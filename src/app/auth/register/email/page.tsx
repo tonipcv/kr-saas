@@ -130,10 +130,29 @@ export default function RegisterEmail() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
-            <p className="mt-3 text-gray-600 text-sm">Loading...</p>
+        <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex items-center justify-center p-4">
+          <div className="w-full max-w-[420px] bg-white rounded-2xl border border-gray-200 p-8 shadow-lg">
+            {/* Tabs skeleton */}
+            <div className="mb-4">
+              <div className="inline-flex items-center rounded-xl border border-gray-200 p-1 bg-white/60 backdrop-blur-sm">
+                <div className="h-8 w-16 rounded-lg bg-gray-100" />
+                <div className="h-8 w-20 rounded-lg bg-gray-100 ml-1" />
+              </div>
+            </div>
+
+            <div className="animate-pulse">
+              {/* Label */}
+              <div className="h-4 w-12 bg-gray-100 rounded mb-3" />
+              {/* Input */}
+              <div className="h-10 w-full bg-gray-100 rounded-lg mb-5" />
+              {/* Button */}
+              <div className="h-10 w-full bg-gray-200 rounded-lg" />
+            </div>
+
+            {/* Secondary link */}
+            <div className="mt-6 flex items-center justify-center">
+              <div className="h-4 w-40 bg-gray-100 rounded" />
+            </div>
           </div>
         </div>
       }
