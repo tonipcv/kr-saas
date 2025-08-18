@@ -9,8 +9,8 @@ import { Toaster } from 'sonner'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Cxlus',
-  description: 'CXLUS is a platform that provides a user experience in another level.',
+  title: 'Zuzz Rewards',
+  description: 'Drive growth with rewards: referrals, points, and rewards codes made simple.',
   manifest: '/site.webmanifest',
   icons: {
     icon: [
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'CXLUS',
+    title: 'Zuzz Rewards',
   },
 }
 
@@ -44,7 +44,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning className="h-full light">
+    <html lang="en" suppressHydrationWarning className="h-full light">
       <head>
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

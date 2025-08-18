@@ -3,14 +3,15 @@
 import { useState } from "react";
 import Image from 'next/image';
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight } from 'lucide-react';
 
 export default function RegisterEmail() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState<string>(searchParams.get('email') ?? "");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

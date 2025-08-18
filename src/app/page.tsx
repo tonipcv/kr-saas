@@ -21,8 +21,8 @@ export default function Home() {
     }
 
     if (status === 'unauthenticated') {
-      console.log('Home page - User not authenticated, redirecting to signin');
-      router.push('/auth/signin');
+      console.log('Home page - User not authenticated, redirecting to public home');
+      router.push('/home');
       return;
     }
 
@@ -66,11 +66,11 @@ export default function Home() {
             }
           }
         } else if (response.status === 401) {
-          console.log('Sessão inválida ou usuário não encontrado - fazendo logout');
+          console.log('Sessão inválida ou usuário não encontrado - fazendo logout e enviando ao /home');
           // Sessão inválida ou usuário não existe no banco
           // Limpar sessão e redirecionar para login
           await signOut({ redirect: false });
-          router.push('/auth/signin');
+          router.push('/home');
         } else {
           console.error('Error checking role:', response.status, await response.text());
           // Para outros erros, assumir paciente como fallback
