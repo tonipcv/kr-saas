@@ -334,18 +334,6 @@ export default function Navigation() {
           description: 'Manage doctors'
         },
         {
-          href: '/admin/clinics',
-          label: 'Clinics',
-          icon: BuildingOfficeIcon,
-          description: 'Manage clinics'
-        },
-        {
-          href: '/admin/clinic-referrals',
-          label: 'Clinic Referrals',
-          icon: UserPlusIcon,
-          description: 'Manage clinic referrals'
-        },
-        {
           href: '/admin/subscriptions',
           label: 'Subscriptions',
           icon: ShieldCheckIcon,

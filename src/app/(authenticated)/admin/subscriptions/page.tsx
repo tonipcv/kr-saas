@@ -3,20 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { 
-  StarIcon,
-  CalendarIcon, 
-  CurrencyDollarIcon, 
-  UsersIcon, 
-  ExclamationTriangleIcon, 
-  CheckCircleIcon, 
-  ClockIcon, 
-  PencilIcon,
-  ArrowLeftIcon,
-  EyeIcon
-} from '@heroicons/react/24/outline';
 import Link from 'next/link';
 
 interface SubscriptionPlan {
@@ -121,7 +107,7 @@ export default function SubscriptionsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-white">
+      <div className="min-h-screen bg-gray-50">
         <div className="lg:ml-64">
           <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
             
@@ -135,77 +121,24 @@ export default function SubscriptionsPage() {
             </div>
 
             {/* Stats Cards Skeleton */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
               {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="bg-white border border-gray-200 shadow-lg rounded-2xl p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-gray-100 rounded-xl animate-pulse">
-                      <div className="h-6 w-6 bg-gray-200 rounded animate-pulse"></div>
-                    </div>
-                    <div className="space-y-2 flex-1">
-                      <div className="h-4 bg-gray-200 rounded w-20 animate-pulse"></div>
-                      <div className="h-7 bg-gray-100 rounded w-12 animate-pulse"></div>
-                    </div>
-                  </div>
+                <div key={i} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                  <div className="text-[11px] text-gray-500 font-medium mb-2">Carregando...</div>
+                  <div className="h-6 w-24 bg-gray-100 rounded animate-pulse" />
                 </div>
               ))}
             </div>
 
             {/* Subscriptions List Skeleton */}
-            <div className="bg-white border border-gray-200 shadow-lg rounded-2xl mb-8">
+            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl mb-6">
               <div className="p-6 pb-4">
                 <div className="h-6 bg-gray-200 rounded w-40 animate-pulse"></div>
               </div>
               <div className="p-6 pt-0 space-y-4">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 bg-gray-200 rounded-xl animate-pulse"></div>
-                        <div className="space-y-2">
-                          <div className="h-4 bg-gray-200 rounded w-32 animate-pulse"></div>
-                          <div className="h-3 bg-gray-100 rounded w-40 animate-pulse"></div>
-                          <div className="h-3 bg-gray-100 rounded w-24 animate-pulse"></div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="space-y-2">
-                          <div className="h-6 bg-gray-100 rounded-xl w-16 animate-pulse"></div>
-                          <div className="h-3 bg-gray-100 rounded w-20 animate-pulse"></div>
-                        </div>
-                        <div className="flex gap-2">
-                          <div className="h-8 bg-gray-100 rounded-xl w-20 animate-pulse"></div>
-                          <div className="h-8 bg-gray-200 rounded-xl w-24 animate-pulse"></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <div key={i} className="h-10 bg-gray-50 border border-gray-100 rounded-lg animate-pulse" />
                 ))}
-              </div>
-            </div>
-
-            {/* Plans Skeleton */}
-            <div className="bg-white border border-gray-200 shadow-lg rounded-2xl">
-              <div className="p-6 pb-4">
-                <div className="h-6 bg-gray-200 rounded w-32 animate-pulse"></div>
-              </div>
-              <div className="p-6 pt-0">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="p-6 border border-gray-200 rounded-xl bg-gray-50">
-                      <div className="space-y-3">
-                        <div className="h-5 bg-gray-200 rounded w-24 animate-pulse"></div>
-                        <div className="h-4 bg-gray-100 rounded w-full animate-pulse"></div>
-                        <div className="h-6 bg-gray-200 rounded w-20 animate-pulse"></div>
-                        <div className="space-y-2">
-                          {[1, 2, 3, 4].map((j) => (
-                            <div key={j} className="h-3 bg-gray-100 rounded w-full animate-pulse"></div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           </div>
@@ -215,303 +148,127 @@ export default function SubscriptionsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gray-50">
       <div className="lg:ml-64">
         <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
           
-          {/* Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-            <div>
-              <h1 className="text-3xl font-light text-gray-900 tracking-tight">
-                Manage Subscriptions
-              </h1>
-              <p className="text-gray-600 mt-1">
-                View and manage all doctor subscriptions
-              </p>
+          {/* Header - minimal, like KPIs */}
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex items-center justify-between">
+              <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Subscriptions</h1>
+              <div className="flex items-center gap-2">
+                <Link href="/admin" className="hidden lg:inline-flex h-8 items-center rounded-full border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50">Dashboard</Link>
+                <Link href="/admin/plans" className="inline-flex h-8 items-center rounded-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] px-3 text-xs font-medium text-white hover:opacity-90 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5893ec]">Plans</Link>
+              </div>
             </div>
-            <Button 
-              asChild
-              variant="outline"
-              className="bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900 shadow-sm"
-            >
-              <Link href="/admin">
-                <ArrowLeftIcon className="h-4 w-4 mr-2" />
-                Back to Dashboard
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2 overflow-auto">
+              {[{ key: 'all', label: 'All', active: true }, { key: 'active', label: 'Active' }, { key: 'trial', label: 'Trial' }, { key: 'expired', label: 'Expired' }].map(tab => (
+                <span
+                  key={tab.key}
+                  className={[
+                    'whitespace-nowrap text-xs font-medium rounded-full border px-3 py-1',
+                    tab.active
+                      ? 'bg-white border-gray-200 text-gray-900 shadow-sm'
+                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-white'
+                  ].join(' ')}
+                >
+                  {tab.label}
+                </span>
+              ))}
+            </div>
           </div>
 
-          {/* Quick Statistics */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-blue-100 rounded-xl">
-                    <StarIcon className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Total</p>
-                    <p className="text-2xl font-light text-gray-900">{subscriptions.length}</p>
-                  </div>
+          {/* Quick Statistics - minimal like KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            {[{
+              title: 'Total',
+              value: subscriptions.length,
+              note: 'all'
+            }, {
+              title: 'Active',
+              value: activeCount,
+              note: 'current'
+            }, {
+              title: 'Trial',
+              value: trialCount,
+              note: 'current'
+            }, {
+              title: 'Revenue/month',
+              value: `R$ ${totalRevenue}`,
+              note: 'active'
+            }].map((kpi) => (
+              <div key={kpi.title} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-gray-500">{kpi.title}</span>
+                  <span className="text-[10px] text-gray-400">{kpi.note}</span>
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-green-100 rounded-xl">
-                    <CheckCircleIcon className="h-6 w-6 text-green-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Active</p>
-                    <p className="text-2xl font-light text-green-600">{activeCount}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-yellow-100 rounded-xl">
-                    <ClockIcon className="h-6 w-6 text-yellow-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Trial</p>
-                    <p className="text-2xl font-light text-yellow-600">{trialCount}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-red-100 rounded-xl">
-                    <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Expiring</p>
-                    <p className="text-2xl font-light text-red-600">{expiringSoon}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-purple-100 rounded-xl">
-                    <CurrencyDollarIcon className="h-6 w-6 text-purple-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Revenue/Month</p>
-                    <p className="text-2xl font-light text-purple-600">R$ {totalRevenue}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{kpi.value}</div>
+              </div>
+            ))}
           </div>
 
-          {/* Expiring Alert */}
+          {/* Optional Expiring Note - toned down */}
           {expiringSoon > 0 && (
-            <Card className="mb-8 bg-red-50 border border-red-200 shadow-lg rounded-2xl">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-red-100 rounded-xl">
-                    <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-lg font-semibold text-red-800">Attention: Trials Expiring</p>
-                    <p className="text-red-700 mt-1">
-                      {expiringSoon} trial subscriptions are expiring in the next 3 days.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="mb-4 text-xs text-gray-600">{expiringSoon} trial subscriptions expiring in the next 3 days.</div>
           )}
 
-          {/* Subscriptions List */}
-          <Card className="mb-8 bg-white border border-gray-200 shadow-lg rounded-2xl">
+          {/* Subscriptions - compact table style */}
+          <Card className="mb-6 bg-white border border-gray-200 shadow-sm rounded-2xl">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                All Subscriptions
-              </CardTitle>
+              <CardTitle className="text-lg font-semibold text-gray-900">All Subscriptions</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="space-y-4">
-                {subscriptions.length > 0 ? (
-                  subscriptions.map((subscription) => {
-                    const isExpiringSoon = subscription.status === 'TRIAL' && subscription.trialEndDate && 
-                      Math.ceil((new Date(subscription.trialEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) <= 3;
-
-                    const daysLeft = subscription.trialEndDate 
-                      ? Math.ceil((new Date(subscription.trialEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-                      : null;
-
-                    return (
-                      <div key={subscription.id} className={`p-4 rounded-xl border transition-colors ${
-                        isExpiringSoon 
-                          ? 'border-red-200 bg-red-50' 
-                          : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
-                      }`}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className="h-12 w-12 bg-turquoise rounded-xl flex items-center justify-center">
-                              <StarIcon className="h-6 w-6 text-black" />
-                            </div>
-                            
-                            <div>
-                              <h3 className="font-medium text-gray-900">
-                                {subscription.doctor?.name || 'Doctor without name'}
-                              </h3>
-                              <p className="text-sm text-gray-600 mt-1">{subscription.doctor?.email}</p>
-                              <div className="flex items-center gap-4 mt-1">
-                                <span className="text-sm text-gray-600">
-                                  Plan: {subscription.plan?.name || 'Basic'}
-                                </span>
-                                {subscription.plan?.price && (
-                                  <span className="text-sm text-gray-600">
-                                    R$ {subscription.plan.price}/month
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-6">
-                            {/* Status */}
-                            <div className="text-right">
-                              <Badge className={`${getStatusColor(subscription.status)} border-0`}>
-                                {getStatusText(subscription.status)}
-                              </Badge>
-                              
-                              {subscription.status === 'TRIAL' && daysLeft !== null && (
-                                <p className={`text-xs mt-1 ${isExpiringSoon ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
-                                  {daysLeft > 0 ? `${daysLeft} days left` : 'Expired'}
-                                </p>
-                              )}
-                              
-                              {subscription.status === 'ACTIVE' && subscription.endDate && (
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Renews on {new Date(subscription.endDate).toLocaleDateString('en-US')}
-                                </p>
-                              )}
-                            </div>
-
-                            {/* Plan Limits */}
-                            {subscription.plan && (
-                              <div className="text-xs text-gray-500 text-right">
-                                <div>Max: {subscription.plan.maxPatients === 999999 ? '∞' : subscription.plan.maxPatients} patients</div>
-                                <div>{subscription.plan.maxProtocols === 999999 ? '∞' : subscription.plan.maxProtocols} protocols</div>
-                                <div>{subscription.plan.maxCourses === 999999 ? '∞' : subscription.plan.maxCourses} courses</div>
-                              </div>
-                            )}
-
-                            {/* Actions */}
-                            <div className="flex gap-2">
-                              <Link href={`/admin/subscriptions/${subscription.id}/edit`}>
-                                <Button 
-                                  size="sm"
-                                  className="bg-turquoise hover:bg-turquoise/90 text-black font-semibold"
-                                >
-                                  <PencilIcon className="h-4 w-4 mr-1" />
-                                  Edit
-                                </Button>
-                              </Link>
-                              <Link href={`/admin/doctors/${subscription.doctor?.id}`}>
-                                <Button 
-                                  size="sm" 
-                                  variant="outline"
-                                  className="bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-                                >
-                                  <EyeIcon className="h-4 w-4 mr-1" />
-                                  View Doctor
-                                </Button>
-                              </Link>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Expiring Alert */}
-                        {isExpiringSoon && (
-                          <div className="mt-3 p-3 bg-red-100 border border-red-200 rounded-lg">
-                            <div className="flex items-center text-sm text-red-700">
-                              <ExclamationTriangleIcon className="h-4 w-4 mr-2" />
-                              Trial expiring soon! Consider contacting the doctor.
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center py-12">
-                    <StarIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 text-lg">No subscriptions found.</p>
-                    <p className="text-gray-500 text-sm mt-2">Subscriptions will appear here once doctors are registered.</p>
-                  </div>
-                )}
-              </div>
+              {subscriptions.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-600 font-medium">No subscriptions found.</p>
+                  <p className="text-gray-500 text-sm mt-1">Subscriptions will appear here once doctors are registered.</p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50/80">
+                      <tr className="text-left text-xs text-gray-600">
+                        <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Doctor</th>
+                        <th className="px-3 py-3.5 font-medium">Email</th>
+                        <th className="px-3 py-3.5 font-medium">Plan</th>
+                        <th className="px-3 py-3.5 font-medium">Status</th>
+                        <th className="px-3 py-3.5 font-medium">Term</th>
+                        <th className="px-3 py-3.5 font-medium">Price</th>
+                        <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {subscriptions.map((s) => {
+                        const isTrial = s.status === 'TRIAL';
+                        const daysLeft = isTrial && s.trialEndDate
+                          ? Math.ceil((new Date(s.trialEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                          : null;
+                        return (
+                          <tr key={s.id} className="hover:bg-gray-50/60">
+                            <td className="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{s.doctor?.name || 'Doctor'}</td>
+                            <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">{s.doctor?.email}</td>
+                            <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{s.plan?.name || 'Basic'}</td>
+                            <td className="whitespace-nowrap px-3 py-3.5 text-sm">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-white text-gray-700 ring-1 ring-inset ring-gray-200">{getStatusText(s.status)}</span>
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">
+                              {isTrial && daysLeft !== null ? (daysLeft > 0 ? `${daysLeft} days left` : 'Expired') : (s.endDate ? `Renews ${new Date(s.endDate).toLocaleDateString('en-US')}` : '—')}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{s.plan?.price ? `R$ ${s.plan.price}/month` : '—'}</td>
+                            <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                              <Link href={`/admin/subscriptions/${s.id}/edit`} className="inline-flex h-8 items-center rounded-full border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50">Edit</Link>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Available Plans */}
-          <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                Available Plans
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {plans.map((plan) => (
-                  <div key={plan.id} className="p-6 border border-gray-200 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-semibold text-gray-900">{plan.name}</h3>
-                      <Badge 
-                        className={plan.isDefault 
-                          ? 'bg-turquoise text-black border-0' 
-                          : 'bg-purple-100 text-purple-800 border-0'
-                        }
-                      >
-                        {plan.isDefault ? 'Default' : 'Premium'}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-gray-600 mb-4">{plan.description}</p>
-                    <div className="text-2xl font-light text-turquoise mb-4">
-                      R$ {plan.price}/month
-                    </div>
-                    <div className="space-y-2 text-sm text-gray-600">
-                      <div className="flex items-center">
-                        <UsersIcon className="h-4 w-4 mr-2 text-gray-400" />
-                        {plan.maxPatients === 999999 ? 'Unlimited patients' : `${plan.maxPatients} patients`}
-                      </div>
-                      <div className="flex items-center">
-                        <CalendarIcon className="h-4 w-4 mr-2 text-gray-400" />
-                        {plan.maxProtocols === 999999 ? 'Unlimited protocols' : `${plan.maxProtocols} protocols`}
-                      </div>
-                      <div className="flex items-center">
-                        <CalendarIcon className="h-4 w-4 mr-2 text-gray-400" />
-                        {plan.maxCourses === 999999 ? 'Unlimited courses' : `${plan.maxCourses} courses`}
-                      </div>
-                      <div className="flex items-center">
-                        <CalendarIcon className="h-4 w-4 mr-2 text-gray-400" />
-                        {plan.maxProducts === 999999 ? 'Unlimited products' : `${plan.maxProducts} products`}
-                      </div>
-                    </div>
-                    {plan.trialDays && plan.trialDays > 0 && (
-                      <div className="mt-3 text-sm text-green-600 font-medium">
-                        {plan.trialDays} days free trial
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          {/* Removed Available Plans section to keep page minimal */}
         </div>
       </div>
     </div>

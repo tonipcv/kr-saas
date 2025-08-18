@@ -3,24 +3,16 @@
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { 
-  CreditCardIcon,
-  CalendarIcon, 
-  CurrencyDollarIcon, 
-  UsersIcon, 
-  DocumentTextIcon, 
-  BookOpenIcon, 
-  ShoppingBagIcon,
-  CheckCircleIcon, 
-  PencilIcon,
-  ArrowLeftIcon,
-  EyeIcon,
-  PlusIcon,
-  StarIcon
-} from '@heroicons/react/24/outline';
 import Link from 'next/link';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+  DialogFooter,
+} from '@/components/ui/dialog';
 
 interface SubscriptionPlan {
   id: string;
@@ -41,6 +33,37 @@ export default function PlansPage() {
   const { data: session } = useSession();
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
+
+  // create plan form state
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({
+    name: '',
+    description: '',
+    price: 0,
+    maxPatients: 100,
+    maxProtocols: 100,
+    maxCourses: 50,
+    maxProducts: 50,
+    trialDays: 0,
+    isDefault: false,
+  });
+
+  // edit plan form state
+  const [updating, setUpdating] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    description: '',
+    price: 0,
+    maxPatients: 100,
+    maxProtocols: 100,
+    maxCourses: 50,
+    maxProducts: 50,
+    trialDays: 0,
+    isDefault: false,
+  });
 
   useEffect(() => {
     const loadPlans = async () => {
@@ -63,6 +86,97 @@ export default function PlansPage() {
       loadPlans();
     }
   }, [session]);
+
+  const openEdit = (plan: SubscriptionPlan) => {
+    setSelectedPlan(plan);
+    setEditForm({
+      name: plan.name,
+      description: plan.description,
+      price: plan.price,
+      maxPatients: plan.maxPatients,
+      maxProtocols: plan.maxProtocols,
+      maxCourses: plan.maxCourses,
+      maxProducts: plan.maxProducts,
+      trialDays: plan.trialDays || 0,
+      isDefault: plan.isDefault,
+    });
+    setEditOpen(true);
+  };
+
+  const submitEditPlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPlan) return;
+    try {
+      setUpdating(true);
+      const res = await fetch(`/api/admin/plans/${selectedPlan.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name,
+          description: editForm.description,
+          price: Number(editForm.price),
+          maxPatients: Number(editForm.maxPatients),
+          maxProtocols: Number(editForm.maxProtocols),
+          maxCourses: Number(editForm.maxCourses),
+          maxProducts: Number(editForm.maxProducts),
+          trialDays: Number(editForm.trialDays) || 0,
+          isDefault: Boolean(editForm.isDefault),
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to update plan');
+
+      // reload list
+      const response = await fetch('/api/admin/plans');
+      if (response.ok) {
+        const data = await response.json();
+        setPlans(data.plans || []);
+      }
+      setEditOpen(false);
+      setSelectedPlan(null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const submitNewPlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setCreating(true);
+      const res = await fetch('/api/admin/plans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.name,
+          description: form.description,
+          price: Number(form.price),
+          maxPatients: Number(form.maxPatients),
+          maxProtocols: Number(form.maxProtocols),
+          maxCourses: Number(form.maxCourses),
+          maxProducts: Number(form.maxProducts),
+          trialDays: Number(form.trialDays) || 0,
+          isDefault: Boolean(form.isDefault),
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to create plan');
+
+      // reload list
+      const response = await fetch('/api/admin/plans');
+      if (response.ok) {
+        const data = await response.json();
+        setPlans(data.plans || []);
+      }
+      setOpen(false);
+      setForm({
+        name: '', description: '', price: 0, maxPatients: 100, maxProtocols: 100, maxCourses: 50, maxProducts: 50, trialDays: 0, isDefault: false,
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCreating(false);
+    }
+  };
 
   // Statistics calculations
   const totalPlans = plans.length;
@@ -136,212 +250,246 @@ export default function PlansPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gray-50">
       <div className="lg:ml-64">
         <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
           
-          {/* Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-            <div>
-              <h1 className="text-3xl font-light text-gray-900 tracking-tight">
-                Subscription Plans
-              </h1>
-              <p className="text-gray-600 mt-1">
-                Manage subscription plans and pricing
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <Button 
-                className="bg-turquoise hover:bg-turquoise/90 text-black font-semibold shadow-lg shadow-turquoise/25 hover:shadow-turquoise/40 hover:scale-105 transition-all duration-200"
-              >
-                <PlusIcon className="h-4 w-4 mr-2" />
-                New Plan
-              </Button>
-              <Button 
-                asChild
-                variant="outline"
-                className="bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900 shadow-sm"
-              >
-                <Link href="/admin">
-                  <ArrowLeftIcon className="h-4 w-4 mr-2" />
-                  Back to Dashboard
-                </Link>
-              </Button>
-            </div>
-          </div>
-
-          {/* Quick Statistics */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-blue-100 rounded-xl">
-                    <CreditCardIcon className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Total Plans</p>
-                    <p className="text-2xl font-light text-gray-900">{totalPlans}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-green-100 rounded-xl">
-                    <CheckCircleIcon className="h-6 w-6 text-green-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Default Plans</p>
-                    <p className="text-2xl font-light text-green-600">{defaultPlans}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-purple-100 rounded-xl">
-                    <StarIcon className="h-6 w-6 text-purple-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Premium Plans</p>
-                    <p className="text-2xl font-light text-purple-600">{premiumPlans}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-orange-100 rounded-xl">
-                    <CurrencyDollarIcon className="h-6 w-6 text-orange-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Avg. Price</p>
-                    <p className="text-2xl font-light text-orange-600">$ {averagePrice}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-yellow-100 rounded-xl">
-                    <CalendarIcon className="h-6 w-6 text-yellow-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">With Trial</p>
-                    <p className="text-2xl font-light text-yellow-600">{plansWithTrial}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Plans List */}
-          <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl">
-            <CardHeader className="flex flex-row items-center justify-between pb-4">
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                Available Plans
-              </CardTitle>
-              <div className="text-sm text-gray-600">
-                {plans.length} plans configured
+          {/* Header - minimal, like KPIs */}
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex items-center justify-between">
+              <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Subscription plans</h1>
+              <div className="flex items-center gap-2">
+                <Link href="/admin" className="hidden lg:inline-flex h-8 items-center rounded-full border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50">Dashboard</Link>
+                <Dialog open={open} onOpenChange={setOpen}>
+                  <DialogTrigger asChild>
+                    <button className="inline-flex h-8 items-center rounded-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] px-3 text-xs font-medium text-white hover:opacity-90 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5893ec]">New plan</button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[560px]">
+                    <DialogHeader>
+                      <DialogTitle>Create new plan</DialogTitle>
+                      <DialogDescription>Define the basic details. You can edit advanced settings later.</DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={submitNewPlan} className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium text-gray-700">Name</label>
+                          <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" placeholder="Pro, Starter..." />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium text-gray-700">Description</label>
+                          <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" rows={2} placeholder="Short summary" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Price (USD/month)</label>
+                          <input type="number" min="0" step="1" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Trial days</label>
+                          <input type="number" min="0" step="1" value={form.trialDays} onChange={(e) => setForm({ ...form, trialDays: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Max patients</label>
+                          <input type="number" min="1" step="1" value={form.maxPatients} onChange={(e) => setForm({ ...form, maxPatients: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Max protocols</label>
+                          <input type="number" min="1" step="1" value={form.maxProtocols} onChange={(e) => setForm({ ...form, maxProtocols: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Max courses</label>
+                          <input type="number" min="1" step="1" value={form.maxCourses} onChange={(e) => setForm({ ...form, maxCourses: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Max products</label>
+                          <input type="number" min="1" step="1" value={form.maxProducts} onChange={(e) => setForm({ ...form, maxProducts: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                        </div>
+                        <div className="sm:col-span-2 flex items-center gap-2 pt-1">
+                          <input id="isDefault" type="checkbox" checked={form.isDefault} onChange={(e) => setForm({ ...form, isDefault: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
+                          <label htmlFor="isDefault" className="text-sm text-gray-700">Mark as default plan</label>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <button type="button" onClick={() => setOpen(false)} className="inline-flex h-9 items-center rounded-full border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+                        <button type="submit" disabled={creating} className="inline-flex h-9 items-center rounded-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] px-4 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60">{creating ? 'Creating...' : 'Create plan'}</button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
               </div>
+            </div>
+            <div className="flex items-center gap-2 overflow-auto">
+              {[
+                { key: 'all', label: 'All plans', active: true },
+                { key: 'default', label: 'Default' },
+                { key: 'premium', label: 'Premium' }
+              ].map(tab => (
+                <span
+                  key={tab.key}
+                  className={[
+                    'whitespace-nowrap text-xs font-medium rounded-full border px-3 py-1',
+                    tab.active
+                      ? 'bg-white border-gray-200 text-gray-900 shadow-sm'
+                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-white'
+                  ].join(' ')}
+                >
+                  {tab.label}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick Statistics - minimal like KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            {[{
+              title: 'Total plans',
+              value: totalPlans,
+              note: 'all'
+            }, {
+              title: 'Default plans',
+              value: defaultPlans,
+              note: 'active'
+            }, {
+              title: 'Premium plans',
+              value: premiumPlans,
+              note: 'active'
+            }, {
+              title: 'Avg. price',
+              value: `$ ${averagePrice}`,
+              note: 'per month'
+            }].map((kpi) => (
+              <div key={kpi.title} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-gray-500">{kpi.title}</span>
+                  <span className="text-[10px] text-gray-400">{kpi.note}</span>
+                </div>
+                <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{kpi.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Plans List - compact table style, minimal badges/actions */}
+          <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
+            <CardHeader className="flex flex-row items-center justify-between pb-4">
+              <CardTitle className="text-lg font-semibold text-gray-900">Available Plans</CardTitle>
+              <div className="text-sm text-gray-600">{plans.length} plans configured</div>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="space-y-4">
-                {plans.map((plan) => (
-                  <div key={plan.id} className="p-6 border border-gray-200 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-4">
-                          <h3 className="text-lg font-semibold text-gray-900">{plan.name}</h3>
-                          <Badge 
-                            className={plan.isDefault 
-                              ? 'bg-turquoise text-black border-0' 
-                              : 'bg-purple-100 text-purple-800 border-0'
-                            }
-                          >
-                            {plan.isDefault ? 'Default' : 'Premium'}
-                          </Badge>
-                          {plan.trialDays && plan.trialDays > 0 && (
-                            <Badge className="bg-yellow-100 text-yellow-800 border-0">
-                              {plan.trialDays} days trial
-                            </Badge>
-                          )}
-                        </div>
-                        
-                        <p className="text-gray-600 mb-4">{plan.description}</p>
-                        
-                        <div className="flex items-center gap-8 mb-4">
-                          <div className="text-3xl font-light text-turquoise">
-                            $ {plan.price}/month
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-700">
-                          <div className="flex items-center gap-2">
-                            <UsersIcon className="h-4 w-4 text-gray-400" />
-                            <span>{plan.maxPatients === 999999 ? 'Unlimited' : plan.maxPatients} patients</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <DocumentTextIcon className="h-4 w-4 text-gray-400" />
-                            <span>{plan.maxProtocols === 999999 ? 'Unlimited' : plan.maxProtocols} protocols</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <BookOpenIcon className="h-4 w-4 text-gray-400" />
-                            <span>{plan.maxCourses === 999999 ? 'Unlimited' : plan.maxCourses} courses</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <ShoppingBagIcon className="h-4 w-4 text-gray-400" />
-                            <span>{plan.maxProducts === 999999 ? 'Unlimited' : plan.maxProducts} products</span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 ml-6">
-                        <Button
-                          asChild
-                          size="sm"
-                          variant="outline"
-                          className="bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-                        >
-                          <Link href={`/admin/plans/${plan.id}`}>
-                            <EyeIcon className="h-4 w-4 mr-1" />
-                            View Details
-                          </Link>
-                        </Button>
-                        <Button
-                          asChild
-                          size="sm"
-                          className="bg-turquoise hover:bg-turquoise/90 text-black font-semibold"
-                        >
-                          <Link href={`/admin/plans/${plan.id}/edit`}>
-                            <PencilIcon className="h-4 w-4 mr-1" />
-                            Edit Plan
-                          </Link>
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                
-                {plans.length === 0 && (
-                  <div className="text-center py-12">
-                    <CreditCardIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">No subscription plans found.</p>
-                    <p className="text-gray-500 text-sm mt-2">Create your first plan to get started.</p>
-                  </div>
-                )}
-              </div>
+              {plans.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-600 font-medium">No subscription plans found.</p>
+                  <p className="text-gray-500 text-sm mt-1">Create your first plan to get started.</p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50/80">
+                      <tr className="text-left text-xs text-gray-600">
+                        <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Name</th>
+                        <th className="px-3 py-3.5 font-medium">Price</th>
+                        <th className="px-3 py-3.5 font-medium">Limits</th>
+                        <th className="px-3 py-3.5 font-medium">Trial</th>
+                        <th className="px-3 py-3.5 font-medium">Type</th>
+                        <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {plans.map((plan) => (
+                        <tr key={plan.id} className="hover:bg-gray-50/60">
+                          <td className="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                            {plan.name}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
+                            ${' '}{plan.price}/month
+                          </td>
+                          <td className="px-3 py-3.5 text-sm text-gray-600">
+                            <div className="flex flex-wrap gap-x-4 gap-y-1">
+                              <span>{plan.maxPatients === 999999 ? 'Unlimited' : plan.maxPatients} patients</span>
+                              <span>{plan.maxProtocols === 999999 ? 'Unlimited' : plan.maxProtocols} protocols</span>
+                              <span>{plan.maxCourses === 999999 ? 'Unlimited' : plan.maxCourses} courses</span>
+                              <span>{plan.maxProducts === 999999 ? 'Unlimited' : plan.maxProducts} products</span>
+                            </div>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm">
+                            {plan.trialDays && plan.trialDays > 0 ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-white text-gray-700 ring-1 ring-inset ring-gray-200">{plan.trialDays} days</span>
+                            ) : (
+                              <span className="text-gray-500">—</span>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-white text-gray-700 ring-1 ring-inset ring-gray-200">{plan.isDefault ? 'Default' : 'Premium'}</span>
+                          </td>
+                          <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                            <button onClick={() => openEdit(plan)} className="inline-flex h-8 items-center rounded-full border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50">Edit</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
+        {/* Edit Plan Modal (placed at page bottom to avoid nesting issues) */}
+        <Dialog
+          open={editOpen}
+          onOpenChange={(open) => {
+            setEditOpen(open);
+            if (!open) setSelectedPlan(null);
+          }}
+        >
+          <DialogContent className="sm:max-w-[560px]">
+            <DialogHeader>
+              <DialogTitle>Edit plan</DialogTitle>
+              <DialogDescription>Update the plan details and limits.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={submitEditPlan} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">Name</label>
+                  <input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" placeholder="Pro, Starter..." />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">Description</label>
+                  <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" rows={2} placeholder="Short summary" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Price (USD/month)</label>
+                  <input type="number" min="0" step="1" value={editForm.price} onChange={(e) => setEditForm({ ...editForm, price: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Trial days</label>
+                  <input type="number" min="0" step="1" value={editForm.trialDays} onChange={(e) => setEditForm({ ...editForm, trialDays: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Max patients</label>
+                  <input type="number" min="1" step="1" value={editForm.maxPatients} onChange={(e) => setEditForm({ ...editForm, maxPatients: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Max protocols</label>
+                  <input type="number" min="1" step="1" value={editForm.maxProtocols} onChange={(e) => setEditForm({ ...editForm, maxProtocols: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Max courses</label>
+                  <input type="number" min="1" step="1" value={editForm.maxCourses} onChange={(e) => setEditForm({ ...editForm, maxCourses: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Max products</label>
+                  <input type="number" min="1" step="1" value={editForm.maxProducts} onChange={(e) => setEditForm({ ...editForm, maxProducts: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                </div>
+                <div className="sm:col-span-2 flex items-center gap-2 pt-1">
+                  <input id="editIsDefault" type="checkbox" checked={editForm.isDefault} onChange={(e) => setEditForm({ ...editForm, isDefault: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
+                  <label htmlFor="editIsDefault" className="text-sm text-gray-700">Mark as default plan</label>
+                </div>
+              </div>
+              <DialogFooter>
+                <button type="button" onClick={() => setEditOpen(false)} className="inline-flex h-9 items-center rounded-full border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button type="submit" disabled={updating} className="inline-flex h-9 items-center rounded-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] px-4 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60">{updating ? 'Saving...' : 'Save changes'}</button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

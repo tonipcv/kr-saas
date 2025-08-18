@@ -14,10 +14,17 @@ export default async function AdminLayout({
     redirect('/auth/signin');
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email: session.user.email },
-    select: { role: true }
-  });
+  let user: { role: string } | null = null;
+  try {
+    user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { role: true }
+    });
+  } catch (err) {
+    console.error('AdminLayout: failed to query user role from DB:', err);
+    // Graceful fallback: if DB is unreachable, deny access to admin
+    redirect('/');
+  }
 
   if (!user || (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN')) {
     redirect('/');

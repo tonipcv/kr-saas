@@ -324,130 +324,88 @@ export default function ClinicsPage() {
             </Card>
           </div>
 
-          {/* Clinics List */}
-          <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl">
+          {/* Clinics List - compact table style */}
+          <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                All Clinics
-              </CardTitle>
+              <CardTitle className="text-lg font-semibold text-gray-900">All Clinics</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="space-y-4">
-                {clinics.length > 0 ? (
-                  clinics.map((clinic) => (
-                    <div key={clinic.id} className={`p-4 rounded-xl border transition-colors ${
-                      clinic.isActive 
-                        ? 'border-gray-200 bg-gray-50 hover:bg-gray-100' 
-                        : 'border-red-200 bg-red-50'
-                    }`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 bg-turquoise rounded-xl flex items-center justify-center">
-                            <BuildingOfficeIcon className="h-6 w-6 text-black" />
-                          </div>
-                          
-                          <div>
-                            <h3 className="font-medium text-gray-900 flex items-center gap-2">
-                              {clinic.name}
-                              {!clinic.isActive && (
-                                <Badge className="bg-red-100 text-red-800 border-0 text-xs">
-                                  Inactive
-                                </Badge>
-                              )}
-                            </h3>
-                            <p className="text-sm text-gray-600 mt-1">
-                              Owner: {clinic.owner.name} ({clinic.owner.email})
-                            </p>
-                            <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
-                              {clinic.members.length > 0 && (
-                                <span className="flex items-center gap-1">
-                                  <UsersIcon className="h-3 w-3" />
-                                  {clinic.members.filter(m => m.isActive).length} members
-                                </span>
-                              )}
-                              {clinic.city && clinic.state && (
-                                <span className="flex items-center gap-1">
-                                  <MapPinIcon className="h-3 w-3" />
-                                  {clinic.city}, {clinic.state}
-                                </span>
-                              )}
-                              {clinic.email && (
-                                <span className="flex items-center gap-1">
-                                  <EnvelopeIcon className="h-3 w-3" />
-                                  {clinic.email}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-6">
-                          {/* Subscription Status */}
-                          <div className="text-right">
-                            <Badge className={`${getSubscriptionStatusColor(clinic.subscription?.status)} border-0`}>
+              {clinics.length === 0 ? (
+                <div className="text-center py-12">
+                  <BuildingOfficeIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 text-lg">No clinics found.</p>
+                  <p className="text-gray-500 text-sm mt-2">Clinics will appear here once they are registered.</p>
+                  <Button asChild className="mt-4 bg-turquoise hover:bg-turquoise/90 text-black font-semibold">
+                    <Link href="/admin/clinics/new">
+                      <PlusIcon className="h-4 w-4 mr-2" />
+                      Create First Clinic
+                    </Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50/80">
+                      <tr className="text-left text-xs text-gray-600">
+                        <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Clinic</th>
+                        <th className="px-3 py-3.5 font-medium">Owner</th>
+                        <th className="px-3 py-3.5 font-medium">Members</th>
+                        <th className="px-3 py-3.5 font-medium">Subscription</th>
+                        <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {clinics.map((clinic) => (
+                        <tr key={clinic.id} className="hover:bg-gray-50/60">
+                          <td className="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                            {clinic.name}
+                            {!clinic.isActive && (
+                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-50 text-red-700 ring-1 ring-inset ring-red-200">Inactive</span>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">
+                            {clinic.owner.name} ({clinic.owner.email})
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
+                            {clinic.members.filter(m => m.isActive).length}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm">
+                            <span className={`${getSubscriptionStatusColor(clinic.subscription?.status)} inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium`}> 
                               {getSubscriptionStatusText(clinic.subscription?.status)}
-                            </Badge>
-                            
-                            {clinic.subscription && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                {clinic.subscription.plan.name} - R$ {clinic.subscription.plan.price}/month
-                              </p>
-                            )}
-                            
-                            {clinic.subscription?.maxDoctors && (
-                              <p className="text-xs text-gray-500">
-                                Max: {clinic.subscription.maxDoctors} doctors
-                              </p>
-                            )}
-                          </div>
-
-                          {/* Actions */}
-                          <div className="flex gap-2">
-                            <Link href={`/admin/clinics/${clinic.id}/edit`}>
-                              <Button 
+                            </span>
+                          </td>
+                          <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                variant="ghost"
                                 size="sm"
-                                className="bg-turquoise hover:bg-turquoise/90 text-black font-semibold"
+                                asChild
+                                className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg h-8 w-8 p-0"
+                                title="Edit"
                               >
-                                <PencilIcon className="h-4 w-4 mr-1" />
-                                Edit
+                                <Link href={`/admin/clinics/${clinic.id}/edit`}>
+                                  <PencilIcon className="h-4 w-4" />
+                                </Link>
                               </Button>
-                            </Link>
-                            <Link href={`/admin/clinics/${clinic.id}`}>
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                className="bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                asChild
+                                className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg h-8 w-8 p-0"
+                                title="View"
                               >
-                                <EyeIcon className="h-4 w-4 mr-1" />
-                                View
+                                <Link href={`/admin/clinics/${clinic.id}`}>
+                                  <EyeIcon className="h-4 w-4" />
+                                </Link>
                               </Button>
-                            </Link>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Additional Info */}
-                      {clinic.description && (
-                        <div className="mt-3 p-3 bg-white border border-gray-200 rounded-lg">
-                          <p className="text-sm text-gray-700">{clinic.description}</p>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-12">
-                    <BuildingOfficeIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 text-lg">No clinics found.</p>
-                    <p className="text-gray-500 text-sm mt-2">Clinics will appear here once they are registered.</p>
-                    <Button asChild className="mt-4 bg-turquoise hover:bg-turquoise/90 text-black font-semibold">
-                      <Link href="/admin/clinics/new">
-                        <PlusIcon className="h-4 w-4 mr-2" />
-                        Create First Clinic
-                      </Link>
-                    </Button>
-                  </div>
-                )}
-              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

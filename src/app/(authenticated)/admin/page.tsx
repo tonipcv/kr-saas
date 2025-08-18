@@ -187,143 +187,125 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-white">
       <div className="lg:ml-64">
-        <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
-          
+        <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 bg-gray-50">
+
           {/* Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-            <div>
-              <h1 className="text-3xl font-light text-gray-900 tracking-tight">
-                Admin Dashboard
-              </h1>
-              <p className="text-gray-600 mt-1">
-                Welcome, {session?.user?.name || 'Administrator'}
-              </p>
+          <div className="flex flex-col gap-3 mb-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+              <div>
+                <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Admin dashboard</h1>
+                <p className="text-gray-600 mt-0.5 text-sm">Welcome, {session?.user?.name || 'Administrator'}</p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  asChild
+                  variant="outline"
+                  className="h-8 rounded-full border-gray-200 bg-white text-gray-800 hover:bg-white hover:text-gray-900 px-3 py-1 text-xs font-medium"
+                >
+                  <Link href="/admin/doctors/new" className="inline-flex items-center gap-1.5">
+                    <PlusIcon className="h-3.5 w-3.5" />
+                    New Doctor
+                  </Link>
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="h-8 rounded-full border-gray-200 bg-white text-gray-800 hover:bg-white hover:text-gray-900 px-3 py-1 text-xs font-medium"
+                >
+                  <Link href="/admin/clinics" className="inline-flex items-center gap-1.5">
+                    <BuildingOffice2Icon className="h-3.5 w-3.5" />
+                    Clinics
+                  </Link>
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="h-8 rounded-full border-gray-200 bg-white text-gray-800 hover:bg-white hover:text-gray-900 px-3 py-1 text-xs font-medium"
+                >
+                  <Link href="/admin/subscriptions" className="inline-flex items-center gap-1.5">
+                    <StarIcon className="h-3.5 w-3.5" />
+                    Subscriptions
+                  </Link>
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-3">
-              <Button 
-                asChild
-                className="bg-turquoise hover:bg-turquoise/90 text-black font-semibold shadow-lg shadow-turquoise/25 hover:shadow-turquoise/40 hover:scale-105 transition-all duration-200"
-              >
-                <Link href="/admin/doctors/new">
-                  <PlusIcon className="h-4 w-4 mr-2" />
-                  New Doctor
-                </Link>
-              </Button>
-              <Button 
-                asChild
-                variant="outline"
-                className="bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900 shadow-sm"
-              >
-                <Link href="/admin/clinics">
-                  <BuildingOffice2Icon className="h-4 w-4 mr-2" />
-                  Clinics
-                </Link>
-              </Button>
-              <Button 
-                asChild
-                variant="outline"
-                className="bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900 shadow-sm"
-              >
-                <Link href="/admin/subscriptions">
-                  <StarIcon className="h-4 w-4 mr-2" />
-                  Subscriptions
-                </Link>
-              </Button>
+            {/* Top Tabs (pills) */}
+            <div className="flex items-center gap-2 overflow-auto">
+              {[
+                { key: 'overview', label: 'Overview', active: true },
+                { key: 'users', label: 'Doctors' },
+                { key: 'clinics', label: 'Clinics' },
+                { key: 'subs', label: 'Subscriptions' }
+              ].map(tab => (
+                <span
+                  key={tab.key}
+                  className={[
+                    'whitespace-nowrap text-xs font-medium rounded-full border px-3 py-1',
+                    tab.active
+                      ? 'bg-white border-gray-200 text-gray-900 shadow-sm'
+                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-white'
+                  ].join(' ')}
+                >
+                  {tab.label}
+                </span>
+              ))}
             </div>
           </div>
 
-          {/* Main Metrics */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-blue-100 rounded-xl">
-                    <CheckIcon className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Doctors</p>
-                    <p className="text-2xl font-light text-gray-900">{metrics.totalDoctors}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {metrics.activeSubscriptions} active, {metrics.trialSubscriptions} trial
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          {/* Main Metrics (pill style) */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+            <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium text-gray-500">Doctors</span>
+                <span className="inline-flex items-center gap-1 text-[10px] text-gray-500">
+                  <CheckIcon className="h-3.5 w-3.5 text-blue-600" />
+                  {metrics.activeSubscriptions} active / {metrics.trialSubscriptions} trial
+                </span>
+              </div>
+              <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{metrics.totalDoctors}</div>
+            </div>
 
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-green-100 rounded-xl">
-                    <UsersIcon className="h-6 w-6 text-green-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Patients</p>
-                    <p className="text-2xl font-light text-gray-900">{metrics.totalPatients}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Average of {Math.round(metrics.totalPatients / Math.max(metrics.totalDoctors, 1))} per doctor
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium text-gray-500">Patients</span>
+                <UsersIcon className="h-3.5 w-3.5 text-green-600" />
+              </div>
+              <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{metrics.totalPatients}</div>
+              <div className="text-[10px] text-gray-400">Avg {Math.round(metrics.totalPatients / Math.max(metrics.totalDoctors, 1))} per doctor</div>
+            </div>
 
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-purple-100 rounded-xl">
-                    <DocumentTextIcon className="h-6 w-6 text-purple-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Protocols</p>
-                    <p className="text-2xl font-light text-gray-900">{metrics.totalProtocols}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Created by doctors
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium text-gray-500">Protocols</span>
+                <DocumentTextIcon className="h-3.5 w-3.5 text-purple-600" />
+              </div>
+              <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{metrics.totalProtocols}</div>
+              <div className="text-[10px] text-gray-400">Created by doctors</div>
+            </div>
 
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-orange-100 rounded-xl">
-                    <BuildingOffice2Icon className="h-6 w-6 text-orange-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Clinics</p>
-                    <p className="text-2xl font-light text-gray-900">{metrics.totalClinics}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {metrics.activeClinicSubscriptions} active
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium text-gray-500">Clinics</span>
+                <BuildingOffice2Icon className="h-3.5 w-3.5 text-orange-600" />
+              </div>
+              <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{metrics.totalClinics}</div>
+              <div className="text-[10px] text-gray-400">{metrics.activeClinicSubscriptions} active</div>
+            </div>
 
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-red-100 rounded-xl">
-                    <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Expiring</p>
-                    <p className="text-2xl font-light text-gray-900">{metrics.expiringSoon}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Next 3 days
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium text-gray-500">Expiring</span>
+                <ExclamationTriangleIcon className="h-3.5 w-3.5 text-red-600" />
+              </div>
+              <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{metrics.expiringSoon}</div>
+              <div className="text-[10px] text-gray-400">Next 3 days</div>
+            </div>
           </div>
 
           {/* Main Content */}
           <div className="grid lg:grid-cols-2 gap-8">
             {/* Recent Doctors */}
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
               <CardHeader className="flex flex-row items-center justify-between pb-4">
                 <CardTitle className="text-lg font-semibold text-gray-900">
                   Recent Doctors
@@ -332,30 +314,30 @@ export default function AdminDashboard() {
                   asChild
                   variant="outline" 
                   size="sm"
-                  className="bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+                  className="rounded-full bg-white border-gray-200 text-gray-700 hover:bg-white"
                 >
                   <Link href="/admin/doctors">
-                    <EyeIcon className="h-4 w-4 mr-2" />
+                    <EyeIcon className="h-3.5 w-3.5 mr-1.5" />
                     View All
                   </Link>
                 </Button>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="space-y-4">
+                <div className="divide-y divide-gray-100">
                   {recentDoctors.length > 0 ? (
                     recentDoctors.slice(0, 5).map((doctor) => (
-                      <div key={doctor.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200 hover:bg-gray-100 transition-colors">
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 bg-turquoise rounded-xl flex items-center justify-center text-black font-semibold">
+                      <div key={doctor.id} className="flex items-center justify-between p-3 bg-white hover:bg-gray-50 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 bg-turquoise rounded-xl flex items-center justify-center text-black font-semibold">
                             {getDoctorInitials(doctor.name)}
                           </div>
                           <div>
                             <p className="font-medium text-gray-900">{doctor.name}</p>
-                            <p className="text-sm text-gray-600">{doctor.email}</p>
+                            <p className="text-xs text-gray-600">{doctor.email}</p>
                           </div>
                         </div>
                         {doctor.subscription && (
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(doctor.subscription.status)}`}>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${getStatusColor(doctor.subscription.status)}`}>
                             {doctor.subscription.status}
                           </span>
                         )}
@@ -372,50 +354,50 @@ export default function AdminDashboard() {
             </Card>
 
             {/* Quick Actions */}
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
               <CardHeader>
                 <CardTitle className="text-lg font-semibold text-gray-900">
                   Quick Actions
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="space-y-4">
+                <div className="space-y-2">
                   <Link 
                     href="/admin/doctors/new"
-                    className="flex items-center gap-4 p-4 bg-turquoise/10 rounded-xl border border-turquoise/20 hover:bg-turquoise/20 transition-colors group"
+                    className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors group"
                   >
-                    <div className="p-3 bg-turquoise rounded-xl group-hover:scale-110 transition-transform">
-                      <PlusIcon className="h-6 w-6 text-black" />
+                    <div className="p-2.5 bg-gray-100 rounded-lg group-hover:bg-gray-200 transition-colors">
+                      <PlusIcon className="h-4 w-4 text-gray-700" />
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">Create New Doctor</p>
-                      <p className="text-sm text-gray-600">Add doctor to the system</p>
+                      <p className="text-sm font-medium text-gray-900">Create New Doctor</p>
+                      <p className="text-xs text-gray-600">Add doctor to the system</p>
                     </div>
                   </Link>
 
                   <Link 
                     href="/admin/clinics"
-                    className="flex items-center gap-4 p-4 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors group"
+                    className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors group"
                   >
-                    <div className="p-3 bg-blue-500 rounded-xl group-hover:scale-110 transition-transform">
-                      <BuildingOffice2Icon className="h-6 w-6 text-white" />
+                    <div className="p-2.5 bg-gray-100 rounded-lg group-hover:bg-gray-200 transition-colors">
+                      <BuildingOffice2Icon className="h-4 w-4 text-gray-700" />
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">Manage Clinics</p>
-                      <p className="text-sm text-gray-600">View and edit clinics</p>
+                      <p className="text-sm font-medium text-gray-900">Manage Clinics</p>
+                      <p className="text-xs text-gray-600">View and edit clinics</p>
                     </div>
                   </Link>
 
                   <Link 
                     href="/admin/subscriptions"
-                    className="flex items-center gap-4 p-4 bg-purple-50 rounded-xl border border-purple-200 hover:bg-purple-100 transition-colors group"
+                    className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors group"
                   >
-                    <div className="p-3 bg-purple-500 rounded-xl group-hover:scale-110 transition-transform">
-                      <StarIcon className="h-6 w-6 text-white" />
+                    <div className="p-2.5 bg-gray-100 rounded-lg group-hover:bg-gray-200 transition-colors">
+                      <StarIcon className="h-4 w-4 text-gray-700" />
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">Subscriptions</p>
-                      <p className="text-sm text-gray-600">Manage plans and subscriptions</p>
+                      <p className="text-sm font-medium text-gray-900">Subscriptions</p>
+                      <p className="text-xs text-gray-600">Manage plans and subscriptions</p>
                     </div>
                   </Link>
                 </div>
