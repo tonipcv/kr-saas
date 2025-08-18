@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Image from 'next/image';
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight } from 'lucide-react';
 
-export default function RegisterVerify() {
+function RegisterVerifyInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const emailParam = searchParams.get('email');
@@ -162,5 +162,13 @@ export default function RegisterVerify() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterVerify() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Carregando...</div>}>
+      <RegisterVerifyInner />
+    </Suspense>
   );
 }
