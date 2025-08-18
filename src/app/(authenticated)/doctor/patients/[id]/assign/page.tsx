@@ -809,7 +809,7 @@ export default function AssignProtocolPage() {
                 <Button
                   onClick={saveChanges}
                   disabled={isSaving}
-                  className="bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl px-6 py-3 font-semibold shadow-lg flex items-center gap-2"
+                  className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl px-6 py-3 font-semibold shadow-lg flex items-center gap-2"
                 >
                   {isSaving ? (
                     <>
@@ -1050,7 +1050,7 @@ export default function AssignProtocolPage() {
 
                 <Button
                   onClick={handleSubmit}
-                  className="w-full bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl h-12 font-semibold"
+                  className="w-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl h-12 font-semibold"
                 >
                   <CheckIcon className="h-4 w-4 mr-2" />
                   Assign Protocol

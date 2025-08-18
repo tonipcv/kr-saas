@@ -12,11 +12,16 @@ export default function Home() {
 
   useEffect(() => {
     // Aguardar até que o status da sessão seja definido
+    console.log('Home page - Session status:', status);
+    console.log('Home page - Session data:', session);
+    
     if (status === 'loading') {
+      console.log('Home page - Session still loading');
       return;
     }
 
     if (status === 'unauthenticated') {
+      console.log('Home page - User not authenticated, redirecting to signin');
       router.push('/auth/signin');
       return;
     }
@@ -38,12 +43,27 @@ export default function Home() {
         if (response.ok) {
           const data = await response.json();
           
+          console.log('Role API response:', data);
+          
           if (data.role === 'SUPER_ADMIN') {
+            console.log('Redirecting to admin dashboard');
             router.push('/admin');
           } else if (data.role === 'DOCTOR') {
-            router.push('/doctor/dashboard');
+            console.log('Redirecting to doctor referrals');
+            router.push('/doctor/referrals');
           } else {
-            router.push('/patient/protocols');
+            console.log('Redirecting to patient referrals');
+            // Use replace instead of push to avoid browser history issues
+            // Try both path formats to handle different environments
+            try {
+              console.log('Attempting to redirect to authenticated patient referrals');
+              router.replace('/patient/referrals');
+            } catch (e) {
+              console.error('Error redirecting:', e);
+              // Fallback to alternative path format
+              console.log('Falling back to alternative path format for referrals');
+              router.push('/patient/referrals');
+            }
           }
         } else if (response.status === 401) {
           console.log('Sessão inválida ou usuário não encontrado - fazendo logout');
@@ -58,8 +78,8 @@ export default function Home() {
         }
       } catch (error) {
         console.error('Error during role detection:', error);
-        // Em caso de erro de rede, tentar redirecionar para protocols como fallback
-        router.push('/patient/protocols');
+        // Em caso de erro de rede, tentar redirecionar para referrals como fallback
+        router.push('/patient/referrals');
       } finally {
         setIsChecking(false);
       }

@@ -76,12 +76,13 @@ export async function GET(request: Request) {
         // Adicionar campos que o frontend espera mas que não existem na tabela
         brand: null,
         imageUrl: null,
-        originalPrice: product.price,
+        originalPrice: product?.price != null ? Number(product.price) : null,
         discountPrice: null,
         discountPercentage: null,
         purchaseUrl: null,
         usageStats: 0,
         doctorId: session.user.id, // Simular que pertence ao médico atual
+        creditsPerUnit: product?.creditsPerUnit != null ? Number(product.creditsPerUnit) : null,
         _count: {
           protocolProducts: product._count?.protocol_products || 0
         }
@@ -117,10 +118,12 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
+    console.log('📝 [POST /api/products] Raw body:', body);
     const { 
       name, 
       description, 
       originalPrice,
+      creditsPerUnit,
       category = 'Geral'
     } = body;
 
@@ -132,34 +135,55 @@ export async function POST(request: Request) {
     // Gerar ID único
     const { createId } = await import('@paralleldrive/cuid2');
 
-    const product = await prisma.products.create({
-      data: {
-        id: createId(),
-        name,
-        description,
-        price: originalPrice ? parseFloat(originalPrice) : 0,
-        category,
-        isActive: true,
-        doctorId: session.user.id
+    const normalizedPrice = originalPrice ? Number(originalPrice) : 0;
+    const normalizedCredits = typeof creditsPerUnit === 'number' ? creditsPerUnit : (creditsPerUnit ? Number(creditsPerUnit) : 0);
+
+    const baseData: any = {
+      id: createId(),
+      name,
+      description,
+      price: normalizedPrice,
+      category,
+      isActive: true,
+      doctorId: session.user.id,
+    };
+
+    // Attach creditsPerUnit initially
+    const dataWithCredits = { ...baseData, creditsPerUnit: normalizedCredits };
+    console.log('📦 [POST /api/products] Prepared data (with creditsPerUnit):', dataWithCredits);
+
+    let product;
+    try {
+      product = await prisma.products.create({ data: dataWithCredits });
+    } catch (e: any) {
+      const message = e?.message || String(e);
+      console.error('❌ Prisma create failed:', message);
+      if (message.includes('Unknown argument `creditsPerUnit`')) {
+        console.warn('⚠️ Retrying without creditsPerUnit due to unknown argument error. This suggests Prisma Client or DB is out-of-sync.');
+        console.log('🧪 [POST /api/products] Prepared data (without creditsPerUnit):', baseData);
+        product = await prisma.products.create({ data: baseData });
+      } else {
+        throw e;
       }
-    });
+    }
 
     // Retornar no formato esperado pelo frontend
     const transformedProduct = {
       ...product,
       brand: null,
       imageUrl: null,
-      originalPrice: product.price,
+      originalPrice: product?.price != null ? Number(product.price) : null,
       discountPrice: null,
       discountPercentage: null,
       purchaseUrl: null,
       usageStats: 0,
-      doctorId: session.user.id
+      doctorId: session.user.id,
+      creditsPerUnit: (product as any)?.creditsPerUnit != null ? Number((product as any).creditsPerUnit) : null
     };
 
     return NextResponse.json(transformedProduct, { status: 201 });
   } catch (error) {
-    console.error('❌ Error creating product:', error instanceof Error ? error.message : 'Erro desconhecido');
-    return NextResponse.json({ error: 'Erro ao criar produto' }, { status: 500 });
+    console.error('❌ Error creating product:', error);
+    return NextResponse.json({ error: 'Erro ao criar produto', details: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 } 

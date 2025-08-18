@@ -91,7 +91,7 @@ export default function SmartAddPatientPage() {
             <Button 
               onClick={handleCreatePatient} 
               disabled={isLoading || !patient.name || !patient.email}
-              className="bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl h-12 px-6 font-semibold"
+              className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl h-12 px-6 font-semibold"
             >
               <CheckIcon className="h-4 w-4 mr-2" />
               {isLoading ? 'Creating...' : 'Create Patient'}

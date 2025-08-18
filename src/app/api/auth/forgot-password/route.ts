@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     const user = await prisma.user.findUnique({
       where: { email },
       include: {
-        clinicMemberships: {
+        clinic_memberships: {
           where: { isActive: true },
           include: {
             clinic: {
@@ -75,8 +75,8 @@ export async function POST(req: Request) {
     await prisma.user.update({
       where: { email },
       data: {
-        resetToken: hashedToken,
-        resetTokenExpiry: new Date(Date.now() + 3600000), // 1 hour from now
+        reset_token: hashedToken,
+        reset_token_expiry: new Date(Date.now() + 3600000), // 1 hour from now
       },
     });
 
@@ -88,8 +88,10 @@ export async function POST(req: Request) {
     const resetUrl = `${baseUrl}/auth/reset-password?token=${resetToken}`;
     console.log('Reset URL generated:', resetUrl);
 
-    const clinicName = user.clinicMemberships?.[0]?.clinic?.name || 'Your Healthcare Provider';
-    const clinicLogo = user.clinicMemberships?.[0]?.clinic?.logo;
+    // Use type assertion to access clinic_memberships property
+    const clinicMemberships = (user as any).clinic_memberships || [];
+    const clinicName = clinicMemberships[0]?.clinic?.name || 'Your Healthcare Provider';
+    const clinicLogo = clinicMemberships[0]?.clinic?.logo;
 
     console.log('Attempting to send email');
     try {
@@ -99,6 +101,7 @@ export async function POST(req: Request) {
       const emailHtml = createResetPasswordEmail({
         name: user.name || '',
         resetUrl,
+        expiryHours: 1, // Token expires in 1 hour
         clinicName,
         clinicLogo
       });

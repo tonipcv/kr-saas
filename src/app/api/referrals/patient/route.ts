@@ -29,8 +29,8 @@ export async function GET(request: NextRequest) {
       where: { id: userId },
       select: { 
         role: true,
-        doctorId: true,
-        referralCode: true
+        doctor_id: true,
+        referral_code: true
       }
     });
 
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     } catch (referralError) {
       console.error('Erro ao gerar código de indicação:', referralError instanceof Error ? referralError.message : String(referralError));
       // Se falhar, usar o código existente do usuário ou null
-      referralCode = user?.referralCode || null;
+      referralCode = (user as any)?.referral_code || null;
     }
 
     // Buscar saldo de créditos atual
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
 
     // Buscar histórico de créditos
     const creditsHistory = await prisma.referralCredit.findMany({
-      where: { userId },
+      where: { userId: userId },
       include: {
         referral_leads: {
           select: { name: true, email: true, status: true }
@@ -76,17 +76,56 @@ export async function GET(request: NextRequest) {
       take: 10
     });
 
-    // Buscar recompensas disponíveis (do médico do paciente)
+    // Resolver médico do paciente (para header e rewards)
+    // 1) Tentar via user.doctor_id
+    // 2) Fallback: relacionamento primário+ativo, senão ativo, senão qualquer
+    let resolvedDoctor: { id: string; name: string | null; email: string | null; image: string | null; doctor_slug?: string | null } | null = null;
+    if ((user as any)?.doctor_id) {
+      const doc = await prisma.user.findUnique({
+        where: { id: (user as any).doctor_id as string },
+        select: { id: true, name: true, email: true, image: true, doctor_slug: true }
+      });
+      if (doc) resolvedDoctor = doc as any;
+    }
+    if (!resolvedDoctor) {
+      const rels = await prisma.doctorPatientRelationship.findMany({
+        where: { patientId: userId },
+        include: { doctor: { select: { id: true, name: true, email: true, image: true, doctor_slug: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      });
+      const primaryActive = rels.find(r => (r as any)?.isPrimary && (r as any)?.isActive && (r as any)?.doctor);
+      const active = rels.find(r => (r as any)?.isActive && (r as any)?.doctor);
+      const anyRel = rels.find(r => (r as any)?.doctor);
+      const chosen: any = primaryActive || active || anyRel || null;
+      if (chosen?.doctor) {
+        resolvedDoctor = {
+          id: chosen.doctor.id,
+          name: chosen.doctor.name,
+          email: chosen.doctor.email,
+          image: chosen.doctor.image as any,
+          doctor_slug: (chosen.doctor as any)?.doctor_slug || null,
+        };
+      }
+    }
+    const doctorInfo: { id: string; name: string | null; email: string | null; image: string | null } | null = resolvedDoctor
+      ? { id: resolvedDoctor.id, name: resolvedDoctor.name, email: resolvedDoctor.email, image: resolvedDoctor.image as any }
+      : null;
+
+    // Buscar recompensas disponíveis (do médico resolvido para o paciente)
     let availableRewards: any[] = [];
-    if (user?.doctorId) {
+    const resolvedDoctorId = (resolvedDoctor as any)?.id || (user as any)?.doctor_id || null;
+    if (resolvedDoctorId) {
       availableRewards = await prisma.referralReward.findMany({
         where: {
-          doctorId: user.doctorId,
+          doctorId: resolvedDoctorId,
           isActive: true
         },
         include: {
-          _count: {
-            select: { redemptions: true }
+          // Incluir apenas resgates aprovados/entregues para não bloquear por pendentes
+          redemptions: {
+            where: { status: { in: ['APPROVED', 'FULFILLED'] } },
+            select: { id: true }
           }
         },
         orderBy: { costInCredits: 'asc' }
@@ -95,7 +134,7 @@ export async function GET(request: NextRequest) {
 
     // Buscar histórico de resgates
     const redemptionsHistory = await prisma.rewardRedemption.findMany({
-      where: { userId },
+      where: { userId: userId },
       include: {
         reward: {
           select: { title: true, description: true, costInCredits: true }
@@ -109,15 +148,15 @@ export async function GET(request: NextRequest) {
     const stats = {
       totalReferrals: referralsMade.length,
       convertedReferrals: referralsMade.filter(r => r.status === 'CONVERTED').length,
-      totalCreditsEarned: creditsHistory.reduce((sum, credit) => sum + Number(credit.amount), 0),
-      totalCreditsUsed: redemptionsHistory.reduce((sum, redemption) => sum + Number(redemption.creditsUsed), 0),
+      totalCreditsEarned: creditsHistory.reduce((sum, credit: any) => sum + Number(credit.amount), 0),
+      totalCreditsUsed: redemptionsHistory.reduce((sum, redemption: any) => sum + Number(redemption.creditsUsed), 0),
       currentBalance: creditsBalance
     };
 
     return NextResponse.json({
       stats,
       creditsBalance,
-      creditsHistory: creditsHistory.map(credit => ({
+      creditsHistory: creditsHistory.map((credit: any) => ({
         id: credit.id,
         amount: Number(credit.amount),
         type: credit.type,
@@ -128,40 +167,44 @@ export async function GET(request: NextRequest) {
           status: credit.referral_leads.status
         } : null
       })),
-      referralsMade: referralsMade.map(referral => ({
+      referralsMade: referralsMade.map((referral: any) => ({
         id: referral.id,
         name: referral.name,
         email: referral.email,
         status: referral.status,
         createdAt: referral.createdAt,
         doctor: referral.doctor,
-        credits: creditsHistory.filter(c => c.referralLeadId === referral.id).map(c => ({
+        credits: (creditsHistory as any[]).filter((c: any) => c.referralLeadId === referral.id).map((c: any) => ({
           id: c.id,
           amount: Number(c.amount),
           status: c.isUsed ? 'USED' : 'AVAILABLE'
         }))
       })),
-      availableRewards: availableRewards.map(reward => ({
+      availableRewards: availableRewards.map((reward: any) => ({
         id: reward.id,
         title: reward.title,
         description: reward.description,
         creditsRequired: Number(reward.costInCredits),
         maxRedemptions: reward.maxRedemptions,
-        currentRedemptions: reward._count.redemptions,
+        currentRedemptions: Array.isArray((reward as any).redemptions) ? (reward as any).redemptions.length : 0,
         isActive: reward.isActive
       })),
-      redemptionsHistory: redemptionsHistory.map(redemption => ({
+      redemptionsHistory: redemptionsHistory.map((redemption: any) => ({
         id: redemption.id,
         creditsUsed: Number(redemption.creditsUsed),
         status: redemption.status,
         redeemedAt: redemption.redeemedAt,
+        uniqueCode: redemption.uniqueCode || null,
         reward: {
           title: redemption.reward.title,
           description: redemption.reward.description,
           creditsRequired: Number(redemption.reward.costInCredits)
         }
       })),
-      doctorId: user?.doctorId,
+      doctorId: resolvedDoctorId,
+      doctorName: doctorInfo?.name || null,
+      doctor: doctorInfo,
+      doctorSlug: (resolvedDoctor as any)?.doctor_slug || null,
       referralCode: referralCode
     });
 
@@ -229,7 +272,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!reward.isActive) {
+    if (!(reward as any).isActive) {
       return NextResponse.json(
         { error: 'Recompensa não está ativa' },
         { status: 400 }
@@ -237,7 +280,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Verificar se atingiu o limite
-    if (reward.maxRedemptions && reward._count.redemptions >= reward.maxRedemptions) {
+    if ((reward as any).maxRedemptions && reward._count.redemptions >= (reward as any).maxRedemptions) {
       return NextResponse.json(
         { error: 'Limite de resgates atingido para esta recompensa' },
         { status: 400 }
@@ -246,55 +289,64 @@ export async function POST(req: NextRequest) {
 
     // Verificar se o usuário tem créditos suficientes
     const creditsBalance = await getUserCreditsBalance(userId);
-    if (creditsBalance < Number(reward.costInCredits)) {
+    if (creditsBalance < Number((reward as any).costInCredits)) {
       return NextResponse.json(
-        { error: `Créditos insuficientes. Você tem ${creditsBalance}, mas precisa de ${Number(reward.costInCredits)}` },
+        { error: `Créditos insuficientes. Você tem ${creditsBalance}, mas precisa de ${Number((reward as any).costInCredits)}` },
         { status: 400 }
       );
     }
 
     // Verificar se o usuário já resgatou esta recompensa recentemente
-    const recentRedemption = await prisma.rewardRedemption.findFirst({
-      where: {
-        userId,
-        rewardId,
-        redeemedAt: {
-          gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // últimas 24h
+    // Removido cooldown de 24h: múltiplos resgates podem ser feitos, desde que haja pontos e disponibilidade
+
+    // Criar o resgate e reservar créditos em uma transação
+    const result = await prisma.$transaction(async (tx) => {
+      // Criar o resgate PENDING
+      const redemption = await tx.rewardRedemption.create({
+        data: {
+          userId: userId,
+          rewardId: rewardId,
+          creditsUsed: (reward as any).costInCredits,
+          status: 'PENDING'
         }
-      }
-    });
+      });
 
-    if (recentRedemption) {
-      return NextResponse.json(
-        { error: 'Você já resgatou esta recompensa nas últimas 24 horas' },
-        { status: 400 }
-      );
-    }
+      // Selecionar créditos disponíveis (não usados)
+      const availableCredits = await tx.referralCredit.findMany({
+        where: { userId: userId, isUsed: false },
+        orderBy: { createdAt: 'asc' }
+      });
 
-    // Criar o resgate
-    const redemption = await prisma.rewardRedemption.create({
-      data: {
-        userId,
-        rewardId,
-        creditsUsed: reward.costInCredits,
-        status: 'PENDING'
-      }
-    });
+      let needed = Number((reward as any).costInCredits);
+      let reserved = 0;
 
-    // Atualizar contador de resgates da recompensa
-    await prisma.referralReward.update({
-      where: { id: rewardId },
-      data: {
-        currentRedemptions: {
-          increment: 1
-        }
+      for (const credit of availableCredits) {
+        if (reserved >= needed) break;
+        // Marcar crédito como usado e vincular ao resgate
+        await tx.referralCredit.update({
+          where: { id: credit.id },
+          data: {
+            isUsed: true,
+            usedAt: new Date(),
+            usedForRewardId: redemption.id
+          }
+        });
+        reserved += Number(credit.amount);
       }
+
+      if (reserved < needed) {
+        // Reverter criação caso não tenha conseguido reservar o suficiente (condição de corrida)
+        throw new Error('Créditos insuficientes no momento do resgate. Tente novamente.');
+      }
+
+      // Não incrementar currentRedemptions em PENDING; disponibilidade é baseada em APPROVED/FULFILLED
+      return redemption;
     });
 
     return NextResponse.json({
       success: true,
-      redemption,
-      message: 'Recompensa resgatada com sucesso! Aguarde a confirmação do seu médico.'
+      redemption: result,
+      message: 'Recompensa resgatada com sucesso! Seus pontos foram reservados. Aguarde a confirmação do seu médico.'
     });
 
   } catch (error) {

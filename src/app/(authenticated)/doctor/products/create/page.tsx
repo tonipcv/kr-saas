@@ -30,6 +30,7 @@ export default function CreateProductPage() {
     discountPercentage: '',
     purchaseUrl: '',
     usageStats: '0',
+    creditsPerUnit: '',
     isActive: true
   });
 
@@ -66,12 +67,21 @@ export default function CreateProductPage() {
     try {
       setIsLoading(true);
       
+      const payload: any = {
+        ...formData,
+        // normalize numeric fields
+        originalPrice: formData.originalPrice ? Number(formData.originalPrice) : undefined,
+        discountPrice: formData.discountPrice ? Number(formData.discountPrice) : undefined,
+        usageStats: formData.usageStats ? Number(formData.usageStats) : undefined,
+        creditsPerUnit: formData.creditsPerUnit ? Number(formData.creditsPerUnit) : undefined,
+      };
+
       const response = await fetch('/api/products', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
@@ -108,65 +118,60 @@ export default function CreateProductPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gray-50">
       <div className="lg:ml-64">
         <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
         
           {/* Header */}
-          <div className="flex items-center gap-6 mb-8">
-            <Button variant="ghost" size="sm" asChild className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl px-4 shadow-md font-semibold">
+          <div className="flex items-center gap-4 mb-4">
+            <Button variant="ghost" size="sm" asChild className="h-9 rounded-xl px-3 border border-gray-200 text-gray-700 hover:bg-gray-50">
               <Link href="/doctor/products">
                 <ArrowLeftIcon className="h-4 w-4 mr-2" />
                 Back
               </Link>
             </Button>
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                New Product
-              </h1>
-              <p className="text-gray-600 font-medium">
-                Add a new product to recommend to clients
-              </p>
+              <h1 className="text-[20px] font-semibold text-gray-900 tracking-[-0.01em]">New Product</h1>
+              <p className="text-sm text-gray-500 mt-1">Add a new product to recommend to clients</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
+          <div>
             {/* Form */}
-            <div className="lg:col-span-2">
-              <form onSubmit={handleSubmit} className="space-y-8">
+            <div>
+              <form onSubmit={handleSubmit} className="space-y-6">
                 
                 {/* Basic Information */}
-                <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-lg font-bold text-gray-900">Basic Information</CardTitle>
+                <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base font-semibold text-gray-900">Basic Information</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div>
-                      <Label htmlFor="name" className="text-gray-900 font-semibold">Product Name *</Label>
+                      <Label htmlFor="name" className="text-gray-900 font-medium">Product Name *</Label>
                       <Input
                         id="name"
                         value={formData.name}
                         onChange={(e) => handleInputChange('name', e.target.value)}
                         placeholder="e.g., Ultra Light Sunscreen"
                         required
-                        className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-12"
+                        className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
                       />
                     </div>
 
                     <div>
-                      <Label htmlFor="brand" className="text-gray-900 font-semibold">Brand</Label>
+                      <Label htmlFor="brand" className="text-gray-900 font-medium">Brand</Label>
                       <Input
                         id="brand"
                         value={formData.brand}
                         onChange={(e) => handleInputChange('brand', e.target.value)}
                         placeholder="e.g., La Roche-Posay"
-                        className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-12"
+                        className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
                       />
                     </div>
 
                     <div>
-                      <Label htmlFor="description" className="text-gray-900 font-semibold">Description</Label>
+                      <Label htmlFor="description" className="text-gray-900 font-medium">Description</Label>
                       <Textarea
                         id="description"
                         value={formData.description}
@@ -178,28 +183,28 @@ export default function CreateProductPage() {
                     </div>
 
                     <div>
-                      <Label htmlFor="imageUrl" className="text-gray-900 font-semibold">Image URL</Label>
+                      <Label htmlFor="imageUrl" className="text-gray-900 font-medium">Image URL</Label>
                       <Input
                         id="imageUrl"
                         value={formData.imageUrl}
                         onChange={(e) => handleInputChange('imageUrl', e.target.value)}
                         placeholder="https://example.com/image.jpg"
                         type="url"
-                        className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-12"
+                        className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
                       />
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Pricing */}
-                <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-lg font-bold text-gray-900">Pricing</CardTitle>
+                <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base font-semibold text-gray-900">Pricing</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <Label htmlFor="originalPrice" className="text-gray-900 font-semibold">Original Price</Label>
+                        <Label htmlFor="originalPrice" className="text-gray-900 font-medium">Original Price</Label>
                         <Input
                           id="originalPrice"
                           value={formData.originalPrice}
@@ -208,12 +213,12 @@ export default function CreateProductPage() {
                           type="number"
                           step="0.01"
                           min="0"
-                          className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-12"
+                          className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
                         />
                       </div>
 
                       <div>
-                        <Label htmlFor="discountPrice" className="text-gray-900 font-semibold">Discount Price</Label>
+                        <Label htmlFor="discountPrice" className="text-gray-900 font-medium">Discount Price</Label>
                         <Input
                           id="discountPrice"
                           value={formData.discountPrice}
@@ -222,7 +227,7 @@ export default function CreateProductPage() {
                           type="number"
                           step="0.01"
                           min="0"
-                          className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-12"
+                          className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
                         />
                       </div>
                     </div>
@@ -237,26 +242,47 @@ export default function CreateProductPage() {
                   </CardContent>
                 </Card>
 
+                {/* Points */}
+                <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base font-semibold text-gray-900">Points</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div>
+                      <Label htmlFor="creditsPerUnit" className="text-gray-900 font-medium">Points per Unit</Label>
+                      <Input
+                        id="creditsPerUnit"
+                        value={formData.creditsPerUnit}
+                        onChange={(e) => handleInputChange('creditsPerUnit', e.target.value)}
+                        placeholder="0"
+                        type="number"
+                        min="0"
+                        className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
                 {/* Purchase Details */}
-                <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-lg font-bold text-gray-900">Purchase Details</CardTitle>
+                <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base font-semibold text-gray-900">Purchase Details</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div>
-                      <Label htmlFor="purchaseUrl" className="text-gray-900 font-semibold">Purchase Link</Label>
+                      <Label htmlFor="purchaseUrl" className="text-gray-900 font-medium">Purchase Link</Label>
                       <Input
                         id="purchaseUrl"
                         value={formData.purchaseUrl}
                         onChange={(e) => handleInputChange('purchaseUrl', e.target.value)}
                         placeholder="https://store.com/product"
                         type="url"
-                        className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-12"
+                        className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
                       />
                     </div>
 
                     <div>
-                      <Label htmlFor="usageStats" className="text-gray-900 font-semibold">Usage Statistics (%)</Label>
+                      <Label htmlFor="usageStats" className="text-gray-900 font-medium">Usage Statistics (%)</Label>
                       <Input
                         id="usageStats"
                         value={formData.usageStats}
@@ -265,7 +291,7 @@ export default function CreateProductPage() {
                         type="number"
                         min="0"
                         max="100"
-                        className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-12"
+                        className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
                       />
                       <p className="text-sm text-gray-500 font-medium mt-2">
                         Percentage of clients who use this product
@@ -275,14 +301,14 @@ export default function CreateProductPage() {
                 </Card>
 
                 {/* Status */}
-                <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-lg font-bold text-gray-900">Status</CardTitle>
+                <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base font-semibold text-gray-900">Status</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label htmlFor="isActive" className="text-gray-900 font-semibold">Active Product</Label>
+                        <Label htmlFor="isActive" className="text-gray-900 font-medium">Active Product</Label>
                         <p className="text-gray-500 font-medium mt-1">
                           Active products can be recommended in protocols
                         </p>
@@ -297,8 +323,8 @@ export default function CreateProductPage() {
                 </Card>
 
                 {/* Actions */}
-                <div className="flex gap-4">
-                  <Button type="submit" disabled={isLoading} className="flex-1 bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl h-12 shadow-md font-semibold">
+                <div className="flex gap-3">
+                  <Button type="submit" disabled={isLoading} className="flex-1 bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl h-10 shadow-sm font-medium">
                     {isLoading ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -311,7 +337,7 @@ export default function CreateProductPage() {
                       </>
                     )}
                   </Button>
-                  <Button type="button" variant="outline" asChild className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-12 px-6 shadow-md font-semibold">
+                  <Button type="button" variant="outline" asChild className="border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-xl h-10 px-4 shadow-sm font-medium">
                     <Link href="/doctor/products">
                       <XMarkIcon className="h-4 w-4 mr-2" />
                       Cancel
@@ -319,93 +345,6 @@ export default function CreateProductPage() {
                   </Button>
                 </div>
               </form>
-            </div>
-
-            {/* Preview */}
-            <div className="lg:col-span-1">
-              <Card className="sticky top-6 bg-white border-gray-200 shadow-lg rounded-2xl">
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-lg font-bold text-gray-900">Preview</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-6">
-                    {/* Product Image */}
-                    <div className="w-full h-40 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden">
-                      {formData.imageUrl ? (
-                        <img 
-                          src={formData.imageUrl} 
-                          alt={formData.name || 'Product'}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <ShoppingBagIcon className="h-10 w-10 text-gray-400" />
-                      )}
-                    </div>
-
-                    {/* Product Info */}
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900">
-                        {formData.name || 'Product Name'}
-                      </h3>
-                      {formData.brand && (
-                        <p className="text-[#5154e7] font-semibold mt-1">{formData.brand}</p>
-                      )}
-                    </div>
-
-                    {formData.description && (
-                      <p className="text-gray-600 font-medium line-clamp-3">
-                        {formData.description}
-                      </p>
-                    )}
-
-                    {/* Price */}
-                    {(formData.originalPrice || formData.discountPrice) && (
-                      <div className="flex items-center gap-3">
-                        {formData.discountPrice && formData.originalPrice ? (
-                          <>
-                            <span className="text-lg font-bold text-[#5154e7]">
-                              {formatPrice(formData.discountPrice)}
-                            </span>
-                            <span className="text-sm text-gray-400 line-through">
-                              {formatPrice(formData.originalPrice)}
-                            </span>
-                            {getDiscountPercentage() > 0 && (
-                              <Badge className="bg-[#5154e7] text-white border-[#5154e7] font-semibold">
-                                -{getDiscountPercentage()}%
-                              </Badge>
-                            )}
-                          </>
-                        ) : (
-                          <span className="text-lg font-bold text-gray-900">
-                            {formatPrice(formData.originalPrice || formData.discountPrice)}
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Status */}
-                    <div className="flex items-center gap-3">
-                      {formData.isActive ? (
-                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 font-semibold">
-                          Active
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="bg-gray-100 text-gray-700 border-gray-200 font-semibold">
-                          Inactive
-                        </Badge>
-                      )}
-                      {formData.usageStats && parseInt(formData.usageStats) > 0 && (
-                        <span className="text-sm text-gray-600 font-medium">
-                          {formData.usageStats}% of clients
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
             </div>
           </div>
         </div>

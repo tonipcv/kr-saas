@@ -61,12 +61,13 @@ export async function GET(
       // Adicionar campos que o frontend espera mas que não existem na tabela
       brand: null,
       imageUrl: null,
-      originalPrice: product.price,
+      originalPrice: product?.price != null ? Number(product.price) : null,
       discountPrice: null,
       discountPercentage: null,
       purchaseUrl: null,
       usageStats: 0,
       doctorId: session.user.id, // Simular que pertence ao médico atual
+      creditsPerUnit: (product as any)?.creditsPerUnit != null ? Number((product as any).creditsPerUnit) : null,
       _count: {
         protocolProducts: product._count.protocol_products
       },
@@ -113,6 +114,7 @@ export async function PUT(
       name, 
       description, 
       originalPrice,
+      creditsPerUnit,
       category = 'Geral',
       isActive = true
     } = body;
@@ -139,6 +141,7 @@ export async function PUT(
         name,
         description,
         price: originalPrice ? parseFloat(originalPrice) : existingProduct.price,
+        creditsPerUnit: typeof creditsPerUnit === 'number' ? creditsPerUnit : (creditsPerUnit != null ? parseFloat(creditsPerUnit) : existingProduct.creditsPerUnit),
         category,
         isActive
       }
@@ -149,12 +152,13 @@ export async function PUT(
       ...updatedProduct,
       brand: null,
       imageUrl: null,
-      originalPrice: updatedProduct.price,
+      originalPrice: updatedProduct?.price != null ? Number(updatedProduct.price) : null,
       discountPrice: null,
       discountPercentage: null,
       purchaseUrl: null,
       usageStats: 0,
-      doctorId: session.user.id
+      doctorId: session.user.id,
+      creditsPerUnit: (updatedProduct as any)?.creditsPerUnit != null ? Number((updatedProduct as any).creditsPerUnit) : null
     };
 
     return NextResponse.json(transformedProduct);

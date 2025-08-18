@@ -18,7 +18,31 @@ export async function GET(req: Request) {
         email: true,
         image: true,
         role: true,
-        googleReviewLink: true,
+        google_review_link: true,
+        is_active: true,
+        created_at: true,
+        updated_at: true,
+        email_verified: true,
+        password: true,
+        reset_token: true,
+        reset_token_expiry: true,
+        verification_code: true,
+        verification_code_expiry: true,
+        doctor_id: true,
+        referral_code: true,
+        phone: true,
+        birth_date: true,
+        gender: true,
+        address: true,
+        emergency_contact: true,
+        emergency_phone: true,
+        medical_history: true,
+        allergies: true,
+        medications: true,
+        notes: true,
+        stripe_connect_id: true,
+        ai_assistant_settings: true,
+        doctor_slug: true,
       },
     });
 
@@ -44,12 +68,12 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const { name, image, googleReviewLink } = body;
+    const { name, image, google_review_link, doctor_slug } = body;
 
     // Get current user to check role
     const currentUser = await prisma.user.findUnique({
       where: { email: session.user.email },
-      select: { role: true },
+      select: { role: true, id: true },
     });
 
     if (!currentUser) {
@@ -59,9 +83,44 @@ export async function PUT(req: Request) {
     // Prepare update data
     const updateData: any = { name, image };
 
-    // Only doctors can update googleReviewLink
-    if (currentUser.role === 'DOCTOR' && googleReviewLink !== undefined) {
-      updateData.googleReviewLink = googleReviewLink;
+    // Only doctors can update google_review_link
+    if (currentUser.role === 'DOCTOR' && google_review_link !== undefined) {
+      updateData.google_review_link = google_review_link;
+    }
+
+    // Allow doctors to update doctor_slug with validation
+    if (currentUser.role === 'DOCTOR' && typeof doctor_slug === 'string') {
+      const raw = doctor_slug.trim();
+      if (raw.length === 0) {
+        updateData.doctor_slug = null;
+      } else {
+        // normalize: lower-case, only a-z0-9 and hyphens, collapse spaces
+        const normalized = raw
+          .toLowerCase()
+          .normalize('NFKD')
+          .replace(/[^a-z0-9\s-]/g, '')
+          .trim()
+          .replace(/\s+/g, '-')
+          .replace(/-+/g, '-');
+
+        if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(normalized)) {
+          return NextResponse.json({ error: 'Slug inválido. Use letras, números e hífens, sem começar/terminar com hífen.' }, { status: 400 });
+        }
+
+        // Uniqueness check (exclude current user)
+        const exists = await prisma.user.findFirst({
+          where: {
+            doctor_slug: normalized,
+            NOT: { id: currentUser.id },
+          },
+          select: { id: true },
+        });
+        if (exists) {
+          return NextResponse.json({ error: 'Este slug já está em uso. Escolha outro.' }, { status: 409 });
+        }
+
+        updateData.doctor_slug = normalized;
+      }
     }
 
     const updatedUser = await prisma.user.update({
@@ -77,4 +136,5 @@ export async function PUT(req: Request) {
       { status: 500 }
     );
   }
-} 
+}
+ 

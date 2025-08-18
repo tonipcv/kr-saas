@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     }
 
     const formData = await req.formData();
-    const file = formData.get('file') as File;
+    const file = (formData.get('file') || formData.get('image')) as File | null;
     
     if (!file) {
       return NextResponse.json({ error: 'Nenhuma imagem enviada' }, { status: 400 });

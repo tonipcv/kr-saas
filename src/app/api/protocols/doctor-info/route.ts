@@ -40,43 +40,52 @@ export async function GET(request: NextRequest) {
     console.log('User data:', { 
       userId: user?.id, 
       role: user?.role,
-      relationships: user?.patient_relationships.map(rel => ({
-        doctorId: rel.doctorId,
-        doctorName: rel.doctor.name,
-        isPrimary: rel.isPrimary
-      }))
+      relationships: user?.patient_relationships?.map(rel => ({
+        doctorId: (rel as any).doctorId ?? (rel as any).doctor_id,
+        doctorName: rel.doctor?.name,
+        isPrimary: (rel as any).isPrimary ?? (rel as any).is_primary
+      })) ?? []
     });
 
     // Function to get clinic logo for a doctor
     const getClinicLogo = async (doctorId: string) => {
-      // First try to find clinic where doctor is owner
-      const ownedClinic = await prisma.clinic.findFirst({
-        where: { ownerId: doctorId },
-        select: { logo: true, name: true }
-      });
+      try {
+        // First try to find clinic where doctor is owner
+        const ownedClinic = await prisma.clinic.findFirst({
+          where: { ownerId: doctorId },
+          select: { logo: true, name: true }
+        });
 
-      if (ownedClinic?.logo) {
-        return { logo: ownedClinic.logo, clinicName: ownedClinic.name };
-      }
-
-      // Then try to find clinic where doctor is a member
-      const memberClinic = await prisma.clinicMember.findFirst({
-        where: { 
-          userId: doctorId,
-          isActive: true 
-        },
-        include: {
-          clinic: {
-            select: { logo: true, name: true }
-          }
+        if (ownedClinic?.logo) {
+          return { logo: ownedClinic.logo, clinicName: ownedClinic.name };
         }
-      });
 
-      if (memberClinic?.clinic?.logo) {
-        return { logo: memberClinic.clinic.logo, clinicName: memberClinic.clinic.name };
+        // Then try to find clinic where doctor is a member
+        const memberClinic = await prisma.clinicMember.findFirst({
+          where: { 
+            userId: doctorId,
+            isActive: true 
+          },
+          include: {
+            clinic: {
+              select: { logo: true, name: true }
+            }
+          }
+        });
+
+        if (memberClinic?.clinic?.logo) {
+          return { logo: memberClinic.clinic.logo, clinicName: memberClinic.clinic.name };
+        }
+
+        return { logo: null, clinicName: null };
+      } catch (e) {
+        console.error('Error in getClinicLogo()', {
+          doctorId,
+          error: e instanceof Error ? e.message : e,
+          stack: e instanceof Error ? e.stack : undefined,
+        });
+        return { logo: null, clinicName: null };
       }
-
-      return { logo: null, clinicName: null };
     };
 
     // If the user IS a doctor, return their own info
@@ -102,6 +111,33 @@ export async function GET(request: NextRequest) {
       response.headers.set('Expires', '0');
       
       return response;
+    }
+
+    // If patient has a directly linked doctor_id, use that first
+    if ((user as any)?.doctor_id) {
+      console.log('Using user.doctor_id to resolve doctor');
+      const doctor = await prisma.user.findUnique({
+        where: { id: (user as any).doctor_id as string },
+        select: { id: true, name: true, email: true, image: true }
+      });
+      if (doctor) {
+        const clinicInfo = await getClinicLogo(doctor.id);
+        const response = NextResponse.json({
+          success: true,
+          doctor: {
+            id: doctor.id,
+            name: doctor.name,
+            email: doctor.email,
+            image: doctor.image,
+            clinicLogo: clinicInfo.logo,
+            clinicName: clinicInfo.clinicName
+          }
+        });
+        response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        response.headers.set('Pragma', 'no-cache');
+        response.headers.set('Expires', '0');
+        return response;
+      }
     }
 
     // For patients, get their primary doctor from relationships
@@ -131,12 +167,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Fallback: Buscar protocolos ativos do usuário que mostram informações do médico
-    const activeProtocols = await prisma.userProtocol.findMany({
+    const activeProtocols = await prisma.protocolPrescription.findMany({
       where: {
-        userId: session.user.id,
-        isActive: true,
+        user_id: session.user.id,
         protocol: {
-          showDoctorInfo: true
+          show_doctor_info: true
         }
       },
       include: {
@@ -154,7 +189,7 @@ export async function GET(request: NextRequest) {
         }
       },
       orderBy: {
-        startDate: 'desc'
+        planned_start_date: 'desc'
       },
       take: 1 // Pegar apenas o protocolo mais recente
     });
@@ -203,10 +238,16 @@ export async function GET(request: NextRequest) {
     
     return response;
   } catch (error) {
-    console.error('Error fetching doctor info:', error instanceof Error ? error.message : 'Unknown error');
+    // Log detailed error information to help debug 500s
+    const err = error as any;
+    console.error('[doctor-info] Unhandled error fetching doctor info', {
+      message: err?.message ?? 'Unknown error',
+      name: err?.name,
+      stack: err?.stack,
+    });
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
     );
   }
-} 
+}

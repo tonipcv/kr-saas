@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hash } from "bcryptjs";
+import crypto from "crypto";
 
 export async function POST(request: Request) {
   try {
@@ -9,6 +10,12 @@ export async function POST(request: Request) {
     if (!token || !password) {
       return NextResponse.json({ error: 'Token and password are required' }, { status: 400 });
     }
+    
+    // Hash the token to match what's stored in the database
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
 
     if (password.length < 6) {
       return NextResponse.json({ error: 'Password must be at least 6 characters long' }, { status: 400 });
@@ -17,34 +24,12 @@ export async function POST(request: Request) {
     // Find user with valid reset token
     const user = await prisma.user.findFirst({
       where: {
-        resetToken: token,
-        resetTokenExpiry: {
+        reset_token: hashedToken, // Use the hashed token for comparison
+        reset_token_expiry: {
           gt: new Date() // Token must not be expired
         }
       },
-      include: {
-        doctor: {
-          select: {
-            name: true,
-            googleReviewLink: true,
-            // Get clinic information for the doctor
-            ownedClinics: {
-              where: { isActive: true },
-              select: { slug: true, name: true },
-              take: 1
-            },
-            clinicMemberships: {
-              where: { isActive: true },
-              include: {
-                clinic: {
-                  select: { slug: true, name: true }
-                }
-              },
-              take: 1
-            }
-          }
-        }
-      }
+      // No need to include relations for password reset
     });
 
     if (!user) {
@@ -59,37 +44,17 @@ export async function POST(request: Request) {
       where: { id: user.id },
       data: {
         password: hashedPassword,
-        resetToken: null,
-        resetTokenExpiry: null,
-        emailVerified: new Date() // Mark email as verified when password is set
+        reset_token: null,
+        reset_token_expiry: null,
+        email_verified: new Date() // Mark email as verified when password is set
       }
     });
 
     console.log(`✅ Password updated successfully for user: ${user.email}`);
 
-    // Get clinic information for response
-    let clinicName = 'Your Healthcare Provider';
-    let clinicSlug = null;
-    
-    if (user.doctor) {
-      // Check if doctor owns a clinic
-      if (user.doctor.ownedClinics.length > 0) {
-        clinicName = user.doctor.ownedClinics[0].name;
-        clinicSlug = user.doctor.ownedClinics[0].slug;
-      }
-      // Otherwise check if doctor is a member of a clinic
-      else if (user.doctor.clinicMemberships.length > 0) {
-        clinicName = user.doctor.clinicMemberships[0].clinic.name;
-        clinicSlug = user.doctor.clinicMemberships[0].clinic.slug;
-      }
-    }
-
     return NextResponse.json({
       message: 'Password updated successfully',
-      clinicName,
-      clinicSlug,
-      doctorName: user.doctor?.name || '',
-      googleReviewLink: user.doctor?.googleReviewLink || ''
+      email: user.email // Include email in response to help with redirect
     });
 
   } catch (error) {

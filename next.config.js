@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  env: {
+    STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -18,7 +21,7 @@ const nextConfig = {
     return config
   },
   images: {
-    domains: ['images.unsplash.com', 'boop-minioboop.dpbdp1.easypanel.host'],
+    domains: ['images.unsplash.com', 'boop-minioboop.dpbdp1.easypanel.host', 'ui-avatars.com'],
   },
 }
 

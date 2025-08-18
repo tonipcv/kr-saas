@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../../../../../lib/prisma';
 import { z } from 'zod';
 
 // Initialize Prisma client directly
-const prisma = new PrismaClient();
+
 
 const createQuestionSchema = z.object({
   question: z.string().min(1, 'A pergunta é obrigatória'),

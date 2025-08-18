@@ -13,7 +13,7 @@ export async function GET() {
     // Get doctor user
     const doctor = await prisma.user.findUnique({
       where: { email: session.user.email },
-      select: { id: true, role: true }
+      select: { id: true, role: true, created_at: true, updated_at: true }
     });
 
     if (!doctor || doctor.role !== 'DOCTOR') {
@@ -22,27 +22,27 @@ export async function GET() {
 
     // Get statistics
     const [totalPatients, totalProtocols] = await Promise.all([
-      // Count patients linked to this doctor (via UserProtocol)
-      prisma.userProtocol.groupBy({
-        by: ['userId'],
+      // Count distinct patients with prescriptions for this doctor's protocols
+      prisma.protocolPrescription.groupBy({
+        by: ['user_id'],
         where: {
           protocol: {
-            doctorId: doctor.id
-          }
-        }
+            doctor_id: doctor.id,
+          },
+        },
       }).then(groups => groups.length),
-      
+
       // Count protocols created by this doctor
       prisma.protocol.count({
-        where: { doctorId: doctor.id }
+        where: { doctor_id: doctor.id }
       })
     ]);
 
     // For templates, we'll count protocols marked as templates
     const totalTemplates = await prisma.protocol.count({
       where: { 
-        doctorId: doctor.id,
-        isTemplate: true
+        doctor_id: doctor.id,
+        is_template: true
       }
     });
 
@@ -50,8 +50,8 @@ export async function GET() {
       totalPatients,
       totalProtocols,
       totalTemplates,
-      joinedDate: new Date().toISOString(), // Placeholder since createdAt is not in select
-      lastLogin: new Date().toISOString() // For now, use current date
+      joinedDate: doctor.created_at?.toISOString?.() || null,
+      lastLogin: doctor.updated_at?.toISOString?.() || null,
     });
 
   } catch (error) {
@@ -61,4 +61,5 @@ export async function GET() {
       { status: 500 }
     );
   }
-} 
+}
+ 

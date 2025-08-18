@@ -55,7 +55,43 @@ export const authOptions: AuthOptions = {
           }
         });
 
-        if (!user || !user.password) {
+        if (!user) {
+          throw new Error("Invalid credentials");
+        }
+        
+        // Verificar se é uma autenticação via token
+        if (credentials.password.startsWith('token:')) {
+          // Extrair o token da string
+          const token = credentials.password.substring(6);
+          
+          try {
+            // Verificar o token JWT
+            const secret = process.env.NEXTAUTH_SECRET || 'default-secret-key';
+            const decoded = require('jsonwebtoken').verify(token, secret);
+            
+            // Verificar se o token pertence ao usuário correto
+            if (decoded.email !== user.email) {
+              throw new Error("Token não pertence a este usuário");
+            }
+            
+            console.log('Autenticação via token bem-sucedida para:', user.email);
+            
+            // Token válido, autenticar o usuário
+            return {
+              id: user.id,
+              email: user.email,
+              name: user.name,
+              image: user.image,
+              role: user.role,
+            };
+          } catch (error) {
+            console.error('Erro ao verificar token JWT:', error);
+            throw new Error("Token inválido ou expirado");
+          }
+        }
+        
+        // Autenticação normal com senha
+        if (!user.password) {
           throw new Error("Invalid credentials");
         }
 

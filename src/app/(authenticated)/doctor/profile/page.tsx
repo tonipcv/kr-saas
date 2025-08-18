@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { useState, useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { 
   ArrowRightOnRectangleIcon, 
   CameraIcon,
@@ -17,7 +17,8 @@ import {
   UsersIcon,
   DocumentTextIcon,
   StarIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  PencilSquareIcon
 } from '@heroicons/react/24/outline';
 import { Loader2 } from 'lucide-react';
 import Image from "next/image";
@@ -47,6 +48,17 @@ export default function DoctorProfilePage() {
   const [userRole, setUserRole] = useState<'DOCTOR' | 'PATIENT' | 'SUPER_ADMIN' | null>(null);
   const [userStats, setUserStats] = useState<UserStats>({});
   const [googleReviewLink, setGoogleReviewLink] = useState('');
+  const [doctorSlug, setDoctorSlug] = useState('');
+
+  const slugify = (value: string) => {
+    return (value || '')
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[^a-z0-9\s-]/g, '')
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-');
+  };
 
   // Load user data and stats
   useEffect(() => {
@@ -61,7 +73,16 @@ export default function DoctorProfilePage() {
             const profileData = await profileResponse.json();
             setName(profileData.name || '');
             setEmail(profileData.email || '');
-            setGoogleReviewLink(profileData.googleReviewLink || '');
+            setGoogleReviewLink(profileData.google_review_link || profileData.googleReviewLink || '');
+            const incomingSlug = profileData.doctor_slug || '';
+            if (incomingSlug) {
+              setDoctorSlug(incomingSlug);
+            } else if (profileData.name) {
+              // Prefill suggestion from name (UI only)
+              setDoctorSlug(slugify(profileData.name));
+            } else {
+              setDoctorSlug('');
+            }
             // Add cache-busting to initial image load to ensure fresh image
             const initialImage = profileData.image;
             setImage(initialImage ? `${initialImage}?t=${Date.now()}` : '');
@@ -160,7 +181,8 @@ export default function DoctorProfilePage() {
         body: JSON.stringify({ 
           name, 
           image: newImage || image,
-          googleReviewLink
+          google_review_link: googleReviewLink,
+          doctor_slug: doctorSlug,
         }),
       });
 
@@ -189,11 +211,12 @@ export default function DoctorProfilePage() {
   const getRoleDisplay = () => {
     switch (userRole) {
       case 'DOCTOR':
-        return { label: 'Doctor', color: 'bg-blue-100 text-blue-700 border-blue-200', icon: UserIcon };
+        // Use gradient for Doctor tag to match branding
+        return { label: 'Doctor', color: 'bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white border-transparent', icon: UserIcon };
       case 'SUPER_ADMIN':
         return { label: 'Super Admin', color: 'bg-purple-100 text-purple-700 border-purple-200', icon: ShieldCheckIcon };
       default:
-        return { label: 'Doctor', color: 'bg-blue-100 text-blue-700 border-blue-200', icon: UserIcon };
+        return { label: 'Doctor', color: 'bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white border-transparent', icon: UserIcon };
     }
   };
 
@@ -212,20 +235,27 @@ export default function DoctorProfilePage() {
       <div className="min-h-screen bg-white">
         <div className="lg:ml-64">
           <div className="container mx-auto p-6 lg:p-8 pt-[88px] lg:pt-8 pb-24 lg:pb-8">
-            <div className="space-y-8">
-              
-              {/* Header Skeleton */}
-              <div className="space-y-2">
+            <div className="space-y-6">
+              {/* Top bar skeleton */}
+              <div className="flex items-center justify-between">
                 <div className="h-8 bg-gray-200 rounded w-32 animate-pulse"></div>
-                <div className="h-4 bg-gray-200 rounded w-64 animate-pulse"></div>
+                <div className="h-8 bg-gray-200 rounded w-24 animate-pulse"></div>
+              </div>
+
+              {/* Tabs skeleton */}
+              <div className="flex items-center gap-4 border-b border-gray-200 -mt-2 pb-2">
+                <div className="h-4 bg-gray-200 rounded w-20 animate-pulse"></div>
+                <div className="h-4 bg-gray-200 rounded w-36 animate-pulse"></div>
+                <div className="h-4 bg-gray-200 rounded w-24 animate-pulse"></div>
+                <div className="h-4 bg-gray-200 rounded w-28 animate-pulse"></div>
               </div>
 
               {/* Content Grid Skeleton */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className={`${isEditing ? 'max-w-5xl gap-6' : 'max-w-md gap-5'} mx-auto grid grid-cols-1`}>
                 
                 {/* Main Profile Card Skeleton */}
                 <div className="lg:col-span-2">
-                  <div className="bg-white border border-gray-200 shadow-lg rounded-2xl p-6">
+                  <div className="bg-white border border-gray-100 shadow-none rounded-lg p-6">
                     <div className="h-6 bg-gray-200 rounded w-48 mb-6 animate-pulse"></div>
                     
                     {/* Profile Image Skeleton */}
@@ -238,57 +268,21 @@ export default function DoctorProfilePage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                       <div className="space-y-2">
                         <div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div>
-                        <div className="h-12 bg-gray-200 rounded-xl animate-pulse"></div>
+                        <div className="h-8 bg-gray-200 rounded-md animate-pulse"></div>
                       </div>
                       <div className="space-y-2">
                         <div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div>
-                        <div className="h-12 bg-gray-200 rounded-xl animate-pulse"></div>
+                        <div className="h-8 bg-gray-200 rounded-md animate-pulse"></div>
                       </div>
                     </div>
 
-                    {/* Buttons Skeleton */}
+                    {/* Sign Out minimal skeleton */}
                     <div className="space-y-3">
-                      <div className="h-12 bg-gray-200 rounded-xl w-32 animate-pulse"></div>
-                      <div className="h-12 bg-gray-200 rounded-xl w-full animate-pulse"></div>
+                      <div className="h-8 bg-gray-200 rounded-md w-full animate-pulse"></div>
                     </div>
                   </div>
                 </div>
-
-                {/* Sidebar Skeleton */}
-                <div className="space-y-6">
-                  {/* Account Info Skeleton */}
-                  <div className="bg-white border border-gray-200 shadow-lg rounded-2xl p-6">
-                    <div className="h-6 bg-gray-200 rounded w-40 mb-4 animate-pulse"></div>
-                    <div className="space-y-3">
-                      <div className="flex justify-between">
-                        <div className="h-4 bg-gray-200 rounded w-24 animate-pulse"></div>
-                        <div className="h-4 bg-gray-200 rounded w-20 animate-pulse"></div>
-                      </div>
-                      <div className="flex justify-between">
-                        <div className="h-4 bg-gray-200 rounded w-24 animate-pulse"></div>
-                        <div className="h-4 bg-gray-200 rounded w-20 animate-pulse"></div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Stats Skeleton */}
-                  <div className="bg-white border border-gray-200 shadow-lg rounded-2xl p-6">
-                    <div className="h-6 bg-gray-200 rounded w-32 mb-4 animate-pulse"></div>
-                    <div className="space-y-4">
-                      {[1, 2, 3].map((i) => (
-                        <div key={i} className="p-4 bg-gray-50 rounded-xl">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-5 h-5 bg-gray-200 rounded animate-pulse"></div>
-                            <div className="flex-1">
-                              <div className="h-5 bg-gray-200 rounded w-8 mb-1 animate-pulse"></div>
-                              <div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                {/* Sidebar removed in new design */}
               </div>
 
             </div>
@@ -302,32 +296,72 @@ export default function DoctorProfilePage() {
   const RoleIcon = roleInfo.icon;
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white text-gray-900">
       <div className="lg:ml-64">
         <div className="container mx-auto p-6 lg:p-8 pt-[88px] lg:pt-8 pb-24 lg:pb-8">
-          <div className="space-y-8">
-            
-            {/* Header */}
-            <div className="space-y-2">
-              <h1 className="text-3xl font-bold text-gray-900">
-                Profile
-              </h1>
-              <p className="text-gray-600 font-medium">
-                Manage your personal information and account settings
-              </p>
+          <div className="space-y-6">
+            {/* Top bar + tabs */}
+            <div className={`flex items-center justify-between ${isEditing ? 'sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-200 py-2 -mx-6 px-6 lg:-mx-8 lg:px-8' : ''}`}>
+              <h1 className="text-2xl font-semibold">Profile</h1>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={() => (isEditing ? handleSave() : setIsEditing(true))}
+                  className={`rounded-md h-8 text-sm px-3 ${isEditing ? 'bg-transparent text-gray-800 hover:bg-gray-50' : 'bg-transparent text-gray-700 hover:bg-gray-50'}`}
+                >
+                  {isEditing ? 'Save Changes' : 'Edit Profile'}
+                </Button>
+                {isEditing && (
+                  <Button
+                    onClick={() => {
+                      setIsEditing(false);
+                      setName(session?.user?.name || '');
+                      const loadOriginalData = async () => {
+                        try {
+                          const response = await fetch('/api/profile');
+                          if (response.ok) {
+                            const data = await response.json();
+                            setGoogleReviewLink(data.google_review_link || data.googleReviewLink || '');
+                            if (data.doctor_slug) {
+                              setDoctorSlug(data.doctor_slug);
+                            } else if (data.name) {
+                              setDoctorSlug(slugify(data.name));
+                            } else {
+                              setDoctorSlug('');
+                            }
+                          }
+                        } catch (error) {
+                          console.error('Error loading original data:', error);
+                        }
+                      };
+                      loadOriginalData();
+                    }}
+                    variant="outline"
+                    className="bg-transparent text-gray-600 hover:bg-gray-50 rounded-md h-8 px-2.5 text-sm"
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-4 border-b border-gray-200 -mt-2">
+              <button className="py-2 text-sm border-b border-gray-900 text-gray-900">General</button>
+              <button className="py-2 text-sm text-gray-500 hover:text-gray-700">Multi-factor authentication</button>
+              <button className="py-2 text-sm text-gray-500 hover:text-gray-700">Custom fields</button>
+              <button className="py-2 text-sm text-gray-500 hover:text-gray-700">Email settings</button>
+              <button className="py-2 text-sm text-gray-500 hover:text-gray-700">Conversations</button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               
               {/* Profile Card */}
               <div className="lg:col-span-2">
-                <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                  <CardHeader className="pb-4">
+                <Card className="bg-white border border-gray-100 shadow-none rounded-lg">
+                  <CardHeader className="pb-1">
                     <CardTitle className="text-xl font-bold text-gray-900">
                       Personal Information
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-6">
+                  <CardContent className="space-y-4">
                     
                     {/* Profile Image */}
                     <div className="flex flex-col items-center space-y-4">
@@ -380,7 +414,7 @@ export default function DoctorProfilePage() {
                           value={name}
                           onChange={(e) => setName(e.target.value)}
                           disabled={!isEditing}
-                          className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 rounded-xl h-12"
+                          className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 rounded-md h-8"
                         />
                       </div>
                       <div className="space-y-2">
@@ -388,8 +422,21 @@ export default function DoctorProfilePage() {
                         <Input
                           value={email}
                           disabled
-                          className="border-gray-300 bg-gray-50 text-gray-500 rounded-xl h-12"
+                          className="border-gray-200 bg-gray-50 text-gray-500 rounded-md h-8"
                         />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-gray-900">Public Slug</label>
+                        <Input
+                          value={doctorSlug}
+                          onChange={(e) => setDoctorSlug(e.target.value)}
+                          disabled={!isEditing}
+                          placeholder="your-name"
+                          className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 rounded-md h-8"
+                        />
+                        <p className="text-xs text-gray-500">
+                          This defines your public referral URL: /{doctorSlug || 'your-slug'} (letters, numbers and hyphens only)
+                        </p>
                       </div>
                       <div className="space-y-2 md:col-span-2">
                         <label className="text-sm font-semibold text-gray-900">Google Review Link</label>
@@ -398,7 +445,7 @@ export default function DoctorProfilePage() {
                           onChange={(e) => setGoogleReviewLink(e.target.value)}
                           disabled={!isEditing}
                           placeholder="https://g.page/r/..."
-                          className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 rounded-xl h-12"
+                          className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 rounded-md h-8"
                         />
                         <p className="text-xs text-gray-500">
                           Link para avaliações do Google que será mostrado aos pacientes após reset de senha
@@ -406,54 +453,12 @@ export default function DoctorProfilePage() {
                       </div>
                     </div>
 
-                    {/* Action Buttons */}
+                    {/* Actions (kept minimal) */}
                     <div className="space-y-3">
-                      {!isEditing ? (
-                        <Button
-                          onClick={() => setIsEditing(true)}
-                          className="bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl h-12 px-6 font-semibold"
-                        >
-                          <UserIcon className="h-4 w-4 mr-2" />
-                          Edit Profile
-                        </Button>
-                      ) : (
-                        <div className="flex gap-3">
-                          <Button
-                            onClick={() => handleSave()}
-                            className="flex-1 bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl h-12 font-semibold"
-                          >
-                            Save Changes
-                          </Button>
-                          <Button
-                            onClick={() => {
-                              setIsEditing(false);
-                              setName(session?.user?.name || '');
-                              // Reset googleReviewLink to original value
-                              const loadOriginalData = async () => {
-                                try {
-                                  const response = await fetch('/api/profile');
-                                  if (response.ok) {
-                                    const data = await response.json();
-                                    setGoogleReviewLink(data.googleReviewLink || '');
-                                  }
-                                } catch (error) {
-                                  console.error('Error loading original data:', error);
-                                }
-                              };
-                              loadOriginalData();
-                            }}
-                            variant="outline"
-                            className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-12 px-6 font-semibold"
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      )}
-                      
                       <Button
                         onClick={() => signOut({ callbackUrl: 'https://app.cxlus.com/auth/signin' })}
                         variant="outline"
-                        className="w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-300 rounded-xl h-12 font-semibold"
+                        className="w-full bg-transparent text-gray-700 hover:bg-gray-50 rounded-md h-8 text-sm"
                       >
                         <ArrowRightOnRectangleIcon className="h-4 w-4 mr-2" />
                         Sign Out
@@ -461,82 +466,44 @@ export default function DoctorProfilePage() {
                     </div>
                   </CardContent>
                 </Card>
-              </div>
 
-              {/* Sidebar */}
-              <div className="space-y-6">
-                
-                {/* Account Information */}
-                <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                      <EnvelopeIcon className="h-5 w-5" />
-                      Account Information
-                    </CardTitle>
+                {/* CRM connection */}
+                <Card className="mt-6 bg-white border border-gray-100 shadow-none rounded-lg">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base font-semibold text-gray-900">CRM connection</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600 font-medium">Member since</span>
-                      <span className="text-sm text-gray-900 font-semibold">
-                        {formatDate(userStats.joinedDate)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600 font-medium">Last login</span>
-                      <span className="text-sm text-gray-900 font-semibold">
-                        {formatDate(userStats.lastLogin)}
-                      </span>
+                  <CardContent>
+                    <div className="text-sm text-gray-600 mb-2">Your team has not connected a CRM</div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-md bg-gray-100 flex items-center justify-center text-gray-500 text-base">+</div>
+                      <div className="w-7 h-7 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-600 text-[10px] font-medium">HS</div>
+                      <div className="w-7 h-7 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-600 text-[10px] font-medium">PD</div>
+                      <div className="w-7 h-7 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-600 text-[10px] font-medium">SF</div>
                     </div>
                   </CardContent>
                 </Card>
 
-                {/* Doctor Statistics */}
-                <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                      <ChartBarIcon className="h-5 w-5" />
-                      Statistics
-                    </CardTitle>
+                {/* Restrictions */}
+                <Card className="mt-6 bg-white border border-gray-100 shadow-none rounded-lg">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base font-semibold text-gray-900">Restrictions</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-                      <div className="flex items-center space-x-3">
-                        <UsersIcon className="h-5 w-5 text-blue-600" />
-                        <div>
-                          <div className="text-2xl font-bold text-blue-900">
-                            {userStats.totalPatients || 0}
-                          </div>
-                          <div className="text-sm text-blue-600 font-medium">Total Patients</div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="p-4 bg-green-50 rounded-xl border border-green-100">
-                      <div className="flex items-center space-x-3">
-                        <DocumentTextIcon className="h-5 w-5 text-green-600" />
-                        <div>
-                          <div className="text-2xl font-bold text-green-900">
-                            {userStats.totalProtocols || 0}
-                          </div>
-                          <div className="text-sm text-green-600 font-medium">Total Protocols</div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="p-4 bg-purple-50 rounded-xl border border-purple-100">
-                      <div className="flex items-center space-x-3">
-                        <StarIcon className="h-5 w-5 text-purple-600" />
-                        <div>
-                          <div className="text-2xl font-bold text-purple-900">
-                            {userStats.totalTemplates || 0}
-                          </div>
-                          <div className="text-sm text-purple-600 font-medium">Templates Created</div>
-                        </div>
-                      </div>
+                  <CardContent>
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-gray-600">Credit Limit</label>
+                      <Input
+                        value={''}
+                        placeholder=""
+                        onChange={() => {}}
+                        className="h-8 rounded-md bg-white border-gray-200 text-gray-900"
+                      />
+                      <p className="text-xs text-gray-500">Leave this field blank if no limit is required</p>
                     </div>
                   </CardContent>
                 </Card>
               </div>
+              {/* Sidebar removed */}
+              <div className="hidden lg:block" />
             </div>
           </div>
         </div>

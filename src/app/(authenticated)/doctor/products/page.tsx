@@ -13,7 +13,9 @@ import {
   PencilIcon,
   EyeIcon,
   XMarkIcon,
-  LinkIcon
+  LinkIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 
@@ -30,6 +32,10 @@ interface Product {
   usageStats: number;
   isActive: boolean;
   createdAt: Date;
+  updatedAt?: Date;
+  doctorId?: string;
+  category?: string;
+  creditsPerUnit?: number;
   _count: {
     protocolProducts: number;
   };
@@ -48,6 +54,8 @@ export default function ProductsPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoadingProduct, setIsLoadingProduct] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(6);
 
   useEffect(() => {
     loadProducts();
@@ -89,6 +97,16 @@ export default function ProductsPage() {
     product.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     product.description?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const totalProducts = filteredProducts.length;
+  const totalPages = Math.ceil(totalProducts / itemsPerPage) || 1;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentProducts = filteredProducts.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   const formatPrice = (price?: number) => {
     if (!price) return null;
@@ -161,350 +179,338 @@ export default function ProductsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gray-50">
       <div className="lg:ml-64">
         <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
         
           {/* Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-            <div className="space-y-2">
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                Products
-              </h1>
-              <p className="text-gray-600 font-medium">
-                Manage products recommended in your protocols
-              </p>
+          <div className="mb-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div>
+                <h1 className="text-[20px] font-semibold text-gray-900 tracking-[-0.01em]">Products</h1>
+                <p className="text-sm text-gray-500 mt-1">Manage products recommended in your protocols</p>
+              </div>
+              <Button asChild className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium">
+                <Link href="/doctor/products/create">
+                  <PlusIcon className="h-4 w-4 mr-2" />
+                  New Product
+                </Link>
+              </Button>
             </div>
-            <Button asChild className="bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl h-12 px-6 shadow-md font-semibold">
-              <Link href="/doctor/products/create">
-                <PlusIcon className="h-4 w-4 mr-2" />
-                New Product
-              </Link>
-            </Button>
           </div>
 
-          {/* Search */}
-          <Card className="bg-white border-gray-200 shadow-lg rounded-2xl mb-8">
-            <CardContent className="p-6">
-              <div className="relative">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search products..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-12"
-                />
-              </div>
-            </CardContent>
-          </Card>
+          {/* Toolbar rendered only when products exist */}
 
-          {/* Products Grid */}
+          {/* Products Table */}
           {filteredProducts.length === 0 ? (
-            <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-              <CardContent className="p-8">
-                <div className="text-center">
-                  <ShoppingBagIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-bold mb-2 text-gray-900">
-                    {searchTerm ? 'No products found' : 'No products registered'}
-                  </h3>
-                  <p className="text-sm text-gray-500 mb-4 font-medium">
-                    {searchTerm 
-                      ? 'Try adjusting your search terms.' 
-                      : 'Start by creating your first product to recommend to clients.'
-                    }
-                  </p>
-                  {!searchTerm && (
-                    <Button asChild className="bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl shadow-md font-semibold">
-                      <Link href="/doctor/products/create">
-                        <PlusIcon className="h-4 w-4 mr-2" />
-                        Create First Product
-                      </Link>
-                    </Button>
-                  )}
+            <div className="text-center py-12">
+              <div className="mb-4">
+                <ShoppingBagIcon className="mx-auto h-12 w-12 text-gray-400" />
+              </div>
+              <h3 className="mt-2 text-sm font-semibold text-gray-900">
+                {searchTerm ? 'No products found' : 'No products registered'}
+              </h3>
+              <p className="mt-1 text-sm text-gray-500">
+                {searchTerm 
+                  ? 'Try adjusting your search terms.' 
+                  : 'Start by creating your first product to recommend to clients.'
+                }
+              </p>
+              {!searchTerm && (
+                <div className="mt-6">
+                  <Button
+                    asChild
+                    className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl font-medium"
+                  >
+                    <Link href="/doctor/products/create">
+                      <PlusIcon className="h-4 w-4 mr-2" />
+                      Create First Product
+                    </Link>
+                  </Button>
                 </div>
-              </CardContent>
-            </Card>
+              )}
+            </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredProducts.map((product) => (
-                <Card key={product.id} className="bg-white border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
-                  <CardHeader className="pb-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-lg font-bold text-gray-900 mb-2">
-                          {product.name}
-                        </CardTitle>
-                        {product.brand && (
-                          <p className="text-sm text-[#5154e7] font-semibold">{product.brand}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {!product.isActive && (
-                          <Badge variant="secondary" className="bg-gray-100 text-gray-700 border-gray-200 font-semibold">
-                            Inactive
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  
-                  <CardContent className="space-y-4">
-                    {/* Image */}
-                    <div className="w-full h-40 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden">
-                      {product.imageUrl ? (
-                        <img 
-                          src={product.imageUrl} 
-                          alt={product.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <ShoppingBagIcon className="h-10 w-10 text-gray-400" />
-                      )}
-                    </div>
+            <>
+            {/* Toolbar */}
+            <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex-1">
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                    <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search products..."
+                    className="block w-full h-10 rounded-xl border border-gray-200 bg-white pl-10 pr-3 text-[14px] text-gray-900 shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5154e7]"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
+                  <span className="text-sm">Filters</span>
+                </Button>
+                <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
+                  <span className="text-sm">Sort</span>
+                </Button>
+              </div>
+            </div>
 
-                    {/* Description */}
-                    {product.description && (
-                      <p className="text-sm text-gray-600 font-medium line-clamp-2">
-                        {product.description}
-                      </p>
-                    )}
-
-                    {/* Price */}
-                    {(product.originalPrice || product.discountPrice) && (
-                      <div className="flex items-center gap-3">
-                        {product.discountPrice && product.originalPrice ? (
-                          <>
-                            <span className="text-lg font-bold text-[#5154e7]">
-                              {formatPrice(product.discountPrice)}
-                            </span>
-                            <span className="text-sm text-gray-400 line-through">
-                              {formatPrice(product.originalPrice)}
-                            </span>
-                            {product.discountPercentage && (
-                              <Badge className="bg-[#5154e7] text-white border-[#5154e7] font-semibold">
-                                -{product.discountPercentage}%
-                              </Badge>
-                            )}
-                          </>
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <table className="min-w-full">
+                <thead className="bg-gray-50/80">
+                  <tr className="text-left text-xs text-gray-600">
+                    <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Name</th>
+                    <th className="px-3 py-3.5 font-medium">Brand</th>
+                    <th className="px-3 py-3.5 font-medium">Price</th>
+                    <th className="px-3 py-3.5 font-medium">Points per purchase</th>
+                    <th className="px-3 py-3.5 font-medium">Status</th>
+                    <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {currentProducts.map((product) => (
+                    <tr key={product.id} className="hover:bg-gray-50/60">
+                      <td className="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                        <div className="flex flex-col">
+                          <span>{product.name}</span>
+                          {product.description && (
+                            <span className="text-xs text-gray-500 line-clamp-1">{product.description}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">
+                        {product.brand || '-'}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
+                        {product.discountPrice && product.originalPrice
+                          ? `${formatPrice(product.discountPrice)} `
+                          : formatPrice(product.originalPrice || product.discountPrice) || '-'}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
+                        {product.creditsPerUnit !== undefined && product.creditsPerUnit !== null ? (
+                          <span>{Number(product.creditsPerUnit)} pts/unit</span>
+                        ) : '-'}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3.5 text-sm">
+                        {product.isActive ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">
+                            Active
+                          </span>
                         ) : (
-                          <span className="text-lg font-bold text-gray-900">
-                            {formatPrice(product.originalPrice || product.discountPrice)}
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">
+                            Inactive
                           </span>
                         )}
-                      </div>
-                    )}
+                      </td>
+                      <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => loadProductDetails(product.id)}
+                            className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg h-8 w-8 p-0"
+                            disabled={isLoadingProduct}
+                          >
+                            <EyeIcon className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            asChild
+                            className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg h-8 w-8 p-0"
+                          >
+                            <Link href={`/doctor/products/${product.id}/edit`}>
+                              <PencilIcon className="h-3.5 w-3.5" />
+                            </Link>
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            </>
+          )}
 
-                    {/* Stats */}
-                    <div className="flex items-center justify-between text-sm text-gray-600 font-medium">
-                      <span>{product._count.protocolProducts} protocols</span>
-                      {product.usageStats > 0 && (
-                        <span>{product.usageStats}% of clients</span>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex gap-3 pt-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="flex-1 border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-10 shadow-md font-semibold"
-                        onClick={() => loadProductDetails(product.id)}
-                        disabled={isLoadingProduct}
-                      >
-                        <EyeIcon className="h-4 w-4 mr-2" />
-                        View
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="flex-1 border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-10 shadow-md font-semibold" 
-                        asChild
-                      >
-                        <Link href={`/doctor/products/${product.id}/edit`}>
-                          <PencilIcon className="h-4 w-4 mr-2" />
-                          Edit
-                        </Link>
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+          {/* Pagination */}
+          {filteredProducts.length > 0 && (
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-sm text-gray-600">
+                Showing {startIndex + 1}-{Math.min(endIndex, totalProducts)} of {totalProducts}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeftIcon className="h-4 w-4" />
+                </Button>
+                <span className="text-sm text-gray-700">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRightIcon className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )}
 
           {/* Product Details Modal */}
           <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white border-gray-200 rounded-2xl">
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-white border border-gray-200 rounded-2xl">
               <DialogHeader>
-                <DialogTitle className="text-2xl font-bold text-gray-900">
-                  Product Details
+                <DialogTitle className="text-[18px] font-semibold text-gray-900 tracking-[-0.01em]">
+                  Product details
                 </DialogTitle>
               </DialogHeader>
-              
+
               {selectedProduct && (
-                <div className="space-y-8">
-                  {/* Product Image and Basic Info */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="w-full h-64 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden">
+                <div className="space-y-6">
+                  {/* Top section: Image + Title/Status */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="md:col-span-1 w-full h-40 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden">
                       {selectedProduct.imageUrl ? (
-                        <img 
-                          src={selectedProduct.imageUrl} 
-                          alt={selectedProduct.name}
-                          className="w-full h-full object-cover"
-                        />
+                        <img src={selectedProduct.imageUrl} alt={selectedProduct.name} className="w-full h-full object-cover" />
                       ) : (
-                        <ShoppingBagIcon className="h-16 w-16 text-gray-400" />
+                        <ShoppingBagIcon className="h-10 w-10 text-gray-400" />
                       )}
                     </div>
-                    
-                    <div className="space-y-6">
+                    <div className="md:col-span-2 flex flex-col justify-between">
                       <div>
-                        <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                          {selectedProduct.name}
-                        </h3>
+                        <h3 className="text-[18px] font-semibold text-gray-900">{selectedProduct.name}</h3>
                         {selectedProduct.brand && (
-                          <p className="text-lg text-[#5154e7] font-semibold">{selectedProduct.brand}</p>
+                          <p className="text-sm text-[#5154e7] font-semibold mt-1">{selectedProduct.brand}</p>
+                        )}
+                        {selectedProduct.description && (
+                          <p className="text-sm text-gray-600 mt-2">{selectedProduct.description}</p>
                         )}
                       </div>
-
-                      {/* Status */}
-                      <div className="flex items-center gap-3">
+                      <div className="mt-3">
                         {selectedProduct.isActive ? (
-                          <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 font-semibold">
-                            Active
-                          </Badge>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Active</span>
                         ) : (
-                          <Badge variant="secondary" className="bg-gray-100 text-gray-700 border-gray-200 font-semibold">
-                            Inactive
-                          </Badge>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Inactive</span>
                         )}
                       </div>
+                    </div>
+                  </div>
 
-                      {/* Price */}
-                      {(selectedProduct.originalPrice || selectedProduct.discountPrice) && (
-                        <div className="space-y-3">
-                          <h4 className="text-lg font-bold text-gray-900">Price</h4>
-                          <div className="flex items-center gap-3">
-                            {selectedProduct.discountPrice && selectedProduct.originalPrice ? (
-                              <>
-                                <span className="text-2xl font-bold text-[#5154e7]">
-                                  {formatPrice(selectedProduct.discountPrice)}
-                                </span>
-                                <span className="text-lg text-gray-400 line-through">
-                                  {formatPrice(selectedProduct.originalPrice)}
-                                </span>
-                                {selectedProduct.discountPercentage && (
-                                  <Badge className="bg-[#5154e7] text-white border-[#5154e7] font-semibold">
-                                    -{selectedProduct.discountPercentage}%
-                                  </Badge>
-                                )}
-                              </>
-                            ) : (
-                              <span className="text-2xl font-bold text-gray-900">
-                                {formatPrice(selectedProduct.originalPrice || selectedProduct.discountPrice)}
-                              </span>
+                  {/* Info grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Pricing</h4>
+                      <div className="text-sm text-gray-700">
+                        {selectedProduct.discountPrice && selectedProduct.originalPrice ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-base font-semibold text-[#5154e7]">{formatPrice(selectedProduct.discountPrice)}</span>
+                            <span className="text-sm text-gray-400 line-through">{formatPrice(selectedProduct.originalPrice)}</span>
+                            {selectedProduct.discountPercentage && (
+                              <Badge className="bg-[#5154e7] text-white border-[#5154e7] font-semibold">-{selectedProduct.discountPercentage}%</Badge>
                             )}
                           </div>
+                        ) : (
+                          <span className="text-base font-semibold text-gray-900">{formatPrice(selectedProduct.originalPrice || selectedProduct.discountPrice) || '-'}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Points per purchase</h4>
+                      <p className="text-sm text-gray-900">{selectedProduct.creditsPerUnit !== undefined && selectedProduct.creditsPerUnit !== null ? `${Number(selectedProduct.creditsPerUnit)} pts/unit` : '-'}</p>
+                    </div>
+
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Categoria</h4>
+                      <p className="text-sm text-gray-700">{(selectedProduct as any).category || '-'}</p>
+                    </div>
+
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Compra</h4>
+                      {selectedProduct.purchaseUrl ? (
+                        <Button variant="outline" size="sm" asChild className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-9 px-3 shadow-sm font-medium">
+                          <a href={selectedProduct.purchaseUrl} target="_blank" rel="noopener noreferrer">
+                            <LinkIcon className="h-4 w-4 mr-2" />
+                            Abrir link
+                          </a>
+                        </Button>
+                      ) : (
+                        <span className="text-sm text-gray-500">Sem link</span>
+                      )}
+                    </div>
+
+                    <div className="rounded-xl border border-gray-200 p-4 md:col-span-2">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Protocolos associados</h4>
+                      <p className="text-sm text-gray-700 mb-3">{selectedProduct._count?.protocolProducts || 0} protocolos</p>
+                      {selectedProduct.protocolProducts && selectedProduct.protocolProducts.length > 0 && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {selectedProduct.protocolProducts.map((pp) => (
+                            <div key={pp.protocol.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
+                              <span className="text-sm font-medium text-gray-900">{pp.protocol.name}</span>
+                              <Button variant="outline" size="sm" asChild className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-lg h-8 px-3">
+                                <Link href={`/doctor/protocols/${pp.protocol.id}`}>Ver</Link>
+                              </Button>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
-                  </div>
 
-                  {/* Description */}
-                  {selectedProduct.description && (
-                    <div className="space-y-3">
-                      <h4 className="text-lg font-bold text-gray-900">Description</h4>
-                      <p className="text-gray-600 font-medium">
-                        {selectedProduct.description}
-                      </p>
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Criado em</h4>
+                      <p className="text-sm text-gray-700">{formatDate(selectedProduct.createdAt)}</p>
                     </div>
-                  )}
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Atualizado em</h4>
+                      <p className="text-sm text-gray-700">{selectedProduct.updatedAt ? formatDate(selectedProduct.updatedAt as unknown as Date) : '-'}</p>
+                    </div>
 
-                  {/* Purchase URL */}
-                  {selectedProduct.purchaseUrl && (
-                    <div className="space-y-3">
-                      <h4 className="text-lg font-bold text-gray-900">Purchase Link</h4>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        asChild
-                        className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-10 px-4 shadow-md font-semibold"
-                      >
-                        <a href={selectedProduct.purchaseUrl} target="_blank" rel="noopener noreferrer">
-                          <LinkIcon className="h-4 w-4 mr-2" />
-                          Open Link
-                        </a>
-                      </Button>
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-1">ID</h4>
+                      <p className="text-xs text-gray-600 break-all">{selectedProduct.id}</p>
                     </div>
-                  )}
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-1">Doctor ID</h4>
+                      <p className="text-xs text-gray-600 break-all">{(selectedProduct as any).doctorId || '-'}</p>
+                    </div>
 
-                  {/* Stats */}
-                  <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-3">
-                      <h4 className="text-lg font-bold text-gray-900">Protocols</h4>
-                      <p className="text-gray-600 font-medium">
-                        {selectedProduct._count?.protocolProducts || 0} associated protocols
-                      </p>
+                    <div className="rounded-xl border border-gray-200 p-4 md:col-span-2">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Uso por clientes</h4>
+                      <p className="text-sm text-gray-700">{typeof selectedProduct.usageStats === 'number' ? `${selectedProduct.usageStats}% dos clientes` : '-'}</p>
                     </div>
-                    <div className="space-y-3">
-                      <h4 className="text-lg font-bold text-gray-900">Client Usage</h4>
-                      <p className="text-gray-600 font-medium">
-                        {selectedProduct.usageStats}% of clients
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Protocol Associations */}
-                  {selectedProduct.protocolProducts && selectedProduct.protocolProducts.length > 0 && (
-                    <div className="space-y-4">
-                      <h4 className="text-lg font-bold text-gray-900">Associated Protocols</h4>
-                      <div className="space-y-3">
-                        {selectedProduct.protocolProducts.map((pp) => (
-                          <div key={pp.protocol.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
-                            <span className="font-bold text-gray-900">{pp.protocol.name}</span>
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              asChild
-                              className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-8 px-3 shadow-md font-semibold"
-                            >
-                              <Link href={`/doctor/protocols/${pp.protocol.id}`}>
-                                View Protocol
-                              </Link>
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Creation Date */}
-                  <div className="space-y-3">
-                    <h4 className="text-lg font-bold text-gray-900">Creation Date</h4>
-                    <p className="text-gray-600 font-medium">
-                      {formatDate(selectedProduct.createdAt)}
-                    </p>
                   </div>
 
                   {/* Actions */}
-                  <div className="flex gap-4 pt-6 border-t border-gray-200">
+                  <div className="flex gap-3 pt-4">
                     <Button 
                       variant="outline" 
-                      className="flex-1 border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-12 shadow-md font-semibold" 
+                      className="flex-1 border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-11 shadow-sm font-medium" 
                       asChild
                     >
                       <Link href={`/doctor/products/${selectedProduct.id}/edit`}>
                         <PencilIcon className="h-4 w-4 mr-2" />
-                        Edit Product
+                        Editar produto
                       </Link>
                     </Button>
                     <Button 
                       variant="outline" 
                       onClick={() => setIsModalOpen(false)}
-                      className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-12 px-6 shadow-md font-semibold"
+                      className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-11 px-5 shadow-sm font-medium"
                     >
                       <XMarkIcon className="h-4 w-4 mr-2" />
-                      Close
+                      Fechar
                     </Button>
                   </div>
                 </div>

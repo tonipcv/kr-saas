@@ -47,35 +47,36 @@ export async function GET(request: NextRequest) {
         name: true,
         email: true
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { created_at: 'desc' }
     });
 
-    // Fetch subscriptions separately
-    const subscriptions = await prisma.doctorSubscription.findMany({
+    // Fetch subscriptions separately from unified_subscriptions
+    const subscriptions = await prisma.unified_subscriptions.findMany({
       where: {
-        doctorId: { in: doctors.map(d => d.id) }
+        type: 'DOCTOR',
+        subscriber_id: { in: doctors.map(d => d.id) }
       },
       include: {
-        plan: {
+        subscription_plans: {
           select: {
             name: true,
             maxPatients: true,
             maxProtocols: true,
             maxCourses: true,
-            maxProducts: true
+            maxProducts: true,
           }
         }
       }
     });
 
-    // Fetch patient counts per doctor
+    // Fetch patient counts per doctor (using doctor_id field)
     const patientCounts = await Promise.all(
       doctors.map(async (doctor) => ({
         doctorId: doctor.id,
         count: await prisma.user.count({
           where: { 
             role: 'PATIENT',
-            doctorId: doctor.id
+            doctor_id: doctor.id
           }
         })
       }))
@@ -83,7 +84,7 @@ export async function GET(request: NextRequest) {
 
     // Combine data
     const doctorsWithData = doctors.map(doctor => {
-      const subscription = subscriptions.find(s => s.doctorId === doctor.id);
+      const subscription = subscriptions.find(s => s.subscriber_id === doctor.id);
       const patientCount = patientCounts.find(p => p.doctorId === doctor.id)?.count || 0;
       
       return {
@@ -143,13 +144,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'This email is already in use' }, { status: 400 });
     }
 
-    // Buscar o plano padrão (Básico)
-    const defaultPlan = await prisma.subscriptionPlan.findFirst({
+    // Buscar o plano padrão (Básico) ou criar se não existir
+    let defaultPlan = await prisma.subscriptionPlan.findFirst({
       where: { isDefault: true }
     });
 
     if (!defaultPlan) {
-      return NextResponse.json({ error: 'Default plan not found' }, { status: 500 });
+      defaultPlan = await prisma.subscriptionPlan.create({
+        data: {
+          name: 'Básico',
+          description: 'Plano padrão para novos médicos (criado automaticamente)',
+          price: 0,
+          billingCycle: 'MONTHLY',
+          maxDoctors: 1,
+          features: 'Auto-created by POST /api/admin/doctors',
+          isActive: true,
+          maxPatients: 50,
+          maxProtocols: 10,
+          maxCourses: 5,
+          maxProducts: 100,
+          isDefault: true,
+          trialDays: 14,
+        },
+      });
     }
 
     // Gerar token para definir senha
@@ -162,33 +179,36 @@ export async function POST(request: NextRequest) {
     // Criar o médico sem senha (será definida via convite)
     const doctor = await prisma.user.create({
       data: {
+        id: crypto.randomUUID(),
         name,
         email,
         role: 'DOCTOR',
-        emailVerified: null, // Será verificado quando definir a senha
-        resetToken: hashedToken, // Usar o campo resetToken para o convite
-        resetTokenExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 dias para aceitar o convite
+        email_verified: null, // Será verificado quando definir a senha
+        reset_token: hashedToken, // Usar o campo resetToken para o convite
+        reset_token_expiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 dias para aceitar o convite
       }
     });
 
     // Criar subscription baseada na seleção (padrão TRIAL)
     const now = new Date();
     const subscriptionData: any = {
-      doctorId: doctor.id,
-      planId: defaultPlan.id,
+      id: crypto.randomUUID(),
+      subscriber_id: doctor.id,
+      type: 'DOCTOR',
+      plan_id: defaultPlan.id,
       status: subscriptionType,
-      startDate: now,
-      autoRenew: true,
+      start_date: now,
+      auto_renew: true,
     };
 
     if (subscriptionType === 'TRIAL') {
       const trialDays = defaultPlan.trialDays || 7; // Default to 7 days if null
-      subscriptionData.trialEndDate = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
+      subscriptionData.trial_end_date = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
     } else {
-      subscriptionData.endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 dias
+      subscriptionData.end_date = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 dias
     }
     
-    await prisma.doctorSubscription.create({
+    await prisma.unified_subscriptions.create({
       data: subscriptionData
     });
 
@@ -225,8 +245,8 @@ export async function POST(request: NextRequest) {
     } catch (emailError) {
       console.error('Email sending error:', emailError);
       // Se o email falhar, deletar o médico criado
-      await prisma.doctorSubscription.deleteMany({
-        where: { doctorId: doctor.id }
+      await prisma.unified_subscriptions.deleteMany({
+        where: { subscriber_id: doctor.id, type: 'DOCTOR' }
       });
       await prisma.user.delete({
         where: { id: doctor.id }

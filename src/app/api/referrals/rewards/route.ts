@@ -31,7 +31,41 @@ export async function GET(req: Request) {
       orderBy: { createdAt: 'desc' }
     });
 
-    return NextResponse.json({ rewards });
+    // Fetch codesAvailable per reward (UNUSED codes)
+    const codesAvailableMap: Record<string, number> = {};
+    await Promise.all(
+      rewards.map(async (r: any) => {
+        const count = await prisma.referralRewardCode.count({
+          where: { rewardId: r.id, status: 'UNUSED' }
+        });
+        codesAvailableMap[r.id] = count;
+      })
+    );
+
+    // Normalize to UI shape expected on doctor/rewards page
+    const normalized = rewards.map((r: any) => {
+      const toNum = (v: any) => (v?.toNumber ? v.toNumber() : (typeof v === 'string' ? parseFloat(v) : Number(v || 0)));
+      return {
+        id: r.id,
+        title: r.title,
+        description: r.description,
+        // UI expects creditsRequired; backend stores costInCredits/value as Decimal
+        creditsRequired: toNum(r.costInCredits) || toNum(r.value) || 0,
+        maxRedemptions: r.maxRedemptions ?? null,
+        currentRedemptions: r._count?.redemptions ?? 0,
+        isActive: !!r.isActive,
+        createdAt: r.createdAt,
+        codesAvailable: codesAvailableMap[r.id] ?? 0,
+        redemptions: (r.redemptions || []).map((rd: any) => ({
+          id: rd.id,
+          status: rd.status,
+          redeemedAt: rd.redeemedAt,
+          user: rd.user ? { id: rd.user.id, name: rd.user.name, email: rd.user.email } : { id: '', name: '', email: '' }
+        })),
+      };
+    });
+
+    return NextResponse.json({ rewards: normalized });
 
   } catch (error) {
     console.error('Erro ao buscar recompensas:', error);

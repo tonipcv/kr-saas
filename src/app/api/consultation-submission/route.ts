@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     let referrer = null;
     if (referralCode) {
       referrer = await prisma.user.findUnique({
-        where: { referralCode }
+        where: { referral_code: referralCode }
       });
     }
 

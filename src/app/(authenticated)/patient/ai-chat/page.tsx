@@ -100,11 +100,11 @@ export default function PatientAIChatPage() {
         if (data.user?.doctorId) {
           setDoctorId(data.user.doctorId);
           
-          // Fetch doctor info for display
-          const doctorResponse = await fetch('/api/protocols/doctor-info');
+          // Fetch doctor info for display (dedicated endpoint)
+          const doctorResponse = await fetch('/api/v2/patients/referral');
           if (doctorResponse.ok) {
-            const doctorData = await doctorResponse.json();
-            setDoctorInfo(doctorData.doctor);
+            const payload = await doctorResponse.json();
+            setDoctorInfo(payload?.data?.doctor || null);
           }
           
           loadWelcomeMessage(data.user.doctorId);

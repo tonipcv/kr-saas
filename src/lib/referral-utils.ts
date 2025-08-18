@@ -1,6 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 
-const prisma = new PrismaClient();
+
 
 /**
  * Gera um código único para indicação
@@ -27,19 +27,50 @@ export function generateUniqueReferralCode(): string {
 }
 
 /**
- * Gera link de indicação para médico
+ * Gera link de indicação para médico (LEGACY - baseado em doctorId)
+ *
+ * @deprecated Não use mais. Padronize para slug: use `generateDoctorReferralLinkBySlug(doctorSlug)`
+ * Ex: https://app.com/{doctor_slug}
  */
 export function generateDoctorReferralLink(doctorId: string): string {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  if (process.env.NODE_ENV !== 'production') {
+    // eslint-disable-next-line no-console
+    console.warn('[referral-utils] generateDoctorReferralLink is deprecated. Use generateDoctorReferralLinkBySlug instead.');
+  }
   return `${baseUrl}/referral/${doctorId}`;
 }
 
 /**
- * Gera link de indicação personalizado para paciente
+ * Gera link de indicação para médico baseado em slug (NOVO PADRÃO)
+ * Ex: https://app.com/{doctor_slug}
+ */
+export function generateDoctorReferralLinkBySlug(doctorSlug: string): string {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  return `${baseUrl}/${doctorSlug}`;
+}
+
+/**
+ * Gera link de indicação personalizado para paciente (LEGACY - usa email na query)
+ *
+ * @deprecated Não use mais. Padronize para `/${doctor_slug}?code=ABC123` usando `generatePatientReferralLinkWithCode`.
  */
 export function generatePatientReferralLink(doctorId: string, patientEmail: string): string {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  if (process.env.NODE_ENV !== 'production') {
+    // eslint-disable-next-line no-console
+    console.warn('[referral-utils] generatePatientReferralLink is deprecated. Use generatePatientReferralLinkWithCode instead.');
+  }
   return `${baseUrl}/referral/${doctorId}?ref=${encodeURIComponent(patientEmail)}`;
+}
+
+/**
+ * Gera link de indicação para paciente com código de indicação (NOVO PADRÃO)
+ * Ex: https://app.com/{doctor_slug}?code=ABC123
+ */
+export function generatePatientReferralLinkWithCode(doctorSlug: string, code: string): string {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  return `${baseUrl}/${doctorSlug}?code=${encodeURIComponent(code)}`;
 }
 
 /**
@@ -65,7 +96,7 @@ export async function isExistingPatient(email: string, doctorId: string): Promis
   const existingPatient = await prisma.user.findFirst({
     where: {
       email,
-      doctorId,
+      doctor_id: doctorId,
       role: 'PATIENT'
     }
   });
@@ -77,18 +108,18 @@ export async function isExistingPatient(email: string, doctorId: string): Promis
  * Busca usuário por código de indicação
  */
 export async function getUserByReferralCode(referralCode: string) {
+  // Select only what we need explicitly to avoid accidental omissions in other layers
   return await prisma.user.findUnique({
     where: {
-      referralCode
+      referral_code: referralCode
     },
-    include: {
-      doctor: {
-        select: {
-          id: true,
-          name: true,
-          email: true
-        }
-      }
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      doctor_id: true,
+      referral_code: true,
     }
   });
 }
@@ -99,11 +130,11 @@ export async function getUserByReferralCode(referralCode: string) {
 export async function ensureUserHasReferralCode(userId: string): Promise<string> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { referralCode: true }
+    select: { referral_code: true }
   });
 
-  if (user?.referralCode) {
-    return user.referralCode;
+  if (user?.referral_code) {
+    return user.referral_code;
   }
 
   // Gerar código único
@@ -115,7 +146,7 @@ export async function ensureUserHasReferralCode(userId: string): Promise<string>
     referralCode = generateReferralCode();
     
     const existing = await prisma.user.findUnique({
-      where: { referralCode }
+      where: { referral_code: referralCode }
     });
     
     if (!existing) {
@@ -130,7 +161,7 @@ export async function ensureUserHasReferralCode(userId: string): Promise<string>
 
   const updatedUser = await prisma.user.update({
     where: { id: userId },
-    data: { referralCode }
+    data: { referral_code: referralCode }
   });
 
   return referralCode!;
@@ -165,4 +196,4 @@ export const REDEMPTION_STATUS = {
   APPROVED: 'APPROVED',
   FULFILLED: 'FULFILLED',
   CANCELLED: 'CANCELLED'
-} as const; 
+} as const;

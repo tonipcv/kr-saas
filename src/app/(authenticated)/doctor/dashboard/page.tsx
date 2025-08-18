@@ -13,11 +13,13 @@ import {
   CheckCircleIcon,
   UserPlusIcon,
   CalendarDaysIcon,
-  ArrowRightIcon
+  ArrowRightIcon,
+  CurrencyDollarIcon
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import ProjectionLineChart, { SeriesPoint } from "@/components/charts/ProjectionLineChart";
 
 interface Patient {
   id: string;
@@ -59,6 +61,9 @@ interface DashboardStats {
   activeProtocols: number;
   totalProtocols: number;
   completedToday: number;
+  revenueCollected: number;
+  referralsCount: number;
+  usersCount: number;
 }
 
 export default function DoctorDashboard() {
@@ -70,7 +75,10 @@ export default function DoctorDashboard() {
     totalPatients: 0,
     activeProtocols: 0,
     totalProtocols: 0,
-    completedToday: 0
+    completedToday: 0,
+    revenueCollected: 0,
+    referralsCount: 0,
+    usersCount: 0
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -141,7 +149,10 @@ export default function DoctorDashboard() {
             totalPatients: dashboardData.data.totalPatients,
             activeProtocols: dashboardData.data.activeProtocols,
             totalProtocols: dashboardData.data.totalProtocols,
-            completedToday: dashboardData.data.completedToday
+            completedToday: dashboardData.data.completedToday,
+            revenueCollected: dashboardData.data.revenueCollected ?? dashboardData.data.revenue ?? 0,
+            referralsCount: dashboardData.data.referralsCount ?? dashboardData.data.referrals ?? 0,
+            usersCount: dashboardData.data.usersCount ?? dashboardData.data.totalPatients ?? 0
           });
         } else {
           // Fallback to calculated stats if dashboard endpoint fails
@@ -156,7 +167,10 @@ export default function DoctorDashboard() {
             totalPatients,
             activeProtocols,
             totalProtocols,
-            completedToday: 0
+            completedToday: 0,
+            revenueCollected: 0,
+            referralsCount: 0,
+            usersCount: totalPatients
           });
         }
 
@@ -181,568 +195,217 @@ export default function DoctorDashboard() {
     return patient.assignedProtocols.find(p => p.isActive);
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-white">
-        <div className="lg:ml-64">
-          <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
-            
-            {/* Header Skeleton */}
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-              <div className="space-y-3">
-                <div className="h-8 bg-gray-200 rounded-lg w-48 animate-pulse"></div>
-                <div className="h-5 bg-gray-100 rounded-lg w-64 animate-pulse"></div>
-              </div>
-              <div className="flex gap-3">
-                <div className="h-10 bg-gray-200 rounded-xl w-32 animate-pulse"></div>
-                <div className="h-10 bg-gray-100 rounded-xl w-36 animate-pulse"></div>
-              </div>
-            </div>
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount || 0);
 
-            {/* Stats Cards Skeleton */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="bg-white border border-gray-200 shadow-lg rounded-2xl p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-gray-100 rounded-xl animate-pulse">
-                      <div className="h-6 w-6 bg-gray-200 rounded animate-pulse"></div>
-                    </div>
-                    <div className="space-y-2 flex-1">
-                      <div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div>
-                      <div className="h-7 bg-gray-100 rounded w-8 animate-pulse"></div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+  // Simple sparkline data (replace with real API data when available)
+  const referralsTrend = [5, 9, 7, 14, 10, 12, 15];
+  const maxY = Math.max(...referralsTrend, 1);
+  const minY = Math.min(...referralsTrend, 0);
+  const buildPath = (values: number[], width = 100, height = 40) => {
+    if (values.length === 0) return '';
+    const stepX = width / (values.length - 1 || 1);
+    const scaleY = (v: number) => {
+      if (maxY === minY) return height / 2;
+      return height - ((v - minY) / (maxY - minY)) * height;
+    };
+    const points = values.map((v, i) => `${i * stepX},${scaleY(v)}`);
+    return `M ${points[0]} L ${points.slice(1).join(' ')}`;
+  };
 
-            {/* Main Content Skeleton */}
-            <div className="grid lg:grid-cols-2 gap-8">
-              {/* Left Card Skeleton */}
-              <div className="bg-white border border-gray-200 shadow-lg rounded-2xl">
-                <div className="flex flex-row items-center justify-between p-6 pb-4">
-                  <div className="h-6 bg-gray-200 rounded w-32 animate-pulse"></div>
-                  <div className="h-8 bg-gray-100 rounded-xl w-20 animate-pulse"></div>
-                </div>
-                <div className="p-6 pt-0 space-y-4">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
-                      <div className="flex items-center gap-4">
-                        <div className="h-10 w-10 bg-gray-200 rounded-xl animate-pulse"></div>
-                        <div className="space-y-2">
-                          <div className="h-4 bg-gray-200 rounded w-24 animate-pulse"></div>
-                          <div className="h-3 bg-gray-100 rounded w-32 animate-pulse"></div>
-                        </div>
-                      </div>
-                      <div className="h-6 bg-gray-100 rounded-xl w-20 animate-pulse"></div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Right Card Skeleton */}
-              <div className="bg-white border border-gray-200 shadow-lg rounded-2xl">
-                <div className="flex flex-row items-center justify-between p-6 pb-4">
-                  <div className="h-6 bg-gray-200 rounded w-36 animate-pulse"></div>
-                  <div className="h-8 bg-gray-100 rounded-xl w-20 animate-pulse"></div>
-                </div>
-                <div className="p-6 pt-0 space-y-4">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3">
-                          <div className="h-4 bg-gray-200 rounded w-32 animate-pulse"></div>
-                          <div className="h-5 bg-gray-100 rounded-lg w-16 animate-pulse"></div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="h-3 bg-gray-100 rounded w-20 animate-pulse"></div>
-                          <div className="h-3 bg-gray-100 rounded w-16 animate-pulse"></div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Actions Skeleton */}
-            <div className="mt-8 bg-white border border-gray-200 shadow-lg rounded-2xl">
-              <div className="p-6 pb-4">
-                <div className="h-6 bg-gray-200 rounded w-32 animate-pulse"></div>
-              </div>
-              <div className="p-6 pt-0">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="h-24 bg-gray-50 border border-gray-200 rounded-2xl p-4 flex flex-col items-center justify-center gap-3">
-                      <div className="h-8 w-8 bg-gray-200 rounded animate-pulse"></div>
-                      <div className="h-3 bg-gray-100 rounded w-16 animate-pulse"></div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Show onboarding if no protocols exist
-  if (!isLoading && protocols.length === 0) {
-    return (
-      <div className="min-h-screen bg-white">
-        <div className="lg:ml-64">
-          <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
-            {/* Header */}
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-              <div className="space-y-2">
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                  Welcome to CXLUS
-                </h1>
-                <p className="text-gray-600 font-medium">
-                  Let's set up your first protocol to get started
-                </p>
-              </div>
-            </div>
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-blue-50 rounded-xl">
-                      <DocumentTextIcon className="w-6 h-6 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Protocols</p>
-                      <h3 className="text-2xl font-bold text-gray-900">0</h3>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-indigo-50 rounded-xl">
-                      <UsersIcon className="w-6 h-6 text-indigo-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Patients</p>
-                      <h3 className="text-2xl font-bold text-gray-900">0</h3>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-emerald-50 rounded-xl">
-                      <CheckCircleIcon className="w-6 h-6 text-emerald-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Active</p>
-                      <h3 className="text-2xl font-bold text-gray-900">0</h3>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-purple-50 rounded-xl">
-                      <ClockIcon className="w-6 h-6 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Completed</p>
-                      <h3 className="text-2xl font-bold text-gray-900">0</h3>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Main Content */}
-            <div className="grid lg:grid-cols-2 gap-8">
-              {/* Quick Start Card */}
-              <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl col-span-2">
-                <CardHeader className="p-6 pb-0">
-                  <CardTitle className="text-xl font-semibold text-gray-900">
-                    Quick Start Guide
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <div className="grid md:grid-cols-3 gap-6">
-                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
-                      <div className="flex items-center gap-4 mb-4">
-                        <div className="p-3 bg-white rounded-xl">
-                          <DocumentTextIcon className="w-6 h-6 text-blue-600" />
-                        </div>
-                        <h3 className="font-semibold text-gray-900">Create Your First Protocol</h3>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-4">
-                        Start by creating your first protocol template with customized sessions and tasks.
-                      </p>
-                      <Button
-                        onClick={() => router.push('/doctor/onboarding')}
-                        className="w-full bg-white text-blue-600 hover:bg-blue-50 border border-blue-200"
-                      >
-                        Create Your First Protocol
-                        <ArrowRightIcon className="w-4 h-4 ml-2" />
-                      </Button>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-6 border border-gray-200">
-                      <div className="flex items-center gap-4 mb-4">
-                        <div className="p-3 bg-white rounded-xl">
-                          <UserPlusIcon className="w-6 h-6 text-gray-600" />
-                        </div>
-                        <h3 className="font-semibold text-gray-900">Add Patients</h3>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-4">
-                        After creating a protocol, you can start adding patients and assigning protocols.
-                      </p>
-                      <Button
-                        disabled
-                        className="w-full bg-white text-gray-400 border border-gray-200 cursor-not-allowed"
-                      >
-                        Add Patient
-                        <ArrowRightIcon className="w-4 h-4 ml-2" />
-                      </Button>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-6 border border-gray-200">
-                      <div className="flex items-center gap-4 mb-4">
-                        <div className="p-3 bg-white rounded-xl">
-                          <CalendarDaysIcon className="w-6 h-6 text-gray-600" />
-                        </div>
-                        <h3 className="font-semibold text-gray-900">Track Progress</h3>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-4">
-                        Monitor patient progress and manage their treatment protocols effectively.
-                      </p>
-                      <Button
-                        disabled
-                        className="w-full bg-white text-gray-400 border border-gray-200 cursor-not-allowed"
-                      >
-                        View Progress
-                        <ArrowRightIcon className="w-4 h-4 ml-2" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Help Section */}
-            <div className="mt-8">
-              <Card className="bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 shadow-lg rounded-2xl">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <h3 className="font-semibold text-gray-900">Need Help?</h3>
-                      <p className="text-sm text-gray-600">
-                        Check out our documentation or contact support for assistance
-                      </p>
-                    </div>
-                    <div className="flex gap-3">
-                      <Link 
-                        href="/help"
-                        className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
-                      >
-                        Documentation
-                      </Link>
-                      <Link
-                        href="/contact"
-                        className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-blue-600 bg-white border border-blue-200 rounded-lg hover:bg-blue-50"
-                      >
-                        Contact Support
-                      </Link>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Professional chart data: build past 30 days + projection 14 days (placeholder; hook to API later)
+  const today = new Date();
+  const daysAgo = (n: number) => new Date(today.getFullYear(), today.getMonth(), today.getDate() - n).getTime();
+  const base: number[] = [0, 30, 0, 0, 360, 180, 0, 0, 210, 0, 0, 0, 1080, 170, 0, 0, 0, 980, 820, 0, 0, 0, 300, 0, 0, 0, 820, 0, 0, 60];
+  const pastSeries: SeriesPoint[] = base.map((v, idx) => [daysAgo(base.length - 1 - idx), v]);
+  const lastPast = base[base.length - 1] || 0;
+  const projLen = 14;
+  const projectionSeries: SeriesPoint[] = Array.from({ length: projLen }, (_, i) => {
+    const t = new Date(today.getFullYear(), today.getMonth(), today.getDate() + (i + 1)).getTime();
+    // simple deterministic projection using a gentle upward drift + occasional spike
+    const val = Math.max(0, Math.round(lastPast * (1 + 0.03 * (i + 1)) + (i % 7 === 3 ? 300 : 0)));
+    return [t, val];
+  });
 
   return (
     <div className="min-h-screen bg-white">
       <div className="lg:ml-64">
-        <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
+        <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 bg-gray-50">
         
-          {/* Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-            <div className="space-y-2">
-              <h1 className="text-large font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                Dashboard
-              </h1>
-              <p className="text-gray-600 font-medium">
-                Welcome, {session?.user?.name}
-              </p>
-            </div>
-            
-            <div className="flex gap-3">
-              <Button 
-                onClick={() => {
-                  // Intelligent routing based on current state
-                  if (stats.totalPatients === 0 && stats.totalProtocols === 0) {
-                    // First time user - go to protocol onboarding first
-                    router.push('/doctor/onboarding');
-                  } else if (stats.totalPatients === 0 && stats.totalProtocols > 0) {
-                    // Has protocols but no patients - use smart patient onboarding
-                    router.push('/doctor/patients/onboarding');
-                  } else {
-                    // Regular add patient flow
-                    router.push('/doctor/patients/smart-add');
-                  }
-                }}
-                className="bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl px-6 shadow-md font-semibold"
-              >
-                <UserPlusIcon className="h-4 w-4 mr-2" />
-                New Client
-              </Button>
-              <Button 
-                asChild
-                variant="outline"
-                className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl px-6 shadow-md font-semibold"
-              >
-                <Link href="/doctor/protocols">
-                  <PlusIcon className="h-4 w-4 mr-2" />
-                  New Protocol
-                </Link>
-              </Button>
+          {/* Header (compact, like KPIs) */}
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex items-center justify-between">
+              <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Overview</h1>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => router.push('/doctor/patients/smart-add')}
+                  className="inline-flex h-8 items-center rounded-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] px-3 text-xs font-medium text-white hover:opacity-90 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5893ec]"
+                >
+                  New client
+                </button>
+              </div>
+
             </div>
           </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-[#5154e7]/10 rounded-xl">
-                    <UsersIcon className="h-6 w-6 text-[#5154e7]" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-gray-500 font-semibold">Clients</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.totalPatients}</p>
-                  </div>
+          {/* Stats (pill cards like KPIs) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-2">
+            {[{
+              title: 'Revenue collected',
+              value: formatCurrency(stats.revenueCollected),
+              note: 'total'
+            }, {
+              title: 'Referrals',
+              value: stats.referralsCount,
+              note: 'last 30 days'
+            }, {
+              title: 'Users',
+              value: stats.usersCount,
+              note: 'total'
+            }].map((kpi) => (
+              <div key={String(kpi.title)} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-gray-500">{kpi.title}</span>
+                  <span className="text-[10px] text-gray-400">{kpi.note}</span>
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-teal-100 rounded-xl">
-                    <ClockIcon className="h-6 w-6 text-teal-600" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-gray-500 font-semibold">Active Protocols</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.activeProtocols}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-cyan-100 rounded-xl">
-                    <DocumentTextIcon className="h-6 w-6 text-cyan-600" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-gray-500 font-semibold">Total Protocols</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.totalProtocols}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-emerald-100 rounded-xl">
-                    <CheckCircleIcon className="h-6 w-6 text-emerald-600" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-gray-500 font-semibold">Completed Today</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.completedToday}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{kpi.value as any}</div>
+              </div>
+            ))}
           </div>
+ 
+          <div className="grid lg:grid-cols-2 gap-3">
+            {/* Rewards (top, spans 2 cols) */}
+            <Card className="bg-white border border-gray-200 rounded-2xl col-span-2 shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between px-4 py-3">
+                <CardTitle className="text-sm font-semibold text-gray-900">Rewards</CardTitle>
+                <div className="flex gap-2">
+                  <Button asChild variant="outline" size="sm" className="h-8 border-gray-300 text-gray-800">
+                    <Link href="/doctor/rewards">Manage Rewards</Link>
+                  </Button>
+                  <Button asChild variant="outline" size="sm" className="h-8 border-gray-300 text-gray-800">
+                    <Link href="/doctor/rewards/approvals">Approvals</Link>
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 pt-0">
+                <div className="grid grid-cols-3 gap-3">
+                  {[{label:'Configured',value:0},{label:'Pending',value:0},{label:'Redeemed',value:0}].map((m) => (
+                    <div key={m.label} className="px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 shadow-sm">
+                      <p className="text-[11px] text-gray-600 font-medium">{m.label}</p>
+                      <p className="text-[22px] leading-7 font-semibold text-gray-900">{m.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
 
-          <div className="grid lg:grid-cols-2 gap-8">
-            
-            {/* Active Clients */}
-            <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-              <CardHeader className="flex flex-row items-center justify-between p-6 pb-4">
-                <CardTitle className="text-lg font-bold text-gray-900">Active Clients</CardTitle>
-                <Button variant="ghost" size="sm" asChild className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-xl font-semibold">
+            {/* Referral projections (above Active Clients and Track Progress) */}
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl col-span-2">
+              <CardContent className="p-0">
+                <ProjectionLineChart 
+                  title="Referral projections"
+                  past={pastSeries}
+                  height={320}
+                />
+              </CardContent>
+            </Card>
+
+            {/* Chart removed in favor of professional projection chart above */}
+
+            {/* Active Clients (minimal) */}
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
+              <CardHeader className="flex flex-row items-center justify-between px-4 py-3">
+                <CardTitle className="text-sm font-semibold text-gray-900">Active Clients</CardTitle>
+                <Button variant="ghost" size="sm" asChild className="h-8 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-full font-medium">
                   <Link href="/doctor/patients">View all</Link>
                 </Button>
               </CardHeader>
-              <CardContent className="p-6 pt-0">
+              <CardContent className="px-2 pb-2 pt-0">
                 {patients.length === 0 ? (
-                  <div className="text-center py-12">
+                  <div className="text-center py-10">
                     <UsersIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
                     <p className="text-gray-500 mb-4 font-medium">No clients registered</p>
-                    <Button className="bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl shadow-md font-semibold" size="sm" asChild>
+                    <Button className="h-8 text-white rounded-full shadow-sm text-xs font-medium bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90" size="sm" asChild>
                       <Link href="/doctor/patients/smart-add">Add first client</Link>
                     </Button>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {patients.slice(0, 5).map((patient) => {
-                      const activeProtocol = getActiveProtocolForPatient(patient);
-                      
-                      return (
-                        <div key={patient.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200 shadow-sm">
-                          <div className="flex items-center gap-4">
-                            {/* Simple Avatar */}
-                            <div className="h-10 w-10 rounded-xl bg-teal-100 flex items-center justify-center text-sm font-bold text-teal-600">
-                              {getPatientInitials(patient.name)}
-                            </div>
-                            <div className="space-y-1">
-                              <p className="font-bold text-gray-900">{patient.name || 'No name'}</p>
-                              <p className="text-sm text-gray-500 font-medium">{patient.email}</p>
-                            </div>
+                  <div className="divide-y divide-gray-200">
+                    {patients.slice(0, 5).map((patient) => (
+                      <div key={patient.id} className="flex items-center justify-between py-3 px-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center text-[11px] font-semibold text-gray-600">
+                            {getPatientInitials(patient.name)}
                           </div>
-                          <div className="text-right">
-                            {activeProtocol ? (
-                              <span className="inline-flex items-center px-3 py-1.5 rounded-xl text-sm bg-teal-100 text-teal-700 border border-teal-200 font-semibold">
-                                {activeProtocol.protocol.name}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-3 py-1.5 rounded-xl text-sm bg-gray-100 text-gray-600 border border-gray-200 font-medium">
-                                No protocol
-                              </span>
-                            )}
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{patient.name || 'No name'}</p>
+                            <p className="text-xs text-gray-500 truncate">{patient.email}</p>
                           </div>
                         </div>
-                      );
-                    })}
+                        <div className="shrink-0">
+                          <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-full text-xs">
+                            <Link href={`/doctor/patients/${patient.id}`}>View</Link>
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            {/* Created Protocols */}
-            <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-              <CardHeader className="flex flex-row items-center justify-between p-6 pb-4">
-                <CardTitle className="text-lg font-bold text-gray-900">Created Protocols</CardTitle>
-                <Button variant="ghost" size="sm" asChild className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-xl font-semibold">
-                  <Link href="/doctor/protocols">View all</Link>
-                </Button>
+            {/* Track Progress */}
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
+              <CardHeader className="flex flex-row items-center justify-between px-4 py-3">
+                <CardTitle className="text-sm font-semibold text-gray-900">Track Progress</CardTitle>
               </CardHeader>
-              <CardContent className="p-6 pt-0">
-                {protocols.length === 0 ? (
-                  <div className="text-center py-12">
-                    <DocumentTextIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500 mb-4 font-medium">No protocols created</p>
-                    <Button className="bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl shadow-md font-semibold" size="sm" asChild>
-                      <Link href="/doctor/protocols">Create first protocol</Link>
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {protocols.slice(0, 5).map((protocol) => {
-                      const activeAssignments = protocol.assignments.filter(a => a.isActive).length;
-                      
-                      return (
-                        <div key={protocol.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200 shadow-sm">
-                          <div className="flex-1 space-y-2">
-                            <div className="flex items-center gap-3">
-                              <p className="font-bold text-gray-900">{protocol.name}</p>
-                              {protocol.isTemplate && (
-                                <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs bg-[#5154e7]/10 text-[#5154e7] border border-[#5154e7]/20 font-semibold">
-                                  Template
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <div className="flex items-center gap-1">
-                                <CalendarDaysIcon className="h-4 w-4 text-gray-400" />
-                                <span className="text-sm text-gray-500 font-medium">
-                                  {protocol.duration} days
-                                </span>
-                              </div>
-                              {activeAssignments > 0 && (
-                                <span className="text-sm text-teal-600 font-semibold">
-                                  {activeAssignments} active
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+              <CardContent className="px-4 pb-4 pt-0">
+                <p className="text-xs text-gray-600 mb-3">Monitor KPIs and review clients.</p>
+                <div className="flex gap-3">
+                  <Button asChild variant="outline" className="h-8 border-gray-300 text-gray-800 rounded-full text-xs font-medium px-3">
+                    <Link href="/doctor/referrals/kpis">View KPIs</Link>
+                  </Button>
+                  <Button asChild variant="outline" className="h-8 border-gray-300 text-gray-800 rounded-full text-xs font-medium px-3">
+                    <Link href="/doctor/patients">View Clients</Link>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </div>
 
           {/* Quick Actions */}
-          <Card className="mt-8 bg-white border-gray-200 shadow-lg rounded-2xl">
-            <CardHeader className="p-6 pb-4">
-              <CardTitle className="text-lg font-bold text-gray-900">Quick Actions</CardTitle>
+          <Card className="mt-6 bg-white border border-gray-200 shadow-sm rounded-2xl">
+            <CardHeader className="px-4 py-3">
+              <CardTitle className="text-sm font-semibold text-gray-900">Quick Actions</CardTitle>
             </CardHeader>
-            <CardContent className="p-6 pt-0">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <CardContent className="px-4 pb-4 pt-0">
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                 <Button 
                   variant="outline" 
-                  className="h-24 flex-col gap-3 border-gray-300 bg-white text-gray-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 rounded-2xl shadow-md font-semibold"
-                  onClick={() => {
-                    if (stats.totalPatients === 0 && stats.totalProtocols > 0) {
-                      router.push('/doctor/patients/onboarding');
-                    } else {
-                      router.push('/doctor/patients/smart-add');
-                    }
-                  }}
+                  className="h-20 flex-col gap-2 border-gray-300 bg-white text-gray-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 rounded-2xl shadow-sm font-medium"
+                  onClick={() => router.push('/doctor/patients/smart-add')}
                 >
-                  <UserPlusIcon className="h-8 w-8" />
-                  <span className="text-sm">Add Client</span>
+                  <UserPlusIcon className="h-7 w-7" />
+                  <span className="text-xs">Add Client</span>
                 </Button>
-                
                 <Button 
                   variant="outline" 
-                  className="h-24 flex-col gap-3 border-gray-300 bg-white text-gray-700 hover:bg-cyan-50 hover:text-cyan-700 hover:border-cyan-300 rounded-2xl shadow-md font-semibold"
+                  className="h-20 flex-col gap-2 border-gray-300 bg-white text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300 rounded-2xl shadow-sm font-medium"
                   asChild
                 >
-                  <Link href="/doctor/protocols">
-                    <PlusIcon className="h-8 w-8" />
-                    <span className="text-sm">Create Protocol</span>
+                  <Link href="/doctor/rewards">
+                    <DocumentTextIcon className="h-7 w-7" />
+                    <span className="text-xs">Manage Rewards</span>
                   </Link>
                 </Button>
-                
                 <Button 
                   variant="outline" 
-                  className="h-24 flex-col gap-3 border-gray-300 bg-white text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 rounded-2xl shadow-md font-semibold"
-                  asChild
-                >
-                  <Link href="/doctor/templates">
-                    <DocumentTextIcon className="h-8 w-8" />
-                    <span className="text-sm">Templates</span>
-                  </Link>
-                </Button>
-                
-                <Button 
-                  variant="outline" 
-                  className="h-24 flex-col gap-3 border-gray-300 bg-white text-gray-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 rounded-2xl shadow-md font-semibold"
+                  className="h-20 flex-col gap-2 border-gray-300 bg-white text-gray-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 rounded-2xl shadow-sm font-medium"
                   asChild
                 >
                   <Link href="/doctor/patients">
-                    <UsersIcon className="h-8 w-8" />
-                    <span className="text-sm">View Clients</span>
+                    <UsersIcon className="h-7 w-7" />
+                    <span className="text-xs">View Clients</span>
                   </Link>
                 </Button>
               </div>

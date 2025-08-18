@@ -10,6 +10,7 @@ export async function GET() {
     
     const session = await getServerSession(authOptions);
     console.log('[ROLE API] Sessão obtida:', session ? 'Sim' : 'Não');
+    console.log('[ROLE API] Detalhes da sessão:', JSON.stringify(session, null, 2));
     
     if (!session?.user?.email) {
       console.log('[ROLE API] Erro: Sessão inválida ou email não encontrado');

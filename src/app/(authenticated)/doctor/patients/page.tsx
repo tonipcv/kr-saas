@@ -35,7 +35,7 @@ import { format } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import { cn } from "@/lib/utils";
 import { toast } from 'react-hot-toast';
-import { useRouter } from 'next/navigation';
+ 
 
 interface Patient {
   id: string;
@@ -92,7 +92,6 @@ interface ImportResults {
 
 export default function PatientsPage() {
   const { data: session } = useSession();
-  const router = useRouter();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -111,6 +110,7 @@ export default function PatientsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(6);
   const [showOptionalFields, setShowOptionalFields] = useState(false);
+  const [balances, setBalances] = useState<Record<string, number>>({});
   
   const [newPatient, setNewPatient] = useState<NewPatientForm>({
     name: '',
@@ -131,6 +131,11 @@ export default function PatientsPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [importResults, setImportResults] = useState<ImportResults | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvPreviewRows, setCsvPreviewRows] = useState<Array<Record<string, string>>>([]);
+  const [csvErrors, setCsvErrors] = useState<string[]>([]);
+  const [isValidatingCsv, setIsValidatingCsv] = useState(false);
 
   useEffect(() => {
     loadPatients();
@@ -211,7 +216,22 @@ export default function PatientsPage() {
   };
 
   const openEditModal = (patient: Patient) => {
-    router.push(`/doctor/patients/${patient.id}`);
+    setPatientToEdit(patient);
+    setNewPatient({
+      name: patient.name || '',
+      email: patient.email || '',
+      phone: patient.phone || '',
+      birth_date: patient.birth_date || '',
+      gender: patient.gender || '',
+      address: patient.address || '',
+      emergency_contact: patient.emergency_contact || '',
+      emergency_phone: patient.emergency_phone || '',
+      medical_history: patient.medical_history || '',
+      allergies: patient.allergies || '',
+      medications: patient.medications || '',
+      notes: patient.notes || ''
+    });
+    setShowEditPatient(true);
   };
 
   const updatePatient = async () => {
@@ -403,6 +423,24 @@ export default function PatientsPage() {
   const endIndex = startIndex + itemsPerPage;
   const currentPatients = filteredPatients.slice(startIndex, endIndex);
 
+  // Fetch credit balances for visible patients
+  useEffect(() => {
+    const fetchBalances = async () => {
+      try {
+        const ids = currentPatients.map((p) => p.id);
+        if (ids.length === 0) return;
+        const params = new URLSearchParams({ ids: ids.join(',') });
+        const res = await fetch(`/api/patients/credits?${params.toString()}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.balances) setBalances((prev) => ({ ...prev, ...data.balances }));
+      } catch (e) {
+        console.error('Failed to load balances', e);
+      }
+    };
+    fetchBalances();
+  }, [currentPatients.map((p) => p.id).join(','), searchTerm, currentPage]);
+
   // Handle page change with smooth scroll
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -463,48 +501,120 @@ export default function PatientsPage() {
     }
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  // CSV helpers
+  const resetCsvImport = () => {
+    setSelectedFile(null);
+    setCsvHeaders([]);
+    setCsvPreviewRows([]);
+    setCsvErrors([]);
+    setIsValidatingCsv(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
-    // Validate file type
-    if (!file.name.endsWith('.csv')) {
-      toast.error('Please upload a CSV file');
+  const parseCsv = (text: string) => {
+    // naive CSV parse: handles simple commas and quotes
+    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length === 0) return { headers: [] as string[], rows: [] as Record<string, string>[] };
+    const splitLine = (line: string): string[] => {
+      const result: string[] = [];
+      let cur = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+          else { inQuotes = !inQuotes; }
+        } else if (ch === ',' && !inQuotes) {
+          result.push(cur);
+          cur = '';
+        } else {
+          cur += ch;
+        }
+      }
+      result.push(cur);
+      return result.map((s) => s.trim());
+    };
+    const rawHeaders = splitLine(lines[0]).map((h) => h.replace(/^\ufeff/, ''));
+    const headers = rawHeaders.map((h) => h.toLowerCase());
+    const rows: Record<string, string>[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const parts = splitLine(lines[i]);
+      const obj: Record<string, string> = {};
+      headers.forEach((h, idx) => {
+        obj[h] = (parts[idx] ?? '').trim();
+      });
+      rows.push(obj);
+    }
+    return { headers, rows };
+  };
+
+  const validateCsv = (headers: string[], rows: Record<string, string>[]) => {
+    const errors: string[] = [];
+    const required = ['name', 'email'];
+    const allowed = ['name', 'email', 'phone'];
+    // headers present
+    for (const req of required) {
+      if (!headers.includes(req)) errors.push(`Missing required column: ${req}`);
+    }
+    // unexpected columns
+    headers.forEach((h) => {
+      if (!allowed.includes(h)) errors.push(`Unexpected column: ${h}. Allowed: name, email, phone`);
+    });
+    // row-level validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    rows.forEach((row, idx) => {
+      const line = idx + 2; // account for header line
+      if (!row['name'] || row['name'].length === 0) errors.push(`Row ${line}: name is required`);
+      if (!row['email'] || row['email'].length === 0) errors.push(`Row ${line}: email is required`);
+      else if (!emailRegex.test(row['email'])) errors.push(`Row ${line}: email is invalid`);
+    });
+    return errors;
+  };
+
+  const handleCsvFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    setSelectedFile(file);
+    setCsvErrors([]);
+    setCsvHeaders([]);
+    setCsvPreviewRows([]);
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      toast.error('Upload a CSV file (.csv)');
       return;
     }
+    try {
+      setIsValidatingCsv(true);
+      const text = await file.text();
+      const { headers, rows } = parseCsv(text);
+      setCsvHeaders(headers);
+      const errors = validateCsv(headers, rows);
+      setCsvErrors(errors);
+      setCsvPreviewRows(rows.slice(0, 10));
+    } catch (e) {
+      console.error('Failed to read CSV', e);
+      toast.error('Failed to read CSV');
+    } finally {
+      setIsValidatingCsv(false);
+    }
+  };
 
+  const confirmCsvUpload = async () => {
+    if (!selectedFile) return;
     try {
       setIsImporting(true);
-      
       const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('/api/patients/import', {
-        method: 'POST',
-        body: formData
-      });
-
+      formData.append('file', selectedFile);
+      const response = await fetch('/api/patients/import', { method: 'POST', body: formData });
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Error importing patients');
-      }
-
+      if (!response.ok) throw new Error(data.error || 'Error importing patients');
       setImportResults(data);
-      
-      // Reload patients list
-      loadPatients();
-      
-      // Show success message
-      toast.success(data.message);
-      
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    } catch (error) {
-      console.error('Error importing patients:', error);
-      toast.error('Error importing patients');
+      await loadPatients();
+      toast.success(data.message || 'Import completed');
+      resetCsvImport();
+      setShowImportModal(false);
+    } catch (e) {
+      console.error('Error importing patients:', e);
+      toast.error(e instanceof Error ? e.message : 'Error importing patients');
     } finally {
       setIsImporting(false);
     }
@@ -512,12 +622,12 @@ export default function PatientsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-white">
+      <div className="min-h-screen bg-gray-50">
         <div className="lg:ml-64">
           <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
             
             {/* Header Skeleton */}
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-6">
               <div className="space-y-3">
                 <div className="h-8 bg-gray-200 rounded-lg w-32 animate-pulse"></div>
                 <div className="h-5 bg-gray-100 rounded-lg w-64 animate-pulse"></div>
@@ -526,14 +636,14 @@ export default function PatientsPage() {
             </div>
 
             {/* Search Skeleton */}
-            <div className="bg-white border border-gray-200 shadow-lg rounded-2xl p-6 mb-6">
+            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6 mb-4">
               <div className="h-12 bg-gray-100 rounded-xl animate-pulse"></div>
             </div>
 
             {/* Clients List Skeleton */}
             <div className="space-y-6">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="bg-white border border-gray-200 shadow-lg rounded-2xl p-6">
+                <div key={i} className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4 flex-1">
                       <div className="h-12 w-12 bg-gray-200 rounded-xl animate-pulse"></div>
@@ -569,26 +679,54 @@ export default function PatientsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gray-50">
       <div className="lg:ml-64">
         <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900">Clients</h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Manage your clients and their protocols
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                asChild
-                className="bg-[#5154e7] hover:bg-[#4145d1] text-white shadow-md rounded-xl font-semibold"
-              >
-                <Link href="/doctor/patients/smart-add">
-                  <UserPlusIcon className="h-5 w-5 mr-2" />
+          {/* Page header + actions */}
+          <div className="mb-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div>
+                <h1 className="text-[20px] font-semibold text-gray-900 tracking-[-0.01em]">Clients</h1>
+                <p className="text-sm text-gray-500 mt-1">Manage your clients and their protocols</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  className="rounded-xl h-9 px-3 border-gray-200 text-gray-700 hover:bg-gray-50"
+                  onClick={() => { resetCsvImport(); setShowImportModal(true); }}
+                  disabled={isImporting}
+                  title="Import clients from CSV"
+                >
+                  <span className="hidden sm:inline">{isImporting ? 'Importing...' : 'Import CSV'}</span>
+                  <ArrowUpTrayIcon className="h-4 w-4 sm:ml-2" />
+                </Button>
+                <Button
+                  className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium"
+                  onClick={() => {
+                    resetForm();
+                    setShowAddPatient(true);
+                  }}
+                >
+                  <UserPlusIcon className="h-4 w-4 mr-2" />
                   Add Client
-                </Link>
-              </Button>
+                </Button>
+              </div>
+            </div>
+
+            {/* Top pill tabs */}
+            <div className="mt-3 flex items-center gap-2">
+              {['All', 'Active', 'Inactive'].map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  className={cn(
+                    'h-8 px-3 text-xs rounded-full border transition shadow-sm',
+                    'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                  )}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -607,10 +745,10 @@ export default function PatientsPage() {
               <div className="mt-6">
                 <Button
                   asChild
-                  className="bg-[#5154e7] hover:bg-[#4145d1] text-white shadow-md rounded-xl font-semibold"
+                  className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl font-medium"
                 >
                   <Link href="/doctor/patients/smart-add">
-                    <UserPlusIcon className="h-5 w-5 mr-2" />
+                    <UserPlusIcon className="h-4 w-4 mr-2" />
                     Add First Client
                   </Link>
                 </Button>
@@ -618,7 +756,8 @@ export default function PatientsPage() {
             </div>
           ) : (
             <>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
+              {/* Toolbar */}
+              <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-3">
                 <div className="flex-1">
                   <div className="relative">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -629,55 +768,63 @@ export default function PatientsPage() {
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       placeholder="Search clients..."
-                      className="block w-full rounded-xl border-0 py-3 pl-10 pr-4 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-[#5154e7] sm:text-sm sm:leading-6"
+                      className="block w-full h-10 rounded-xl border border-gray-200 bg-white pl-10 pr-3 text-[14px] text-gray-900 shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5154e7]"
                     />
                   </div>
                 </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
+                    <span className="text-sm">Filters</span>
+                  </Button>
+                  <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
+                    <span className="text-sm">Sort</span>
+                  </Button>
+                </div>
               </div>
 
-              <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
-                <table className="min-w-full divide-y divide-gray-300">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Name</th>
-                      <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Email</th>
-                      <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Protocols</th>
-                      <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Status</th>
-                      <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6">
-                        <span className="sr-only">Actions</span>
-                      </th>
+              {/* Table */}
+              <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <table className="min-w-full">
+                  <thead className="bg-gray-50/80">
+                    <tr className="text-left text-xs text-gray-600">
+                      <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Name</th>
+                      <th className="px-3 py-3.5 font-medium">Email</th>
+                      <th className="px-3 py-3.5 font-medium">Phone</th>
+                      <th className="px-3 py-3.5 font-medium">Points</th>
+                      <th className="px-3 py-3.5 font-medium">Status</th>
+                      <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200 bg-white">
+                  <tbody className="divide-y divide-gray-100">
                     {currentPatients.map((patient) => {
                       const activeProtocol = getActiveProtocol(patient);
-                      const totalProtocols = patient.assigned_protocols?.length || 0;
-                      const activeProtocolsCount = patient.assigned_protocols?.filter(p => p.is_active).length || 0;
-                      
                       return (
-                        <tr key={patient.id} className="hover:bg-gray-50">
-                          <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                        <tr key={patient.id} className="hover:bg-gray-50/60">
+                          <td className="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
                             {patient.name || 'Name not provided'}
                           </td>
-                          <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">
                             {patient.email || '-'}
                           </td>
-                          <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                            {totalProtocols > 0 ? `${activeProtocolsCount} active / ${totalProtocols} total` : 'No protocols'}
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">
+                            {patient.phone || '-'}
                           </td>
-                          <td className="whitespace-nowrap px-3 py-4 text-sm">
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
+                            {typeof balances[patient.id] === 'number' ? Math.round(balances[patient.id]) : 0}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm">
                             {activeProtocol ? (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">
                                 Active
                               </span>
                             ) : (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">
                                 Inactive
                               </span>
                             )}
                           </td>
-                          <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                            <div className="flex items-center justify-end gap-2">
+                          <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                            <div className="flex items-center justify-end gap-1.5">
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -694,7 +841,7 @@ export default function PatientsPage() {
                                 onClick={() => openEditModal(patient)}
                                 className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg h-8 w-8 p-0"
                               >
-                                <PencilIcon className="h-3 w-3" />
+                                <PencilIcon className="h-3.5 w-3.5" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -710,7 +857,7 @@ export default function PatientsPage() {
                                 {deletingPatientId === patient.id ? (
                                   <span className="h-3 w-3 animate-spin rounded-full border-2 border-red-600 border-t-transparent"></span>
                                 ) : (
-                                  <TrashIcon className="h-3 w-3" />
+                                  <TrashIcon className="h-3.5 w-3.5" />
                                 )}
                               </Button>
                               <Button
@@ -718,13 +865,13 @@ export default function PatientsPage() {
                                 size="sm"
                                 onClick={() => sendPasswordResetEmail(patient.id, patient.email || '')}
                                 disabled={sendingEmailId === patient.id}
-                                className="border-blue-300 bg-white text-blue-700 hover:bg-blue-50 hover:border-blue-400 rounded-lg font-medium h-8 px-2"
+                                className="border-blue-200 bg-white text-blue-700 hover:bg-blue-50 hover:border-blue-300 rounded-lg font-medium h-8 px-2"
                                 title="Send password setup email"
                               >
                                 {sendingEmailId === patient.id ? (
                                   <span className="h-3 w-3 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></span>
                                 ) : (
-                                  <PaperAirplaneIcon className="h-3 w-3" />
+                                  <PaperAirplaneIcon className="h-3.5 w-3.5" />
                                 )}
                               </Button>
                             </div>
@@ -739,6 +886,168 @@ export default function PatientsPage() {
           )}
         </div>
       </div>
+
+      {/* Add Patient Modal */}
+      {showAddPatient && (
+        <Dialog open={showAddPatient} onOpenChange={setShowAddPatient}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Add Client</DialogTitle>
+              <DialogDescription>
+                Create a new client. Required fields are marked with *.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2 col-span-2 sm:col-span-1">
+                  <Label htmlFor="add_name">Name *</Label>
+                  <Input
+                    id="add_name"
+                    value={newPatient.name}
+                    onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })}
+                    placeholder="Full name"
+                  />
+                </div>
+                <div className="space-y-2 col-span-2 sm:col-span-1">
+                  <Label htmlFor="add_email">Email *</Label>
+                  <Input
+                    id="add_email"
+                    type="email"
+                    value={newPatient.email}
+                    onChange={(e) => setNewPatient({ ...newPatient, email: e.target.value })}
+                    placeholder="Email address"
+                  />
+                </div>
+                <div className="space-y-2 col-span-2 sm:col-span-1">
+                  <Label htmlFor="add_phone">Phone</Label>
+                  <Input
+                    id="add_phone"
+                    type="tel"
+                    value={newPatient.phone}
+                    onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
+                    placeholder="Phone number"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowAddPatient(false);
+                  resetForm();
+                }}
+                disabled={isAddingPatient}
+                className="mt-3 sm:mt-0"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={addPatient}
+                disabled={isAddingPatient}
+                className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white"
+              >
+                {isAddingPatient ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-2"></span>
+                    Adding...
+                  </>
+                ) : (
+                  'Add Client'
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Import CSV Modal */}
+      {showImportModal && (
+        <Dialog open={showImportModal} onOpenChange={(open) => { setShowImportModal(open); if (!open) resetCsvImport(); }}>
+          <DialogContent className="sm:max-w-[720px]">
+            <DialogHeader>
+              <DialogTitle>Import clients via CSV</DialogTitle>
+              <DialogDescription>
+                The CSV file must include the columns: <b>name</b>, <b>email</b>, <b>phone</b>. Required fields: <b>name</b> and <b>email</b>.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                <p className="mb-2 font-medium">How to prepare your CSV</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>The first line must be the header: name,email,phone</li>
+                  <li><b>name</b> and <b>email</b> are required</li>
+                  <li><b>phone</b> is optional</li>
+                  <li>Download an example: <a className="text-blue-600 hover:underline" href="/exemple-clients.csv" download>exemple-clients.csv</a></li>
+                </ul>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={handleCsvFileChange}
+                  className=""
+                  disabled={isValidatingCsv || isImporting}
+                />
+                <Button variant="outline" onClick={resetCsvImport} className="rounded-xl" disabled={isValidatingCsv || isImporting}>Clear</Button>
+              </div>
+
+              {isValidatingCsv && (
+                <div className="text-sm text-gray-600">Validating CSV...</div>
+              )}
+
+              {csvErrors.length > 0 && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                  <p className="text-red-700 font-medium mb-1">Errors found ({csvErrors.length}):</p>
+                  <ul className="list-disc pl-5 text-sm text-red-700 space-y-1 max-h-40 overflow-auto">
+                    {csvErrors.map((e, i) => (<li key={i}>{e}</li>))}
+                  </ul>
+                </div>
+              )}
+
+              {selectedFile && csvErrors.length === 0 && (
+                <div className="rounded-lg border border-gray-200">
+                  <div className="px-3 py-2 text-sm text-gray-600 bg-gray-50">Preview (first {csvPreviewRows.length} rows)</div>
+                  <div className="overflow-auto max-h-64">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-white">
+                        <tr>
+                          {csvHeaders.map((h) => (
+                            <th key={h} className="px-3 py-2 text-left font-medium text-gray-700 border-b">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {csvPreviewRows.map((row, idx) => (
+                          <tr key={idx} className="odd:bg-gray-50">
+                            {csvHeaders.map((h) => (
+                              <td key={h} className="px-3 py-2 border-b text-gray-800">{row[h] ?? ''}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button variant="outline" className="rounded-xl" onClick={() => { setShowImportModal(false); }}>Cancel</Button>
+                <Button
+                  className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white rounded-xl"
+                  onClick={confirmCsvUpload}
+                  disabled={!selectedFile || csvErrors.length > 0 || isImporting}
+                >
+                  {isImporting ? 'Importing...' : 'Confirm import'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Edit Patient Modal */}
       {showEditPatient && (
@@ -783,12 +1092,13 @@ export default function PatientsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="allergies">Allergies</Label>
+                <Label htmlFor="phone">Phone</Label>
                 <Input
-                  id="allergies"
-                  value={newPatient.allergies}
-                  onChange={(e) => setNewPatient({ ...newPatient, allergies: e.target.value })}
-                  placeholder="Known allergies"
+                  id="phone"
+                  type="tel"
+                  value={newPatient.phone}
+                  onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
+                  placeholder="Phone number"
                 />
               </div>
               <div className="space-y-2">
@@ -818,7 +1128,7 @@ export default function PatientsPage() {
               <Button
                 onClick={updatePatient}
                 disabled={isEditingPatient}
-                className="bg-[#5154e7] hover:bg-[#4145d1] text-white"
+                className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white"
               >
                 {isEditingPatient ? (
                   <>

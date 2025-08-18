@@ -32,19 +32,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { 
-  Loader2, 
-  Users, 
-  UserPlus, 
-  CheckCircle, 
-  Clock, 
-  XCircle,
-  Eye,
-  Edit,
-  Share2,
-  TrendingUp,
-  ChartBarIcon
-} from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface ReferralLead {
@@ -83,11 +71,11 @@ interface ReferralStats {
 }
 
 const statusConfig = {
-  PENDING: { label: 'Pending', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
-  CONTACTED: { label: 'Contacted', color: 'bg-blue-100 text-blue-800', icon: UserPlus },
-  CONVERTED: { label: 'Converted', color: 'bg-green-100 text-green-800', icon: CheckCircle },
-  REJECTED: { label: 'Rejected', color: 'bg-red-100 text-red-800', icon: XCircle },
-  EXPIRED: { label: 'Expired', color: 'bg-gray-100 text-gray-800', icon: Clock }
+  PENDING: { label: 'Pending' },
+  CONTACTED: { label: 'Contacted' },
+  CONVERTED: { label: 'Converted' },
+  REJECTED: { label: 'Rejected' },
+  EXPIRED: { label: 'Expired' }
 };
 
 export default function DoctorReferralsPage() {
@@ -100,6 +88,7 @@ export default function DoctorReferralsPage() {
   const [activeTab, setActiveTab] = useState<'active' | 'rejected'>('active');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [doctorSlug, setDoctorSlug] = useState('');
 
   const [updateForm, setUpdateForm] = useState({
     status: '',
@@ -134,6 +123,24 @@ export default function DoctorReferralsPage() {
       loadData();
     }
   }, [session, page]);
+
+  // Load doctor's slug for referral link generation (new standard)
+  useEffect(() => {
+    const fetchDoctorSlug = async () => {
+      try {
+        const res = await fetch('/api/profile');
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.doctor_slug) {
+            setDoctorSlug(String(data.doctor_slug));
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load doctor slug', e);
+      }
+    };
+    if (session?.user?.id) fetchDoctorSlug();
+  }, [session?.user?.id]);
 
   const handleStatusUpdate = async () => {
     if (!selectedLead || !updateForm.status) return;
@@ -171,12 +178,23 @@ export default function DoctorReferralsPage() {
   };
 
   const generateReferralLink = () => {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
-    return `${baseUrl}/referral/${session?.user?.id}`;
+    const base = (process.env.NEXT_PUBLIC_APP_URL || window.location.origin).replace(/\/+$/, '');
+    const slug = (doctorSlug || '').trim().replace(/^\/+/, '');
+    if (!slug) {
+      // If slug isn't set yet, prefer empty string so UI can handle/disable copy
+      console.warn('[DoctorReferrals] doctor_slug missing. Set it in your profile to generate a shareable link.');
+      return '';
+    }
+    return `${base}/${slug}`;
   };
 
   const copyReferralLink = () => {
-    navigator.clipboard.writeText(generateReferralLink());
+    const link = generateReferralLink();
+    if (!link) {
+      console.warn('[DoctorReferrals] Unable to copy link: doctor_slug missing');
+      return;
+    }
+    navigator.clipboard.writeText(link);
     // Here you could add a success toast
   };
 
@@ -199,7 +217,7 @@ export default function DoctorReferralsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white">
+      <div className="min-h-screen bg-gray-50">
         <div className="lg:ml-64">
           <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
             {/* Header Skeleton */}
@@ -270,28 +288,64 @@ export default function DoctorReferralsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gray-50">
       <div className="lg:ml-64">
         <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
-          <div className="flex justify-between items-start mb-8">
-            <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent mb-2">
-                Referrals Management
-              </h1>
-              <p className="text-sm text-gray-600">
-                Manage referral leads and track conversions
-              </p>
+          {/* Header */}
+          <div className="mb-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div>
+                <h1 className="text-[20px] font-semibold text-gray-900 tracking-[-0.01em] mb-1">Referrals</h1>
+                <p className="text-sm text-gray-500">Manage referral leads and track conversions</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button asChild variant="outline" className="rounded-xl h-9 px-3 border-gray-200 text-gray-700 hover:bg-gray-50">
+                  <Link href="/doctor/pipeline" className="flex items-center gap-2">
+                    <span>Pipeline</span>
+                  </Link>
+                </Button>
+                <Button onClick={copyReferralLink} className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl h-9 px-4 font-medium">
+                  Copy referral link
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-3">
-              <Button asChild className="flex items-center space-x-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl h-12 px-6 text-sm font-semibold">
-                <Link href="/doctor/pipeline">
-                  <ChartBarIcon className="h-4 w-4" />
-                  <span>Pipeline</span>
-                </Link>
+
+            {/* Page tabs */}
+            <div className="mt-3 flex items-center gap-2">
+              {['Overview', 'Stats'].map((tab, i) => (
+                <button key={tab} type="button" className={`h-8 px-3 text-xs rounded-full border shadow-sm ${i === 0 ? 'bg-white border-gray-200 text-gray-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                  {tab}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Toolbar */}
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
+                All leads
               </Button>
-              <Button onClick={copyReferralLink} className="flex items-center space-x-2 bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl h-12 px-6 text-sm font-semibold">
-                <Share2 className="h-4 w-4" />
-                <span>Copy Referral Link</span>
+              <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
+                Show filters
+              </Button>
+              <div className="w-full sm:w-72">
+                <input
+                  type="text"
+                  placeholder="Search deals"
+                  className="block w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-[14px] text-gray-900 shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5154e7]"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
+                Save view
+              </Button>
+              <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
+                Sort
+              </Button>
+              <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
+                View options
               </Button>
             </div>
           </div>
@@ -302,7 +356,7 @@ export default function DoctorReferralsPage() {
               onClick={() => setActiveTab('active')}
               className={`px-6 py-3 rounded-xl font-semibold text-xs transition-all ${
                 activeTab === 'active'
-                  ? 'bg-[#5154e7] text-white shadow-md'
+                  ? 'bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white shadow-md'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
@@ -312,7 +366,7 @@ export default function DoctorReferralsPage() {
               onClick={() => setActiveTab('rejected')}
               className={`px-6 py-3 rounded-xl font-semibold text-xs transition-all ${
                 activeTab === 'rejected'
-                  ? 'bg-[#5154e7] text-white shadow-md'
+                  ? 'bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white shadow-md'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
@@ -320,86 +374,116 @@ export default function DoctorReferralsPage() {
             </button>
           </div>
 
-          {/* Statistics - Show different stats based on active tab */}
+          {/* Statistics - minimalist */}
           {stats && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               {activeTab === 'active' ? (
                 <>
-                  <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                    <CardContent className="p-6">
-                      <div className="flex items-center">
-                        <div className="p-3 bg-yellow-100 rounded-xl">
-                          <Clock className="h-6 w-6 text-yellow-600" />
-                        </div>
-                        <div className="ml-4">
-                          <p className="text-xs font-semibold text-gray-600">Pending</p>
-                          <p className="text-xl font-bold text-gray-900">{stats.pending}</p>
-                        </div>
+                  <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
+                    <CardContent className="p-5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-gray-600">Pending</p>
+                        <span className="text-xl font-bold text-gray-900">{stats.pending}</span>
                       </div>
                     </CardContent>
                   </Card>
-
-                  <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                    <CardContent className="p-6">
-                      <div className="flex items-center">
-                        <div className="p-3 bg-blue-100 rounded-xl">
-                          <UserPlus className="h-6 w-6 text-blue-600" />
-                        </div>
-                        <div className="ml-4">
-                          <p className="text-xs font-semibold text-gray-600">Contacted</p>
-                          <p className="text-xl font-bold text-gray-900">{stats.contacted}</p>
-                        </div>
+                  <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
+                    <CardContent className="p-5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-gray-600">Contacted</p>
+                        <span className="text-xl font-bold text-gray-900">{stats.contacted}</span>
                       </div>
                     </CardContent>
                   </Card>
-
-                  <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                    <CardContent className="p-6">
-                      <div className="flex items-center">
-                        <div className="p-3 bg-green-100 rounded-xl">
-                          <CheckCircle className="h-6 w-6 text-green-600" />
-                        </div>
-                        <div className="ml-4">
-                          <p className="text-xs font-semibold text-gray-600">Converted</p>
-                          <p className="text-xl font-bold text-gray-900">{stats.converted}</p>
-                        </div>
+                  <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
+                    <CardContent className="p-5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-gray-600">Converted</p>
+                        <span className="text-xl font-bold text-gray-900">{stats.converted}</span>
                       </div>
                     </CardContent>
                   </Card>
-
-                  <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                    <CardContent className="p-6">
-                      <div className="flex items-center">
-                        <div className="p-3 bg-purple-100 rounded-xl">
-                          <TrendingUp className="h-6 w-6 text-purple-600" />
-                        </div>
-                        <div className="ml-4">
-                          <p className="text-xs font-semibold text-gray-600">Conversion Rate</p>
-                          <p className="text-xl font-bold text-gray-900">
-                            {activeStats.total > 0 ? Math.round((stats.converted / activeStats.total) * 100) : 0}%
-                          </p>
-                        </div>
+                  <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
+                    <CardContent className="p-5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-gray-600">Conversion Rate</p>
+                        <span className="text-xl font-bold text-gray-900">{activeStats.total > 0 ? Math.round((stats.converted / activeStats.total) * 100) : 0}%</span>
                       </div>
                     </CardContent>
                   </Card>
                 </>
               ) : (
-                <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                  <CardContent className="p-6">
-                    <div className="flex items-center">
-                      <div className="p-3 bg-red-100 rounded-xl">
-                        <XCircle className="h-6 w-6 text-red-600" />
-                      </div>
-                      <div className="ml-4">
-                        <p className="text-xs font-semibold text-gray-600">Rejected</p>
-                        <p className="text-xl font-bold text-gray-900">{stats.rejected}</p>
-                      </div>
+                <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
+                  <CardContent className="p-5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-gray-600">Rejected</p>
+                      <span className="text-xl font-bold text-gray-900">{stats.rejected}</span>
                     </div>
                   </CardContent>
                 </Card>
               )}
             </div>
           )}
+
+          {/* Referrals Pipeline (overview) */}
+          {(() => {
+            const allForTab = filteredLeads;
+            const byStatus = (s: string) => allForTab.filter(l => l.status === s);
+            const columns = [
+              { id: 'PENDING', title: 'Pending', color: 'bg-gray-50 text-gray-700 border-gray-200' },
+              { id: 'CONTACTED', title: 'Contacted', color: 'bg-gray-50 text-gray-700 border-gray-200' },
+              { id: 'CONVERTED', title: 'Converted', color: 'bg-gray-50 text-gray-700 border-gray-200' },
+              { id: 'REJECTED', title: 'Rejected', color: 'bg-gray-50 text-gray-700 border-gray-200' },
+            ];
+            return (
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-bold text-gray-900">Referrals Pipeline</h2>
+                  <span className="text-sm text-gray-600 font-medium">Drag & drop is available on the full Pipeline page</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {columns.map(col => (
+                    <div key={col.id} className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                      <div className={`px-4 py-3 border-b ${col.color} bg-opacity-40`}> 
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold">{col.title}</span>
+                          <span className="text-xs font-bold text-gray-700 bg-white/70 rounded-lg px-2 py-0.5 border border-gray-200">
+                            {byStatus(col.id).length}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="p-4 space-y-3 max-h-96 overflow-auto">
+                        {byStatus(col.id).slice(0, 8).map(lead => (
+                          <div key={lead.id} className="border border-gray-200 rounded-xl p-3 hover:shadow-sm transition bg-white">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">{lead.name}</p>
+                                <p className="text-xs text-gray-600">{lead.email}</p>
+                              </div>
+                              <Badge className={`bg-gray-100 text-gray-800 rounded-lg px-2 py-0.5 text-[10px] font-medium`}> 
+                                {statusConfig[lead.status as keyof typeof statusConfig]?.label || lead.status}
+                              </Badge>
+                            </div>
+                            <div className="mt-2 flex items-center justify-between">
+                              <span className="text-[11px] text-gray-500">{new Date(lead.createdAt).toLocaleDateString('en-US')}</span>
+                              <Button asChild variant="outline" size="sm" className="h-8 px-2 text-xs rounded-lg border-gray-300">
+                                <Link href="#" onClick={e => { e.preventDefault(); setSelectedLead(lead); setUpdateForm({ status: lead.status, notes: lead.notes || '' }); }}>
+                                  Manage
+                                </Link>
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                        {byStatus(col.id).length === 0 && (
+                          <div className="text-center text-xs text-gray-500 font-medium py-6 border border-dashed border-gray-200 rounded-xl">No leads</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Referrals Table */}
           <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
@@ -428,20 +512,18 @@ export default function DoctorReferralsPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredLeads.map((lead) => {
-                    const StatusIcon = statusConfig[lead.status as keyof typeof statusConfig]?.icon || Clock;
                     return (
                       <TableRow key={lead.id}>
                         <TableCell className="text-sm font-semibold text-gray-900">{lead.name}</TableCell>
                         <TableCell className="text-sm text-gray-700">{lead.email}</TableCell>
                         <TableCell>
                           <div>
-                            <p className="text-sm font-semibold text-gray-900">{lead.referrer.name}</p>
-                            <p className="text-xs text-gray-500">{lead.referrer.email}</p>
+                            <p className="text-sm font-semibold text-gray-900">{lead.referrer?.name ?? 'Anonymous'}</p>
+                            <p className="text-xs text-gray-500">{lead.referrer?.email ?? '—'}</p>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge className={`${statusConfig[lead.status as keyof typeof statusConfig]?.color || 'bg-gray-100 text-gray-800'} rounded-lg px-3 py-1 text-xs font-medium`}>
-                            <StatusIcon className="h-3 w-3 mr-1" />
+                          <Badge className={`bg-gray-100 text-gray-800 rounded-lg px-3 py-1 text-xs font-medium`}>
                             {statusConfig[lead.status as keyof typeof statusConfig]?.label || lead.status}
                           </Badge>
                         </TableCell>
@@ -457,7 +539,6 @@ export default function DoctorReferralsPage() {
                                 onClick={() => openUpdateDialog(lead)}
                                 className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-9 px-3 text-xs font-semibold"
                               >
-                                <Edit className="h-4 w-4 mr-1" />
                                 Manage
                               </Button>
                             </DialogTrigger>
@@ -468,7 +549,6 @@ export default function DoctorReferralsPage() {
                                   Update the status and add notes about this referral
                                 </DialogDescription>
                               </DialogHeader>
-                              
                               <div className="space-y-6">
                                 <div>
                                   <Label className="text-sm font-semibold text-gray-900">Referral Data</Label>
@@ -476,7 +556,7 @@ export default function DoctorReferralsPage() {
                                     <p className="text-sm text-gray-900"><strong>Name:</strong> {selectedLead?.name}</p>
                                     <p className="text-sm text-gray-900"><strong>Email:</strong> {selectedLead?.email}</p>
                                     <p className="text-sm text-gray-900"><strong>Phone:</strong> {selectedLead?.phone || 'Not provided'}</p>
-                                    <p className="text-sm text-gray-900"><strong>Referred by:</strong> {selectedLead?.referrer.name}</p>
+                                    <p className="text-sm text-gray-900"><strong>Referred by:</strong> {selectedLead?.referrer?.name ?? 'Anonymous'}</p>
                                   </div>
                                 </div>
 
@@ -512,7 +592,7 @@ export default function DoctorReferralsPage() {
                                 <Button 
                                   onClick={handleStatusUpdate}
                                   disabled={updating === selectedLead?.id}
-                                  className="bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl h-10 px-6 font-semibold"
+                                  className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl h-10 px-6 font-semibold"
                                 >
                                   {updating === selectedLead?.id ? (
                                     <>
@@ -535,13 +615,7 @@ export default function DoctorReferralsPage() {
 
               {filteredLeads.length === 0 && (
                 <div className="text-center py-12">
-                  <div className="p-4 bg-gray-100 rounded-2xl w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-                    {activeTab === 'active' ? (
-                      <Users className="h-8 w-8 text-gray-400" />
-                    ) : (
-                      <XCircle className="h-8 w-8 text-gray-400" />
-                    )}
-                  </div>
+                  <div className="p-4 bg-gray-100 rounded-2xl w-16 h-16 mx-auto mb-4" />
                   <h3 className="text-lg font-bold text-gray-900 mb-2">
                     {activeTab === 'active' ? 'No active referrals found' : 'No rejected referrals found'}
                   </h3>

@@ -114,31 +114,37 @@ export default function ReferralPage() {
     ctaText: 'Agendar consulta'
   };
 
-  // Carregar informações do médico
+  // Redirecionar legacy /referral/[doctorId] -> /[doctor_slug]?code=
   useEffect(() => {
-    async function loadDoctorInfo() {
+    let cancelled = false;
+    async function redirectToSlug() {
       try {
         const url = `/api/referrals/doctor/${doctorId}${referrerCode ? `?code=${referrerCode}` : ''}`;
         const response = await fetch(url);
         const data = await response.json();
 
-        if (response.ok) {
-          setDoctor(data.doctor);
-          setStats(data.stats);
-          setReferrer(data.referrer);
-        } else {
-          setError(data.error || 'Médico não encontrado');
+        if (response.ok && data?.doctor?.doctor_slug) {
+          const dest = `/${encodeURIComponent(data.doctor.doctor_slug)}${referrerCode ? `?code=${encodeURIComponent(referrerCode)}` : ''}`;
+          if (!cancelled) {
+            window.location.replace(dest);
+          }
+          return;
+        }
+
+        // fallback: render old UI if we cannot resolve slug
+        if (!cancelled) {
+          setDoctor(data.doctor || null);
+          setStats(data.stats || null);
+          setReferrer(data.referrer || null);
         }
       } catch (err) {
-        setError('Erro ao carregar informações do médico');
+        // fallback to old UI
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
-
-    if (doctorId) {
-      loadDoctorInfo();
-    }
+    if (doctorId) redirectToSlug();
+    return () => { cancelled = true; };
   }, [doctorId, referrerCode]);
 
   // Redirecionamento automático após sucesso

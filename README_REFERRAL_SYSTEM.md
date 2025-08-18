@@ -27,14 +27,19 @@ O sistema de indicações permite que pacientes indiquem outras pessoas para seu
 ## 🔗 Links de Indicação
 
 ### Como Funciona:
-- Cada médico tem um link único: `/referral/[doctorId]`
-- Pacientes podem compartilhar: `/referral/[doctorId]?ref=[email]`
+- Novo padrão (oficial): `/{doctor_slug}?code={referral_code}`
+  - Ex.: `https://seusite.com/dr-joao?code=ABC123`
+  - O parâmetro `code` é o código de indicação do paciente (gerado automaticamente via backend quando necessário)
 - O sistema detecta automaticamente se a pessoa indicada já é paciente
+- Importante: Os padrões legados com `/referral/[doctorId]` e `?ref=email` estão descontinuados e não devem ser usados em novas telas/APIs. Há redirecionamento de compatibilidade apenas para não quebrar links antigos.
 
-### Exemplo de Link:
-```
-https://seusite.com/referral/doctor123?ref=paciente@email.com
-```
+### Geração de Links (novo padrão)
+- Paciente: gerar par `(doctor_slug, referral_code)` e compor a URL `/{doctor_slug}?code={referral_code}`
+  - `referral_code` é garantido via `ensureUserHasReferralCode(userId)` (backend)
+  - `doctor_slug` vem do médico associado ao paciente (APIs: `/api/referrals/patient` ou `/api/v2/patients/referral`)
+- Médico: link público do perfil é `/{doctor_slug}` (sem `code`)
+  - O slug do médico pode ser lido em `/api/profile` (campo `doctor_slug`)
+  - Base URL: `NEXT_PUBLIC_APP_URL`
 
 ## 💳 Sistema de Créditos
 
@@ -80,7 +85,10 @@ https://seusite.com/referral/doctor123?ref=paciente@email.com
 
 ### Públicas:
 - `POST /api/referrals/submit` - Enviar indicação
-- `GET /api/referrals/doctor/[id]` - Info do médico
+- `GET /api/referrals/doctor/by-slug/[slug]` - Info do médico por slug (padrão)
+- `GET /api/referrals/resolve?doctor_slug=...&code=...` - Validação/resolução do par slug+code
+  
+Observação: `GET /api/referrals/doctor/[id]` existe apenas para compatibilidade e não deve ser usado em novas integrações.
 
 ### Médicos:
 - `GET /api/referrals/manage` - Listar indicações

@@ -87,10 +87,16 @@ function ResetPasswordForm() {
 
       if (response.ok) {
         const data = await response.json();
+        console.log('Password reset successful:', data);
         setSuccess(true);
+        
+        // Get email from response if available
+        const emailToUse = data.email || '';
+        
         setTimeout(() => {
-          // Redirect to standard login
-          router.push('/auth/signin');
+          console.log('Redirecting to signin page with email:', emailToUse);
+          // Redirect to signin page with email parameter to help with auto-login
+          router.push(`/auth/signin?reset=true&email=${encodeURIComponent(emailToUse)}`);
         }, 3000);
       } else {
         const error = await response.json();
@@ -106,50 +112,56 @@ function ResetPasswordForm() {
 
   if (isValidating) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#1a1a1a] to-[#2a2a2a] font-normal tracking-[-0.03em] relative z-10">
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white font-normal tracking-[-0.03em] relative z-10">
+        {/* Floating logo */}
+        <div className="absolute top-4 left-4">
+          <div className="relative w-8 h-8">
+            <Image src="/logo.png" alt="Logo" fill className="object-contain" priority />
+          </div>
+        </div>
         <div className="min-h-screen flex flex-col items-center justify-center p-4">
-          <div className="w-full max-w-[420px] bg-[#0f0f0f] rounded-2xl border border-gray-800 p-8 shadow-lg relative z-20">
+          <div className="w-full max-w-[420px] bg-white rounded-2xl border border-gray-200 p-8 shadow-lg relative z-20">
             
             {/* Skeleton Logo */}
             <div className="text-center mb-6">
               <div className="flex justify-center items-center mb-4">
-                <div className="w-16 h-16 bg-gray-700 rounded-xl animate-pulse"></div>
+                <div className="w-16 h-16 bg-gray-200 rounded-xl animate-pulse"></div>
               </div>
               
               {/* Skeleton Title */}
-              <div className="h-6 bg-gray-700 rounded-lg animate-pulse mb-2 mx-8"></div>
-              <div className="h-4 bg-gray-700 rounded animate-pulse mx-4"></div>
+              <div className="h-6 bg-gray-200 rounded-lg animate-pulse mb-2 mx-8"></div>
+              <div className="h-4 bg-gray-200 rounded animate-pulse mx-4"></div>
             </div>
 
             {/* Skeleton Form */}
             <div className="space-y-5">
               <div>
-                <div className="h-4 bg-gray-700 rounded animate-pulse mb-2 w-24"></div>
-                <div className="h-10 bg-gray-700 rounded-lg animate-pulse"></div>
+                <div className="h-4 bg-gray-200 rounded animate-pulse mb-2 w-24"></div>
+                <div className="h-10 bg-gray-200 rounded-lg animate-pulse"></div>
               </div>
               
               <div>
-                <div className="h-4 bg-gray-700 rounded animate-pulse mb-2 w-32"></div>
-                <div className="h-10 bg-gray-700 rounded-lg animate-pulse"></div>
+                <div className="h-4 bg-gray-200 rounded animate-pulse mb-2 w-32"></div>
+                <div className="h-10 bg-gray-200 rounded-lg animate-pulse"></div>
               </div>
 
               {/* Skeleton Requirements */}
               <div className="space-y-2">
-                <div className="h-3 bg-gray-700 rounded animate-pulse w-32"></div>
+                <div className="h-3 bg-gray-200 rounded animate-pulse w-32"></div>
                 <div className="space-y-1">
-                  <div className="h-3 bg-gray-700 rounded animate-pulse w-28"></div>
-                  <div className="h-3 bg-gray-700 rounded animate-pulse w-24"></div>
+                  <div className="h-3 bg-gray-200 rounded animate-pulse w-28"></div>
+                  <div className="h-3 bg-gray-200 rounded animate-pulse w-24"></div>
                 </div>
               </div>
 
-              <div className="h-12 bg-gray-700 rounded-lg animate-pulse"></div>
+              <div className="h-12 bg-gray-200 rounded-lg animate-pulse"></div>
             </div>
 
-            {/* Skeleton Logo do sistema */}
-            <div className="mt-6 pt-4 border-t border-gray-800">
+            {/* Skeleton footer */}
+            <div className="mt-6 pt-4 border-t border-gray-200">
               <div className="flex items-center justify-center gap-2">
-                <div className="h-3 bg-gray-700 rounded animate-pulse w-16"></div>
-                <div className="h-3 bg-gray-700 rounded animate-pulse w-8"></div>
+                <div className="h-3 bg-gray-200 rounded animate-pulse w-16"></div>
+                <div className="h-3 bg-gray-200 rounded animate-pulse w-8"></div>
               </div>
             </div>
           </div>
@@ -160,26 +172,32 @@ function ResetPasswordForm() {
 
   if (!isValidToken) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#1a1a1a] to-[#2a2a2a] font-normal tracking-[-0.03em] relative z-10">
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white font-normal tracking-[-0.03em] relative z-10">
+        {/* Floating logo */}
+        <div className="absolute top-4 left-4">
+          <div className="relative w-8 h-8">
+            <Image src="/logo.png" alt="Logo" fill className="object-contain" priority />
+          </div>
+        </div>
         <div className="min-h-screen flex flex-col items-center justify-center p-4">
-          <div className="w-full max-w-[420px] bg-[#0f0f0f] rounded-2xl border border-gray-800 p-8 shadow-lg relative z-20">
+          <div className="w-full max-w-[420px] bg-white rounded-2xl border border-gray-200 p-8 shadow-lg relative z-20">
             <div className="text-center">
               <div className="w-16 h-16 rounded-xl bg-red-500/10 flex items-center justify-center mx-auto mb-4">
-                <XCircleIcon className="h-8 w-8 text-red-400" />
+                <XCircleIcon className="h-8 w-8 text-red-500" />
               </div>
-              <h2 className="text-xl font-semibold text-gray-200 mb-2">Invalid Reset Link</h2>
-              <p className="text-gray-400 mb-6">{error}</p>
+              <h2 className="text-xl font-medium text-gray-900 mb-2">Invalid Reset Link</h2>
+              <p className="text-gray-600 mb-6">{error}</p>
               <button
                 onClick={() => router.push('/auth/signin')}
-                className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-[#1a1a1a] hover:bg-[#2a2a2a] rounded-lg transition-all duration-300 border border-gray-700"
+                className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:from-[#4f88e2] hover:to-[#8fc4f5] rounded-lg transition-all duration-300"
               >
                 Back to Sign In
               </button>
               
-              {/* Logo do sistema */}
-              <div className="mt-6 pt-4 border-t border-gray-800">
+              {/* Footer */}
+              <div className="mt-6 pt-4 border-t border-gray-200">
                 <div className="flex items-center justify-center gap-2">
-                  <span className="text-xs text-gray-500">Powered by</span>
+                  <span className="text-xs text-gray-400">Powered by</span>
                   <Image
                     src="/logo.png"
                     alt="Sistema"
@@ -198,23 +216,29 @@ function ResetPasswordForm() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#1a1a1a] to-[#2a2a2a] font-normal tracking-[-0.03em] relative z-10">
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white font-normal tracking-[-0.03em] relative z-10">
+        {/* Floating logo */}
+        <div className="absolute top-4 left-4">
+          <div className="relative w-8 h-8">
+            <Image src="/logo.png" alt="Logo" fill className="object-contain" priority />
+          </div>
+        </div>
         <div className="min-h-screen flex flex-col items-center justify-center p-4">
-          <div className="w-full max-w-[420px] bg-[#0f0f0f] rounded-2xl border border-gray-800 p-8 shadow-lg relative z-20">
+          <div className="w-full max-w-[420px] bg-white rounded-2xl border border-gray-200 p-8 shadow-lg relative z-20">
             <div className="text-center">
               <div className="w-16 h-16 rounded-xl bg-green-500/10 flex items-center justify-center mx-auto mb-4">
-                <CheckCircleIcon className="h-8 w-8 text-green-400" />
+                <CheckCircleIcon className="h-8 w-8 text-green-600" />
               </div>
-              <h2 className="text-xl font-semibold text-gray-200 mb-2">Password Updated!</h2>
-              <p className="text-gray-400 mb-6">Your password has been successfully updated. We'd love to hear about your experience!</p>
-              <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+              <h2 className="text-xl font-medium text-gray-900 mb-2">Password Updated!</h2>
+              <p className="text-gray-600 mb-6">Your password has been successfully updated.</p>
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                 <div className="h-full bg-green-500 rounded-full animate-pulse"></div>
               </div>
               
-              {/* Logo do sistema */}
-              <div className="mt-6 pt-4 border-t border-gray-800">
+              {/* Footer */}
+              <div className="mt-6 pt-4 border-t border-gray-200">
                 <div className="flex items-center justify-center gap-2">
-                  <span className="text-xs text-gray-500">Powered by</span>
+                  <span className="text-xs text-gray-400">Powered by</span>
                   <Image
                     src="/logo.png"
                     alt="Sistema"
@@ -232,14 +256,20 @@ function ResetPasswordForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#1a1a1a] to-[#2a2a2a] font-normal tracking-[-0.03em] relative z-10">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white font-normal tracking-[-0.03em] relative z-10">
+      {/* Floating logo */}
+      <div className="absolute top-4 left-4">
+        <div className="relative w-8 h-8">
+          <Image src="/logo.png" alt="Logo" fill className="object-contain" priority />
+        </div>
+      </div>
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-[420px] bg-[#0f0f0f] rounded-2xl border border-gray-800 p-8 shadow-lg relative z-20">
+        <div className="w-full max-w-[420px] bg-white rounded-2xl border border-gray-200 p-8 shadow-lg relative z-20">
           
           {/* Logo/Icon */}
           <div className="text-center mb-6">
-            <h1 className="text-xl font-semibold text-gray-200 mb-2">Set Your Password</h1>
-            <p className="text-gray-400 text-sm">Welcome! Please set your password to access your account.</p>
+            <h1 className="text-xl font-medium text-gray-900 mb-2">Set Your Password</h1>
+            <p className="text-gray-600 text-sm">Welcome! Please set your password to access your account.</p>
             {userEmail && (
               <p className="text-xs text-gray-500 mt-2">Account: {userEmail}</p>
             )}
@@ -247,13 +277,13 @@ function ResetPasswordForm() {
 
           {/* Error Message */}
           {error && (
-            <div className="mb-6 text-red-400 text-center text-sm">{error}</div>
+            <div className="mb-6 text-red-600 text-center text-sm">{error}</div>
           )}
           
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 New Password
               </label>
               <div className="relative">
@@ -263,13 +293,13 @@ function ResetPasswordForm() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your new password"
-                  className="w-full px-4 py-2.5 pr-10 text-sm bg-[#1a1a1a] border border-gray-700 rounded-lg focus:ring-2 focus:ring-gray-600/20 focus:border-gray-500 transition-all duration-200 text-gray-200"
+                  className="w-full px-4 py-2.5 pr-10 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900 placeholder-gray-500"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-200 transition-colors"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   {showPassword ? (
                     <EyeSlashIcon className="h-4 w-4" />
@@ -281,7 +311,7 @@ function ResetPasswordForm() {
             </div>
             
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300 mb-2">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
                 Confirm Password
               </label>
               <div className="relative">
@@ -291,13 +321,13 @@ function ResetPasswordForm() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Confirm your new password"
-                  className="w-full px-4 py-2.5 pr-10 text-sm bg-[#1a1a1a] border border-gray-700 rounded-lg focus:ring-2 focus:ring-gray-600/20 focus:border-gray-500 transition-all duration-200 text-gray-200"
+                  className="w-full px-4 py-2.5 pr-10 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900 placeholder-gray-500"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-200 transition-colors"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   {showConfirmPassword ? (
                     <EyeSlashIcon className="h-4 w-4" />
@@ -309,14 +339,14 @@ function ResetPasswordForm() {
             </div>
             
             <div className="space-y-2">
-              <p className="text-xs text-gray-400 font-medium">Password requirements:</p>
+              <p className="text-xs text-gray-500 font-medium">Password requirements:</p>
               <ul className="text-xs text-gray-500 space-y-1">
-                <li className={`flex items-center gap-2 ${password.length >= 6 ? 'text-green-400' : ''}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${password.length >= 6 ? 'bg-green-400' : 'bg-gray-600'}`}></span>
+                <li className={`flex items-center gap-2 ${password.length >= 6 ? 'text-green-600' : ''}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${password.length >= 6 ? 'bg-green-600' : 'bg-gray-300'}`}></span>
                   At least 6 characters
                 </li>
-                <li className={`flex items-center gap-2 ${password === confirmPassword && password.length > 0 ? 'text-green-400' : ''}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${password === confirmPassword && password.length > 0 ? 'bg-green-400' : 'bg-gray-600'}`}></span>
+                <li className={`flex items-center gap-2 ${password === confirmPassword && password.length > 0 ? 'text-green-600' : ''}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${password === confirmPassword && password.length > 0 ? 'bg-green-600' : 'bg-gray-300'}`}></span>
                   Passwords match
                 </li>
               </ul>
@@ -325,7 +355,7 @@ function ResetPasswordForm() {
             <button
               type="submit"
               disabled={isLoading || password !== confirmPassword || password.length < 6}
-              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-[#1a1a1a] hover:bg-[#2a2a2a] rounded-lg transition-all duration-300 border border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:from-[#4f88e2] hover:to-[#8fc4f5] rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <>
@@ -337,20 +367,7 @@ function ResetPasswordForm() {
               )}
             </button>
           </form>
-          
-          {/* Logo do sistema */}
-          <div className="mt-6 pt-4 border-t border-gray-800">
-            <div className="flex items-center justify-center gap-2">
-              <span className="text-xs text-gray-500">Powered by</span>
-              <Image
-                src="/logo.png"
-                alt="Sistema"
-                width={32}
-                height={10}
-                className="object-contain opacity-60"
-              />
-            </div>
-          </div>
+
         </div>
       </div>
     </div>
@@ -359,9 +376,15 @@ function ResetPasswordForm() {
 
 function LoadingFallback() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#1a1a1a] to-[#2a2a2a] font-normal tracking-[-0.03em] relative z-10">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white font-normal tracking-[-0.03em] relative z-10">
+      {/* Floating logo */}
+      <div className="absolute top-4 left-4">
+        <div className="relative w-8 h-8">
+          <Image src="/logo.png" alt="Logo" fill className="object-contain" priority />
+        </div>
+      </div>
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-[420px] bg-[#0f0f0f] rounded-2xl border border-gray-800 p-8 shadow-lg relative z-20">
+        <div className="w-full max-w-[420px] bg-white rounded-2xl border border-gray-200 p-8 shadow-lg relative z-20">
           
           {/* Skeleton Logo */}
           <div className="text-center mb-6">
@@ -388,10 +411,10 @@ function LoadingFallback() {
 
             {/* Skeleton Requirements */}
             <div className="space-y-2">
-              <div className="h-3 bg-gray-700 rounded animate-pulse w-32"></div>
+              <div className="h-3 bg-gray-200 rounded animate-pulse w-32"></div>
               <div className="space-y-1">
-                <div className="h-3 bg-gray-700 rounded animate-pulse w-28"></div>
-                <div className="h-3 bg-gray-700 rounded animate-pulse w-24"></div>
+                <div className="h-3 bg-gray-200 rounded animate-pulse w-28"></div>
+                <div className="h-3 bg-gray-200 rounded animate-pulse w-24"></div>
               </div>
             </div>
 

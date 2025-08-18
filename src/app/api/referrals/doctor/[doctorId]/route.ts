@@ -24,7 +24,8 @@ export async function GET(
         id: true,
         name: true,
         email: true,
-        image: true
+        image: true,
+        doctor_slug: true
       }
     });
 
@@ -40,7 +41,7 @@ export async function GET(
     if (referrerCode) {
       const referrerUser = await prisma.user.findUnique({
         where: {
-          referralCode: referrerCode
+          referral_code: referrerCode
         },
         select: {
           name: true
@@ -55,13 +56,10 @@ export async function GET(
     }
 
     // Buscar estatísticas básicas (opcional)
-    const stats = await prisma.user.aggregate({
+    const totalPatients = await prisma.user.count({
       where: {
-        doctorId: doctorId,
+        doctor_id: doctorId,
         role: 'PATIENT'
-      },
-      _count: {
-        id: true
       }
     });
 
@@ -69,10 +67,11 @@ export async function GET(
       doctor: {
         id: doctor.id,
         name: doctor.name,
-        image: doctor.image
+        image: doctor.image,
+        doctor_slug: doctor.doctor_slug
       },
       stats: {
-        totalPatients: stats._count.id
+        totalPatients: totalPatients
       },
       referrer
     });
@@ -84,4 +83,5 @@ export async function GET(
       { status: 500 }
     );
   }
-} 
+}
+ 
