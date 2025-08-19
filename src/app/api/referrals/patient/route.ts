@@ -321,20 +321,50 @@ export async function POST(req: NextRequest) {
       let reserved = 0;
 
       for (const credit of availableCredits) {
-        if (reserved >= needed) break;
-        // Marcar crédito como usado e vincular ao resgate
-        await tx.referralCredit.update({
-          where: { id: credit.id },
-          data: {
-            isUsed: true,
-            usedAt: new Date(),
-            usedForRewardId: redemption.id
-          }
-        });
-        reserved += Number(credit.amount);
+        if (needed <= 0) break;
+
+        const creditAmt = Number(credit.amount);
+        const useAmt = Math.min(creditAmt, needed);
+
+        if (creditAmt <= needed + 1e-9) {
+          // Consome o crédito inteiro
+          await tx.referralCredit.update({
+            where: { id: credit.id },
+            data: {
+              isUsed: true,
+              usedAt: new Date(),
+              usedForRewardId: redemption.id
+            }
+          });
+        } else {
+          // Consumo parcial: dividir o crédito
+          // 1) Reduz o crédito original
+          await tx.referralCredit.update({
+            where: { id: credit.id },
+            data: {
+              amount: creditAmt - useAmt,
+            }
+          });
+          // 2) Cria um novo registro representando a parte usada
+          await tx.referralCredit.create({
+            data: {
+              userId: credit.userId,
+              amount: useAmt,
+              type: credit.type,
+              description: credit.description || `Uso parcial para resgate ${redemption.id}`,
+              referralLeadId: credit.referralLeadId || null,
+              isUsed: true,
+              usedAt: new Date(),
+              usedForRewardId: redemption.id,
+            }
+          });
+        }
+
+        reserved += useAmt;
+        needed -= useAmt;
       }
 
-      if (reserved < needed) {
+      if (needed > 0) {
         // Reverter criação caso não tenha conseguido reservar o suficiente (condição de corrida)
         throw new Error('Créditos insuficientes no momento do resgate. Tente novamente.');
       }

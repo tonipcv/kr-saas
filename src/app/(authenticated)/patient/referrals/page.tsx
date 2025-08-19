@@ -266,8 +266,9 @@ interface Redemption {
 
 export default function PatientReferralsPage() {
   const { data: session } = useSession();
+  // Keep dynamic language for any logic, but bind UI strings to English
   const language = useLanguage();
-  const t = translations[language];
+  const t = translations.en;
   
   const [loading, setLoading] = useState(true);
   const [redeeming, setRedeeming] = useState<string | null>(null);
@@ -286,6 +287,10 @@ export default function PatientReferralsPage() {
   const [availableRewards, setAvailableRewards] = useState<Reward[]>([]);
   const [redemptionsHistory, setRedemptionsHistory] = useState<Redemption[]>([]);
   const [creditsBalance, setCreditsBalance] = useState(0);
+  // Controls flip animation for membership card
+  const [isCardFlipped, setIsCardFlipped] = useState(false);
+  // Tabs for lower content
+  const [activeTab, setActiveTab] = useState<'earn' | 'use' | 'history' | null>(null);
   const [referralCode, setReferralCode] = useState('');
   const [doctorId, setDoctorId] = useState('');
   const [doctorSlug, setDoctorSlug] = useState<string>('');
@@ -910,15 +915,104 @@ return (
             <h2 className="text-xl lg:text-2xl font-medium text-gray-900 mb-3 lg:mb-4 text-center">
               {displayDoctorName}
             </h2>
-            {/* Points Card */}
-            <div
-              className="w-full max-w-sm mx-auto rounded-2xl shadow-md p-4 lg:p-5 mb-4 lg:mb-5"
-              style={{ background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' }}
-            >
-              <div className="text-[11px] lg:text-xs text-white/80 tracking-widest font-medium">YOUR BALANCE</div>
-              <div className="mt-1 text-3xl lg:text-5xl font-light text-white">
-                {displayPoints}
-                <span className="ml-2 text-base lg:text-xl text-white/85 align-[10%]">Points</span>
+            {/* Membership-style Points Card with Flip to reveal Code */}
+            <div className="w-full max-w-md lg:max-w-xl mx-auto mb-5 lg:mb-6" style={{ perspective: '1000px' }}>
+              <div
+                role="button"
+                aria-label="Show membership code"
+                onClick={() => setIsCardFlipped((v) => !v)}
+                className="relative rounded-2xl shadow-xl overflow-hidden border border-white/10 cursor-pointer select-none h-[200px] lg:h-[300px]"
+              >
+                {/* 3D container */}
+                <div
+                  className="absolute inset-0 transition-transform duration-500 ease-out"
+                  style={{ transformStyle: 'preserve-3d', transform: isCardFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}
+                >
+                  {/* Front Face */}
+                  <div
+                    className="absolute inset-0"
+                    style={{ backfaceVisibility: 'hidden', background: 'linear-gradient(135deg, #2b68f0 0%, #7bb8ff 50%, #9ad8ff 100%)' }}
+                  >
+                    {/* Decorative background */}
+                    <div className="absolute inset-0 opacity-25">
+                      <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/20 blur-2xl" />
+                      <div className="absolute -bottom-12 -left-8 w-48 h-48 rounded-full bg-white/10 blur-2xl" />
+                    </div>
+
+                    <div className="relative h-full p-6 lg:p-8 flex flex-col">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] lg:text-sm uppercase tracking-[0.2em] text-white/80">Membership</div>
+                        <div className="flex items-center gap-2 text-white/80">
+                          <div className="h-6 w-9 rounded bg-white/20 backdrop-blur-sm" />
+                          <div className="h-6 w-6 rounded-full bg-white/20 backdrop-blur-sm" />
+                        </div>
+                      </div>
+
+                      <div className="mt-3 lg:mt-4">
+                        <div className="text-white/80 text-[12px] lg:text-base">Your Balance</div>
+                        <div className="mt-1 text-4xl lg:text-6xl font-light text-white">
+                          {displayPoints}
+                          <span className="ml-2 text-lg lg:text-2xl text-white/85 align-[10%]">Points</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-auto flex items-center justify-between text-white">
+                        <div className="min-w-0">
+                          <div className="text-[12px] lg:text-base text-white/70">Member</div>
+                          <div className="text-base lg:text-xl font-medium truncate max-w-[320px]">
+                            {session?.user?.name || 'Paciente'}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[12px] lg:text-base text-white/70">Code</div>
+                          {/* Hidden on front: masked */}
+                          <div className="text-base lg:text-xl tracking-widest">
+                            • • • •
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Back Face */}
+                  <div
+                    className="absolute inset-0"
+                    style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)', background: 'linear-gradient(135deg, #1d2b64 0%, #2b5876 100%)' }}
+                  >
+                    <div className="absolute inset-0 opacity-20">
+                      <div className="absolute -top-8 -right-6 w-36 h-36 rounded-full bg-white/20 blur-2xl" />
+                    </div>
+                    <div className="relative h-full p-6 lg:p-8 flex flex-col text-white">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] lg:text-sm uppercase tracking-[0.2em] text-white/80">Your Code</div>
+                        <div className="text-[11px] lg:text-xs text-white/70">Tap to hide</div>
+                      </div>
+
+                      <div className="mt-4 lg:mt-8 text-center">
+                        <div className="text-xs lg:text-base text-white/70">Referral Code</div>
+                        <div className="mt-2 text-3xl lg:text-4xl font-mono tracking-[0.35em]">
+                          {referralCode || '— — — —'}
+                        </div>
+                      </div>
+
+                      <div className="mt-auto flex items-center justify-center">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-white/15 hover:bg-white/25 transition-colors text-white"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard?.writeText(referralCode || '');
+                          }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
+                            <path d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+                          </svg>
+                          Copy code
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -931,64 +1025,165 @@ return (
               <div className="text-center max-w-3xl mx-auto">
                 {/* Title/Description removed per request to avoid duplication */}
                 
-                {/* Section 1: Your Primary Tool (Magic Link) */}
-                  <div className="mb-8 lg:mb-10">
-                    <div
-                      className="max-w-2xl mx-auto rounded-xl shadow-sm"
-                      style={{ background: 'linear-gradient(180deg, #e5eaf5 0%, #f7f7fc 100%)' }}
+                {/* Tabs Switcher */}
+                <div className="max-w-3xl mx-auto">
+                  <div className="flex items-center justify-center gap-2">
+                    <button
+                      onClick={() => setActiveTab('earn')}
+                      className={`px-4 py-2 text-sm rounded-full border shadow-sm transition
+                        ${activeTab==='earn'
+                          ? 'text-white border-transparent'
+                          : 'text-gray-700 border-gray-200 hover:bg-gray-50 bg-white'}`}
+                      style={activeTab==='earn' ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : undefined}
                     >
-                      <div className="p-4 lg:p-5 space-y-3 lg:space-y-4">
-                        {/* Magic Link visible */}
-                        <div className="text-left">
-                          <p className="text-xs lg:text-sm text-gray-600 mb-2">Your personal referral link</p>
-                          <div className="flex items-center gap-2 p-3 lg:p-3.5 bg-gray-50 rounded-lg border border-gray-200">
-                            <code className="flex-1 text-[11px] lg:text-xs text-gray-800 font-mono break-all">
-                              {generateReferralLink('default')}
-                            </code>
-                            <Button
-                              onClick={copyReferralLink}
-                              className="text-white font-medium h-8 lg:h-9 px-3 lg:px-4 hover:opacity-90"
-                              style={{ background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' }}
-                            >
-                              <Copy className="h-3.5 w-3.5 lg:h-4 lg:w-4 mr-1.5" />
-                              Copy
-                            </Button>
-                          </div>
-                        </div>
-                        {/* Quick Share Buttons */}
-                        <div className="flex items-center justify-center gap-2 lg:gap-3">
-                          <Button onClick={shareViaWhatsApp} variant="outline" className="h-8 lg:h-9 px-3 border-gray-300 text-black hover:bg-gray-50">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" className="h-4 w-4 mr-1.5" aria-hidden>
-                              <path fill="currentColor" d="M19.11 17.13c-.29-.14-1.68-.83-1.94-.92-.26-.1-.45-.14-.64.14-.19.29-.73.92-.9 1.11-.17.19-.33.22-.62.07-.29-.14-1.23-.45-2.34-1.44-.86-.77-1.44-1.72-1.61-2-.17-.29-.02-.45.12-.6.12-.12.29-.33.43-.5.14-.17.19-.29.29-.48.1-.19.05-.36-.02-.5-.07-.14-.64-1.55-.88-2.12-.23-.56-.47-.48-.64-.48h-.55c-.19 0-.5.07-.76.36-.26.29-1 1-.99 2.45.01 1.45 1.03 2.84 1.18 3.03.14.19 2.03 3.1 4.93 4.35.69.3 1.22.48 1.64.62.69.22 1.31.19 1.81.12.55-.08 1.68-.69 1.92-1.36.24-.67.24-1.24.17-1.36-.07-.12-.26-.19-.55-.33z"/>
-                            </svg>
-                            WhatsApp
-                          </Button>
-                          <Button onClick={shareViaEmail} variant="outline" className="h-8 lg:h-9 px-3 border-gray-300 text-gray-700 hover:bg-gray-50">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4 mr-1.5" aria-hidden>
-                              <path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v.01L12 13l8-6.99V6H4zm16 12V8l-8 7L4 8v10h16z"/>
-                            </svg>
-                            Email
-                          </Button>
-                          <Button onClick={shareViaNative} variant="outline" className="h-8 lg:h-9 px-3 border-gray-300 text-gray-700 hover:bg-gray-50">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4 mr-1.5" aria-hidden>
-                              <path fill="currentColor" d="M12 3l4 4h-3v5h-2V7H8l4-4zm-6 8h2v7h8v-7h2v7a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-7z"/>
-                            </svg>
-                            Share
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
+                      Earn Points
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('use')}
+                      className={`px-4 py-2 text-sm rounded-full border shadow-sm transition
+                        ${activeTab==='use'
+                          ? 'text-white border-transparent'
+                          : 'text-gray-700 border-gray-200 hover:bg-gray-50 bg-white'}`}
+                      style={activeTab==='use' ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : undefined}
+                    >
+                      Use Points
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('history')}
+                      className={`px-4 py-2 text-sm rounded-full border shadow-sm transition
+                        ${activeTab==='history'
+                          ? 'text-white border-transparent'
+                          : 'text-gray-700 border-gray-200 hover:bg-gray-50 bg-white'}`}
+                      style={activeTab==='history' ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : undefined}
+                    >
+                      History
+                    </button>
                   </div>
-
-                {/* Stats Cards removed per request */}
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Main Content */}
+        {/* Tabbed Content */}
         <div className="max-w-6xl mx-auto px-3 lg:px-6 space-y-6 lg:space-y-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+          {activeTab === 'earn' && (
+            <>
+              {/* Earn Points: Referral Link */}
+              <div
+                className="max-w-3xl mx-auto rounded-xl shadow-sm"
+                style={{ background: 'linear-gradient(180deg, #e5eaf5 0%, #f7f7fc 100%)' }}
+              >
+                <div className="p-4 lg:p-5 space-y-3 lg:space-y-4">
+                  <div className="text-left">
+                    <h2 className="text-gray-900 text-base lg:text-xl font-light mb-1">Earn Points</h2>
+                    <p className="text-xs lg:text-sm text-gray-600 mb-2">Share your personal link to earn points</p>
+                    <div className="flex items-center gap-2 p-3 lg:p-3.5 bg-gray-50 rounded-lg border border-gray-200">
+                      <code className="flex-1 text-[11px] lg:text-xs text-gray-800 font-mono break-all">
+                        {generateReferralLink('default')}
+                      </code>
+                      <Button
+                        onClick={copyReferralLink}
+                        className="text-white font-medium h-8 lg:h-9 px-3 lg:px-4 hover:opacity-90"
+                        style={{ background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' }}
+                      >
+                        <Copy className="h-3.5 w-3.5 lg:h-4 lg:w-4 mr-1.5" />
+                        Copy
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 lg:gap-3">
+                    <Button onClick={shareViaWhatsApp} variant="outline" className="h-8 lg:h-9 px-3 border-gray-300 text-black hover:bg-gray-50">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" className="h-4 w-4 mr-1.5" aria-hidden>
+                        <path fill="currentColor" d="M19.11 17.13c-.29-.14-1.68-.83-1.94-.92-.26-.1-.45-.14-.64.14-.19.29-.73.92-.9 1.11-.17.19-.33.22-.62.07-.29-.14-1.23-.45-2.34-1.44-.86-.77-1.44-1.72-1.61-2-.17-.29-.02-.45.12-.6.12-.12.29-.33.43-.5.14-.17.19-.29.29-.48.1-.19.05-.36-.02-.5-.07-.14-.64-1.55-.88-2.12-.23-.56-.47-.48-.64-.48h-.55c-.19 0-.5.07-.76.36-.26.29-1 1-.99 2.45.01 1.45 1.03 2.84 1.18 3.03.14.19 2.03 3.1 4.93 4.35.69.3 1.22.48 1.64.62.69.22 1.31.19 1.81.12.55-.08 1.68-.69 1.92-1.36.24-.67.24-1.24.17-1.36-.07-.12-.26-.19-.55-.33z"/>
+                      </svg>
+                      WhatsApp
+                    </Button>
+                    <Button onClick={shareViaEmail} variant="outline" className="h-8 lg:h-9 px-3 border-gray-300 text-gray-700 hover:bg-gray-50">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4 mr-1.5" aria-hidden>
+                        <path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v.01L12 13l8-6.99V6H4zm16 12V8l-8 7L4 8v10h16z"/>
+                      </svg>
+                      Email
+                    </Button>
+                    <Button onClick={shareViaNative} variant="outline" className="h-8 lg:h-9 px-3 border-gray-300 text-gray-700 hover:bg-gray-50">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4 mr-1.5" aria-hidden>
+                        <path fill="currentColor" d="M12 3l4 4h-3v5h-2V7H8l4-4zm-6 8h2v7h8v-7h2v7a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-7z"/>
+                      </svg>
+                      Share
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Your Referrals list (ways to earn feedback) */}
+              <div className="group rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
+                   style={{ background: 'linear-gradient(180deg, #e5eaf5 0%, #f7f7fc 100%)' }}>
+                <div className="p-4 lg:p-6 border-b border-gray-200">
+                  <div className="flex items-center gap-2 lg:gap-3">
+                    <div className="p-1.5 lg:p-2 bg-turquoise/20 rounded-lg">
+                      <UserPlus className="h-4 w-4 lg:h-5 lg:w-5 text-turquoise" />
+                    </div>
+                    <div>
+                      <h2 className="text-gray-900 text-base lg:text-xl font-light">Your referrals</h2>
+                      <p className="text-gray-600 text-xs lg:text-sm">Track who you referred and credits earned</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 lg:p-6 space-y-3 lg:space-y-4">
+                  {referralsMade.map((referral) => {
+                    const StatusIcon = statusConfig[referral.status as keyof typeof statusConfig]?.icon || Clock;
+                    return (
+                      <div key={referral.id} className="bg-white rounded-lg p-3 lg:p-4 border border-gray-200 hover:border-turquoise/30 transition-colors">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex-1">
+                            <h3 className="font-medium text-gray-900 text-sm lg:text-base">{referral.name}</h3>
+                          </div>
+                          {referral.status === 'CONVERTED' ? (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-black text-[11px] lg:text-xs font-semibold bg-[#91f2ce] border border-[#7eeec0]">
+                              <Star className="h-3 w-3 lg:h-3.5 lg:w-3.5 text-black" />
+                              +{referral.credits.reduce((sum, credit) => sum + credit.amount, 0)} {t.creditsEarned}
+                            </div>
+                          ) : (
+                            <Badge className={`${statusConfig[referral.status as keyof typeof statusConfig]?.color || 'bg-gray-700 text-gray-300'} border text-xs flex items-center gap-1`}>
+                              <StatusIcon className="h-3 w-3" />
+                              {statusConfig[referral.status as keyof typeof statusConfig]?.label || referral.status}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex justify-between items-center text-xs lg:text-sm text-gray-500 mb-2">
+                          <span>
+                            {referral.doctor.name.toLowerCase().startsWith('dr') 
+                              ? referral.doctor.name 
+                              : `Dr(a). ${referral.doctor.name}`
+                            }
+                          </span>
+                          <span>{formatDate(referral.createdAt)}</span>
+                        </div>
+                        {referral.credits.length > 0 && referral.status !== 'CONVERTED' && (
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-white text-[11px] lg:text-xs font-semibold bg-[#91f2ce] shadow-sm">
+                            <Star className="h-3 w-3 lg:h-3.5 lg:w-3.5 text-white" />
+                            +{referral.credits.reduce((sum, credit) => sum + credit.amount, 0)} {t.creditsEarned}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {referralsMade.length === 0 && (
+                    <div className="text-center py-8 lg:py-12">
+                      <div className="w-12 h-12 lg:w-16 lg:h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 lg:mb-4">
+                        <UserPlus className="h-5 w-5 lg:h-6 lg:w-6 text-gray-500" />
+                      </div>
+                      <div className="text-gray-500 text-sm lg:text-base mb-1 lg:mb-2">No referrals yet</div>
+                      <div className="text-gray-600 text-xs lg:text-sm mb-3 lg:mb-4">Start referring people to earn points</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'use' && (
+            <>
             {/* Recompensas Disponíveis */}
             <div
               className="group rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
@@ -1000,10 +1195,8 @@ return (
                     <Gift className="h-4 w-4 lg:h-5 lg:w-5 text-turquoise" />
                   </div>
                   <div>
-                    <h2 className="text-gray-900 text-base lg:text-xl font-light">{t.rewards}</h2>
-                    <p className="text-gray-600 text-xs lg:text-sm">
-                      {t.rewardsDescription}
-                    </p>
+                    <h2 className="text-gray-900 text-base lg:text-xl font-light">Rewards</h2>
+                    <p className="text-gray-600 text-xs lg:text-sm">Use your points to redeem rewards</p>
                   </div>
                 </div>
               </div>
@@ -1091,202 +1284,93 @@ return (
                 )}
               </div>
             </div>
+            </>
+          )}
 
-            {/* Histórico de Indicações */}
-            <div
-              className="group rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
-              style={{ background: 'linear-gradient(180deg, #e5eaf5 0%, #f7f7fc 100%)' }}
-            >
-              <div className="p-4 lg:p-6 border-b border-gray-200">
-                <div className="flex items-center gap-2 lg:gap-3">
-                  <div className="p-1.5 lg:p-2 bg-turquoise/20 rounded-lg">
-                    <UserPlus className="h-4 w-4 lg:h-5 lg:w-5 text-turquoise" />
-                  </div>
-                  <div>
-                    <h2 className="text-gray-900 text-base lg:text-xl font-light">{t.yourReferrals}</h2>
-                    <p className="text-gray-600 text-xs lg:text-sm">
-                      {t.referralsDescription}
-                    </p>
+          {activeTab === 'history' && (
+            <>
+              {/* Redemption History */}
+              <div
+                className="group rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
+                style={{ background: 'linear-gradient(180deg, #e5eaf5 0%, #f7f7fc 100%)' }}
+              >
+                <div className="p-4 lg:p-6 border-b border-gray-200">
+                  <div className="flex items-center gap-2 lg:gap-3">
+                    <div className="p-1.5 lg:p-2 bg-turquoise/20 rounded-lg">
+                      <Gift className="h-4 w-4 lg:h-5 lg:w-5 text-turquoise" />
+                    </div>
+                    <div>
+                      <h2 className="text-gray-900 text-base lg:text-xl font-light">{t.redemptionHistory}</h2>
+                      <p className="text-gray-600 text-xs lg:text-sm">{t.redemptionDescription}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="p-4 lg:p-6 space-y-3 lg:space-y-4">
-                {referralsMade.map((referral) => {
-                  const StatusIcon = statusConfig[referral.status as keyof typeof statusConfig]?.icon || Clock;
-                  return (
-                    <div key={referral.id} className="bg-white rounded-lg p-3 lg:p-4 border border-gray-200 hover:border-turquoise/30 transition-colors">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex-1">
-                          <h3 className="font-medium text-gray-900 text-sm lg:text-base">{referral.name}</h3>
-                        </div>
-                        {referral.status === 'CONVERTED' ? (
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-black text-[11px] lg:text-xs font-semibold bg-[#91f2ce] border border-[#7eeec0]">
-                            <Star className="h-3 w-3 lg:h-3.5 lg:w-3.5 text-black" />
-                            +{referral.credits.reduce((sum, credit) => sum + credit.amount, 0)} {t.creditsEarned}
+                <div className="p-4 lg:p-6 space-y-3 lg:space-y-4">
+                  {redemptionsHistory.map((redemption) => {
+                    const StatusIcon = statusConfig[redemption.status as keyof typeof statusConfig]?.icon || Clock;
+                    return (
+                      <div key={redemption.id} className="bg-white rounded-lg p-4 lg:p-5 border border-gray-200 hover:border-turquoise/30 transition-colors">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex-1">
+                            <h3 className="font-medium text-gray-900 text-sm lg:text-base">{redemption.reward.title}</h3>
+                            <p className="text-gray-600 text-xs lg:text-sm">{redemption.reward.description}</p>
                           </div>
-                        ) : (
-                          <Badge className={`${statusConfig[referral.status as keyof typeof statusConfig]?.color || 'bg-gray-700 text-gray-300'} border text-xs flex items-center gap-1`}>
+                          <Badge className={`${statusConfig[redemption.status as keyof typeof statusConfig]?.color || 'bg-gray-700 text-gray-300'} border text-xs flex items-center gap-1`}>
                             <StatusIcon className="h-3 w-3" />
-                            {statusConfig[referral.status as keyof typeof statusConfig]?.label || referral.status}
+                            {statusConfig[redemption.status as keyof typeof statusConfig]?.label || redemption.status}
                           </Badge>
+                        </div>
+                        <div className="flex justify-between items-center text-xs lg:text-sm text-gray-500 mb-2">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-gray-700 text-[11px] lg:text-xs font-semibold bg-gray-100 border border-gray-300">
+                            <Star className="h-3 w-3 lg:h-3.5 lg:w-3.5 text-gray-500" />
+                            {redemption.creditsUsed} {t.creditsUsed}
+                          </span>
+                          <span>{formatDate(redemption.redeemedAt)}</span>
+                        </div>
+                        {redemption.status === 'APPROVED' && redemption.uniqueCode && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <span className="text-[11px] lg:text-xs text-gray-600">{language === 'en' ? 'Code' : 'Código'}:</span>
+                            <code className="px-2 py-1 rounded bg-gray-50 border border-gray-200 text-gray-700 text-[11px] lg:text-xs font-mono break-all">
+                              {redemption.uniqueCode}
+                            </code>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs border-gray-300 text-gray-700 hover:bg-gray-50"
+                              onClick={() => copyUniqueCode(redemption.uniqueCode || '')}
+                            >
+                              <Copy className="h-3 w-3 mr-1" /> {language === 'en' ? 'Copy' : 'Copiar'}
+                            </Button>
+                          </div>
+                        )}
+                        {redemption.status === 'PENDING' && (
+                          <div className="mt-3 flex justify-end">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-3 text-xs border-gray-300 text-red-600 hover:bg-red-50"
+                              disabled={cancellingId === redemption.id}
+                              onClick={() => handleCancelRedemption(redemption.id)}
+                            >
+                              {cancellingId === redemption.id ? (language === 'en' ? 'Cancelling…' : 'Cancelando…') : (language === 'en' ? 'Cancel' : 'Cancelar')}
+                            </Button>
+                          </div>
                         )}
                       </div>
-                       
-                      <div className="flex justify-between items-center text-xs lg:text-sm text-gray-500 mb-2">
-                        <span>
-                          {referral.doctor.name.toLowerCase().startsWith('dr') 
-                            ? referral.doctor.name 
-                            : `Dr(a). ${referral.doctor.name}`
-                          }
-                        </span>
-                        <span>{formatDate(referral.createdAt)}</span>
+                    );
+                  })}
+
+                  {redemptionsHistory.length === 0 && (
+                    <div className="text-center py-8 lg:py-12">
+                      <div className="w-12 h-12 lg:w-16 lg:h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 lg:mb-4">
+                        <Gift className="h-5 w-5 lg:h-6 lg:w-6 text-gray-500" />
                       </div>
-
-                      {referral.credits.length > 0 && referral.status !== 'CONVERTED' && (
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-white text-[11px] lg:text-xs font-semibold bg-[#91f2ce] shadow-sm">
-                          <Star className="h-3 w-3 lg:h-3.5 lg:w-3.5 text-white" />
-                          +{referral.credits.reduce((sum, credit) => sum + credit.amount, 0)} {t.creditsEarned}
-                        </div>
-                      )}
+                      <div className="text-gray-500 text-sm lg:text-base mb-1 lg:mb-2">{language === 'en' ? 'No redemptions yet' : 'Nenhum resgate ainda'}</div>
                     </div>
-                  );
-                })}
-
-                {referralsMade.length === 0 && (
-                  <div className="text-center py-8 lg:py-12">
-                    <div className="w-12 h-12 lg:w-16 lg:h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 lg:mb-4">
-                      <UserPlus className="h-5 w-5 lg:h-6 lg:w-6 text-gray-500" />
-                    </div>
-                    <div className="text-gray-500 text-sm lg:text-base mb-1 lg:mb-2">No referrals yet</div>
-                    <div className="text-gray-600 text-xs lg:text-sm mb-3 lg:mb-4">Start referring people to earn points</div>
-                    {doctorId && (
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button className="bg-turquoise hover:bg-turquoise/90 text-black font-medium text-xs lg:text-sm h-7 lg:h-8 px-3 lg:px-4 shadow-md shadow-turquoise/25">
-                            <Copy className="h-3 w-3 lg:h-4 lg:w-4 mr-1.5 lg:mr-2" />
-                            Copy Referral Link
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="bg-white border border-gray-200 text-gray-900">
-                          <DialogHeader>
-                            <DialogTitle className="text-gray-900">Copy Your Referral Link</DialogTitle>
-                            <DialogDescription className="text-gray-600">
-                              Share this link with friends to earn rewards when they sign up
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="py-4 space-y-4">
-                            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                              <p className="text-sm text-gray-700 mb-3">
-                                Your unique referral link:
-                              </p>
-                              <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-gray-200">
-                                <code className="flex-1 text-xs text-turquoise font-mono break-all">
-                                  {generateReferralLink('default')}
-                                </code>
-                              </div>
-                            </div>
-                            <Button
-                              onClick={copyReferralLink}
-                              className="w-full text-white font-medium flex items-center justify-center gap-2 h-10 hover:opacity-90"
-                              style={{ background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' }}
-                            >
-                              <Copy className="h-4 w-4" />
-                              Copy Link to Clipboard
-                            </Button>
-                            <div className="text-center">
-                              <p className="text-xs text-gray-600">
-                                Share this link with friends and family to start earning referral points!
-                              </p>
-                            </div>
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Histórico de Resgates */}
-          {redemptionsHistory.length > 0 && (
-            <div
-              className="group rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden bg-white"
-            >
-              <div className="p-4 lg:p-6 border-b border-gray-200">
-                <div className="flex items-center gap-2 lg:gap-3">
-                  <div className="p-1.5 lg:p-2 bg-gray-100 rounded-lg">
-                    <CheckCircle className="h-4 w-4 lg:h-5 lg:w-5 text-gray-500" />
-                  </div>
-                  <div>
-                    <h2 className="text-gray-900 text-base lg:text-xl font-light">{t.redemptionHistory}</h2>
-                    <p className="text-gray-600 text-xs lg:text-sm">
-                      {t.redemptionDescription}
-                    </p>
-                  </div>
+                  )}
                 </div>
               </div>
-              <div className="p-4 lg:p-6 space-y-3 lg:space-y-4">
-                {redemptionsHistory
-                  .filter((r) => r.status !== 'CANCELLED')
-                  .map((redemption) => {
-                  const StatusIcon = statusConfig[redemption.status as keyof typeof statusConfig]?.icon || Clock;
-                  return (
-                    <div
-                      key={redemption.id}
-                      className={`bg-white rounded-lg p-3 lg:p-4 border border-gray-200 hover:border-gray-300 transition-colors ${redemption.status === 'FULFILLED' ? 'opacity-60 pointer-events-none' : ''}`}
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex-1">
-                          <h3 className="font-medium text-gray-900 text-sm lg:text-base">{redemption.reward.title}</h3>
-                          <p className="text-gray-600 text-xs lg:text-sm">{redemption.reward.description}</p>
-                        </div>
-                        <Badge className={`${statusConfig[redemption.status as keyof typeof statusConfig]?.color || 'bg-gray-700 text-gray-300'} border text-xs flex items-center gap-1`}>
-                          <StatusIcon className="h-3 w-3" />
-                          {statusConfig[redemption.status as keyof typeof statusConfig]?.label || redemption.status}
-                        </Badge>
-                      </div>
-                      <div className="flex justify-between items-center text-xs lg:text-sm text-gray-500 mb-2">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-gray-700 text-[11px] lg:text-xs font-semibold bg-gray-100 border border-gray-300">
-                          <Star className="h-3 w-3 lg:h-3.5 lg:w-3.5 text-gray-500" />
-                          {redemption.creditsUsed} {t.creditsUsed}
-                        </span>
-                        <span>{formatDate(redemption.redeemedAt)}</span>
-                      </div>
-                      {redemption.status === 'APPROVED' && redemption.uniqueCode && (
-                        <div className="mt-2 flex items-center gap-2">
-                          <span className="text-[11px] lg:text-xs text-gray-600">{language === 'en' ? 'Code' : 'Código'}:</span>
-                          <code className="px-2 py-1 rounded bg-gray-50 border border-gray-200 text-gray-700 text-[11px] lg:text-xs font-mono break-all">
-                            {redemption.uniqueCode}
-                          </code>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 px-2 text-xs border-gray-300 text-gray-700 hover:bg-gray-50"
-                            onClick={() => copyUniqueCode(redemption.uniqueCode || '')}
-                          >
-                            <Copy className="h-3 w-3 mr-1" /> {language === 'en' ? 'Copy' : 'Copiar'}
-                          </Button>
-                        </div>
-                      )}
-                      {redemption.status === 'PENDING' && (
-                        <div className="mt-3 flex justify-end">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 px-3 text-xs border-gray-300 text-red-600 hover:bg-red-50"
-                            disabled={cancellingId === redemption.id}
-                            onClick={() => handleCancelRedemption(redemption.id)}
-                          >
-                            {cancellingId === redemption.id ? (language === 'en' ? 'Cancelling…' : 'Cancelando…') : (language === 'en' ? 'Cancel' : 'Cancelar')}
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            </>
           )}
         </div>
 
