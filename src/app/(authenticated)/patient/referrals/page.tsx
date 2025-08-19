@@ -1076,39 +1076,32 @@ return (
               >
                 <div className="p-4 lg:p-5 space-y-3 lg:space-y-4">
                   <div className="text-left">
-                    <h2 className="text-gray-900 text-base lg:text-xl font-light mb-1">Earn Points</h2>
-                    <p className="text-xs lg:text-sm text-gray-600 mb-2">Share your personal link to earn points</p>
-                    <div className="flex items-center gap-2 p-3 lg:p-3.5 bg-gray-50 rounded-lg border border-gray-200">
-                      <code className="flex-1 text-[11px] lg:text-xs text-gray-800 font-mono break-all">
-                        {generateReferralLink('default')}
-                      </code>
-                      <Button
-                        onClick={copyReferralLink}
-                        className="text-white font-medium h-8 lg:h-9 px-3 lg:px-4 hover:opacity-90"
-                        style={{ background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' }}
-                      >
-                        <Copy className="h-3.5 w-3.5 lg:h-4 lg:w-4 mr-1.5" />
-                        Copy
-                      </Button>
-                    </div>
+                    <h2 className="text-gray-900 text-base lg:text-lg font-semibold">Earn points</h2>
+                    <p className="text-xs lg:text-sm text-gray-600">Share your personal link to earn points</p>
                   </div>
-                  <div className="flex items-center justify-center gap-2 lg:gap-3">
-                    <Button onClick={shareViaWhatsApp} variant="outline" className="h-8 lg:h-9 px-3 border-gray-300 text-black hover:bg-gray-50">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" className="h-4 w-4 mr-1.5" aria-hidden>
-                        <path fill="currentColor" d="M19.11 17.13c-.29-.14-1.68-.83-1.94-.92-.26-.1-.45-.14-.64.14-.19.29-.73.92-.9 1.11-.17.19-.33.22-.62.07-.29-.14-1.23-.45-2.34-1.44-.86-.77-1.44-1.72-1.61-2-.17-.29-.02-.45.12-.6.12-.12.29-.33.43-.5.14-.17.19-.29.29-.48.1-.19.05-.36-.02-.5-.07-.14-.64-1.55-.88-2.12-.23-.56-.47-.48-.64-.48h-.55c-.19 0-.5.07-.76.36-.26.29-1 1-.99 2.45.01 1.45 1.03 2.84 1.18 3.03.14.19 2.03 3.1 4.93 4.35.69.3 1.22.48 1.64.62.69.22 1.31.19 1.81.12.55-.08 1.68-.69 1.92-1.36.24-.67.24-1.24.17-1.36-.07-.12-.26-.19-.55-.33z"/>
-                      </svg>
+                  <div className="flex items-center gap-2 p-2.5 lg:p-3 bg-white rounded-lg border border-gray-200">
+                    <code className="flex-1 text-[11px] lg:text-xs text-gray-800 font-mono break-all">
+                      {generateReferralLink('default')}
+                    </code>
+                    <Button
+                      onClick={copyReferralLink}
+                      variant="outline"
+                      className="h-8 lg:h-9 px-3 border-gray-300 text-gray-700 hover:bg-gray-50"
+                    >
+                      <Copy className="h-3.5 w-3.5 mr-1.5" />
+                      Copy
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-center gap-1.5 lg:gap-2">
+                    <Button onClick={shareViaWhatsApp} variant="ghost" className="h-8 lg:h-9 px-2 text-gray-600 hover:text-gray-900">
                       WhatsApp
                     </Button>
-                    <Button onClick={shareViaEmail} variant="outline" className="h-8 lg:h-9 px-3 border-gray-300 text-gray-700 hover:bg-gray-50">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4 mr-1.5" aria-hidden>
-                        <path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v.01L12 13l8-6.99V6H4zm16 12V8l-8 7L4 8v10h16z"/>
-                      </svg>
+                    <span className="text-gray-300">•</span>
+                    <Button onClick={shareViaEmail} variant="ghost" className="h-8 lg:h-9 px-2 text-gray-600 hover:text-gray-900">
                       Email
                     </Button>
-                    <Button onClick={shareViaNative} variant="outline" className="h-8 lg:h-9 px-3 border-gray-300 text-gray-700 hover:bg-gray-50">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4 mr-1.5" aria-hidden>
-                        <path fill="currentColor" d="M12 3l4 4h-3v5h-2V7H8l4-4zm-6 8h2v7h8v-7h2v7a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-7z"/>
-                      </svg>
+                    <span className="text-gray-300">•</span>
+                    <Button onClick={shareViaNative} variant="ghost" className="h-8 lg:h-9 px-2 text-gray-600 hover:text-gray-900">
                       Share
                     </Button>
                   </div>
@@ -1119,12 +1112,9 @@ return (
               <div className="group rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
                    style={{ background: 'linear-gradient(180deg, #e5eaf5 0%, #f7f7fc 100%)' }}>
                 <div className="p-4 lg:p-6 border-b border-gray-200">
-                  <div className="flex items-center gap-2 lg:gap-3">
-                    <div className="p-1.5 lg:p-2 bg-turquoise/20 rounded-lg">
-                      <UserPlus className="h-4 w-4 lg:h-5 lg:w-5 text-turquoise" />
-                    </div>
+                  <div className="flex items-center">
                     <div>
-                      <h2 className="text-gray-900 text-base lg:text-xl font-light">Your referrals</h2>
+                      <h2 className="text-gray-900 text-base lg:text-lg font-semibold">Your referrals</h2>
                       <p className="text-gray-600 text-xs lg:text-sm">Track who you referred and credits earned</p>
                     </div>
                   </div>
@@ -1133,36 +1123,31 @@ return (
                   {referralsMade.map((referral) => {
                     const StatusIcon = statusConfig[referral.status as keyof typeof statusConfig]?.icon || Clock;
                     return (
-                      <div key={referral.id} className="bg-white rounded-lg p-3 lg:p-4 border border-gray-200 hover:border-turquoise/30 transition-colors">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex-1">
-                            <h3 className="font-medium text-gray-900 text-sm lg:text-base">{referral.name}</h3>
+                      <div key={referral.id} className="bg-white rounded-lg p-3.5 lg:p-4 border border-gray-200 hover:border-gray-300 transition-colors">
+                        <div className="flex justify-between items-start">
+                          <h3 className="font-medium text-gray-900 text-sm lg:text-base truncate">{referral.name}</h3>
+                          <div className="shrink-0">
+                            {referral.status === 'CONVERTED' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] lg:text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                                <Star className="h-3 w-3" />
+                                Converted
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] lg:text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">
+                                <StatusIcon className="h-3 w-3" />
+                                {statusConfig[referral.status as keyof typeof statusConfig]?.label || referral.status}
+                              </span>
+                            )}
                           </div>
-                          {referral.status === 'CONVERTED' ? (
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-black text-[11px] lg:text-xs font-semibold bg-[#91f2ce] border border-[#7eeec0]">
-                              <Star className="h-3 w-3 lg:h-3.5 lg:w-3.5 text-black" />
-                              +{referral.credits.reduce((sum, credit) => sum + credit.amount, 0)} {t.creditsEarned}
-                            </div>
-                          ) : (
-                            <Badge className={`${statusConfig[referral.status as keyof typeof statusConfig]?.color || 'bg-gray-700 text-gray-300'} border text-xs flex items-center gap-1`}>
-                              <StatusIcon className="h-3 w-3" />
-                              {statusConfig[referral.status as keyof typeof statusConfig]?.label || referral.status}
-                            </Badge>
-                          )}
                         </div>
-                        <div className="flex justify-between items-center text-xs lg:text-sm text-gray-500 mb-2">
-                          <span>
-                            {referral.doctor.name.toLowerCase().startsWith('dr') 
-                              ? referral.doctor.name 
-                              : `Dr(a). ${referral.doctor.name}`
-                            }
-                          </span>
+                        <div className="mt-1.5 flex items-center justify-between text-[11px] lg:text-xs text-gray-500">
+                          <span className="truncate">{referral.doctor.name}</span>
                           <span>{formatDate(referral.createdAt)}</span>
                         </div>
-                        {referral.credits.length > 0 && referral.status !== 'CONVERTED' && (
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-white text-[11px] lg:text-xs font-semibold bg-[#91f2ce] shadow-sm">
-                            <Star className="h-3 w-3 lg:h-3.5 lg:w-3.5 text-white" />
-                            +{referral.credits.reduce((sum, credit) => sum + credit.amount, 0)} {t.creditsEarned}
+                        {referral.credits.length > 0 && (
+                          <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] lg:text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">
+                            <Star className="h-3 w-3" />
+                            +{referral.credits.reduce((sum, credit) => sum + credit.amount, 0)} points earned
                           </div>
                         )}
                       </div>
@@ -1184,55 +1169,38 @@ return (
 
           {activeTab === 'use' && (
             <>
-            {/* Recompensas Disponíveis */}
+            {/* Rewards */}
             <div
               className="group rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
               style={{ background: 'linear-gradient(180deg, #e5eaf5 0%, #f7f7fc 100%)' }}
             >
               <div className="p-4 lg:p-6 border-b border-gray-200">
-                <div className="flex items-center gap-2 lg:gap-3">
-                  <div className="p-1.5 lg:p-2 bg-turquoise/20 rounded-lg">
-                    <Gift className="h-4 w-4 lg:h-5 lg:w-5 text-turquoise" />
-                  </div>
+                <div className="flex items-center">
                   <div>
-                    <h2 className="text-gray-900 text-base lg:text-xl font-light">Rewards</h2>
+                    <h2 className="text-gray-900 text-base lg:text-lg font-semibold">Rewards</h2>
                     <p className="text-gray-600 text-xs lg:text-sm">Use your points to redeem rewards</p>
                   </div>
                 </div>
               </div>
               <div className="p-4 lg:p-6 space-y-3 lg:space-y-4">
                 {availableRewards.map((reward) => (
-                  <div key={reward.id} className="bg-white rounded-lg p-4 lg:p-5 border border-gray-200 hover:border-turquoise/30 transition-colors">
+                  <div key={reward.id} className="bg-white rounded-lg p-4 lg:p-5 border border-gray-200 hover:border-gray-300 transition-colors">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-gray-900 text-sm lg:text-base font-medium leading-6">{reward.title}</h3>
-                        <p className="text-gray-600 text-xs lg:text-sm mt-1 line-clamp-2">{reward.description}</p>
+                        <h3 className="text-gray-900 text-sm lg:text-base font-medium leading-6 truncate">{reward.title}</h3>
+                        {reward.description && (
+                          <p className="text-gray-600 text-xs lg:text-sm mt-1 line-clamp-2">{reward.description}</p>
+                        )}
                       </div>
                       <div className="shrink-0 text-right">
-                        <div className="inline-flex items-center gap-1.5 rounded-full border border-turquoise/30 bg-turquoise/10 px-2.5 py-1">
-                          <Star className="h-3.5 w-3.5 text-turquoise" />
-                          <span className="text-turquoise text-xs lg:text-sm font-semibold">{reward.creditsRequired}</span>
-                          <span className="text-gray-600 text-[10px] lg:text-xs">{t.credits}</span>
-                        </div>
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-gray-700">
+                          <Star className="h-3.5 w-3.5" />
+                          <span className="text-xs lg:text-sm font-medium">
+                            {reward.creditsRequired} {reward.creditsRequired === 1 ? 'point' : 'points'}
+                          </span>
+                        </span>
                       </div>
                     </div>
-
-                    {(typeof reward.maxRedemptions === 'number') && (
-                      <div className="mt-3 lg:mt-4">
-                        <div className="flex items-center justify-between text-[11px] lg:text-xs text-gray-500 mb-1">
-                          <span>{t.remaining}</span>
-                          <span>{Math.max(0, reward.maxRedemptions - reward.currentRedemptions)} {t.redemptions}</span>
-                        </div>
-                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          {(() => {
-                            const total = Math.max(1, reward.maxRedemptions);
-                            const used = Math.min(reward.currentRedemptions, total);
-                            const pct = Math.round((used / total) * 100);
-                            return <div className="h-full bg-turquoise/50" style={{ width: `${pct}%` }} />;
-                          })()}
-                        </div>
-                      </div>
-                    )}
 
                     <div className="mt-4 pt-3 lg:pt-4 border-t border-gray-100">
                       <Button
@@ -1242,8 +1210,8 @@ return (
                           redeeming === reward.id ||
                           (reward.maxRedemptions ? reward.currentRedemptions >= reward.maxRedemptions : false)
                         }
-                        className="w-full text-black font-semibold disabled:bg-gray-200 disabled:text-gray-500 text-xs lg:text-sm h-8 lg:h-9 shadow-sm
-                                   bg-[#91f2ce] hover:bg-[#7eeec0] ring-1 ring-[#7eeec0]/70 transition transform hover:scale-[1.01] rounded-full"
+                        className="w-full text-white font-semibold disabled:bg-gray-200 disabled:text-gray-500 text-xs lg:text-sm h-8 lg:h-9 shadow-sm rounded-full"
+                        style={!(creditsBalance < reward.creditsRequired || (reward.maxRedemptions ? reward.currentRedemptions >= reward.maxRedemptions : false)) ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : undefined}
                       >
                         {redeeming === reward.id ? (
                           <>
@@ -1251,20 +1219,17 @@ return (
                             {t.redeeming}
                           </>
                         ) : creditsBalance < reward.creditsRequired ? (
-                          <span className="flex items-center gap-1.5">
+                          <span className="flex items-center gap-1.5 text-gray-600">
                             <Clock className="h-3.5 w-3.5" />
                             {t.insufficientCredits}
                           </span>
                         ) : (reward.maxRedemptions && reward.currentRedemptions >= reward.maxRedemptions) ? (
-                          <span className="flex items-center gap-1.5">
+                          <span className="flex items-center gap-1.5 text-gray-600">
                             <Gift className="h-3.5 w-3.5" />
                             {t.soldOut}
                           </span>
                         ) : (
                           <span className="flex items-center gap-1.5">
-                            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M12 2l1.9 4.1L18 8l-4.1 1.9L12 14l-1.9-4.1L6 8l4.1-1.9L12 2z" fill="#0f5132" fillOpacity="0.6"/>
-                            </svg>
                             {t.redeem}
                           </span>
                         )}
@@ -1295,12 +1260,9 @@ return (
                 style={{ background: 'linear-gradient(180deg, #e5eaf5 0%, #f7f7fc 100%)' }}
               >
                 <div className="p-4 lg:p-6 border-b border-gray-200">
-                  <div className="flex items-center gap-2 lg:gap-3">
-                    <div className="p-1.5 lg:p-2 bg-turquoise/20 rounded-lg">
-                      <Gift className="h-4 w-4 lg:h-5 lg:w-5 text-turquoise" />
-                    </div>
+                  <div className="flex items-center">
                     <div>
-                      <h2 className="text-gray-900 text-base lg:text-xl font-light">{t.redemptionHistory}</h2>
+                      <h2 className="text-gray-900 text-base lg:text-lg font-semibold">{t.redemptionHistory}</h2>
                       <p className="text-gray-600 text-xs lg:text-sm">{t.redemptionDescription}</p>
                     </div>
                   </div>
@@ -1309,27 +1271,29 @@ return (
                   {redemptionsHistory.map((redemption) => {
                     const StatusIcon = statusConfig[redemption.status as keyof typeof statusConfig]?.icon || Clock;
                     return (
-                      <div key={redemption.id} className="bg-white rounded-lg p-4 lg:p-5 border border-gray-200 hover:border-turquoise/30 transition-colors">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex-1">
-                            <h3 className="font-medium text-gray-900 text-sm lg:text-base">{redemption.reward.title}</h3>
-                            <p className="text-gray-600 text-xs lg:text-sm">{redemption.reward.description}</p>
+                      <div key={redemption.id} className="bg-white rounded-lg p-4 lg:p-5 border border-gray-200 hover:border-gray-300 transition-colors">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium text-gray-900 text-sm lg:text-base truncate">{redemption.reward.title}</h3>
+                            {redemption.reward.description && (
+                              <p className="text-gray-600 text-xs lg:text-sm mt-1 line-clamp-2">{redemption.reward.description}</p>
+                            )}
                           </div>
-                          <Badge className={`${statusConfig[redemption.status as keyof typeof statusConfig]?.color || 'bg-gray-700 text-gray-300'} border text-xs flex items-center gap-1`}>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] lg:text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">
                             <StatusIcon className="h-3 w-3" />
                             {statusConfig[redemption.status as keyof typeof statusConfig]?.label || redemption.status}
-                          </Badge>
-                        </div>
-                        <div className="flex justify-between items-center text-xs lg:text-sm text-gray-500 mb-2">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-gray-700 text-[11px] lg:text-xs font-semibold bg-gray-100 border border-gray-300">
-                            <Star className="h-3 w-3 lg:h-3.5 lg:w-3.5 text-gray-500" />
-                            {redemption.creditsUsed} {t.creditsUsed}
                           </span>
+                        </div>
+                        <div className="mt-1.5 flex items-center justify-between text-[11px] lg:text-xs text-gray-500">
+                          <span>
+                            {redemption.creditsUsed} {redemption.creditsUsed === 1 ? 'point used' : 'points used'}
+                          </span>
+                          <span className="text-gray-400">•</span>
                           <span>{formatDate(redemption.redeemedAt)}</span>
                         </div>
                         {redemption.status === 'APPROVED' && redemption.uniqueCode && (
                           <div className="mt-2 flex items-center gap-2">
-                            <span className="text-[11px] lg:text-xs text-gray-600">{language === 'en' ? 'Code' : 'Código'}:</span>
+                            <span className="text-[11px] lg:text-xs text-gray-600">Code:</span>
                             <code className="px-2 py-1 rounded bg-gray-50 border border-gray-200 text-gray-700 text-[11px] lg:text-xs font-mono break-all">
                               {redemption.uniqueCode}
                             </code>
@@ -1339,7 +1303,7 @@ return (
                               className="h-7 px-2 text-xs border-gray-300 text-gray-700 hover:bg-gray-50"
                               onClick={() => copyUniqueCode(redemption.uniqueCode || '')}
                             >
-                              <Copy className="h-3 w-3 mr-1" /> {language === 'en' ? 'Copy' : 'Copiar'}
+                              <Copy className="h-3 w-3 mr-1" /> Copy
                             </Button>
                           </div>
                         )}
@@ -1352,7 +1316,7 @@ return (
                               disabled={cancellingId === redemption.id}
                               onClick={() => handleCancelRedemption(redemption.id)}
                             >
-                              {cancellingId === redemption.id ? (language === 'en' ? 'Cancelling…' : 'Cancelando…') : (language === 'en' ? 'Cancel' : 'Cancelar')}
+                              {cancellingId === redemption.id ? 'Cancelling…' : 'Cancel'}
                             </Button>
                           </div>
                         )}
@@ -1365,7 +1329,7 @@ return (
                       <div className="w-12 h-12 lg:w-16 lg:h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 lg:mb-4">
                         <Gift className="h-5 w-5 lg:h-6 lg:w-6 text-gray-500" />
                       </div>
-                      <div className="text-gray-500 text-sm lg:text-base mb-1 lg:mb-2">{language === 'en' ? 'No redemptions yet' : 'Nenhum resgate ainda'}</div>
+                      <div className="text-gray-500 text-sm lg:text-base mb-1 lg:mb-2">No redemptions yet</div>
                     </div>
                   )}
                 </div>
