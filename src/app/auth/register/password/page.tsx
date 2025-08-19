@@ -20,14 +20,14 @@ function RegisterPasswordInner() {
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // Redirecionar se não tiver email ou token
+  // Redirect if no email or token
   useEffect(() => {
     if (!emailParam || !tokenParam) {
       router.push('/auth/register/email');
     }
   }, [emailParam, tokenParam, router]);
 
-  // Verificar força da senha
+  // Evaluate password strength
   useEffect(() => {
     if (!password) {
       setPasswordStrength(0);
@@ -50,19 +50,19 @@ function RegisterPasswordInner() {
     setError(null);
 
     if (!name || !password || !confirmPassword) {
-      setError("Todos os campos são obrigatórios");
+      setError("All fields are required");
       setIsSubmitting(false);
       return;
     }
 
     if (password !== confirmPassword) {
-      setError("As senhas não coincidem");
+      setError("Passwords do not match");
       setIsSubmitting(false);
       return;
     }
 
     if (password.length < 8) {
-      setError("A senha deve ter pelo menos 8 caracteres");
+      setError("Password must be at least 8 characters");
       setIsSubmitting(false);
       return;
     }
@@ -82,17 +82,17 @@ function RegisterPasswordInner() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Falha ao finalizar cadastro');
+        throw new Error(data.message || 'Failed to complete registration');
       }
 
       setIsSuccess(true);
       
-      // Redirecionar após 3 segundos
+      // Redirect after 3 seconds
       setTimeout(() => {
         router.push('/auth/signin');
       }, 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao finalizar cadastro');
+      setError(err instanceof Error ? err.message : 'Failed to complete registration');
     } finally {
       setIsSubmitting(false);
     }
@@ -101,7 +101,7 @@ function RegisterPasswordInner() {
   if (isSuccess) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white font-normal tracking-[-0.03em] relative z-10">
-        {/* Logo no topo esquerdo */}
+        {/* Logo at top-left */}
         <div className="absolute top-4 left-4">
           <div className="relative w-8 h-8">
             <Image src="/logo.png" alt="Logo" fill className="object-contain" priority />
@@ -116,21 +116,21 @@ function RegisterPasswordInner() {
                   <Check className="h-8 w-8 text-green-600" />
                 </div>
               </div>
-              <h1 className="text-xl font-medium text-gray-900 mt-4">Cadastro concluído!</h1>
+              <h1 className="text-xl font-medium text-gray-900 mt-4">Registration complete!</h1>
               <p className="text-sm text-gray-600">
-                Sua conta foi criada com sucesso e seu período de teste de 7 dias foi ativado.
+                Your account has been created and your 7-day trial is active.
               </p>
             </div>
 
             <div className="mt-6">
               <p className="text-center text-sm text-gray-600 mb-4">
-                Redirecionando para a página de login...
+                Redirecting to the sign-in page...
               </p>
               <Link
                 href="/auth/signin"
                 className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:from-[#4f88e2] hover:to-[#8fc4f5] rounded-lg transition-all duration-300 flex items-center justify-center gap-2"
               >
-                Fazer login agora
+                Sign in now
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
@@ -142,7 +142,7 @@ function RegisterPasswordInner() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white font-normal tracking-[-0.03em] relative z-10">
-      {/* Logo no topo esquerdo */}
+      {/* Logo at top-left */}
       <div className="absolute top-4 left-4">
         <div className="relative w-8 h-8">
           <Image src="/logo.png" alt="Logo" fill className="object-contain" priority />
@@ -152,22 +152,22 @@ function RegisterPasswordInner() {
         <div className="w-full max-w-[420px] bg-white rounded-2xl border border-gray-200 p-8 shadow-lg relative z-20">
 
           <div className="text-center space-y-2 mb-6">
-            <h1 className="text-xl font-medium text-gray-900">Finalize seu cadastro</h1>
+            <h1 className="text-xl font-medium text-gray-900">Finish your registration</h1>
             <p className="text-sm text-gray-600">
-              Defina seu nome e senha para começar seu período de teste
+              Set your business name and password to start your trial
             </p>
           </div>
 
-          {/* Mensagem de erro */}
+          {/* Error message */}
           {error && (
             <div className="mb-6 text-red-600 text-center text-sm">{error}</div>
           )}
 
-          {/* Formulário */}
+          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                Nome completo
+                Business name
               </label>
               <input
                 type="text"
@@ -177,13 +177,13 @@ function RegisterPasswordInner() {
                 required
                 autoComplete="off"
                 className="w-full px-4 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900"
-                placeholder="Dr. João Silva"
+                placeholder="Your Business"
               />
             </div>
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                Senha
+                Password
               </label>
               <input
                 type="password"
@@ -193,7 +193,7 @@ function RegisterPasswordInner() {
                 required
                 autoComplete="new-password"
                 className="w-full px-4 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900"
-                placeholder="Mínimo 8 caracteres"
+                placeholder="Minimum 8 characters"
               />
               {password && (
                 <div className="mt-2">
@@ -208,7 +208,7 @@ function RegisterPasswordInner() {
                     ))}
                   </div>
                   <p className="mt-1 text-xs text-gray-500">
-                    {passwordStrength < 3 ? 'Senha fraca' : passwordStrength < 5 ? 'Senha média' : 'Senha forte'}
+                    {passwordStrength < 3 ? 'Weak password' : passwordStrength < 5 ? 'Medium password' : 'Strong password'}
                   </p>
                 </div>
               )}
@@ -216,7 +216,7 @@ function RegisterPasswordInner() {
 
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
-                Confirmar senha
+                Confirm password
               </label>
               <input
                 type="password"
@@ -226,7 +226,7 @@ function RegisterPasswordInner() {
                 required
                 autoComplete="new-password"
                 className="w-full px-4 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900"
-                placeholder="Repita sua senha"
+                placeholder="Repeat your password"
               />
             </div>
 
@@ -235,7 +235,7 @@ function RegisterPasswordInner() {
               className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:from-[#4f88e2] hover:to-[#8fc4f5] rounded-lg transition-all duration-300 flex items-center justify-center gap-2"
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Finalizando...' : 'Finalizar cadastro'}
+              {isSubmitting ? 'Finalizing...' : 'Finish registration'}
               <ArrowRight className="h-4 w-4" />
             </button>
           </form>
@@ -247,7 +247,7 @@ function RegisterPasswordInner() {
                 href={`/auth/register/slug?email=${encodeURIComponent(emailParam || '')}&token=${encodeURIComponent(tokenParam || '')}`}
                 className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200"
               >
-                Voltar
+                Back
               </Link>
             </div>
           </div>

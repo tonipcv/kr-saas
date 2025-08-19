@@ -6,16 +6,14 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
+import {
   ArrowLeft,
-  CreditCard, 
+  CreditCard,
   Calendar,
   Users,
-  FileText,
-  BookOpen,
   CheckCircle,
-  AlertCircle,
-  Crown
+  Crown,
+  XCircle
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -25,8 +23,9 @@ interface SubscriptionPlan {
   maxPatients: number;
   maxProtocols: number;
   maxCourses: number;
-  price: number;
+  price: number | null;
   description: string;
+  contactOnly?: boolean;
 }
 
 interface ClinicSubscription {
@@ -50,6 +49,7 @@ export default function SubscriptionManagement() {
   const [clinic, setClinic] = useState<ClinicData | null>(null);
   const [availablePlans, setAvailablePlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [annualBilling, setAnnualBilling] = useState(false);
 
   useEffect(() => {
     if (!session?.user?.id) {
@@ -64,229 +64,239 @@ export default function SubscriptionManagement() {
     try {
       setLoading(true);
       
-      // Buscar dados da clínica
+      // Fetch clinic data
       const clinicResponse = await fetch('/api/clinic');
       if (clinicResponse.ok) {
         const clinicData = await clinicResponse.json();
         setClinic(clinicData.clinic);
       }
 
-      // Buscar planos disponíveis (simulado)
-      setAvailablePlans([
-        {
-          id: '1',
-          name: 'Básico',
-          maxPatients: 50,
-          maxProtocols: 10,
-          maxCourses: 5,
-          price: 99,
-          description: 'Ideal para clínicas pequenas'
-        },
-        {
-          id: '2',
-          name: 'Growth',
-          maxPatients: 200,
-          maxProtocols: 50,
-          maxCourses: 20,
-          price: 199,
-          description: 'Para clínicas em crescimento'
-        },
-        {
-          id: '3',
-          name: 'Pro',
-          maxPatients: 500,
-          maxProtocols: 100,
-          maxCourses: 50,
-          price: 399,
-          description: 'Para clínicas estabelecidas'
-        },
-        {
-          id: '4',
-          name: 'Enterprise',
-          maxPatients: 1000,
-          maxProtocols: 200,
-          maxCourses: 100,
-          price: 699,
-          description: 'Para grandes organizações'
-        }
-      ]);
+      // Fetch available plans (public endpoint)
+      const plansRes = await fetch('/api/plans', { cache: 'no-store' });
+      if (plansRes.ok) {
+        const data = await plansRes.json();
+        setAvailablePlans(Array.isArray(data?.plans) ? data.plans : []);
+      } else {
+        setAvailablePlans([]);
+      }
 
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+      console.error('Error loading subscription data:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const handlePlanChange = (planId: string) => {
-    // Aqui você implementaria a lógica de mudança de plano
-    alert(`Funcionalidade de mudança para o plano ${planId} será implementada em breve!`);
+    // TODO: implement change plan action
+    alert(`Plan change to ${planId} will be implemented soon!`);
   };
+
+  // Filter available plans to exclude the Free plan from display
+  const displayPlans = availablePlans.filter(
+    (p) => p?.name?.toLowerCase() !== 'free'
+  );
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
-          <p className="text-xs text-slate-600">Carregando subscription...</p>
+      <div className="lg:ml-64">
+        <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 bg-gray-50">
+          {/* Header skeleton */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="h-6 w-36 bg-gray-100 rounded animate-pulse" />
+            <div className="h-8 w-28 bg-gray-100 rounded-full animate-pulse" />
+          </div>
+          {/* Pills skeleton */}
+          <div className="flex items-center gap-2 mb-4">
+            {[1,2,3].map(i => (
+              <div key={i} className="h-7 w-40 bg-white border border-gray-200 rounded-full shadow-sm" />
+            ))}
+          </div>
+          {/* KPI cards skeleton */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                <div className="text-[11px] text-gray-500 font-medium mb-2">Loading...</div>
+                <div className="h-6 w-24 bg-gray-100 rounded animate-pulse" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="container mx-auto p-4 lg:p-6 pt-[88px] lg:pt-6">
-        
+    <div className="lg:ml-64">
+      <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 bg-gray-50">
         {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <Button variant="outline" size="sm" asChild className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
-            <Link href="/clinic">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Voltar
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-2xl font-light text-slate-800">Gerenciar Subscription</h1>
-            <p className="text-sm text-slate-600">{clinic?.name}</p>
+        <div className="flex flex-col gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" asChild className="hidden lg:inline-flex h-8 items-center rounded-full border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                <Link href="/clinic">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back
+                </Link>
+              </Button>
+              <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Clinic subscription</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="inline-flex h-8 items-center rounded-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] px-3 text-xs font-medium text-white hover:opacity-90 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5893ec]">Upgrade</button>
+            </div>
+          </div>
+          {/* Top Tab (only Plans) */}
+          <div className="flex items-center gap-2 overflow-auto">
+            <span className="whitespace-nowrap text-xs font-medium rounded-full border px-3 py-1 bg-white border-gray-200 text-gray-900 shadow-sm">
+              Plans
+            </span>
           </div>
         </div>
 
-        {/* Current Subscription */}
-        {clinic?.subscription && (
-          <Card className="bg-white/80 border-slate-200/50 backdrop-blur-sm mb-6">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-slate-800 flex items-center gap-2">
+        {/* Current Subscription (hidden if plan is Free) */}
+        {clinic?.subscription && clinic.subscription.plan.name.toLowerCase() !== 'free' && (
+          <div className="mb-4">
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <div className="px-4 py-3 border-b border-gray-100 rounded-t-2xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
                     <Crown className="h-5 w-5 text-yellow-600" />
-                    Plano Atual: {clinic.subscription.plan.name}
-                  </CardTitle>
-                  <CardDescription className="text-slate-600">
-                    {clinic.subscription.plan.description}
-                  </CardDescription>
-                </div>
-                <Badge 
-                  variant={clinic.subscription.status === 'ACTIVE' ? 'default' : 'secondary'}
-                  className={clinic.subscription.status === 'ACTIVE' ? 'bg-green-100 text-green-700 border-green-200' : ''}
-                >
-                  {clinic.subscription.status}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div className="text-center p-4 bg-slate-50 rounded-lg">
-                  <Users className="h-6 w-6 text-blue-600 mx-auto mb-2" />
-                  <p className="text-sm text-slate-600">Médicos</p>
-                  <p className="text-lg font-medium text-slate-800">{clinic.subscription.maxDoctors}</p>
-                </div>
-                <div className="text-center p-4 bg-slate-50 rounded-lg">
-                  <Users className="h-6 w-6 text-green-600 mx-auto mb-2" />
-                  <p className="text-sm text-slate-600">Pacientes</p>
-                  <p className="text-lg font-medium text-slate-800">{clinic.subscription.plan.maxPatients}</p>
-                </div>
-                <div className="text-center p-4 bg-slate-50 rounded-lg">
-                  <FileText className="h-6 w-6 text-purple-600 mx-auto mb-2" />
-                  <p className="text-sm text-slate-600">Protocolos</p>
-                  <p className="text-lg font-medium text-slate-800">{clinic.subscription.plan.maxProtocols}</p>
-                </div>
-                <div className="text-center p-4 bg-slate-50 rounded-lg">
-                  <BookOpen className="h-6 w-6 text-orange-600 mx-auto mb-2" />
-                  <p className="text-sm text-slate-600">Cursos</p>
-                  <p className="text-lg font-medium text-slate-800">{clinic.subscription.plan.maxCourses}</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Calendar className="h-5 w-5 text-blue-600" />
-                  <div>
-                    <p className="text-sm font-medium text-slate-800">Próxima cobrança</p>
-                    <p className="text-xs text-slate-600">
-                      {clinic.subscription.endDate 
-                        ? new Date(clinic.subscription.endDate).toLocaleDateString('pt-BR')
-                        : 'Sem vencimento'
-                      }
-                    </p>
+                    <span className="text-sm font-semibold text-gray-900">Current plan</span>
+                    <Badge className="bg-blue-100 text-blue-700 border-blue-200">{clinic.subscription.plan.name}</Badge>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold text-slate-800">R$ {availablePlans.find(p => p.name === clinic.subscription?.plan.name)?.price || 0}</p>
-                  <p className="text-xs text-slate-600">por mês</p>
+                  <Badge
+                    variant={clinic.subscription.status === 'ACTIVE' ? 'default' : 'secondary'}
+                    className={clinic.subscription.status === 'ACTIVE' ? 'bg-green-100 text-green-700 border-green-200' : ''}
+                  >
+                    {clinic.subscription.status}
+                  </Badge>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+              <div className="p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-2">
+                  {[{
+                    title: 'Doctors',
+                    value: clinic.subscription.maxDoctors,
+                    color: 'text-blue-600'
+                  }, {
+                    title: 'Clients',
+                    value: clinic.subscription.plan.maxPatients,
+                    color: 'text-green-600'
+                  }, {
+                    title: 'Referrals / mo',
+                    value: clinic.subscription.plan.name.toLowerCase() === 'starter' ? 500 : clinic.subscription.plan.name.toLowerCase() === 'creator' ? 2000 : '-',
+                    color: 'text-purple-600'
+                  }, {
+                    title: 'Rewards limit',
+                    value: 50,
+                    color: 'text-orange-600'
+                  }].map((kpi) => (
+                    <div key={kpi.title} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium text-gray-500">{kpi.title}</span>
+                        {/* Using Users icon for simplicity; can swap for specific icons if desired */}
+                        <Users className={`h-4 w-4 ${kpi.color}`} />
+                      </div>
+                      <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{kpi.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Billing panel removed to focus on plans */}
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Available Plans */}
         <div className="mb-6">
-          <h2 className="text-lg font-light text-slate-800 mb-4">Planos Disponíveis</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {availablePlans.map((plan) => {
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-gray-900">Available plans</h2>
+            {/* Annual toggle (visual only) */}
+            <label className="flex items-center gap-2 text-xs text-gray-700">
+              <span>Annual</span>
+              <button
+                type="button"
+                onClick={() => setAnnualBilling(v => !v)}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${annualBilling ? 'bg-blue-500' : 'bg-gray-200'}`}
+                aria-pressed={annualBilling}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${annualBilling ? 'translate-x-4' : 'translate-x-1'}`} />
+              </button>
+            </label>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {displayPlans.map((plan: SubscriptionPlan) => {
               const isCurrentPlan = clinic?.subscription?.plan.name === plan.name;
-              
+
               return (
-                <Card key={plan.id} className={`bg-white/80 border-slate-200/50 backdrop-blur-sm ${isCurrentPlan ? 'ring-2 ring-blue-500' : ''}`}>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-slate-800">{plan.name}</CardTitle>
+                <div key={plan.id} className={`rounded-2xl border border-gray-200 bg-white shadow-sm ${isCurrentPlan ? 'ring-2 ring-blue-500' : ''}`}>
+                  <div className="px-4 py-4 border-b border-gray-100 rounded-t-2xl">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">{plan.name}</div>
+                        <p className="text-xs text-gray-600">{plan.description}</p>
+                      </div>
                       {isCurrentPlan && (
-                        <Badge className="bg-blue-100 text-blue-700 border-blue-200">Atual</Badge>
+                        <Badge className="bg-blue-100 text-blue-700 border-blue-200">Current</Badge>
                       )}
                     </div>
-                    <CardDescription className="text-slate-600">{plan.description}</CardDescription>
-                    <div className="text-2xl font-bold text-slate-800">
-                      R$ {plan.price}
-                      <span className="text-sm font-normal text-slate-600">/mês</span>
+                    <div className="mt-3">
+                      {plan.contactOnly || plan.price === null ? (
+                        <div>
+                          <div className="text-2xl font-bold text-gray-900">Flexible billing</div>
+                          <div className="text-xs text-gray-600">Custom plans</div>
+                        </div>
+                      ) : (
+                        <div className="flex items-end gap-2">
+                          <div className="text-3xl font-bold text-gray-900">$ {plan.price}</div>
+                          <div className="text-xs text-gray-600 mb-1">per month</div>
+                        </div>
+                      )}
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3 mb-4">
-                      <div className="flex items-center gap-2">
+                  </div>
+                  <div className="p-4">
+                    <div className="mb-3">
+                      {plan.contactOnly || plan.price === null ? (
+                        <Button asChild className="w-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white hover:opacity-90">
+                          <a href="/contact" target="_self">Book a demo</a>
+                        </Button>
+                      ) : (
+                        <Button onClick={() => handlePlanChange(plan.id)} className="w-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white hover:opacity-90">
+                          {isCurrentPlan ? 'Current plan' : 'Upgrade'}
+                        </Button>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
                         <CheckCircle className="h-4 w-4 text-green-600" />
-                        <span className="text-sm text-slate-600">{plan.maxPatients} pacientes</span>
+                        <span>{plan.maxPatients} clients</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
                         <CheckCircle className="h-4 w-4 text-green-600" />
-                        <span className="text-sm text-slate-600">{plan.maxProtocols} protocolos</span>
+                        <span>{plan.name.toLowerCase() === 'starter' ? '500 referrals / month' : plan.name.toLowerCase() === 'creator' ? '2000 referrals / month' : 'Referrals / month as per plan'}</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
                         <CheckCircle className="h-4 w-4 text-green-600" />
-                        <span className="text-sm text-slate-600">{plan.maxCourses} cursos</span>
+                        <span>Credit by purchase access</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span>Up to 50 rewards</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <XCircle className="h-4 w-4 text-gray-400" />
+                        <span>No access to Campaigns</span>
                       </div>
                     </div>
-                    
-                    {!isCurrentPlan && (
-                      <Button 
-                        onClick={() => handlePlanChange(plan.id)}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                      >
-                        {clinic?.subscription ? 'Alterar Plano' : 'Escolher Plano'}
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               );
             })}
           </div>
         </div>
 
-        {/* Billing History */}
-        <Card className="bg-white/80 border-slate-200/50 backdrop-blur-sm mb-6">
-          <CardHeader>
-            <CardTitle className="text-slate-800">Histórico de Cobrança</CardTitle>
-            <CardDescription className="text-slate-600">Suas últimas faturas</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-8">
-              <CreditCard className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-              <p className="text-slate-600">Nenhuma fatura encontrada</p>
-              <p className="text-xs text-slate-500 mt-1">O histórico de cobrança aparecerá aqui</p>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Billing history removed to keep the page focused on plans */}
       </div>
     </div>
   );

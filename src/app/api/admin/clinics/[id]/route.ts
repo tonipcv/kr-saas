@@ -29,35 +29,8 @@ export async function GET(
     const clinic = await prisma.clinic.findUnique({
       where: { id: clinicId },
       include: {
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        },
-        members: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true
-              }
-            }
-          }
-        },
-        subscription: {
-          include: {
-            plan: {
-              select: {
-                id: true,
-                name: true,
-                price: true
-              }
-            }
-          }
-        }
+        owner: { select: { id: true, name: true, email: true } },
+        members: { include: { user: { select: { id: true, name: true, email: true } } } }
       }
     });
 
@@ -119,12 +92,7 @@ export async function PUT(
     }
 
     // Check if clinic exists
-    const existingClinic = await prisma.clinic.findUnique({
-      where: { id: clinicId },
-      include: {
-        subscription: true
-      }
-    });
+    const existingClinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
 
     if (!existingClinic) {
       return NextResponse.json({ error: 'Clinic not found' }, { status: 404 });
@@ -179,37 +147,36 @@ export async function PUT(
       }
     });
 
-    // Update subscription if provided
+    // Update or create subscription using unified_subscriptions if provided
     if (subscription && subscription.planId) {
-      // Verify the plan exists
-      const plan = await prisma.subscriptionPlan.findUnique({
-        where: { id: subscription.planId }
+      const plan = await prisma.subscriptionPlan.findUnique({ where: { id: subscription.planId } });
+      if (!plan) return NextResponse.json({ error: 'Invalid subscription plan' }, { status: 400 });
+
+      const currentUnified = await prisma.unified_subscriptions.findFirst({
+        where: { type: 'CLINIC', subscriber_id: clinicId },
+        orderBy: { created_at: 'desc' }
       });
 
-      if (!plan) {
-        return NextResponse.json({ error: 'Invalid subscription plan' }, { status: 400 });
-      }
-
-      if (existingClinic.subscription) {
-        // Update existing subscription
-        await prisma.clinicSubscription.update({
-          where: { id: existingClinic.subscription.id },
+      if (currentUnified) {
+        await prisma.unified_subscriptions.update({
+          where: { id: currentUnified.id },
           data: {
-            planId: subscription.planId,
-            status: subscription.status,
-            maxDoctors: subscription.maxDoctors
+            plan_id: subscription.planId,
+            status: subscription.status || currentUnified.status,
+            max_doctors: subscription.maxDoctors ?? currentUnified.max_doctors,
+            updated_at: new Date()
           }
         });
       } else {
-        // Create new subscription
-        await prisma.clinicSubscription.create({
+        await prisma.unified_subscriptions.create({
           data: {
-            clinicId: clinicId,
-            planId: subscription.planId,
+            id: `${clinicId}-${Date.now()}`,
+            type: 'CLINIC',
+            subscriber_id: clinicId,
+            plan_id: subscription.planId,
             status: subscription.status || 'ACTIVE',
-            maxDoctors: subscription.maxDoctors || 1,
-            startDate: new Date(),
-            endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days from now
+            max_doctors: subscription.maxDoctors ?? plan.maxDoctors,
+            start_date: new Date()
           }
         });
       }
@@ -260,18 +227,9 @@ export async function DELETE(
 
     // Delete clinic and all related data
     await prisma.$transaction([
-      // Delete clinic members
-      prisma.clinicMember.deleteMany({
-        where: { clinicId }
-      }),
-      // Delete clinic subscription
-      prisma.clinicSubscription.deleteMany({
-        where: { clinicId }
-      }),
-      // Delete the clinic
-      prisma.clinic.delete({
-        where: { id: clinicId }
-      })
+      prisma.clinicMember.deleteMany({ where: { clinicId } }),
+      prisma.unified_subscriptions.deleteMany({ where: { type: 'CLINIC', subscriber_id: clinicId } }),
+      prisma.clinic.delete({ where: { id: clinicId } })
     ]);
 
     return NextResponse.json({ message: 'Clinic deleted successfully' });

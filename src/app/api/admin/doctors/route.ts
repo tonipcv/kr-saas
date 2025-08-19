@@ -45,7 +45,8 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         name: true,
-        email: true
+        email: true,
+        created_at: true
       },
       orderBy: { created_at: 'desc' }
     });
@@ -82,15 +83,45 @@ export async function GET(request: NextRequest) {
       }))
     );
 
-    // Combine data
+    // Combine data (normalize subscription shape for client rendering)
     const doctorsWithData = doctors.map(doctor => {
       const subscription = subscriptions.find(s => s.subscriber_id === doctor.id);
       const patientCount = patientCounts.find(p => p.doctorId === doctor.id)?.count || 0;
-      
+
+      const normalizedSubscription = subscription
+        ? {
+            status: subscription.status,
+            startDate: subscription.start_date?.toISOString?.() ?? null,
+            endDate: subscription.end_date?.toISOString?.() ?? null,
+            trialEndDate: subscription.trial_end_date?.toISOString?.() ?? null,
+            plan: subscription.subscription_plans
+              ? {
+                  name: subscription.subscription_plans.name,
+                  maxPatients: subscription.subscription_plans.maxPatients ?? 0,
+                  maxProtocols: subscription.subscription_plans.maxProtocols ?? 0,
+                  maxCourses: subscription.subscription_plans.maxCourses ?? 0,
+                  maxProducts: subscription.subscription_plans.maxProducts ?? 0,
+                }
+              : null,
+          }
+        : {
+            status: 'ACTIVE',
+            startDate: doctor.created_at ? new Date(doctor.created_at as any).toISOString() : null,
+            endDate: null,
+            trialEndDate: null,
+            plan: {
+              name: 'Free',
+              maxPatients: 50,
+              maxProtocols: 10,
+              maxCourses: 5,
+              maxProducts: 100,
+            },
+          };
+
       return {
         ...doctor,
-        subscription,
-        patientCount
+        subscription: normalizedSubscription,
+        patientCount,
       };
     });
 
@@ -123,7 +154,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, email, subscriptionType = 'TRIAL' } = body;
+    const { name, email, subscriptionType = 'ACTIVE' } = body;
 
     // Validações
     if (!name || !email) {
@@ -144,16 +175,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'This email is already in use' }, { status: 400 });
     }
 
-    // Buscar o plano padrão (Básico) ou criar se não existir
+    // Buscar (ou criar) plano Free como padrão
     let defaultPlan = await prisma.subscriptionPlan.findFirst({
-      where: { isDefault: true }
+      where: { name: { equals: 'Free', mode: 'insensitive' } }
     });
 
     if (!defaultPlan) {
       defaultPlan = await prisma.subscriptionPlan.create({
         data: {
-          name: 'Básico',
-          description: 'Plano padrão para novos médicos (criado automaticamente)',
+          name: 'Free',
+          description: 'Plano gratuito padrão para novos médicos (criado automaticamente)',
           price: 0,
           billingCycle: 'MONTHLY',
           maxDoctors: 1,
@@ -164,7 +195,7 @@ export async function POST(request: NextRequest) {
           maxCourses: 5,
           maxProducts: 100,
           isDefault: true,
-          trialDays: 14,
+          trialDays: 0,
         },
       });
     }
@@ -205,7 +236,8 @@ export async function POST(request: NextRequest) {
       const trialDays = defaultPlan.trialDays || 7; // Default to 7 days if null
       subscriptionData.trial_end_date = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
     } else {
-      subscriptionData.end_date = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 dias
+      // ACTIVE Free plan should be non-expiring
+      subscriptionData.end_date = null;
     }
     
     await prisma.unified_subscriptions.create({

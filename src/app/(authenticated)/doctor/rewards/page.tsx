@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,6 +52,10 @@ export default function DoctorRewardsPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [planName, setPlanName] = useState<string | null>(null);
+  const [isPlansOpen, setIsPlansOpen] = useState(false);
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [availablePlans, setAvailablePlans] = useState<any[]>([]);
   // Codes management state
   const [showCodesDialog, setShowCodesDialog] = useState(false);
   const [codesRewardId, setCodesRewardId] = useState<string | null>(null);
@@ -183,6 +187,49 @@ export default function DoctorRewardsPage() {
     }
   }, [session]);
 
+  // Fetch current plan name
+  useEffect(() => {
+    const checkPlan = async () => {
+      try {
+        const res = await fetch('/api/subscription/current', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          setPlanName((data?.planName || '').toString());
+        } else if (res.status === 404) {
+          setPlanName('Free');
+        }
+      } catch (e) {
+        console.error('Failed to check subscription', e);
+      }
+    };
+    checkPlan();
+  }, []);
+
+  const isFree = useMemo(() => (planName || '').toLowerCase() === 'free', [planName]);
+  const hasReachedFreeLimit = useMemo(() => isFree && rewards.length >= 3, [isFree, rewards.length]);
+
+  // Plans modal loader (same pattern as Purchases)
+  const openPlansModal = async () => {
+    try {
+      setIsPlansOpen(true);
+      setPlansLoading(true);
+      const res = await fetch('/api/plans', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const plans = Array.isArray(data?.plans) ? data.plans : [];
+        const filtered = plans.filter((p: any) => p?.name?.toLowerCase() !== 'free');
+        setAvailablePlans(filtered);
+      } else {
+        setAvailablePlans([]);
+      }
+    } catch (e) {
+      console.error('Failed to load plans', e);
+      setAvailablePlans([]);
+    } finally {
+      setPlansLoading(false);
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       title: '',
@@ -306,6 +353,10 @@ export default function DoctorRewardsPage() {
   };
 
   const openCreateDialog = () => {
+    if (hasReachedFreeLimit) {
+      openPlansModal();
+      return;
+    }
     resetForm();
     setShowCreateDialog(true);
   };
@@ -439,6 +490,19 @@ export default function DoctorRewardsPage() {
               New reward
             </Button>
           </div>
+
+          {/* Free plan banner */}
+          {isFree && (
+            <div className="mb-4 rounded-2xl px-4 py-4 text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] shadow-sm">
+              <p className="text-sm font-semibold">You're on the Free plan — limited to 3 rewards.</p>
+              <p className="text-xs mt-1 opacity-95">Upgrade to create unlimited rewards and unlock more features.</p>
+              <div className="mt-3">
+                <Button size="sm" variant="secondary" className="h-8 rounded-lg bg-white text-gray-800 hover:bg-gray-100" onClick={openPlansModal}>
+                  See plans
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Rewards List */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -894,8 +958,65 @@ export default function DoctorRewardsPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* Plans Modal */}
+          <Dialog open={isPlansOpen} onOpenChange={setIsPlansOpen}>
+            <DialogContent className="sm:max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Choose a plan</DialogTitle>
+              </DialogHeader>
+              {plansLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[1,2].map(i => (
+                    <div key={i} className="rounded-2xl border border-gray-200 bg-white p-4">
+                      <div className="h-4 w-24 bg-gray-100 rounded animate-pulse mb-2" />
+                      <div className="h-3 w-40 bg-gray-100 rounded animate-pulse mb-4" />
+                      <div className="h-8 w-full bg-gray-100 rounded animate-pulse" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {availablePlans.map((plan: any) => {
+                    const isCurrent = planName && planName.toLowerCase() === plan.name?.toLowerCase();
+                    return (
+                      <div key={plan.id} className={`rounded-2xl border border-gray-200 bg-white shadow-sm ${isCurrent ? 'ring-2 ring-blue-500' : ''}`}>
+                        <div className="px-4 py-4 border-b border-gray-100 rounded-t-2xl">
+                          <div className="text-sm font-semibold text-gray-900">{plan.name}</div>
+                          <p className="text-xs text-gray-600">{plan.description}</p>
+                          <div className="mt-3">
+                            {plan.contactOnly || plan.price === null ? (
+                              <div>
+                                <div className="text-xl font-bold text-gray-900">Flexible billing</div>
+                                <div className="text-xs text-gray-600">Custom plans</div>
+                              </div>
+                            ) : (
+                              <div className="flex items-end gap-2">
+                                <div className="text-2xl font-bold text-gray-900">$ {plan.price}</div>
+                                <div className="text-xs text-gray-600 mb-1">per month</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="p-4">
+                          <Button className="w-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white hover:opacity-90">
+                            {isCurrent ? 'Current plan' : 'Upgrade'}
+                          </Button>
+                          <div className="mt-3 space-y-2">
+                            {plan.maxPatients != null && (
+                              <div className="text-xs text-gray-700">Up to {plan.maxPatients} clients</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     </div>
   );
-} 
+}

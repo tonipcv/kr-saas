@@ -18,7 +18,7 @@ function RegisterSlugInner() {
   const [slug, setSlug] = useState("");
   const [isChecking, setIsChecking] = useState(false);
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
-  const [baseUrl] = useState("cxlus.com/");
+  const [baseUrl] = useState("zuzz.vu/");
 
   // Redirecionar se não tiver email ou token
   useEffect(() => {
@@ -146,7 +146,7 @@ function RegisterSlugInner() {
                   required
                   autoComplete="off"
                   className="w-full pl-[90px] pr-10 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900"
-                  placeholder="sua-clinica"
+                  placeholder="your-business"
                   minLength={3}
                   maxLength={30}
                 />

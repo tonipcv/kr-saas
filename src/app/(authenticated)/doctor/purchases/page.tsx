@@ -35,6 +35,10 @@ export default function PurchasesPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [planName, setPlanName] = useState<string | null>(null);
+  const [isPlansOpen, setIsPlansOpen] = useState(false);
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [availablePlans, setAvailablePlans] = useState<any[]>([]);
 
   // Purchases list state
   interface PurchaseItem {
@@ -54,6 +58,31 @@ export default function PurchasesPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
+
+  // Derived flags
+  const isFree = (planName || '').toLowerCase() === 'free';
+
+  // Plans modal loader
+  const openPlansModal = async () => {
+    try {
+      setIsPlansOpen(true);
+      setPlansLoading(true);
+      const res = await fetch('/api/plans', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const plans = Array.isArray(data?.plans) ? data.plans : [];
+        const filtered = plans.filter((p: any) => p?.name?.toLowerCase() !== 'free');
+        setAvailablePlans(filtered);
+      } else {
+        setAvailablePlans([]);
+      }
+    } catch (e) {
+      console.error('Failed to load plans', e);
+      setAvailablePlans([]);
+    } finally {
+      setPlansLoading(false);
+    }
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -96,6 +125,25 @@ export default function PurchasesPage() {
     };
 
     load();
+  }, []);
+
+  // Check plan (same approach as products page)
+  useEffect(() => {
+    const checkPlan = async () => {
+      try {
+        const res = await fetch('/api/subscription/current', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          const name = (data?.planName || '').toString();
+          setPlanName(name);
+        } else if (res.status === 404) {
+          setPlanName('Free');
+        }
+      } catch (e) {
+        console.error('Failed to check subscription', e);
+      }
+    };
+    checkPlan();
   }, []);
 
   // Load purchases list
@@ -193,19 +241,42 @@ export default function PurchasesPage() {
                 <p className="text-sm text-gray-500 mt-1">Record a client purchase and automatically award points</p>
               </div>
               <div className="flex items-center gap-2">
-                <Button
-                  onClick={() => setIsModalOpen(true)}
-                  className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium"
-                >
-                  <PlusIcon className="h-4 w-4 mr-2" />
-                  Record Purchase
-                </Button>
+                {isFree ? (
+                  <Button
+                    onClick={openPlansModal}
+                    className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium"
+                  >
+                    <PlusIcon className="h-4 w-4 mr-2" />
+                    Record Purchase
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => setIsModalOpen(true)}
+                    className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium"
+                  >
+                    <PlusIcon className="h-4 w-4 mr-2" />
+                    Record Purchase
+                  </Button>
+                )}
                 <Button asChild variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
                   <Link href="/doctor/products">Manage Products</Link>
                 </Button>
               </div>
             </div>
           </div>
+
+          {/* Free plan banner */}
+          {planName && planName.toLowerCase() === 'free' && (
+            <div className="mb-4 rounded-2xl px-4 py-4 text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] shadow-sm">
+              <p className="text-sm font-semibold">You're on the Free plan — access to the Purchases page is not included.</p>
+              <p className="text-xs mt-1 opacity-95">Upgrade to a paid plan to unlock this feature.</p>
+              <div className="mt-3">
+                <Button size="sm" variant="secondary" className="h-8 rounded-lg bg-white text-gray-800 hover:bg-gray-100" onClick={openPlansModal}>
+                  See plans
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Page-level errors */}
           {error && (
@@ -215,47 +286,64 @@ export default function PurchasesPage() {
           )}
 
           {/* Purchases Table */}
-          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <table className="min-w-full">
-              <thead className="bg-gray-50/80">
-                <tr className="text-left text-xs text-gray-600">
-                  <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Date & Time</th>
-                  <th className="px-3 py-3.5 font-medium">Client</th>
-                  <th className="px-3 py-3.5 font-medium">Product</th>
-                  <th className="px-3 py-3.5 font-medium">Qty</th>
-                  <th className="px-3 py-3.5 font-medium">Unit</th>
-                  <th className="px-3 py-3.5 font-medium">Total</th>
-                  <th className="px-3 py-3.5 font-medium">Points</th>
-                  <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Notes</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {isLoadingPurchases ? (
-                  <tr><td className="px-6 py-6 text-sm text-gray-500" colSpan={8}>Loading purchases...</td></tr>
-                ) : purchases.length === 0 ? (
-                  <tr><td className="px-6 py-6 text-sm text-gray-500" colSpan={8}>No purchases yet.</td></tr>
-                ) : (
-                  purchases.map((p) => {
-                    const d = new Date(p.createdAt);
-                    const fmt = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(d);
-                    const toNum = (v: any) => typeof v === 'number' ? v : Number(v);
-                    return (
-                      <tr key={p.id} className="hover:bg-gray-50/60">
-                        <td className="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm text-gray-900 sm:pl-6">{fmt}</td>
-                        <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-700">{p.user?.name || p.user?.email || '-'}</td>
-                        <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-700">{p.product?.name || '-'}</td>
-                        <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{p.quantity}</td>
-                        <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{formatPrice(toNum(p.unitPrice)) || '-'}</td>
-                        <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{formatPrice(toNum(p.totalPrice)) || '-'}</td>
-                        <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{toNum(p.pointsAwarded)} pts</td>
-                        <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm text-gray-600 sm:pr-6">{p.notes || '-'}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+          {isFree ? (
+            <div className="relative">
+              <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white/50 backdrop-blur-md shadow-sm min-h-56" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center px-4">
+                  <p className="text-sm font-semibold text-gray-800">Purchases are locked on the Free plan.</p>
+                  <p className="text-xs text-gray-600 mt-1">Upgrade to record and view purchases.</p>
+                  <div className="mt-3">
+                    <Button size="sm" className="h-8 bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white hover:opacity-90 rounded-lg" onClick={openPlansModal}>
+                      See plans
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <table className="min-w-full">
+                <thead className="bg-gray-50/80">
+                  <tr className="text-left text-xs text-gray-600">
+                    <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Date & Time</th>
+                    <th className="px-3 py-3.5 font-medium">Client</th>
+                    <th className="px-3 py-3.5 font-medium">Product</th>
+                    <th className="px-3 py-3.5 font-medium">Qty</th>
+                    <th className="px-3 py-3.5 font-medium">Unit</th>
+                    <th className="px-3 py-3.5 font-medium">Total</th>
+                    <th className="px-3 py-3.5 font-medium">Points</th>
+                    <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {isLoadingPurchases ? (
+                    <tr><td className="px-6 py-6 text-sm text-gray-500" colSpan={8}>Loading purchases...</td></tr>
+                  ) : purchases.length === 0 ? (
+                    <tr><td className="px-6 py-6 text-sm text-gray-500" colSpan={8}>No purchases yet.</td></tr>
+                  ) : (
+                    purchases.map((p) => {
+                      const d = new Date(p.createdAt);
+                      const fmt = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(d);
+                      const toNum = (v: any) => typeof v === 'number' ? v : Number(v);
+                      return (
+                        <tr key={p.id} className="hover:bg-gray-50/60">
+                          <td className="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm text-gray-900 sm:pl-6">{fmt}</td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-700">{p.user?.name || p.user?.email || '-'}</td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-700">{p.product?.name || '-'}</td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{p.quantity}</td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{formatPrice(toNum(p.unitPrice)) || '-'}</td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{formatPrice(toNum(p.totalPrice)) || '-'}</td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{toNum(p.pointsAwarded)} pts</td>
+                          <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm text-gray-600 sm:pr-6">{p.notes || '-'}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {purchasesError && (
             <div className="mt-3 rounded-xl border border-red-200 bg-red-50 text-red-800 px-4 py-2 text-sm">
@@ -376,6 +464,63 @@ export default function PurchasesPage() {
                   </Button>
                 </div>
               </form>
+            </DialogContent>
+          </Dialog>
+
+          {/* Plans Modal */}
+          <Dialog open={isPlansOpen} onOpenChange={setIsPlansOpen}>
+            <DialogContent className="sm:max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Choose a plan</DialogTitle>
+              </DialogHeader>
+              {plansLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[1,2].map(i => (
+                    <div key={i} className="rounded-2xl border border-gray-200 bg-white p-4">
+                      <div className="h-4 w-24 bg-gray-100 rounded animate-pulse mb-2" />
+                      <div className="h-3 w-40 bg-gray-100 rounded animate-pulse mb-4" />
+                      <div className="h-8 w-full bg-gray-100 rounded animate-pulse" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {availablePlans.map((plan: any) => {
+                    const isCurrent = planName && planName.toLowerCase() === plan.name?.toLowerCase();
+                    return (
+                      <div key={plan.id} className={`rounded-2xl border border-gray-200 bg-white shadow-sm ${isCurrent ? 'ring-2 ring-blue-500' : ''}`}>
+                        <div className="px-4 py-4 border-b border-gray-100 rounded-t-2xl">
+                          <div className="text-sm font-semibold text-gray-900">{plan.name}</div>
+                          <p className="text-xs text-gray-600">{plan.description}</p>
+                          <div className="mt-3">
+                            {plan.contactOnly || plan.price === null ? (
+                              <div>
+                                <div className="text-xl font-bold text-gray-900">Flexible billing</div>
+                                <div className="text-xs text-gray-600">Custom plans</div>
+                              </div>
+                            ) : (
+                              <div className="flex items-end gap-2">
+                                <div className="text-2xl font-bold text-gray-900">$ {plan.price}</div>
+                                <div className="text-xs text-gray-600 mb-1">per month</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="p-4">
+                          <Button className="w-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white hover:opacity-90">
+                            {isCurrent ? 'Current plan' : 'Upgrade'}
+                          </Button>
+                          <div className="mt-3 space-y-2">
+                            {plan.maxPatients != null && (
+                              <div className="text-xs text-gray-700">Up to {plan.maxPatients} clients</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </DialogContent>
           </Dialog>
         </div>

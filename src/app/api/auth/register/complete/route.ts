@@ -55,16 +55,29 @@ export async function POST(req: Request) {
       );
     }
 
-    // Buscar plano padrão para médicos
-    const defaultPlan = await prisma.subscriptionPlan.findFirst({
-      where: { isDefault: true }
+    // Buscar (ou criar) plano Free como padrão
+    let freePlan = await prisma.subscriptionPlan.findFirst({
+      where: { name: { equals: 'Free', mode: 'insensitive' } }
     });
 
-    if (!defaultPlan) {
-      return NextResponse.json(
-        { message: "Plano padrão não encontrado" },
-        { status: 500 }
-      );
+    if (!freePlan) {
+      freePlan = await prisma.subscriptionPlan.create({
+        data: {
+          name: 'Free',
+          description: 'Plano gratuito padrão para novos médicos',
+          price: 0,
+          billingCycle: 'MONTHLY',
+          maxDoctors: 1,
+          features: 'Auto-created by register complete API',
+          isActive: true,
+          maxPatients: 50,
+          maxProtocols: 10,
+          maxCourses: 5,
+          maxProducts: 100,
+          isDefault: true,
+          trialDays: 0,
+        }
+      });
     }
 
     // Hash da senha
@@ -95,22 +108,23 @@ export async function POST(req: Request) {
       }
     });
 
-    // Criar assinatura trial
+    // Criar assinatura Free (ativa e sem expiração)
     await prisma.unified_subscriptions.create({
       data: {
-        id: uuidv4(), // Gerando ID para a assinatura
+        id: uuidv4(),
         type: 'DOCTOR',
         subscriber_id: doctor.id,
-        plan_id: defaultPlan.id,
-        status: 'TRIAL',
+        plan_id: freePlan.id,
+        status: 'ACTIVE',
         start_date: new Date(),
-        trial_end_date: new Date(Date.now() + (defaultPlan.trialDays || 7) * 24 * 60 * 60 * 1000),
+        end_date: null,
+        trial_end_date: null,
         auto_renew: true
       }
     });
 
     return NextResponse.json({
-      message: "Cadastro concluído com sucesso. Seu período de trial de 7 dias foi ativado.",
+      message: "Cadastro concluído com sucesso. Plano Free ativado.",
       doctorId: doctor.id,
       clinicId: clinic.id
     });

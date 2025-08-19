@@ -81,6 +81,7 @@ export default function DoctorDashboard() {
     usersCount: 0
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [planName, setPlanName] = useState<string | null>(null);
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -186,6 +187,22 @@ export default function DoctorDashboard() {
     }
   }, [session]);
 
+  // Load subscription to detect Free plan
+  useEffect(() => {
+    const loadSubscription = async () => {
+      try {
+        const res = await fetch('/api/subscription/current');
+        if (res.ok) {
+          const data = await res.json();
+          setPlanName(data?.planName || null);
+        }
+      } catch (e) {
+        console.error('Error loading subscription status:', e);
+      }
+    };
+    loadSubscription();
+  }, [session]);
+
   const getPatientInitials = (name?: string) => {
     if (!name) return 'C';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -247,6 +264,19 @@ export default function DoctorDashboard() {
 
             </div>
           </div>
+
+          {/* Free plan banner */}
+          {planName && planName.toLowerCase() === 'free' && (
+            <div className="mb-4 rounded-2xl px-4 py-4 text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] shadow-sm">
+              <p className="text-sm font-semibold">You are on the Free plan — limited features.</p>
+              <p className="text-xs mt-1 opacity-95">Upgrade to unlock all features.</p>
+              <div className="mt-3">
+                <Link href="/doctor/purchases">
+                  <Button size="sm" variant="secondary" className="h-8 rounded-lg bg-white text-gray-800 hover:bg-gray-100">View plans</Button>
+                </Link>
+              </div>
+            </div>
+          )}
 
           {/* Stats (pill cards like KPIs) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-2">

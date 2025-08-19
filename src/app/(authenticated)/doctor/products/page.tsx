@@ -1,11 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { 
   PlusIcon,
   MagnifyingGlassIcon,
@@ -56,9 +54,29 @@ export default function ProductsPage() {
   const [isLoadingProduct, setIsLoadingProduct] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(6);
+  const [planName, setPlanName] = useState<string | null>(null);
+  const [isPlansOpen, setIsPlansOpen] = useState(false);
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [availablePlans, setAvailablePlans] = useState<any[]>([]);
 
   useEffect(() => {
-    loadProducts();
+    const checkPlanAndLoad = async () => {
+      try {
+        const res = await fetch('/api/subscription/current', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          const name = (data?.planName || '').toString();
+          setPlanName(name);
+        } else if (res.status === 404) {
+          setPlanName('Free');
+        }
+      } catch (e) {
+        console.error('Failed to check subscription', e);
+      } finally {
+        loadProducts();
+      }
+    };
+    checkPlanAndLoad();
   }, []);
 
   const loadProducts = async () => {
@@ -73,6 +91,28 @@ export default function ProductsPage() {
       console.error('Error loading products:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Open plans modal and fetch available plans (exclude Free)
+  const openPlansModal = async () => {
+    try {
+      setIsPlansOpen(true);
+      setPlansLoading(true);
+      const res = await fetch('/api/plans', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const plans = Array.isArray(data?.plans) ? data.plans : [];
+        const filtered = plans.filter((p: any) => p?.name?.toLowerCase() !== 'free');
+        setAvailablePlans(filtered);
+      } else {
+        setAvailablePlans([]);
+      }
+    } catch (e) {
+      console.error('Failed to load plans', e);
+      setAvailablePlans([]);
+    } finally {
+      setPlansLoading(false);
     }
   };
 
@@ -123,6 +163,8 @@ export default function ProductsPage() {
       year: 'numeric'
     }).format(new Date(date));
   };
+
+  const isFree = (planName || '').toLowerCase() === 'free';
 
   if (isLoading) {
     return (
@@ -190,19 +232,53 @@ export default function ProductsPage() {
                 <h1 className="text-[20px] font-semibold text-gray-900 tracking-[-0.01em]">Products</h1>
                 <p className="text-sm text-gray-500 mt-1">Manage products recommended in your protocols</p>
               </div>
-              <Button asChild className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium">
-                <Link href="/doctor/products/create">
+              {planName && planName.toLowerCase() === 'free' ? (
+                <Button onClick={openPlansModal} className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium">
                   <PlusIcon className="h-4 w-4 mr-2" />
                   New Product
-                </Link>
-              </Button>
+                </Button>
+              ) : (
+                <Button asChild className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium">
+                  <Link href="/doctor/products/create">
+                    <PlusIcon className="h-4 w-4 mr-2" />
+                    New Product
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
+
+          {planName && planName.toLowerCase() === 'free' && (
+            <div className="mb-4 rounded-2xl px-4 py-4 text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] shadow-sm">
+              <p className="text-sm font-semibold">You're on the Free plan — access to the Products page is not included.</p>
+              <p className="text-xs mt-1 opacity-95">Upgrade to a paid plan to unlock this feature.</p>
+              <div className="mt-3">
+                <Button size="sm" variant="secondary" className="h-8 rounded-lg bg-white text-gray-800 hover:bg-gray-100" onClick={openPlansModal}>
+                  See plans
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Toolbar rendered only when products exist */}
 
           {/* Products Table */}
-          {filteredProducts.length === 0 ? (
+          {isFree ? (
+            <div className="relative">
+              <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white/50 backdrop-blur-md shadow-sm min-h-56" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center px-4">
+                  <p className="text-sm font-semibold text-gray-800">Products list is locked on the Free plan.</p>
+                  <p className="text-xs text-gray-600 mt-1">Upgrade to view and manage your products.</p>
+                  <div className="mt-3">
+                    <Button size="sm" className="h-8 bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white hover:opacity-90 rounded-lg" onClick={openPlansModal}>
+                      See plans
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : filteredProducts.length === 0 ? (
             <div className="text-center py-12">
               <div className="mb-4">
                 <ShoppingBagIcon className="mx-auto h-12 w-12 text-gray-400" />
@@ -258,7 +334,7 @@ export default function ProductsPage() {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white/70 backdrop-blur-sm shadow-sm">
               <table className="min-w-full">
                 <thead className="bg-gray-50/80">
                   <tr className="text-left text-xs text-gray-600">
@@ -454,9 +530,9 @@ export default function ProductsPage() {
                     <div className="rounded-xl border border-gray-200 p-4 md:col-span-2">
                       <h4 className="text-sm font-semibold text-gray-900 mb-3">Protocolos associados</h4>
                       <p className="text-sm text-gray-700 mb-3">{selectedProduct._count?.protocolProducts || 0} protocolos</p>
-                      {selectedProduct.protocolProducts && selectedProduct.protocolProducts.length > 0 && (
+                      {(selectedProduct as any).protocolProducts && (selectedProduct as any).protocolProducts.length > 0 && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {selectedProduct.protocolProducts.map((pp) => (
+                          {(selectedProduct as any).protocolProducts.map((pp: any) => (
                             <div key={pp.protocol.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
                               <span className="text-sm font-medium text-gray-900">{pp.protocol.name}</span>
                               <Button variant="outline" size="sm" asChild className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-lg h-8 px-3">
@@ -517,8 +593,81 @@ export default function ProductsPage() {
               )}
             </DialogContent>
           </Dialog>
+
+          {/* Plans Modal */}
+          <Dialog open={isPlansOpen} onOpenChange={setIsPlansOpen}>
+            <DialogContent className="sm:max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Choose a plan</DialogTitle>
+                <DialogDescription>
+                  {planName ? (
+                    <span>You're currently on plan: <span className="font-medium">{planName}</span></span>
+                  ) : (
+                    <span>Select a plan that fits your clinic.</span>
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+              {plansLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[1,2].map(i => (
+                    <div key={i} className="rounded-2xl border border-gray-200 bg-white p-4">
+                      <div className="h-4 w-24 bg-gray-100 rounded animate-pulse mb-2" />
+                      <div className="h-3 w-40 bg-gray-100 rounded animate-pulse mb-4" />
+                      <div className="h-8 w-full bg-gray-100 rounded animate-pulse" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {availablePlans.map((plan: any) => {
+                    const isCurrent = planName && planName.toLowerCase() === plan.name?.toLowerCase();
+                    return (
+                      <div key={plan.id} className={`rounded-2xl border border-gray-200 bg-white shadow-sm ${isCurrent ? 'ring-2 ring-blue-500' : ''}`}>
+                        <div className="px-4 py-4 border-b border-gray-100 rounded-t-2xl">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="text-sm font-semibold text-gray-900">{plan.name}</div>
+                              <p className="text-xs text-gray-600">{plan.description}</p>
+                            </div>
+                            {isCurrent && (
+                              <Badge className="bg-blue-100 text-blue-700 border-blue-200">Current</Badge>
+                            )}
+                          </div>
+                          <div className="mt-3">
+                            {plan.contactOnly || plan.price === null ? (
+                              <div>
+                                <div className="text-xl font-bold text-gray-900">Flexible billing</div>
+                                <div className="text-xs text-gray-600">Custom plans</div>
+                              </div>
+                            ) : (
+                              <div className="flex items-end gap-2">
+                                <div className="text-2xl font-bold text-gray-900">$ {plan.price}</div>
+                                <div className="text-xs text-gray-600 mb-1">per month</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="p-4">
+                          <Button className="w-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white hover:opacity-90">
+                            {isCurrent ? 'Current plan' : 'Upgrade'}
+                          </Button>
+                          <div className="mt-3 space-y-2">
+                            {plan.maxPatients != null && (
+                              <div className="text-xs text-gray-700">Up to {plan.maxPatients} clients</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          
         </div>
       </div>
     </div>
   );
-} 
+}

@@ -119,7 +119,7 @@ export function useUserRole() {
 }
 
 // Hook para buscar informações do médico dos protocolos ativos
-function useDoctorInfo() {
+function useDoctorInfo(effectiveRole?: 'DOCTOR' | 'PATIENT' | 'SUPER_ADMIN' | null) {
   const [doctorInfo, setDoctorInfo] = useState<DoctorInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -127,6 +127,12 @@ function useDoctorInfo() {
 
   const fetchDoctorInfo = async (forceRefresh = false) => {
       if (!session?.user?.id) return;
+      // Only patients should call this endpoint. Avoid 403 on doctor/admin pages.
+      if (effectiveRole && effectiveRole !== 'PATIENT') {
+        setDoctorInfo(null);
+        setError(null);
+        return;
+      }
 
       try {
         setIsLoading(true);
@@ -164,7 +170,8 @@ function useDoctorInfo() {
 
   useEffect(() => {
     fetchDoctorInfo();
-  }, [session]);
+    // Re-run when role changes to start/stop fetching appropriately
+  }, [session, effectiveRole]);
 
   // Return refresh function along with state
   return { 
@@ -178,7 +185,6 @@ function useDoctorInfo() {
 export default function Navigation() {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const { doctorInfo } = useDoctorInfo();
   const { userRole, isLoadingRole } = useUserRole();
   
   // Estado para controlar hidratação e evitar erros de SSR
@@ -379,6 +385,8 @@ export default function Navigation() {
   };
   
   const effectiveRole = getEffectiveRole();
+  // Fetch patient-linked doctor info only for patients
+  const { doctorInfo } = useDoctorInfo(effectiveRole);
   
   // Determinar tema baseado no role do usuário e na URL
   // /doctor-info sempre usa tema escuro (paciente), mesmo que o usuário seja médico

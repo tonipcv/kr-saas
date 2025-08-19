@@ -14,7 +14,6 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is super admin
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       select: { role: true }
@@ -26,7 +25,6 @@ export async function GET(
 
     const { id: planId } = await params;
 
-    // Fetch the specific plan
     const plan = await prisma.subscriptionPlan.findUnique({
       where: { id: planId }
     });
@@ -53,7 +51,6 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is super admin
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       select: { role: true }
@@ -73,15 +70,17 @@ export async function PUT(
       maxCourses,
       maxProducts,
       trialDays,
-      isDefault
+      isDefault,
+      referralsMonthlyLimit,
+      maxRewards,
+      allowCreditPerPurchase,
+      allowCampaigns
     } = await request.json();
 
-    // Validate required fields
     if (!name || !description || price === undefined) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // If setting as default, remove default from other plans
     if (isDefault) {
       await prisma.subscriptionPlan.updateMany({
         where: { isDefault: true },
@@ -89,7 +88,6 @@ export async function PUT(
       });
     }
 
-    // Update the plan
     const updatedPlan = await prisma.subscriptionPlan.update({
       where: { id: planId },
       data: {
@@ -101,7 +99,11 @@ export async function PUT(
         maxCourses: parseInt(maxCourses) || 999999,
         maxProducts: parseInt(maxProducts) || 999999,
         trialDays: parseInt(trialDays) || null,
-        isDefault
+        isDefault,
+        referralsMonthlyLimit: referralsMonthlyLimit !== undefined && referralsMonthlyLimit !== null ? parseInt(referralsMonthlyLimit) : null,
+        maxRewards: maxRewards !== undefined && maxRewards !== null ? parseInt(maxRewards) : null,
+        allowCreditPerPurchase: Boolean(allowCreditPerPurchase),
+        allowCampaigns: Boolean(allowCampaigns)
       }
     });
 
@@ -110,4 +112,38 @@ export async function PUT(
     console.error('Error updating plan:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-} 
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { role: true }
+    });
+
+    if (user?.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    const { id: planId } = await params;
+
+    const updated = await prisma.subscriptionPlan.update({
+      where: { id: planId },
+      data: { isActive: false }
+    });
+
+    return NextResponse.json({ success: true, plan: updated });
+  } catch (error) {
+    console.error('Error deleting plan:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}

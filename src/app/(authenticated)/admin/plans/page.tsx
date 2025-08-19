@@ -27,6 +27,10 @@ interface SubscriptionPlan {
   isDefault: boolean;
   createdAt: string;
   updatedAt: string;
+  referralsMonthlyLimit?: number | null;
+  maxRewards?: number | null;
+  allowCreditPerPurchase?: boolean | null;
+  allowCampaigns?: boolean | null;
 }
 
 export default function PlansPage() {
@@ -49,6 +53,10 @@ export default function PlansPage() {
     maxProducts: 50,
     trialDays: 0,
     isDefault: false,
+    referralsMonthlyLimit: 0,
+    maxRewards: 0,
+    allowCreditPerPurchase: false,
+    allowCampaigns: false,
   });
 
   // edit plan form state
@@ -63,6 +71,10 @@ export default function PlansPage() {
     maxProducts: 50,
     trialDays: 0,
     isDefault: false,
+    referralsMonthlyLimit: 0,
+    maxRewards: 0,
+    allowCreditPerPurchase: false,
+    allowCampaigns: false,
   });
 
   useEffect(() => {
@@ -87,6 +99,23 @@ export default function PlansPage() {
     }
   }, [session]);
 
+  const deletePlan = async (planId: string) => {
+    const ok = window.confirm('Are you sure you want to delete this plan? This will deactivate it.');
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/admin/plans/${planId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete plan');
+      // reload list
+      const response = await fetch('/api/admin/plans');
+      if (response.ok) {
+        const data = await response.json();
+        setPlans(data.plans || []);
+      }
+    } catch (error) {
+      console.error('Error deleting plan:', error);
+    }
+  };
+
   const openEdit = (plan: SubscriptionPlan) => {
     setSelectedPlan(plan);
     setEditForm({
@@ -99,6 +128,10 @@ export default function PlansPage() {
       maxProducts: plan.maxProducts,
       trialDays: plan.trialDays || 0,
       isDefault: plan.isDefault,
+      referralsMonthlyLimit: plan.referralsMonthlyLimit ?? 0,
+      maxRewards: plan.maxRewards ?? 0,
+      allowCreditPerPurchase: !!plan.allowCreditPerPurchase,
+      allowCampaigns: !!plan.allowCampaigns,
     });
     setEditOpen(true);
   };
@@ -121,6 +154,10 @@ export default function PlansPage() {
           maxProducts: Number(editForm.maxProducts),
           trialDays: Number(editForm.trialDays) || 0,
           isDefault: Boolean(editForm.isDefault),
+          referralsMonthlyLimit: Number(editForm.referralsMonthlyLimit) || 0,
+          maxRewards: Number(editForm.maxRewards) || 0,
+          allowCreditPerPurchase: Boolean(editForm.allowCreditPerPurchase),
+          allowCampaigns: Boolean(editForm.allowCampaigns),
         }),
       });
       if (!res.ok) throw new Error('Failed to update plan');
@@ -157,6 +194,10 @@ export default function PlansPage() {
           maxProducts: Number(form.maxProducts),
           trialDays: Number(form.trialDays) || 0,
           isDefault: Boolean(form.isDefault),
+          referralsMonthlyLimit: Number(form.referralsMonthlyLimit) || 0,
+          maxRewards: Number(form.maxRewards) || 0,
+          allowCreditPerPurchase: Boolean(form.allowCreditPerPurchase),
+          allowCampaigns: Boolean(form.allowCampaigns),
         }),
       });
       if (!res.ok) throw new Error('Failed to create plan');
@@ -170,6 +211,7 @@ export default function PlansPage() {
       setOpen(false);
       setForm({
         name: '', description: '', price: 0, maxPatients: 100, maxProtocols: 100, maxCourses: 50, maxProducts: 50, trialDays: 0, isDefault: false,
+        referralsMonthlyLimit: 0, maxRewards: 0, allowCreditPerPurchase: false, allowCampaigns: false,
       });
     } catch (err) {
       console.error(err);
@@ -303,9 +345,27 @@ export default function PlansPage() {
                           <label className="block text-sm font-medium text-gray-700">Max products</label>
                           <input type="number" min="1" step="1" value={form.maxProducts} onChange={(e) => setForm({ ...form, maxProducts: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
                         </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Referrals per month</label>
+                          <input type="number" min="0" step="1" value={form.referralsMonthlyLimit} onChange={(e) => setForm({ ...form, referralsMonthlyLimit: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Max rewards</label>
+                          <input type="number" min="0" step="1" value={form.maxRewards} onChange={(e) => setForm({ ...form, maxRewards: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                        </div>
                         <div className="sm:col-span-2 flex items-center gap-2 pt-1">
                           <input id="isDefault" type="checkbox" checked={form.isDefault} onChange={(e) => setForm({ ...form, isDefault: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
                           <label htmlFor="isDefault" className="text-sm text-gray-700">Mark as default plan</label>
+                        </div>
+                        <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                            <input type="checkbox" checked={form.allowCreditPerPurchase} onChange={(e) => setForm({ ...form, allowCreditPerPurchase: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
+                            Allow credit per purchase
+                          </label>
+                          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                            <input type="checkbox" checked={form.allowCampaigns} onChange={(e) => setForm({ ...form, allowCampaigns: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
+                            Allow campaigns access
+                          </label>
                         </div>
                       </div>
                       <DialogFooter>
@@ -404,9 +464,19 @@ export default function PlansPage() {
                           <td className="px-3 py-3.5 text-sm text-gray-600">
                             <div className="flex flex-wrap gap-x-4 gap-y-1">
                               <span>{plan.maxPatients === 999999 ? 'Unlimited' : plan.maxPatients} patients</span>
-                              <span>{plan.maxProtocols === 999999 ? 'Unlimited' : plan.maxProtocols} protocols</span>
-                              <span>{plan.maxCourses === 999999 ? 'Unlimited' : plan.maxCourses} courses</span>
                               <span>{plan.maxProducts === 999999 ? 'Unlimited' : plan.maxProducts} products</span>
+                              {typeof plan.referralsMonthlyLimit === 'number' && (
+                                <span>{plan.referralsMonthlyLimit} referrals/mo</span>
+                              )}
+                              {typeof plan.maxRewards === 'number' && (
+                                <span>{plan.maxRewards} rewards</span>
+                              )}
+                              {plan.allowCreditPerPurchase ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-white text-green-700 ring-1 ring-inset ring-green-200">Credit per purchase</span>
+                              ) : null}
+                              {plan.allowCampaigns ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-white text-blue-700 ring-1 ring-inset ring-blue-200">Campaigns access</span>
+                              ) : null}
                             </div>
                           </td>
                           <td className="whitespace-nowrap px-3 py-3.5 text-sm">
@@ -420,7 +490,10 @@ export default function PlansPage() {
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-white text-gray-700 ring-1 ring-inset ring-gray-200">{plan.isDefault ? 'Default' : 'Premium'}</span>
                           </td>
                           <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                            <button onClick={() => openEdit(plan)} className="inline-flex h-8 items-center rounded-full border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50">Edit</button>
+                            <div className="flex items-center justify-end gap-2">
+                              <button onClick={() => openEdit(plan)} className="inline-flex h-8 items-center rounded-full border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50">Edit</button>
+                              <button onClick={() => deletePlan(plan.id)} className="inline-flex h-8 items-center rounded-full border border-red-200 bg-white px-3 text-xs font-medium text-red-700 hover:bg-red-50">Delete</button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -478,9 +551,27 @@ export default function PlansPage() {
                   <label className="block text-sm font-medium text-gray-700">Max products</label>
                   <input type="number" min="1" step="1" value={editForm.maxProducts} onChange={(e) => setEditForm({ ...editForm, maxProducts: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Referrals per month</label>
+                  <input type="number" min="0" step="1" value={editForm.referralsMonthlyLimit} onChange={(e) => setEditForm({ ...editForm, referralsMonthlyLimit: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Max rewards</label>
+                  <input type="number" min="0" step="1" value={editForm.maxRewards} onChange={(e) => setEditForm({ ...editForm, maxRewards: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                </div>
                 <div className="sm:col-span-2 flex items-center gap-2 pt-1">
                   <input id="editIsDefault" type="checkbox" checked={editForm.isDefault} onChange={(e) => setEditForm({ ...editForm, isDefault: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
                   <label htmlFor="editIsDefault" className="text-sm text-gray-700">Mark as default plan</label>
+                </div>
+                <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={editForm.allowCreditPerPurchase} onChange={(e) => setEditForm({ ...editForm, allowCreditPerPurchase: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
+                    Allow credit per purchase
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={editForm.allowCampaigns} onChange={(e) => setEditForm({ ...editForm, allowCampaigns: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
+                    Allow campaigns access
+                  </label>
                 </div>
               </div>
               <DialogFooter>

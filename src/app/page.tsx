@@ -49,8 +49,8 @@ export default function Home() {
             console.log('Redirecting to admin dashboard');
             router.push('/admin');
           } else if (data.role === 'DOCTOR') {
-            console.log('Redirecting to doctor referrals');
-            router.push('/doctor/referrals');
+            console.log('Redirecting to doctor dashboard');
+            router.push('/doctor/dashboard');
           } else {
             console.log('Redirecting to patient referrals');
             // Use replace instead of push to avoid browser history issues

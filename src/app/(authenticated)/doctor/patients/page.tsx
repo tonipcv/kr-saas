@@ -36,6 +36,7 @@ import { enUS } from 'date-fns/locale';
 import { cn } from "@/lib/utils";
 import { toast } from 'react-hot-toast';
  
+import { useSubscription } from '@/hooks/useSubscription';
 
 interface Patient {
   id: string;
@@ -112,6 +113,9 @@ export default function PatientsPage() {
   const [showOptionalFields, setShowOptionalFields] = useState(false);
   const [balances, setBalances] = useState<Record<string, number>>({});
   
+  // Subscription status for gating
+  const { subscriptionStatus, loading: subLoading, checkLimit } = useSubscription();
+
   const [newPatient, setNewPatient] = useState<NewPatientForm>({
     name: '',
     email: '',
@@ -693,7 +697,15 @@ export default function PatientsPage() {
                 <Button
                   variant="outline"
                   className="rounded-xl h-9 px-3 border-gray-200 text-gray-700 hover:bg-gray-50"
-                  onClick={() => { resetCsvImport(); setShowImportModal(true); }}
+                  onClick={async () => {
+                    const res = await checkLimit('patients');
+                    if (!res.allowed) {
+                      toast.error(res.message || 'Upgrade required to import more clients');
+                      return;
+                    }
+                    resetCsvImport();
+                    setShowImportModal(true);
+                  }}
                   disabled={isImporting}
                   title="Import clients from CSV"
                 >
@@ -702,7 +714,12 @@ export default function PatientsPage() {
                 </Button>
                 <Button
                   className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium"
-                  onClick={() => {
+                  onClick={async () => {
+                    const res = await checkLimit('patients');
+                    if (!res.allowed) {
+                      toast.error(res.message || 'Upgrade required to add more clients');
+                      return;
+                    }
                     resetForm();
                     setShowAddPatient(true);
                   }}
@@ -712,6 +729,19 @@ export default function PatientsPage() {
                 </Button>
               </div>
             </div>
+
+            {/* Free plan banner – match Products page style (English copy) */}
+            {!subLoading && (!subscriptionStatus || (subscriptionStatus.planName || '').toLowerCase().includes('free')) && (
+              <div className="mt-4 mb-1 rounded-2xl px-4 py-4 text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] shadow-sm">
+                <p className="text-sm font-semibold">You're on the Free plan — you can have up to {(subscriptionStatus?.limits?.maxPatients) ?? 10} clients.</p>
+                <p className="text-xs mt-1 opacity-95">Upgrade to unlock all features.</p>
+                <div className="mt-3">
+                  <Button size="sm" variant="secondary" className="h-8 rounded-lg bg-white text-gray-800 hover:bg-gray-100" onClick={() => toast('Plans modal coming soon')}>
+                    See plans
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Top pill tabs */}
             <div className="mt-3 flex items-center gap-2">
@@ -729,6 +759,8 @@ export default function PatientsPage() {
               ))}
             </div>
           </div>
+
+          
 
           {isLoading ? (
             <div className="text-center py-12">

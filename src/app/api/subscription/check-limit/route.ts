@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { canAddPatient, canCreateProtocol, canCreateCourse, canCreateProduct } from '@/lib/subscription';
+import { canAddPatient, canCreateProtocol, canCreateCourse, canCreateProduct, canCreateReferral, canCreateReward, hasAccessPurchaseCredits, hasAccessCampaigns } from '@/lib/subscription';
 
 export async function GET(request: NextRequest) {
   try {
@@ -38,6 +38,18 @@ export async function GET(request: NextRequest) {
         break;
       case 'products':
         result = await canCreateProduct(session.user.id);
+        break;
+      case 'referrals':
+        result = await canCreateReferral(session.user.id);
+        break;
+      case 'rewards':
+        result = await canCreateReward(session.user.id);
+        break;
+      case 'purchase-credits':
+        result = await hasAccessPurchaseCredits(session.user.id);
+        break;
+      case 'campaigns':
+        result = await hasAccessCampaigns(session.user.id);
         break;
       default:
         return NextResponse.json(

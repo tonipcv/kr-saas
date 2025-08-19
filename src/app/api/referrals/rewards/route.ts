@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { canCreateReward } from '@/lib/subscription';
 
 // GET - Listar recompensas do médico
 export async function GET(req: Request) {
@@ -98,6 +99,15 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: 'Créditos necessários deve ser maior que 0' },
         { status: 400 }
+      );
+    }
+
+    // Enforce plan limit for creating rewards
+    const limitCheck = await canCreateReward(session.user.id);
+    if (!limitCheck.allowed) {
+      return NextResponse.json(
+        { error: limitCheck.message || 'Seu plano não permite criar mais rewards' },
+        { status: 403 }
       );
     }
 

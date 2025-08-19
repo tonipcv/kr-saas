@@ -21,42 +21,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Fetch all clinics with related data
+    // Fetch all clinics with related data (without legacy subscription relation)
     const clinics = await prisma.clinic.findMany({
       include: {
         owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
+          select: { id: true, name: true, email: true }
         },
         members: {
           include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true
-              }
-            }
-          }
-        },
-        subscription: {
-          include: {
-            plan: {
-              select: {
-                id: true,
-                name: true,
-                price: true
-              }
-            }
+            user: { select: { id: true, name: true, email: true } }
           }
         }
       },
-      orderBy: {
-        createdAt: 'desc'
-      }
+      orderBy: { createdAt: 'desc' }
     });
 
     return NextResponse.json({ 
@@ -151,7 +128,7 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Create subscription if plan is selected
+    // Create subscription if plan is selected (unified_subscriptions)
     if (planId) {
       const plan = await prisma.subscriptionPlan.findUnique({
         where: { id: planId }
@@ -159,57 +136,33 @@ export async function POST(request: NextRequest) {
 
       if (plan) {
         const now = new Date();
-        const subscriptionData: any = {
-          clinicId: clinic.id,
-          planId: plan.id,
-          status: subscriptionStatus || 'TRIAL',
-          maxDoctors: plan.maxDoctors,
-          startDate: now
-        };
-
-        // Set trial end date if status is TRIAL
-        if (subscriptionStatus === 'TRIAL') {
-          const trialDays = plan.trialDays || 7;
-          subscriptionData.trialEndDate = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
-        }
-
-        await prisma.clinicSubscription.create({
-          data: subscriptionData
+        const isTrial = (subscriptionStatus || 'TRIAL') === 'TRIAL';
+        const trialDays = plan.trialDays || 7;
+        await prisma.unified_subscriptions.create({
+          data: {
+            id: `${clinic.id}-${now.getTime()}`,
+            type: 'CLINIC',
+            subscriber_id: clinic.id,
+            plan_id: plan.id,
+            status: subscriptionStatus || 'TRIAL',
+            max_doctors: plan.maxDoctors,
+            start_date: now,
+            trial_end_date: isTrial ? new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000) : null
+          }
         });
       }
     }
 
-    // Fetch the created clinic with all related data
+    // Fetch the created clinic with all related data (without legacy subscription relation)
     const createdClinic = await prisma.clinic.findUnique({
       where: { id: clinic.id },
       include: {
         owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
+          select: { id: true, name: true, email: true }
         },
         members: {
           include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true
-              }
-            }
-          }
-        },
-        subscription: {
-          include: {
-            plan: {
-              select: {
-                id: true,
-                name: true,
-                price: true
-              }
-            }
+            user: { select: { id: true, name: true, email: true } }
           }
         }
       }

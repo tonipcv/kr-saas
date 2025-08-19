@@ -82,29 +82,10 @@ export async function DELETE(
 
     const { id: doctorId } = await context.params;
 
-    // Check if doctor exists
+    // Check if doctor exists (no heavy includes; field names in schema differ)
     const existingDoctor = await prisma.user.findUnique({
       where: { id: doctorId },
-      include: {
-        subscription: true,
-        patients: true,
-        createdProtocols: true,
-        createdCourses: true,
-        createdProducts: true,
-        doctorFAQs: true,
-        doctorConversations: true,
-        consultationForm: true,
-        formSettings: true,
-        leads: true,
-        credits: true,
-        offeredRewards: true,
-        redemptions: true,
-        subscriptions: true,
-        assignedCourses: true,
-        lessonProgress: true,
-        symptomReports: true,
-        reviewedSymptomReports: true
-      }
+      select: { id: true }
     });
 
     if (!existingDoctor) {
@@ -113,18 +94,22 @@ export async function DELETE(
 
     // Delete doctor and all related data in a transaction
     await prisma.$transaction([
-      // Delete doctor's subscription
-      prisma.doctorSubscription.deleteMany({
-        where: { doctorId }
+      // Delete clinics owned by the doctor (prevents clinics_ownerId_fkey error)
+      prisma.clinic.deleteMany({
+        where: { ownerId: doctorId }
+      }),
+      // Delete doctor's services
+      prisma.doctorService.deleteMany({
+        where: { doctor_id: doctorId }
       }),
       // Delete doctor's patients
       prisma.user.updateMany({
-        where: { doctorId },
-        data: { doctorId: null }
+        where: { doctor_id: doctorId },
+        data: { doctor_id: null }
       }),
       // Delete doctor's protocols
       prisma.protocol.deleteMany({
-        where: { doctorId }
+        where: { doctor_id: doctorId }
       }),
       // Delete doctor's courses
       prisma.course.deleteMany({
@@ -170,10 +155,7 @@ export async function DELETE(
       prisma.rewardRedemption.deleteMany({
         where: { userId: doctorId }
       }),
-      // Delete doctor's subscriptions
-      prisma.subscriptions.deleteMany({
-        where: { userId: doctorId }
-      }),
+      // unified_subscriptions are tied to clinics; no direct user subscription model to delete here
       // Delete doctor's assigned courses
       prisma.userCourse.deleteMany({
         where: { userId: doctorId }
@@ -198,7 +180,8 @@ export async function DELETE(
 
     return NextResponse.json({ message: 'Doctor deleted successfully' });
   } catch (error) {
-    console.error('Error deleting doctor:', error);
+    const safeError = error instanceof Error ? { message: error.message, stack: error.stack } : { error };
+    console.error('Error deleting doctor:', safeError);
     return NextResponse.json(
       { error: 'Error deleting doctor' },
       { status: 500 }

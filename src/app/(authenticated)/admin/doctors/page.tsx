@@ -32,6 +32,8 @@ import { toast } from 'sonner';
 
 interface DoctorSubscription {
   status: string;
+  startDate?: string | null;
+  endDate?: string | null;
   trialEndDate?: string;
   plan?: {
     name: string;
@@ -132,6 +134,14 @@ export default function DoctorsPage() {
       case 'EXPIRED': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  // Format ISO date string to locale date or '-' if invalid/empty
+  const formatDate = (iso?: string | null) => {
+    if (!iso) return '-';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '-';
+    return d.toLocaleDateString();
   };
 
   const openView = (doctor: Doctor) => {
@@ -468,15 +478,24 @@ export default function DoctorsPage() {
                             <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{doctor.patientCount}</td>
                             <td className="whitespace-nowrap px-3 py-3.5 text-sm">
                               {subscription ? (
-                                <div className="flex items-center gap-2">
-                                  {subscription.status === 'ACTIVE' ? (
-                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Active</span>
-                                  ) : (
-                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200">Trial</span>
-                                  )}
-                                  {isExpiringSoon && (
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-50 text-red-700 ring-1 ring-inset ring-red-200">Expiring soon</span>
-                                  )}
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    {subscription.status === 'ACTIVE' ? (
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Active</span>
+                                    ) : (
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200">Trial</span>
+                                    )}
+                                    {isExpiringSoon && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-50 text-red-700 ring-1 ring-inset ring-red-200">Expiring soon</span>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-gray-600">
+                                    <div>Plan: <span className="font-medium text-gray-800">{subscription.plan?.name || '-'}</span></div>
+                                    <div className="flex gap-4">
+                                      <span>Start: <span className="font-medium text-gray-800">{formatDate(subscription.startDate)}</span></span>
+                                      <span>Expires: <span className="font-medium text-gray-800">{formatDate(subscription.trialEndDate || subscription.endDate)}</span></span>
+                                    </div>
+                                  </div>
                                 </div>
                               ) : (
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">No Subscription</span>

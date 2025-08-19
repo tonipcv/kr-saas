@@ -41,14 +41,15 @@ export async function GET(request: NextRequest) {
       prisma.course.count(),
       prisma.products.count(),
       prisma.clinic.count(),
-      prisma.doctorSubscription.count({ where: { status: 'ACTIVE' } }),
-      prisma.doctorSubscription.count({ where: { status: 'TRIAL' } }),
-      prisma.clinicSubscription.count({ where: { status: 'ACTIVE' } }),
-      prisma.clinicSubscription.count({ where: { status: 'TRIAL' } }),
-      prisma.doctorSubscription.count({
+      prisma.unified_subscriptions.count({ where: { type: 'DOCTOR', status: 'ACTIVE' } }),
+      prisma.unified_subscriptions.count({ where: { type: 'DOCTOR', status: 'TRIAL' } }),
+      prisma.unified_subscriptions.count({ where: { type: 'CLINIC', status: 'ACTIVE' } }),
+      prisma.unified_subscriptions.count({ where: { type: 'CLINIC', status: 'TRIAL' } }),
+      prisma.unified_subscriptions.count({
         where: {
+          type: 'DOCTOR',
           status: 'TRIAL',
-          trialEndDate: {
+          trial_end_date: {
             lte: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) // 3 days
           }
         }
@@ -63,28 +64,29 @@ export async function GET(request: NextRequest) {
         name: true,
         email: true
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { created_at: 'desc' },
       take: 5
     });
 
-    // Fetch subscriptions for recent doctors
-    const doctorSubscriptions = await prisma.doctorSubscription.findMany({
+    // Fetch subscriptions for recent doctors from unified_subscriptions
+    const doctorSubscriptions = await prisma.unified_subscriptions.findMany({
       where: {
-        doctorId: { in: recentDoctors.map(d => d.id) }
+        type: 'DOCTOR',
+        subscriber_id: { in: recentDoctors.map(d => d.id) }
       },
       include: {
-        plan: { select: { name: true } }
+        subscription_plans: { select: { name: true } }
       }
     });
 
     // Combine doctor data with their subscriptions
     const recentDoctorsWithSubscriptions = recentDoctors.map(doctor => {
-      const subscription = doctorSubscriptions.find(s => s.doctorId === doctor.id);
+      const subscription = doctorSubscriptions.find(s => s.subscriber_id === doctor.id);
       return {
         ...doctor,
         subscription: subscription ? {
           status: subscription.status,
-          plan: subscription.plan
+          plan: subscription.subscription_plans
         } : undefined
       };
     });

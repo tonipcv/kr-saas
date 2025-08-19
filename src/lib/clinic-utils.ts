@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { getClinicSubscriptionStatus } from '@/lib/subscription';
 
 // ========== TIPOS ==========
 export interface ClinicWithDetails {
@@ -34,11 +35,14 @@ export interface ClinicWithDetails {
     maxDoctors: number;
     startDate: Date;
     endDate: Date | null;
+    trialEndDate?: Date | null;
     plan: {
       name: string;
       maxPatients: number | null;
       maxProtocols: number | null;
       maxCourses: number | null;
+      maxProducts: number | null;
+      price?: number | null;
     };
   } | null;
 }
@@ -63,8 +67,8 @@ export interface ClinicData {
  * Buscar clínica do usuário (como owner ou membro)
  */
 export async function getUserClinic(userId: string): Promise<ClinicWithDetails | null> {
-  // Primeiro, verificar se é owner de alguma clínica
-  let clinic = await prisma.clinic.findFirst({
+  // Buscar clínica do usuário (owner)
+  let baseClinic = await prisma.clinic.findFirst({
     where: { ownerId: userId },
     select: {
       id: true,
@@ -76,71 +80,74 @@ export async function getUserClinic(userId: string): Promise<ClinicWithDetails |
       isActive: true,
       createdAt: true,
       updatedAt: true,
-      owner: {
-        select: { id: true, name: true, email: true }
-      },
+      owner: { select: { id: true, name: true, email: true } },
       members: {
-        include: {
-          user: {
-            select: { id: true, name: true, email: true, role: true }
-          }
-        }
-      },
-      subscription: {
-        include: {
-          plan: {
-            select: { name: true, maxPatients: true, maxProtocols: true, maxCourses: true }
-          }
-        }
+        include: { user: { select: { id: true, name: true, email: true, role: true } } }
       }
     }
   });
 
   // Se não é owner, verificar se é membro
-  if (!clinic) {
+  if (!baseClinic) {
     const membership = await prisma.clinicMember.findFirst({
-      where: { 
-        userId: userId,
-        isActive: true 
-      },
-      include: {
-        clinic: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            logo: true,
-            slug: true,
-            ownerId: true,
-            isActive: true,
-            createdAt: true,
-            updatedAt: true,
-            owner: {
-              select: { id: true, name: true, email: true }
-            },
-            members: {
-              include: {
-                user: {
-                  select: { id: true, name: true, email: true, role: true }
-                }
-              }
-            },
-            subscription: {
-              include: {
-                plan: {
-                  select: { name: true, maxPatients: true, maxProtocols: true, maxCourses: true }
-                }
-              }
-            }
+      where: { userId, isActive: true },
+      select: { clinicId: true }
+    });
+    if (membership) {
+      baseClinic = await prisma.clinic.findUnique({
+        where: { id: membership.clinicId },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          logo: true,
+          slug: true,
+          ownerId: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          owner: { select: { id: true, name: true, email: true } },
+          members: {
+            include: { user: { select: { id: true, name: true, email: true, role: true } } }
           }
         }
-      }
-    });
-
-    clinic = membership?.clinic || null;
+      });
+    }
   }
 
-  return clinic;
+  if (!baseClinic) return null;
+
+  // Buscar a subscription unificada mais recente (ACTIVE ou TRIAL)
+  const sub = await prisma.unified_subscriptions.findFirst({
+    where: {
+      type: 'CLINIC',
+      subscriber_id: baseClinic.id,
+      status: { in: ['ACTIVE', 'TRIAL'] }
+    },
+    include: { subscription_plans: true },
+    orderBy: { created_at: 'desc' }
+  });
+
+  const subscription = sub
+    ? {
+        id: sub.id,
+        status: sub.status,
+        maxDoctors: sub.max_doctors ?? sub.subscription_plans.maxDoctors,
+        startDate: sub.start_date,
+        endDate: sub.end_date ?? null,
+        trialEndDate: sub.trial_end_date ?? null,
+        plan: {
+          name: sub.subscription_plans.name,
+          maxPatients: sub.subscription_plans.maxPatients ?? null,
+          maxProtocols: sub.subscription_plans.maxProtocols ?? null,
+          maxCourses: sub.subscription_plans.maxCourses ?? null,
+          maxProducts: sub.subscription_plans.maxProducts ?? null,
+          price: sub.subscription_plans.price ?? null
+        }
+      }
+    : null;
+
+  return { ...baseClinic, subscription } as ClinicWithDetails;
 }
 
 /**
@@ -149,36 +156,34 @@ export async function getUserClinic(userId: string): Promise<ClinicWithDetails |
 export async function canAddDoctorToClinic(clinicId: string): Promise<boolean> {
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
-    include: {
-      subscription: true,
-      members: {
-        where: { isActive: true }
-      }
-    }
+    include: { members: { where: { isActive: true } } }
   });
+  if (!clinic) return false;
 
-  if (!clinic?.subscription) return false;
+  const sub = await prisma.unified_subscriptions.findFirst({
+    where: { type: 'CLINIC', subscriber_id: clinicId, status: { in: ['ACTIVE', 'TRIAL'] } },
+    include: { subscription_plans: true },
+    orderBy: { created_at: 'desc' }
+  });
+  if (!sub) return false;
 
+  const limit = sub.max_doctors ?? sub.subscription_plans.maxDoctors;
   const currentDoctors = clinic.members.length;
-  return currentDoctors < clinic.subscription.maxDoctors;
+  return currentDoctors < limit;
 }
 
 /**
  * Verificar se usuário pode criar mais protocolos
  */
 export async function canCreateProtocol(userId: string): Promise<boolean> {
+  const status = await getClinicSubscriptionStatus(userId);
+  if (!status || !status.isActive) return false;
+
   const clinic = await getUserClinic(userId);
-  if (!clinic?.subscription) return false;
-
-  // Contar protocolos criados por qualquer membro da clínica
+  if (!clinic) return false;
   const memberIds = clinic.members.map(m => m.user.id);
-  const protocolCount = await prisma.protocol.count({
-    where: {
-      doctorId: { in: memberIds }
-    }
-  });
-
-  const maxProtocols = clinic.subscription.plan.maxProtocols ?? 0;
+  const protocolCount = await prisma.protocol.count({ where: { doctorId: { in: memberIds } } });
+  const maxProtocols = status.limits.maxProtocols ?? 0;
   return protocolCount < maxProtocols;
 }
 
@@ -186,19 +191,16 @@ export async function canCreateProtocol(userId: string): Promise<boolean> {
  * Verificar se usuário pode adicionar mais pacientes
  */
 export async function canAddPatient(userId: string): Promise<boolean> {
-  const clinic = await getUserClinic(userId);
-  if (!clinic?.subscription) return false;
+  const status = await getClinicSubscriptionStatus(userId);
+  if (!status || !status.isActive) return false;
 
-  // Contar pacientes de todos os membros da clínica
+  const clinic = await getUserClinic(userId);
+  if (!clinic) return false;
   const memberIds = clinic.members.map(m => m.user.id);
   const patientCount = await prisma.user.count({
-    where: {
-      role: 'PATIENT',
-      doctorId: { in: memberIds }
-    }
+    where: { role: 'PATIENT', doctorId: { in: memberIds } }
   });
-
-  const maxPatients = clinic.subscription.plan.maxPatients ?? 0;
+  const maxPatients = status.limits.maxPatients ?? 0;
   return patientCount < maxPatients;
 }
 
@@ -382,16 +384,18 @@ export async function ensureDoctorHasClinic(doctorId: string): Promise<{ success
       }
     });
 
-    // Criar subscription trial para a clínica
+    // Criar subscription trial para a clínica (unified_subscriptions)
     const now = new Date();
     const trialDays = defaultPlan.trialDays ?? 30; // Default to 30 days if null
-    await prisma.clinicSubscription.create({
+    await prisma.unified_subscriptions.create({
       data: {
-        clinicId: clinic.id,
-        planId: defaultPlan.id,
+        id: `${clinic.id}-trial`,
+        type: 'CLINIC',
+        subscriber_id: clinic.id,
+        plan_id: defaultPlan.id,
         status: 'TRIAL',
-        maxDoctors: 3,
-        trialEndDate: new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000)
+        max_doctors: 3,
+        trial_end_date: new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000)
       }
     });
 
