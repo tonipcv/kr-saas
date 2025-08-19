@@ -82,6 +82,8 @@ export default function DoctorDashboard() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [planName, setPlanName] = useState<string | null>(null);
+  const [doctorSlug, setDoctorSlug] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -187,6 +189,37 @@ export default function DoctorDashboard() {
     }
   }, [session]);
 
+  // Load doctor slug for public link
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const res = await fetch('/api/profile');
+        if (res.ok) {
+          const data = await res.json();
+          setDoctorSlug(data?.doctor_slug || null);
+        }
+      } catch (e) {
+        console.error('Error loading profile:', e);
+      }
+    };
+    loadProfile();
+  }, [session]);
+
+  const publicUrl = doctorSlug
+    ? `${(process.env.NEXT_PUBLIC_APP_URL as string) || (typeof window !== 'undefined' ? window.location.origin : '')}/${doctorSlug}`
+    : '';
+
+  const copyPublicUrl = async () => {
+    if (!publicUrl) return;
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (e) {
+      console.error('Failed to copy public URL:', e);
+    }
+  };
+
   // Load subscription to detect Free plan
   useEffect(() => {
     const loadSubscription = async () => {
@@ -277,6 +310,31 @@ export default function DoctorDashboard() {
               </div>
             </div>
           )}
+
+          {/* Public company link (domain + slug) */}
+          <div className="mb-4 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            {doctorSlug ? (
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] text-gray-500 font-medium">Your public link</p>
+                  <code className="block text-sm text-gray-900 truncate">{publicUrl}</code>
+                </div>
+                <Button onClick={copyPublicUrl} variant="outline" size="sm" className="h-8 border-gray-300 text-gray-800 shrink-0">
+                  {copied ? 'Copied' : 'Copy'}
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] text-gray-500 font-medium">Set your public link</p>
+                  <p className="text-sm text-gray-900">Define your slug in Profile to get a public link.</p>
+                </div>
+                <Button asChild variant="outline" size="sm" className="h-8 border-gray-300 text-gray-800 shrink-0">
+                  <Link href="/doctor/profile">Open Profile</Link>
+                </Button>
+              </div>
+            )}
+          </div>
 
           {/* Stats (pill cards like KPIs) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-2">
