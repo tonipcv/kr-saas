@@ -97,7 +97,7 @@ function RegisterEmailInner() {
                 required
                 autoComplete="off"
                 className="w-full px-4 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900 placeholder-gray-500"
-                placeholder="doctor@example.com"
+                placeholder="email@exemple.com"
               />
             </div>
 

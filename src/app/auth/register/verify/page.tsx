@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight } from 'lucide-react';
+import { signIn } from 'next-auth/react';
 
 function RegisterVerifyInner() {
   const router = useRouter();
@@ -46,9 +47,23 @@ function RegisterVerifyInner() {
       }
 
       // Verificar se o usuário foi autenticado (login) ou se deve continuar o fluxo de registro
-      if (data.user) {
-        // Usuário autenticado, redirecionar para o dashboard do médico
-        router.push('/doctor/dashboard');
+      if (data.user && data.token) {
+        // Usuário existente: efetuar login via NextAuth usando token
+        const result = await signIn('credentials', {
+          email,
+          password: `token:${data.token}`,
+          redirect: false,
+          callbackUrl: '/doctor/dashboard'
+        });
+
+        if (result?.ok) {
+          // Forçar navegação completa para garantir que o middleware enxergue a sessão
+          window.location.assign('/doctor/dashboard');
+          return;
+        }
+
+        // Se falhar por algum motivo, cair no fallback de redirecionamento de login
+        router.push('/auth/signin?callbackUrl=' + encodeURIComponent('/doctor/dashboard'));
       } else {
         // Continuar fluxo de registro
         router.push(`/auth/register/slug?email=${encodeURIComponent(email)}&token=${encodeURIComponent(data.token)}`);

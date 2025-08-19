@@ -4,8 +4,8 @@ import { verify } from "jsonwebtoken";
 import { hash } from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 
-// Chave secreta para verificar tokens
-const SECRET_KEY = process.env.JWT_SECRET || "your-secret-key";
+// Chave secreta para verificar tokens (alinha com verify: NEXTAUTH_SECRET || JWT_SECRET)
+const SECRET_KEY = process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET || "your-secret-key";
 
 export async function POST(req: Request) {
   try {
@@ -26,8 +26,8 @@ export async function POST(req: Request) {
         slug: string, 
         verified: boolean 
       };
-      
-      if (decodedToken.email !== email || !decodedToken.verified) {
+      const normalizedEmail = (email as string).toLowerCase().trim();
+      if (decodedToken.email.toLowerCase().trim() !== normalizedEmail || !decodedToken.verified) {
         return NextResponse.json(
           { message: "Token inválido" },
           { status: 401 }
@@ -101,6 +101,7 @@ export async function POST(req: Request) {
     // Criar clínica com o slug definido
     const clinic = await prisma.clinic.create({
       data: {
+        id: doctor.id, // garantir compatibilidade com FKs ao usar o mesmo id do usuário
         name: `Clínica ${name}`,
         slug,
         ownerId: doctor.id, // Usando ownerId conforme definido no schema
@@ -108,12 +109,12 @@ export async function POST(req: Request) {
       }
     });
 
-    // Criar assinatura Free (ativa e sem expiração)
+    // Criar assinatura Free (ativa e sem expiração) - nível CLÍNICA atrelada ao mesmo id do usuário
     await prisma.unified_subscriptions.create({
       data: {
         id: uuidv4(),
-        type: 'DOCTOR',
-        subscriber_id: doctor.id,
+        type: 'CLINIC',
+        subscriber_id: clinic.id,
         plan_id: freePlan.id,
         status: 'ACTIVE',
         start_date: new Date(),

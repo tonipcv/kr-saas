@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verify, sign } from "jsonwebtoken";
 
-// Chave secreta para verificar e assinar tokens
-const SECRET_KEY = process.env.JWT_SECRET || "your-secret-key";
+// Use the same secret resolution as the verify endpoint to avoid signature mismatches
+const SECRET_KEY = process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET || "your-secret-key";
 
 export async function POST(req: Request) {
   try {
@@ -19,8 +19,8 @@ export async function POST(req: Request) {
     // Verificar o token
     try {
       const decoded = verify(token, SECRET_KEY) as { email: string, verified: boolean };
-      
-      if (decoded.email !== email || !decoded.verified) {
+      const normalizedEmail = (email as string).toLowerCase().trim();
+      if (decoded.email.toLowerCase().trim() !== normalizedEmail || !decoded.verified) {
         return NextResponse.json(
           { message: "Token inválido" },
           { status: 401 }

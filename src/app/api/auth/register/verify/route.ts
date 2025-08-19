@@ -4,13 +4,13 @@ import { sign } from "jsonwebtoken";
 import { cookies } from "next/headers";
 import { compare } from "bcryptjs";
 
-// Chave secreta para assinar o token temporário
-const SECRET_KEY = process.env.JWT_SECRET || "your-secret-key";
+// Chave secreta para assinar tokens de autenticação compatíveis com NextAuth
+const SECRET_KEY = process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET || "your-secret-key";
 
 export async function POST(req: Request) {
   try {
     const { email, code, existingUser } = await req.json();
-    const cookieStore = cookies(); // Obter o cookieStore no início da função
+    const cookieStore = await cookies(); // Next.js 15: cookies() é assíncrono
 
     if (!email || !code) {
       return NextResponse.json(
@@ -82,7 +82,7 @@ export async function POST(req: Request) {
         );
       }
 
-      // Criar token de autenticação
+      // Criar token de autenticação (compatível com auth.ts)
       const token = sign(
         { 
           id: user.id,
@@ -111,7 +111,8 @@ export async function POST(req: Request) {
           email: user.email,
           role: user.role,
           clinicId: user.owned_clinics[0]?.id
-        }
+        },
+        token
       });
     } else {
       // Fluxo normal de verificação para novos usuários

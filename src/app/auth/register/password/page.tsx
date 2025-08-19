@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import Image from 'next/image';
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { ArrowRight, Check } from 'lucide-react';
 
 function RegisterPasswordInner() {
@@ -87,10 +88,25 @@ function RegisterPasswordInner() {
 
       setIsSuccess(true);
       
-      // Redirect after 3 seconds
-      setTimeout(() => {
+      // Try to automatically sign the user in and go to the doctor dashboard
+      try {
+        const result = await signIn('credentials', {
+          email: emailParam || '',
+          password,
+          redirect: false,
+        });
+
+        if (result?.ok) {
+          router.push('/doctor/dashboard');
+          router.refresh();
+        } else {
+          // Fallback to sign-in page if auto sign-in fails
+          router.push('/auth/signin');
+        }
+      } catch (e) {
+        // Fallback to sign-in page in case of any error
         router.push('/auth/signin');
-      }, 3000);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to complete registration');
     } finally {
@@ -124,13 +140,13 @@ function RegisterPasswordInner() {
 
             <div className="mt-6">
               <p className="text-center text-sm text-gray-600 mb-4">
-                Redirecting to the sign-in page...
+                Finalizing your account and redirecting to your dashboard...
               </p>
               <Link
-                href="/auth/signin"
+                href="/doctor/dashboard"
                 className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:from-[#4f88e2] hover:to-[#8fc4f5] rounded-lg transition-all duration-300 flex items-center justify-center gap-2"
               >
-                Sign in now
+                Go to dashboard
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </div>

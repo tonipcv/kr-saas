@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getClinicSubscriptionStatus } from '@/lib/subscription';
 import { prisma } from '@/lib/prisma';
+import { randomUUID } from 'crypto';
 
 export async function GET() {
   try {
@@ -14,12 +15,106 @@ export async function GET() {
 
     const status = await getClinicSubscriptionStatus(session.user.id);
     if (!status) {
-      // Step-by-step diagnostics
+      // Step-by-step diagnostics + auto-provision Free plan if missing
       const userId = session.user.id;
-      const ownedClinic = await prisma.clinic.findFirst({ where: { ownerId: userId }, select: { id: true, name: true } });
-      const membership = await prisma.clinicMember.findFirst({ where: { userId, isActive: true }, select: { clinicId: true } });
-      const clinicId = ownedClinic?.id ?? membership?.clinicId ?? null;
+      // Always ensure a personal clinic exists with id=userId to satisfy both FKs (clinic and user)
+      let clinicId = userId;
+      try {
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true } });
+        if (user) {
+          await prisma.clinic.upsert({
+            where: { id: userId },
+            update: {},
+            create: {
+              id: userId,
+              ownerId: userId,
+              name: user.name ? `Personal Clinic - ${user.name}` : 'Personal Clinic',
+              isActive: true,
+            },
+          });
+        }
+      } catch (createClinicErr) {
+        const errObj = createClinicErr instanceof Error ? { name: createClinicErr.name, message: createClinicErr.message, stack: createClinicErr.stack } : { value: String(createClinicErr) };
+        console.error('Falha ao criar/garantir clínica pessoal para auto-provisionar:', errObj);
+      }
 
+      // Try to auto-provision default Free plan (CLINIC-level only to satisfy FK schema)
+      try {
+        if (clinicId) {
+          const [userExists, clinicExists] = await Promise.all([
+            prisma.user.findUnique({ where: { id: clinicId }, select: { id: true } }),
+            prisma.clinic.findUnique({ where: { id: clinicId }, select: { id: true } }),
+          ]);
+          if (!userExists || !clinicExists) {
+            console.warn('[AutoProvision] subscriber prerequisites missing', {
+              subscriberId: clinicId,
+              hasUser: !!userExists,
+              hasClinic: !!clinicExists,
+            });
+            throw new Error('Subscriber prerequisites missing for FK constraints');
+          }
+          const freePlan = await prisma.subscriptionPlan.findFirst({ where: { isActive: true, isDefault: true }, orderBy: { price: 'asc' } });
+          if (freePlan) {
+            const now = new Date();
+            const existing = await prisma.unified_subscriptions.findFirst({ where: { type: 'CLINIC', subscriber_id: clinicId } });
+            if (existing) {
+              await prisma.unified_subscriptions.update({
+                where: { id: existing.id },
+                data: {
+                  plan_id: freePlan.id,
+                  status: 'ACTIVE',
+                  start_date: now,
+                  trial_end_date: null,
+                  end_date: null,
+                  auto_renew: true,
+                  updated_at: now,
+                },
+              });
+            } else {
+              await prisma.unified_subscriptions.create({
+                data: {
+                  id: randomUUID(),
+                  type: 'CLINIC',
+                  subscriber_id: clinicId,
+                  plan_id: freePlan.id,
+                  status: 'ACTIVE',
+                  start_date: now,
+                  trial_end_date: null,
+                  end_date: null,
+                  auto_renew: true,
+                },
+              });
+            }
+          }
+        }
+      } catch (e) {
+        const errObj = e instanceof Error ? { name: e.name, message: e.message, stack: e.stack } : { value: String(e) };
+        console.error('Falha ao auto-provisionar plano Free (nível clínica):', errObj);
+      }
+
+      // Re-check after attempting auto-provision
+      const statusAfter = await getClinicSubscriptionStatus(userId);
+      if (statusAfter) {
+        return NextResponse.json({
+          planId: statusAfter.planId,
+          planName: statusAfter.planName,
+          status: statusAfter.status,
+          isActive: statusAfter.isActive,
+          isTrial: statusAfter.isTrial,
+          isExpired: statusAfter.isExpired,
+          daysRemaining: statusAfter.daysRemaining,
+          trialDays: statusAfter.trialDays ?? null,
+          limits: statusAfter.limits,
+          planFeatures: statusAfter.planFeatures,
+          maxReferralsPerMonth: statusAfter.planFeatures?.maxReferralsPerMonth ?? null,
+          maxRewards: statusAfter.planFeatures?.maxRewards ?? null,
+          allowPurchaseCredits: statusAfter.planFeatures?.allowPurchaseCredits ?? false,
+          allowCampaigns: statusAfter.planFeatures?.allowCampaigns ?? false,
+          planPrice: statusAfter.planFeatures?.price ?? null,
+        });
+      }
+
+      // If still not available, return diagnostics for client handling
       const latestClinicSub = clinicId
         ? await prisma.unified_subscriptions.findFirst({
             where: { type: 'CLINIC', subscriber_id: clinicId },
@@ -39,6 +134,7 @@ export async function GET() {
 
       const hasActiveClinic = !!(latestClinicSub && ['ACTIVE', 'TRIAL'].includes(latestClinicSub.status));
       const hasActiveDoctor = !!(latestDoctorSub && ['ACTIVE', 'TRIAL'].includes(latestDoctorSub.status));
+
       if (!hasActiveClinic && !hasActiveDoctor) {
         reasons.push('Nenhuma assinatura ativa ou em trial foi encontrada (nível clínica nem nível doutor).');
       }
@@ -49,7 +145,6 @@ export async function GET() {
         reasons.push(`Última assinatura de doutor está '${latestDoctorSub.status}'.`);
       }
 
-      // Provide a compact snapshot of active plans to help clients decide next steps
       const activePlans = await prisma.subscriptionPlan.findMany({
         where: { isActive: true },
         orderBy: { price: 'asc' },
@@ -95,9 +190,7 @@ export async function GET() {
         plans: activePlans,
       } as const;
 
-      // Print detailed reason in server console for debugging
       console.warn('[SUBSCRIPTION CURRENT 404]', JSON.stringify(diagnostics, null, 2));
-
       return NextResponse.json(diagnostics, { status: 404 });
     }
 

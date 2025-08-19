@@ -161,7 +161,7 @@ function LoginForm() {
                 Log In
               </span>
               <Link
-                href="/auth/register"
+                href="/auth/register/email"
                 className="h-8 px-3 inline-flex items-center justify-center rounded-lg text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50"
               >
                 Sign Up

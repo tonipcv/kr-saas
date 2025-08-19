@@ -271,7 +271,7 @@ export default function DoctorDashboard() {
               <p className="text-sm font-semibold">You are on the Free plan — limited features.</p>
               <p className="text-xs mt-1 opacity-95">Upgrade to unlock all features.</p>
               <div className="mt-3">
-                <Link href="/doctor/purchases">
+                <Link href="/clinic/subscription">
                   <Button size="sm" variant="secondary" className="h-8 rounded-lg bg-white text-gray-800 hover:bg-gray-100">View plans</Button>
                 </Link>
               </div>

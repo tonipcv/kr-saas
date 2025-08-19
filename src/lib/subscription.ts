@@ -29,14 +29,16 @@ export interface PlanFeatures {
   price?: number;
 }
 
-// Resolve the clinic for a user (owner or active member)
+// Resolve the clinic for a user, preferring a personal clinic with id=userId
 async function findClinicForUser(userId: string): Promise<{ id: string } | null> {
+  // Personal clinic (created by auto-provisioner) ensures FK compatibility
+  const personal = await prisma.clinic.findUnique({ where: { id: userId }, select: { id: true } });
+  if (personal) return personal;
+  // Otherwise owned clinic
   const owned = await prisma.clinic.findFirst({ where: { ownerId: userId }, select: { id: true } });
   if (owned) return owned;
-  const membership = await prisma.clinicMember.findFirst({
-    where: { userId, isActive: true },
-    select: { clinicId: true }
-  });
+  // Otherwise any active membership
+  const membership = await prisma.clinicMember.findFirst({ where: { userId, isActive: true }, select: { clinicId: true } });
   if (membership) return { id: membership.clinicId };
   return null;
 }
@@ -137,7 +139,7 @@ async function countClinicPatients(userId: string): Promise<number> {
   const members = await prisma.clinicMember.findMany({ where: { clinicId: clinic.id, isActive: true }, select: { userId: true } });
   const ids = members.map(m => m.userId);
   if (ids.length === 0) return 0;
-  return prisma.user.count({ where: { role: 'PATIENT', doctor_id: { in: ids } } });
+  return prisma.user.count({ where: { role: 'PATIENT', doctorId: { in: ids } } });
 }
 
 async function countClinicProtocols(userId: string): Promise<number> {
@@ -155,7 +157,7 @@ async function countClinicCourses(userId: string): Promise<number> {
   const members = await prisma.clinicMember.findMany({ where: { clinicId: clinic.id, isActive: true }, select: { userId: true } });
   const ids = members.map(m => m.userId);
   if (ids.length === 0) return 0;
-  return prisma.course.count({ where: { doctor_id: { in: ids } } });
+  return prisma.course.count({ where: { doctorId: { in: ids } } });
 }
 
 async function countClinicProducts(userId: string): Promise<number> {
@@ -164,7 +166,7 @@ async function countClinicProducts(userId: string): Promise<number> {
   const members = await prisma.clinicMember.findMany({ where: { clinicId: clinic.id, isActive: true }, select: { userId: true } });
   const ids = members.map(m => m.userId);
   if (ids.length === 0) return 0;
-  return prisma.products.count({ where: { doctor_id: { in: ids } } });
+  return prisma.products.count({ where: { doctorId: { in: ids } } });
 }
 
 // Public checks used by API
@@ -205,7 +207,7 @@ export async function canCreateReferral(userId: string): Promise<{ allowed: bool
 
   const count = await prisma.referrals.count({
     where: {
-      doctor_id: { in: memberIds },
+      doctorId: { in: memberIds },
       createdAt: { gte: startOfMonth, lt: endOfMonth }
     }
   });
@@ -227,7 +229,7 @@ export async function canCreateReward(userId: string): Promise<{ allowed: boolea
   const memberIds = await getClinicMemberIds(userId);
   if (memberIds.length === 0) return { allowed: false, message: 'Sem membros na clínica' };
 
-  const count = await prisma.referralReward.count({ where: { doctor_id: { in: memberIds } } });
+  const count = await prisma.referralReward.count({ where: { doctorId: { in: memberIds } } });
   if (count >= limit) {
     return { allowed: false, message: `Limite de ${limit} rewards atingido. Faça upgrade do seu plano.` };
   }
