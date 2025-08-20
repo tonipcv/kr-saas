@@ -17,6 +17,7 @@ import {
   Loader2, 
   Share2,
   Copy,
+  Check,
   Gift,
   Users,
   CheckCircle,
@@ -27,9 +28,7 @@ import {
   Mail,
   Phone,
   User,
-  Menu,
-  Home,
-  Settings,
+  MoreVertical,
   LogOut
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -126,7 +125,7 @@ const translations = {
     copyLink: 'Copy Link',
     
     // Share messages
-    shareMessage: 'Hello! I\'m using this amazing medical system and wanted to refer you. Use my referral code to sign up:',
+    shareMessage: 'Hello! I\'m using this amazing medical system and wanted to refer you. Use my membership number to sign up:',
     shareSubject: 'Referral - Medical System',
     
     // Stats
@@ -223,7 +222,6 @@ interface Credit {
     status: string;
   };
 }
-
 interface Referral {
   id: string;
   name: string;
@@ -298,6 +296,10 @@ export default function PatientReferralsPage() {
   const [doctorImage, setDoctorImage] = useState<string>('');
   // State for hamburger menu (must be before any early returns)
   const [menuOpen, setMenuOpen] = useState(false);
+  // Published campaigns for this doctor (for Earn points section)
+  const [campaigns, setCampaigns] = useState<Array<{ campaign_slug: string; title: string; description?: string | null }>>([]);
+  // UI state: which campaign link was copied recently
+  const [copiedCampaign, setCopiedCampaign] = useState<string | null>(null);
   // Friendly fallback name for design preview and empty states
   const displayDoctorName = doctorName || 'Dr. Especialista';
   // Points card display: use real balance if available, otherwise a pleasant placeholder
@@ -522,6 +524,32 @@ export default function PatientReferralsPage() {
     return () => controller.abort();
   }, [doctorSlug, referralCode]);
 
+  // Fetch published campaigns for the doctor's public page (patient-visible)
+  useEffect(() => {
+    const slug = (doctorSlug || '').trim();
+    if (!slug) return;
+    let aborted = false;
+    const run = async () => {
+      try {
+        const res = await fetch(`/api/campaigns/doctor/${encodeURIComponent(slug)}`);
+        const payload = await res.json().catch(() => ({ success: false }));
+        if (aborted) return;
+        if (res.ok && Array.isArray(payload?.data)) {
+          setCampaigns(payload.data);
+        } else {
+          setCampaigns([]);
+        }
+      } catch (e) {
+        console.warn('[PatientReferrals] campaigns fetch error', e);
+        setCampaigns([]);
+      }
+    };
+    run();
+    return () => {
+      aborted = true;
+    };
+  }, [doctorSlug]);
+
   const handleRedeemReward = async (rewardId: string) => {
     setRedeeming(rewardId);
     try {
@@ -671,6 +699,34 @@ export default function PatientReferralsPage() {
         console.error('Fallback copy also failed:', fallbackError);
         toast.error(t.toastMessages.copyManually + link);
       }
+    }
+  };
+
+  // Copy a campaign link and show inline copied state (no toasts)
+  const copyCampaignLink = async (id: string, url: string) => {
+    if (!url) return;
+    try {
+      if (!navigator.clipboard) {
+        const textArea = document.createElement('textarea');
+        textArea.value = url;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          document.execCommand('copy');
+        } finally {
+          document.body.removeChild(textArea);
+        }
+      } else {
+        await navigator.clipboard.writeText(url);
+      }
+      setCopiedCampaign(id);
+      window.setTimeout(() => setCopiedCampaign((curr) => (curr === id ? null : curr)), 2000);
+    } catch (e) {
+      console.error('Copy failed', e);
     }
   };
 
@@ -919,7 +975,7 @@ return (
             <div className="w-full max-w-md lg:max-w-xl mx-auto mb-5 lg:mb-6" style={{ perspective: '1000px' }}>
               <div
                 role="button"
-                aria-label="Show membership code"
+                aria-label="Show membership number"
                 onClick={() => setIsCardFlipped((v) => !v)}
                 className="relative rounded-2xl shadow-xl overflow-hidden border border-white/10 cursor-pointer select-none h-[200px] lg:h-[300px]"
               >
@@ -964,7 +1020,7 @@ return (
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-[12px] lg:text-base text-white/70">Code</div>
+                          <div className="text-[12px] lg:text-base text-white/70">Membership Number</div>
                           {/* Hidden on front: masked */}
                           <div className="text-base lg:text-xl tracking-widest">
                             • • • •
@@ -983,13 +1039,12 @@ return (
                       <div className="absolute -top-8 -right-6 w-36 h-36 rounded-full bg-white/20 blur-2xl" />
                     </div>
                     <div className="relative h-full p-6 lg:p-8 flex flex-col text-white">
-                      <div className="flex items-center justify-between">
-                        <div className="text-[10px] lg:text-sm uppercase tracking-[0.2em] text-white/80">Your Code</div>
+                      <div className="flex items-center justify-end">
                         <div className="text-[11px] lg:text-xs text-white/70">Tap to hide</div>
                       </div>
 
                       <div className="mt-4 lg:mt-8 text-center">
-                        <div className="text-xs lg:text-base text-white/70">Referral Code</div>
+                        <div className="text-xs lg:text-base text-white/70">Membership Number</div>
                         <div className="mt-2 text-3xl lg:text-4xl font-mono tracking-[0.35em]">
                           {referralCode || '— — — —'}
                         </div>
@@ -1007,7 +1062,7 @@ return (
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
                             <path d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
                           </svg>
-                          Copy code
+                          Copy number
                         </button>
                       </div>
                     </div>
@@ -1077,34 +1132,57 @@ return (
                 <div className="p-4 lg:p-5 space-y-3 lg:space-y-4">
                   <div className="text-left">
                     <h2 className="text-gray-900 text-base lg:text-lg font-semibold">Earn points</h2>
-                    <p className="text-xs lg:text-sm text-gray-600">Share your personal link to earn points</p>
+                    <p className="text-xs lg:text-sm text-gray-600">Share your personal cupons to friend and earn points</p>
                   </div>
-                  <div className="flex items-center gap-2 p-2.5 lg:p-3 bg-white rounded-lg border border-gray-200">
-                    <code className="flex-1 text-[11px] lg:text-xs text-gray-800 font-mono break-all">
-                      {generateReferralLink('default')}
-                    </code>
-                    <Button
-                      onClick={copyReferralLink}
-                      variant="outline"
-                      className="h-8 lg:h-9 px-3 border-gray-300 text-gray-700 hover:bg-gray-50"
-                    >
-                      <Copy className="h-3.5 w-3.5 mr-1.5" />
-                      Copy
-                    </Button>
-                  </div>
-                  <div className="flex items-center justify-center gap-1.5 lg:gap-2">
-                    <Button onClick={shareViaWhatsApp} variant="ghost" className="h-8 lg:h-9 px-2 text-gray-600 hover:text-gray-900">
-                      WhatsApp
-                    </Button>
-                    <span className="text-gray-300">•</span>
-                    <Button onClick={shareViaEmail} variant="ghost" className="h-8 lg:h-9 px-2 text-gray-600 hover:text-gray-900">
-                      Email
-                    </Button>
-                    <span className="text-gray-300">•</span>
-                    <Button onClick={shareViaNative} variant="ghost" className="h-8 lg:h-9 px-2 text-gray-600 hover:text-gray-900">
-                      Share
-                    </Button>
-                  </div>
+                  {/* Show only campaign links (doctor personal link hidden) */}
+                  {campaigns.length > 0 ? (
+                    <div className="mt-3 lg:mt-4">
+                      <div className="grid grid-cols-1 gap-2">
+                        {campaigns.map((c) => {
+                          const hasCode = Boolean(referralCode);
+                          const path = `/${doctorSlug}/${c.campaign_slug}`;
+                          const href = hasCode ? `${path}?referrerCode=${encodeURIComponent(referralCode)}` : path;
+                          const origin = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_APP_URL || window.location.origin).replace(/\/+$/, '') : '';
+                          const fullUrl = `${origin}${href}`;
+                          return (
+                            <div
+                              key={c.campaign_slug}
+                              className="group rounded-lg border border-gray-200 bg-white px-3 py-2 hover:border-gray-300 hover:shadow-sm transition"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="text-sm lg:text-base font-medium text-gray-900 truncate">{c.title}</div>
+                                  {c.description && (
+                                    <div className="text-[11px] lg:text-xs text-gray-600 truncate">{c.description}</div>
+                                  )}
+                                  <div className="mt-1 flex items-center gap-2">
+                                    <code className="flex-1 text-[11px] lg:text-xs font-mono text-gray-600 break-all truncate">{fullUrl}</code>
+                                    <Button
+                                      onClick={() => copyCampaignLink(c.campaign_slug, fullUrl)}
+                                      variant="outline"
+                                      className={`h-7 lg:h-8 px-2 border-gray-300 hover:bg-gray-50 ${copiedCampaign === c.campaign_slug ? 'text-green-700 border-green-300 bg-green-50' : 'text-gray-700'}`}
+                                    >
+                                      {copiedCampaign === c.campaign_slug ? (
+                                        <>
+                                          <Check className="h-3.5 w-3.5 mr-1" /> Copied
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Copy className="h-3.5 w-3.5 mr-1" /> Copy
+                                        </>
+                                      )}
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs lg:text-sm text-gray-600">No campaigns available right now.</div>
+                  )}
                 </div>
               </div>
 
@@ -1387,24 +1465,30 @@ return (
           <div className="relative">
             <button
               onClick={toggleMenu}
-              className="h-12 w-12 rounded-full bg-turquoise text-white shadow-lg hover:bg-turquoise/90 focus:outline-none focus:ring-2 focus:ring-turquoise/40 flex items-center justify-center"
+              className="h-12 w-12 rounded-full text-white shadow-lg focus:outline-none focus:ring-2 flex items-center justify-center"
+              style={{ background: 'linear-gradient(135deg, #2b68f0 0%, #7bb8ff 50%, #9ad8ff 100%)' }}
               aria-label="Toggle menu"
             >
-              <Menu className="h-6 w-6" />
+              <div className="relative h-10 w-10">
+                {session?.user?.image ? (
+                  <Image
+                    src={session.user.image}
+                    alt={session.user.name || 'User profile'}
+                    className="rounded-full object-cover border-2 border-white/80 shadow"
+                    fill
+                  />
+                ) : (
+                  <div className="h-10 w-10 rounded-full flex items-center justify-center">
+                    <MoreVertical className="h-5 w-5 text-white" />
+                  </div>
+                )}
+              </div>
             </button>
             {menuOpen && (
               <div className="absolute bottom-14 right-0 bg-white border border-gray-200 rounded-xl shadow-xl w-56 p-2">
                 <Link href="/patient/profile" className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
                   <User className="mr-2 h-4 w-4 text-gray-600" />
                   Profile
-                </Link>
-                <Link href="/patient" className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
-                  <Home className="mr-2 h-4 w-4 text-gray-600" />
-                  Dashboard
-                </Link>
-                <Link href="/patient/settings" className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
-                  <Settings className="mr-2 h-4 w-4 text-gray-600" />
-                  Settings
                 </Link>
                 <button
                   onClick={() => signOut({ callbackUrl: '/' })}

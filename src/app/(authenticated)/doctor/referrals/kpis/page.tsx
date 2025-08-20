@@ -2,19 +2,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import dynamic from 'next/dynamic';
- 
 
-interface KpisResponse {
-  success: boolean;
-  data: {
-    leadsRecebidos: number;
-    leadsConvertidos: number;
-    valorGerado: number;
-    recompensasPendentes: number;
-  };
-}
+
+// Removed KPIs response/types and UI; this page now focuses on the pipeline only
 
 interface ReferralLead {
   id: string;
@@ -49,9 +40,6 @@ const DraggableLib = dynamic(
 type DropResult = any;
 
 export default function ReferralKpisPage() {
-  const [data, setData] = useState<KpisResponse['data'] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [leads, setLeads] = useState<ReferralLead[]>([]);
   const [leadsLoading, setLeadsLoading] = useState(true);
   const [leadsError, setLeadsError] = useState<string | null>(null);
@@ -89,24 +77,7 @@ export default function ReferralKpisPage() {
     }
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const res = await fetch('/api/v2/doctor/referrals/kpis', { cache: 'no-store' });
-        if (!res.ok) {
-          throw new Error(`Request failed: ${res.status}`);
-        }
-        const json: KpisResponse = await res.json();
-        setData(json.data);
-      } catch (err: any) {
-        setError(err?.message || 'Erro ao carregar KPIs');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
+  // KPIs fetch removed
 
   useEffect(() => {
     const fetchLeads = async () => {
@@ -162,54 +133,6 @@ export default function ReferralKpisPage() {
           </div>
         </div>
 
-        {/* Loading state */}
-        {loading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-                <div className="text-[11px] text-gray-500 font-medium mb-2">Carregando...</div>
-                <div className="h-6 w-24 bg-gray-100 rounded animate-pulse" />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div className="text-sm text-red-500">{error}</div>
-        )}
-
-        {/* KPIs */}
-        {data && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-2">
-            {/* KPI pill cards */}
-            {[{
-              title: 'Leads recebidos',
-              value: data.leadsRecebidos,
-              note: 'últimos 30 dias'
-            }, {
-              title: 'Leads convertidos',
-              value: data.leadsConvertidos,
-              note: 'últimos 30 dias'
-            }, {
-              title: 'Valor gerado',
-              value: data.valorGerado.toLocaleString(undefined, { style: 'currency', currency: 'BRL' }),
-              note: 'total'
-            }, {
-              title: 'Recompensas pendentes',
-              value: data.recompensasPendentes,
-              note: 'para aprovar'
-            }].map((kpi) => (
-              <div key={kpi.title} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-gray-500">{kpi.title}</span>
-                  <span className="text-[10px] text-gray-400">{kpi.note}</span>
-                </div>
-                <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{kpi.value}</div>
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* Pipeline */}
         <div className="mt-6">

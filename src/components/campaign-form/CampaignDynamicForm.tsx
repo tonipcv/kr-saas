@@ -197,9 +197,7 @@ export default function CampaignDynamicForm({
             >
               <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Cupom exclusivo</div>
               <div className={`font-mono text-2xl tracking-[.35em] text-gray-900 ${classNames?.titleClass || ''}`}>{coupon.code}</div>
-              {typeof coupon.amount === 'number' ? (
-                <div className={`text-xs mt-2 text-gray-600 ${classNames?.subtitleClass || ''}`}>Desconto: {coupon.amount}</div>
-              ) : null}
+              {/* Discount amount intentionally hidden per request */}
               <div className="mt-4 flex items-center justify-center gap-2">
                 <button
                   type="button"
