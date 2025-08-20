@@ -68,29 +68,29 @@ export async function sendVerificationCode(
   code: string,
   doctorName: string
 ): Promise<boolean> {
-  const subject = `Código de acesso para protocolos do Dr. ${doctorName}`;
+  const subject = `Access code for Dr. ${doctorName}'s protocols`;
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
       <div style="text-align: center; margin-bottom: 20px;">
         <img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.png" alt="Cxlus Logo" style="max-width: 150px;">
       </div>
       
-      <h1 style="color: #333; font-size: 24px; margin-bottom: 20px; text-align: center;">Seu código de acesso</h1>
+      <h1 style="color: #333; font-size: 24px; margin-bottom: 20px; text-align: center;">Your access code</h1>
       
-      <p style="color: #555; font-size: 16px; line-height: 1.5;">Olá,</p>
+      <p style="color: #555; font-size: 16px; line-height: 1.5;">Hello,</p>
       
-      <p style="color: #555; font-size: 16px; line-height: 1.5;">Seu código de acesso para os protocolos do Dr. ${doctorName} é:</p>
+      <p style="color: #555; font-size: 16px; line-height: 1.5;">Your access code for Dr. ${doctorName}'s protocols is:</p>
       
       <div style="background-color: #f7f7f7; padding: 15px; border-radius: 5px; text-align: center; margin: 20px 0;">
         <h2 style="font-size: 32px; letter-spacing: 5px; color: #333; margin: 0;">${code}</h2>
       </div>
       
-      <p style="color: #555; font-size: 16px; line-height: 1.5;">Este código expira em 15 minutos.</p>
+      <p style="color: #555; font-size: 16px; line-height: 1.5;">This code expires in 15 minutes.</p>
       
-      <p style="color: #555; font-size: 16px; line-height: 1.5;">Se você não solicitou este código, por favor ignore este email.</p>
+      <p style="color: #555; font-size: 16px; line-height: 1.5;">If you did not request this code, please ignore this email.</p>
       
       <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center; color: #888; font-size: 14px;">
-        <p>© ${new Date().getFullYear()} Cxlus. Todos os direitos reservados.</p>
+        <p>© ${new Date().getFullYear()} Cxlus. All rights reserved.</p>
       </div>
     </div>
   `;

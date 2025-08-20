@@ -163,7 +163,7 @@ export async function GET(request: NextRequest) {
         offset,
         hasMore: offset + limit < totalCount
       },
-      message: 'Pacientes carregados com sucesso'
+      message: 'Patients loaded successfully'
     });
 
   } catch (error) {
@@ -446,7 +446,7 @@ export async function POST(request: NextRequest) {
         birth_date: result.birth_date?.toISOString(),
         gender: result.gender
       },
-      message: 'Paciente criado com sucesso e email de verificação enviado'
+      message: 'Patient created successfully and verification email sent'
     });
 
   } catch (error) {

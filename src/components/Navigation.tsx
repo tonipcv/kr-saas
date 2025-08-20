@@ -318,6 +318,12 @@ export default function Navigation() {
           icon: GiftIcon,
           description: 'Configure rewards and approve redemptions'
         },
+        {
+          href: '/doctor/integrations',
+          label: 'Integrations',
+          icon: CogIcon,
+          description: 'Connect external tools'
+        },
       ]
     }
   ], []);

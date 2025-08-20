@@ -5,14 +5,14 @@ import { prisma } from '@/lib/prisma';
 import { getUserCreditsBalance, ensureUserHasReferralCode } from '@/lib/referral-utils';
 import { verifyMobileAuth } from '@/lib/mobile-auth';
 
-// GET - Dashboard do paciente (créditos, indicações, recompensas)
+// GET - Patient dashboard (credits, referrals, rewards)
 export async function GET(request: NextRequest) {
   try {
-    // Tentar autenticação web primeiro
+    // Try web authentication first
     const session = await getServerSession(authOptions);
     let userId = session?.user?.id;
 
-    // Se não há sessão web, tentar autenticação mobile
+    // If no web session, try mobile authentication
     if (!userId) {
       const mobileUser = await verifyMobileAuth(request);
       if (mobileUser) {
@@ -21,10 +21,10 @@ export async function GET(request: NextRequest) {
     }
     
     if (!userId) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verificar se é paciente
+    // Ensure user is a patient
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { 
@@ -35,24 +35,24 @@ export async function GET(request: NextRequest) {
     });
 
     if (!user || user.role !== 'PATIENT') {
-      return NextResponse.json({ error: 'Acesso negado. Apenas pacientes podem acessar esta funcionalidade.' }, { status: 403 });
+      return NextResponse.json({ error: 'Access denied. Patients only.' }, { status: 403 });
     }
 
-    // Garantir que o usuário tenha um código de indicação
+    // Ensure the user has a referral code
     let referralCode;
     try {
       referralCode = await ensureUserHasReferralCode(userId);
       
     } catch (referralError) {
-      console.error('Erro ao gerar código de indicação:', referralError instanceof Error ? referralError.message : String(referralError));
-      // Se falhar, usar o código existente do usuário ou null
+      console.error('Error generating referral code:', referralError instanceof Error ? referralError.message : String(referralError));
+      // If it fails, use the user’s existing code or null
       referralCode = (user as any)?.referral_code || null;
     }
 
-    // Buscar saldo de créditos atual
+    // Get current credits balance
     const creditsBalance = await getUserCreditsBalance(userId);
 
-    // Buscar histórico de créditos
+    // Get credits history
     const creditsHistory = await prisma.referralCredit.findMany({
       where: { userId: userId },
       include: {
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
       take: 10
     });
 
-    // Buscar indicações feitas pelo usuário
+    // Get referrals made by the user
     const referralsMade = await prisma.referralLead.findMany({
       where: { referrerId: userId },
       include: {
@@ -76,9 +76,9 @@ export async function GET(request: NextRequest) {
       take: 10
     });
 
-    // Resolver médico do paciente (para header e rewards)
-    // 1) Tentar via user.doctor_id
-    // 2) Fallback: relacionamento primário+ativo, senão ativo, senão qualquer
+    // Resolve patient's doctor (for header and rewards)
+    // 1) Try via user.doctor_id
+    // 2) Fallback: primary+active relationship, else active, else any
     let resolvedDoctor: { id: string; name: string | null; email: string | null; image: string | null; doctor_slug?: string | null } | null = null;
     if ((user as any)?.doctor_id) {
       const doc = await prisma.user.findUnique({
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
       ? { id: resolvedDoctor.id, name: resolvedDoctor.name, email: resolvedDoctor.email, image: resolvedDoctor.image as any }
       : null;
 
-    // Buscar recompensas disponíveis (do médico resolvido para o paciente)
+    // Fetch available rewards (from the resolved doctor for the patient)
     let availableRewards: any[] = [];
     const resolvedDoctorId = (resolvedDoctor as any)?.id || (user as any)?.doctor_id || null;
     if (resolvedDoctorId) {
@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
           isActive: true
         },
         include: {
-          // Incluir apenas resgates aprovados/entregues para não bloquear por pendentes
+          // Include only approved/fulfilled redemptions so pending ones don’t block
           redemptions: {
             where: { status: { in: ['APPROVED', 'FULFILLED'] } },
             select: { id: true }
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Buscar histórico de resgates
+    // Fetch redemptions history
     const redemptionsHistory = await prisma.rewardRedemption.findMany({
       where: { userId: userId },
       include: {
@@ -144,7 +144,7 @@ export async function GET(request: NextRequest) {
       take: 10
     });
 
-    // Estatísticas
+    // Stats
     const stats = {
       totalReferrals: referralsMade.length,
       convertedReferrals: referralsMade.filter(r => r.status === 'CONVERTED').length,
@@ -209,22 +209,22 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Erro ao buscar dados do paciente:', error instanceof Error ? error.message : String(error));
+    console.error('Error fetching patient data:', error instanceof Error ? error.message : String(error));
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
 
-// POST - Resgatar recompensa
+// POST - Redeem reward
 export async function POST(req: NextRequest) {
   try {
-    // Tentar autenticação web primeiro
+    // Try web authentication first
     const session = await getServerSession(authOptions);
     let userId = session?.user?.id;
 
-    // Se não há sessão web, tentar autenticação mobile
+    // If no web session, try mobile authentication
     if (!userId) {
       const mobileUser = await verifyMobileAuth(req);
       if (mobileUser) {
@@ -233,29 +233,29 @@ export async function POST(req: NextRequest) {
     }
     
     if (!userId) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verificar se é paciente
+    // Ensure user is a patient
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { role: true }
     });
 
     if (!user || user.role !== 'PATIENT') {
-      return NextResponse.json({ error: 'Acesso negado. Apenas pacientes podem resgatar recompensas.' }, { status: 403 });
+      return NextResponse.json({ error: 'Access denied. Only patients can redeem rewards.' }, { status: 403 });
     }
 
     const { rewardId } = await req.json();
 
     if (!rewardId) {
       return NextResponse.json(
-        { error: 'ID da recompensa é obrigatório' },
+        { error: 'Reward ID is required' },
         { status: 400 }
       );
     }
 
-    // Buscar a recompensa
+    // Fetch reward
     const reward = await prisma.referralReward.findUnique({
       where: { id: rewardId },
       include: {
@@ -267,41 +267,41 @@ export async function POST(req: NextRequest) {
 
     if (!reward) {
       return NextResponse.json(
-        { error: 'Recompensa não encontrada' },
+        { error: 'Reward not found' },
         { status: 404 }
       );
     }
 
     if (!(reward as any).isActive) {
       return NextResponse.json(
-        { error: 'Recompensa não está ativa' },
+        { error: 'Reward is not active' },
         { status: 400 }
       );
     }
 
-    // Verificar se atingiu o limite
+    // Check if redemption limit has been reached
     if ((reward as any).maxRedemptions && reward._count.redemptions >= (reward as any).maxRedemptions) {
       return NextResponse.json(
-        { error: 'Limite de resgates atingido para esta recompensa' },
+        { error: 'Redemption limit reached for this reward' },
         { status: 400 }
       );
     }
 
-    // Verificar se o usuário tem créditos suficientes
+    // Check if the user has enough credits
     const creditsBalance = await getUserCreditsBalance(userId);
     if (creditsBalance < Number((reward as any).costInCredits)) {
       return NextResponse.json(
-        { error: `Créditos insuficientes. Você tem ${creditsBalance}, mas precisa de ${Number((reward as any).costInCredits)}` },
+        { error: `Insufficient credits. You have ${creditsBalance}, but need ${Number((reward as any).costInCredits)}` },
         { status: 400 }
       );
     }
 
-    // Verificar se o usuário já resgatou esta recompensa recentemente
-    // Removido cooldown de 24h: múltiplos resgates podem ser feitos, desde que haja pontos e disponibilidade
+    // Check if the user redeemed this recently
+    // Removed 24h cooldown: multiple redemptions are allowed if there are points and availability
 
-    // Criar o resgate e reservar créditos em uma transação
+    // Create redemption and reserve credits in a transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Criar o resgate PENDING
+      // Create PENDING redemption
       const redemption = await tx.rewardRedemption.create({
         data: {
           userId: userId,
@@ -311,7 +311,7 @@ export async function POST(req: NextRequest) {
         }
       });
 
-      // Selecionar créditos disponíveis (não usados)
+      // Select available (unused) credits
       const availableCredits = await tx.referralCredit.findMany({
         where: { userId: userId, isUsed: false },
         orderBy: { createdAt: 'asc' }
@@ -327,7 +327,7 @@ export async function POST(req: NextRequest) {
         const useAmt = Math.min(creditAmt, needed);
 
         if (creditAmt <= needed + 1e-9) {
-          // Consome o crédito inteiro
+          // Consume the entire credit
           await tx.referralCredit.update({
             where: { id: credit.id },
             data: {
@@ -337,21 +337,21 @@ export async function POST(req: NextRequest) {
             }
           });
         } else {
-          // Consumo parcial: dividir o crédito
-          // 1) Reduz o crédito original
+          // Partial consumption: split the credit
+          // 1) Reduce the original credit
           await tx.referralCredit.update({
             where: { id: credit.id },
             data: {
               amount: creditAmt - useAmt,
             }
           });
-          // 2) Cria um novo registro representando a parte usada
+          // 2) Create a new record representing the used portion
           await tx.referralCredit.create({
             data: {
               userId: credit.userId,
               amount: useAmt,
               type: credit.type,
-              description: credit.description || `Uso parcial para resgate ${redemption.id}`,
+              description: credit.description || `Partial use for redemption ${redemption.id}`,
               referralLeadId: credit.referralLeadId || null,
               isUsed: true,
               usedAt: new Date(),
@@ -365,25 +365,26 @@ export async function POST(req: NextRequest) {
       }
 
       if (needed > 0) {
-        // Reverter criação caso não tenha conseguido reservar o suficiente (condição de corrida)
-        throw new Error('Créditos insuficientes no momento do resgate. Tente novamente.');
+        // Revert creation if not enough could be reserved (race condition)
+        throw new Error('Insufficient credits at redemption time. Please try again.');
       }
 
-      // Não incrementar currentRedemptions em PENDING; disponibilidade é baseada em APPROVED/FULFILLED
+      // Do not increment currentRedemptions while PENDING; availability is based on APPROVED/FULFILLED
       return redemption;
     });
 
     return NextResponse.json({
       success: true,
       redemption: result,
-      message: 'Recompensa resgatada com sucesso! Seus pontos foram reservados. Aguarde a confirmação do seu médico.'
+      message: 'Reward redeemed successfully! Your points have been reserved. Please wait for your doctor’s confirmation.'
     });
 
   } catch (error) {
-    console.error('Erro ao resgatar recompensa:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('Error redeeming reward:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
-} 
+}
+ 

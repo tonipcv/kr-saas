@@ -20,13 +20,13 @@ const transporter = nodemailer.createTransport({
 });
 
 const createReferralSchema = z.object({
-  name: z.string().min(1, 'Nome é obrigatório'),
-  email: z.string().email('Email inválido'),
+  name: z.string().min(1, 'Name is required'),
+  email: z.string().email('Invalid email'),
   phone: z.string().nullable(),
   notes: z.string().nullable()
 });
 
-// GET /api/mobile/referrals - Listar indicações do usuário
+// GET /api/mobile/referrals - List user referrals
 export async function GET(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       return unauthorizedResponse();
     }
 
-    // Buscar indicações do usuário
+    // Fetch user's referrals
     const referrals = await prisma.referralLead.findMany({
       where: {
         referrerId: user.id
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/mobile/referrals - Criar nova indicação
+// POST /api/mobile/referrals - Create new referral
 export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       return unauthorizedResponse();
     }
 
-    // Verificar se é paciente
+    // Verify user is a patient
     const userDetails = await prisma.user.findUnique({
       where: { id: user.id },
       select: { 
@@ -107,14 +107,14 @@ export async function POST(request: NextRequest) {
 
     if (!userDetails || userDetails.role !== 'PATIENT') {
       return NextResponse.json(
-        { error: 'Acesso negado. Apenas pacientes podem criar indicações.' },
+        { error: 'Access denied. Only patients can create referrals.' },
         { status: 403 }
       );
     }
 
     if (!userDetails.doctorId) {
       return NextResponse.json(
-        { error: 'Você precisa estar vinculado a um médico para fazer indicações.' },
+        { error: 'You need to be linked to a doctor to create referrals.' },
         { status: 400 }
       );
     }
@@ -122,19 +122,19 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, email, phone, notes } = createReferralSchema.parse(body);
 
-    // Verificar se o email já existe como usuário
+    // Check if the email already exists as a user
     const existingUser = await prisma.user.findUnique({
       where: { email }
     });
 
     if (existingUser) {
       return NextResponse.json(
-        { error: 'Esta pessoa já possui uma conta no sistema' },
+        { error: 'This person already has an account in the system' },
         { status: 400 }
       );
     }
 
-    // Verificar se já existe uma indicação pendente para este email
+    // Check if there is already a pending referral for this email
     const existingReferral = await prisma.referralLead.findFirst({
       where: {
         email,
@@ -144,12 +144,12 @@ export async function POST(request: NextRequest) {
 
     if (existingReferral) {
       return NextResponse.json(
-        { error: 'Já existe uma indicação pendente para este email' },
+        { error: 'There is already a pending referral for this email' },
         { status: 400 }
       );
     }
 
-    // Buscar informações do médico e clínica
+    // Fetch doctor and clinic information
     const doctor = await prisma.user.findUnique({
       where: { id: userDetails.doctorId },
       include: {
@@ -170,12 +170,12 @@ export async function POST(request: NextRequest) {
 
     if (!doctor) {
       return NextResponse.json(
-        { error: 'Médico não encontrado' },
+        { error: 'Doctor not found' },
         { status: 404 }
       );
     }
 
-    // Criar a indicação
+    // Create referral
     const referral = await prisma.referralLead.create({
       data: {
         name,
@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
     const clinicName = doctor.clinicMemberships?.[0]?.clinic?.name || doctor.name || 'CXLUS';
     const clinicLogo = doctor.clinicMemberships?.[0]?.clinic?.logo || undefined;
 
-    // Enviar notificação por email
+    // Send email notification
     try {
       const emailHtml = createReferralEmail({
         referralName: name,
@@ -209,11 +209,11 @@ export async function POST(request: NextRequest) {
           address: process.env.SMTP_FROM as string
         },
         to: doctor.email,
-        subject: `[Cxlus] Nova Indicação - ${name}`,
+        subject: `[Cxlus] New Referral - ${name}`,
         html: emailHtml
       });
 
-      // Enviar email de crédito para o paciente que indicou
+      // Send credit email to the referring patient
       const creditEmailHtml = createCreditEmail({
         name: userDetails.name || '',
         amount: 1,
@@ -228,13 +228,13 @@ export async function POST(request: NextRequest) {
           address: process.env.SMTP_FROM as string
         },
         to: userDetails.email,
-        subject: '[Cxlus] Novo Crédito de Indicação',
+        subject: '[Cxlus] New Referral Credit',
         html: creditEmailHtml
       });
 
     } catch (emailError) {
-      console.error('Erro ao enviar notificação de indicação:', emailError);
-      // Não falhar a criação da indicação por causa do email
+      console.error('Error sending referral notification:', emailError);
+      // Do not fail referral creation because of email
     }
 
     return NextResponse.json({
@@ -247,7 +247,7 @@ export async function POST(request: NextRequest) {
         status: referral.status,
         createdAt: referral.createdAt
       },
-      message: 'Indicação criada com sucesso! O médico será notificado.'
+      message: 'Referral created successfully! The doctor will be notified.'
     });
 
   } catch (error: any) {
@@ -259,7 +259,7 @@ export async function POST(request: NextRequest) {
 
     if (error.name === 'ZodError') {
       return NextResponse.json(
-        { error: 'Dados inválidos', details: error.errors },
+        { error: 'Invalid data', details: error.errors },
         { status: 400 }
       );
     }

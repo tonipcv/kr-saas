@@ -4,21 +4,21 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import nodemailer from 'nodemailer';
 
-// Configuração do transporter com SMTP do Pulse
+// SMTP transporter configuration (Pulse)
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT),
-  secure: false, // true para porta 465, false para outras portas
+  secure: false, // true for port 465, false for other ports
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASSWORD
   },
   tls: {
-    rejectUnauthorized: false // Para desenvolvimento local
+    rejectUnauthorized: false // For local development
   }
 });
 
-// Função para enviar email de redefinição de senha
+// Helper to send password reset email
 async function sendPasswordResetEmail(email: string, token: string) {
   try {
     const resetUrl = `${process.env.NEXTAUTH_URL}/auth/set-password?token=${token}`;
@@ -26,21 +26,21 @@ async function sendPasswordResetEmail(email: string, token: string) {
     const mailOptions = {
       from: `"CXLUS" <${process.env.SMTP_FROM}>`,
       to: email,
-      subject: 'Redefinição de Senha',
+      subject: 'Password Reset',
       html: `
-        <p>Você solicitou a redefinição de senha para sua conta CXLUS.</p>
-        <p>Clique no link abaixo para definir uma nova senha:</p>
+        <p>You requested a password reset for your CXLUS account.</p>
+        <p>Click the link below to set a new password:</p>
         <p><a href="${resetUrl}">${resetUrl}</a></p>
-        <p>Se você não solicitou esta redefinição, por favor ignore este email.</p>
+        <p>If you did not request this reset, please ignore this email.</p>
       `
     };
     
     const info = await transporter.sendMail(mailOptions);
-    console.log('Email enviado via SMTP Pulse:', info.messageId);
+    console.log('Email sent via SMTP Pulse:', info.messageId);
     return true;
     
   } catch (error) {
-    console.error('Erro ao enviar email:', error);
+    console.error('Error sending email:', error);
     return false;
   }
 }
@@ -67,7 +67,7 @@ export async function POST(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Obtenha o ID do paciente de forma segura
+    // Safely obtain the patient ID
     const patientId = params.id;
 
     // Check if doctor has access to this patient
@@ -96,11 +96,10 @@ export async function POST(
 
     // For now, just return a success message
     // TODO: Implement actual email sending functionality
-    // Gerar um token simples para redefinição de senha
+    // Generate a simple token for password reset
     const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     
-    // Em uma implementação real, você salvaria este token em algum lugar
-    // e o associaria ao usuário com um tempo de expiração
+    // In a real implementation, you would persist this token with an expiration
     
     const resetUrl = `${process.env.NEXTAUTH_URL}/auth/set-password?token=${token}`;
     

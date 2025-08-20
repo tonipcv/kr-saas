@@ -43,27 +43,28 @@ export default function CampaignEditPage() {
   const [heroImageUrl, setHeroImageUrl] = useState('');
   const [benefitTitle, setBenefitTitle] = useState('');
   const [benefitDescription, setBenefitDescription] = useState('');
+  // Headline with placeholders
+  const [headline, setHeadline] = useState('');
+  const [businessName, setBusinessName] = useState('');
 
-  // Form config (JSON) + design theme/colors inside form_config.design
-  const [formJsonText, setFormJsonText] = useState('');
-  const [formJsonError, setFormJsonError] = useState<string | null>(null);
+  // Form behavior
+  const [buttonText, setButtonText] = useState<string>(''); // submit button text
+  const [successBtnText, setSuccessBtnText] = useState<string>('');
+  const [successBtnUrl, setSuccessBtnUrl] = useState<string>('');
+  // Keep theme/colors controls already present
   const [theme, setTheme] = useState<'light' | 'brand' | 'minimal'>('brand');
   const [primaryColor, setPrimaryColor] = useState<string>('');
   const [secondaryColor, setSecondaryColor] = useState<string>('');
+  // Keep a copy of original form_config to merge on save
+  const [originalCfg, setOriginalCfg] = useState<any>(null);
+
+  // Offer (only amount) - not shown publicly, just captured on submit
+  const [offerAmount, setOfferAmount] = useState<string>('');
 
   // Doctor slug for preview
   const [doctorSlug, setDoctorSlug] = useState<string | null>(null);
 
-  // Placeholder para o editor de JSON (evita caracteres especiais diretamente no JSX)
-  const FORM_JSON_PLACEHOLDER = `{
-  "fields": [...],
-  "consents": [...],
-  "design": {
-    "theme": "brand",
-    "primary_color": "#5893ec",
-    "secondary_color": "#9bcef7"
-  }
-}`;
+  // (JSON editor removed for simple UX)
 
   const load = async () => {
     try {
@@ -87,28 +88,25 @@ export default function CampaignEditPage() {
       setBenefitTitle(c.benefit_title || '');
       setBenefitDescription(c.benefit_description || '');
 
-      // Form JSON and design defaults
-      const defaultConfig = {
-        fields: [
-          { type: 'text', name: 'full_name', label: 'Nome completo', required: true },
-          { type: 'email', name: 'email', label: 'Email', required: true },
-        ],
-        consents: [
-          { name: 'terms', label: 'Aceito os termos', required: true }
-        ],
-        design: {
-          theme: 'brand',
-          primary_color: '#5893ec',
-          secondary_color: '#9bcef7',
-        }
-      } as any;
-      const cfg = (c.form_config && typeof c.form_config === 'object') ? c.form_config : defaultConfig;
-      setFormJsonText(JSON.stringify(cfg, null, 2));
+      // Load existing config and design defaults
+      const cfg = (c.form_config && typeof c.form_config === 'object') ? c.form_config : {};
+      setOriginalCfg(cfg);
       try {
         const d = cfg?.design || {};
         setTheme((d.theme as any) || 'brand');
         setPrimaryColor(d.primary_color || '#5893ec');
         setSecondaryColor(d.secondary_color || '#9bcef7');
+        setButtonText(d.submit_button_text || '');
+        const sp = cfg?.success_page || {};
+        setSuccessBtnText(sp.button_text || '');
+        setSuccessBtnUrl(sp.button_url || cfg.redirect_url || '');
+        setHeadline(d.headline || '');
+        setBusinessName(d.business_name || '');
+        // Offer
+        const off = cfg?.offer || {};
+        if (off && typeof off === 'object') {
+          if (off.amount != null) setOfferAmount(String(off.amount));
+        }
       } catch (_) {}
     } catch (e: any) {
       setError(e?.message || 'Erro ao carregar campanha');
@@ -142,39 +140,51 @@ export default function CampaignEditPage() {
     ev.preventDefault();
     setSaveMsg(null);
     setError(null);
-    setFormJsonError(null);
     try {
       setSaving(true);
       const body: Record<string, any> = {
         title,
         description,
         status,
+        // Also persist design fields into top-level columns for consistency with GET
+        hero_image_url: heroImageUrl || null,
+        benefit_title: benefitTitle || null,
+        benefit_description: benefitDescription || null,
       };
       if (canEditSlug) body.campaign_slug = campaignSlug;
 
-      // Parse JSON if provided and valid; merge design selections
-      if (formJsonText && formJsonText.trim()) {
-        try {
-          const parsed = JSON.parse(formJsonText);
-          if (typeof parsed !== 'object' || Array.isArray(parsed)) {
-            throw new Error('form_config deve ser um objeto JSON');
-          }
-          const design = {
-            theme,
-            primary_color: primaryColor || undefined,
-            secondary_color: secondaryColor || undefined,
-            hero_image_url: heroImageUrl || undefined,
-            benefit_title: benefitTitle || undefined,
-            benefit_description: benefitDescription || undefined,
-          };
-          const merged = { ...parsed, design: { ...(parsed.design || {}), ...design } };
-          body.form_config = merged;
-        } catch (e: any) {
-          console.error('[UI][campaign] invalid form_config JSON', e?.message);
-          setFormJsonError(e?.message || 'JSON inválido');
-          // não bloqueia salvar dos demais campos; omite form_config no PATCH
-        }
-      }
+      // Build form_config merging original with selected fields and simple UX inputs
+      const mergedDesign = {
+        ...((originalCfg && originalCfg.design) || {}),
+        theme,
+        primary_color: primaryColor || undefined,
+        secondary_color: secondaryColor || undefined,
+        hero_image_url: heroImageUrl || undefined,
+        benefit_title: benefitTitle || undefined,
+        benefit_description: benefitDescription || undefined,
+        submit_button_text: buttonText || undefined,
+        headline: headline || undefined,
+        business_name: businessName || undefined,
+      };
+      // Merge offer (keep only amount) and strip legacy currency
+      const parsedAmount = offerAmount.trim() !== '' ? Number(offerAmount) : undefined;
+      const cleanedOriginalOffer = originalCfg?.offer ? (
+        (originalCfg.offer.amount != null) ? { amount: originalCfg.offer.amount } : {}
+      ) : undefined;
+
+      const mergedCfg = {
+        ...(originalCfg || {}),
+        design: mergedDesign,
+        success_page: {
+          ...((originalCfg && originalCfg.success_page) || {}),
+          button_text: successBtnText || undefined,
+          button_url: successBtnUrl || undefined,
+        },
+        offer: (parsedAmount != null && !Number.isNaN(parsedAmount))
+          ? { amount: parsedAmount }
+          : cleanedOriginalOffer,
+      };
+      body.form_config = mergedCfg;
 
       const res = await fetch(`/api/v2/doctor/campaigns/${id}`, {
         method: 'PATCH',
@@ -333,6 +343,25 @@ export default function CampaignEditPage() {
                     </select>
                   </div>
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Headline (template)</label>
+                  <input
+                    value={headline}
+                    onChange={(e) => setHeadline(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5893ec]"
+                    placeholder="Ex.: {user} cupom de desconto de 20% para Harmonização Facial com {business}"
+                  />
+                  <p className="mt-1 text-[11px] text-gray-500">Placeholders: {`{user}`}, {`{business}`}, {`{doctor}`}, {`{offer_amount}`}</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Business (para template)</label>
+                  <input
+                    value={businessName}
+                    onChange={(e) => setBusinessName(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5893ec]"
+                    placeholder="Nome da clínica/negócio"
+                  />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Cor Primária</label>
@@ -373,18 +402,57 @@ export default function CampaignEditPage() {
                   />
                 </div>
 
-                {/* Formulário (JSON) */}
+                {/* Formulário e página de sucesso */}
                 <div className="pt-2 border-t border-gray-100" />
-                <h3 className="text-sm font-semibold text-gray-900">Formulário (JSON)</h3>
-                <p className="text-[11px] text-gray-500 mb-1">Defina campos e consentimentos. Um builder visual poderá ser adicionado depois.</p>
-                <textarea
-                  value={formJsonText}
-                  onChange={(e) => { setFormJsonText(e.target.value); setFormJsonError(null); }}
-                  className="font-mono w-full rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#5893ec]"
-                  rows={14}
-                  placeholder={FORM_JSON_PLACEHOLDER}
-                />
-                {formJsonError && <div className="text-[11px] text-red-600">{formJsonError}</div>}
+                <h3 className="text-sm font-semibold text-gray-900">Formulário</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Texto do botão</label>
+                    <input
+                      value={buttonText}
+                      onChange={(e) => setButtonText(e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5893ec]"
+                      placeholder="Ex.: Quero minha avaliação"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Botão da página de sucesso (texto)</label>
+                    <input
+                      value={successBtnText}
+                      onChange={(e) => setSuccessBtnText(e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5893ec]"
+                      placeholder="Ex.: Agendar no WhatsApp"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Botão da página de sucesso (link)</label>
+                    <input
+                      value={successBtnUrl}
+                      onChange={(e) => setSuccessBtnUrl(e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5893ec]"
+                      placeholder="https://... (suporta {leadId} {name} {email} {coupon})"
+                    />
+                  </div>
+                </div>
+
+                {/* Oferta (somente valor; capturada no envio do lead) */}
+                <div className="pt-2 border-t border-gray-100" />
+                <h3 className="text-sm font-semibold text-gray-900">Oferta (capturada no envio do lead)</h3>
+                <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Valor (número)</label>
+                    <input
+                      value={offerAmount}
+                      onChange={(e) => setOfferAmount(e.target.value)}
+                      type="number"
+                      step="0.01"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5893ec]"
+                      placeholder="Ex.: 199.90"
+                    />
+                  </div>
+                </div>
               </form>
             </div>
 

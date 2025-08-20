@@ -4,7 +4,7 @@ import nodemailer from 'nodemailer';
 import { createConsultationRequestEmail } from '@/email-templates/notifications/consultation-request';
 import { createConsultationConfirmationEmail } from '@/email-templates/patient/consultation-confirmation';
 
-// Configurar transporter de email
+// Configure email transporter
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: 465,
@@ -15,7 +15,7 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// POST /api/consultation-submission - Enviar formulário de consulta
+// POST /api/consultation-submission - Submit consultation form
 export async function POST(request: Request) {
   try {
     const data = await request.json();
@@ -31,12 +31,12 @@ export async function POST(request: Request) {
       referralCode 
     } = data;
 
-    // Validar dados obrigatórios
+    // Validate required fields
     if (!formId || !doctorId || !name || !email || !whatsapp) {
-      return NextResponse.json({ error: 'Dados obrigatórios não preenchidos' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Verificar se o formulário existe e está ativo
+    // Check if the form exists and is active
     const form = await prisma.consultationForm.findUnique({
       where: { 
         id: formId,
@@ -64,10 +64,10 @@ export async function POST(request: Request) {
     });
 
     if (!form) {
-      return NextResponse.json({ error: 'Formulário não encontrado ou inativo' }, { status: 404 });
+      return NextResponse.json({ error: 'Form not found or inactive' }, { status: 404 });
     }
 
-    // Verificar código de indicação se fornecido
+    // Check referral code if provided
     let referrer = null;
     if (referralCode) {
       referrer = await prisma.user.findUnique({
@@ -75,12 +75,12 @@ export async function POST(request: Request) {
       });
     }
 
-    // Obter IP e User Agent
+    // Get IP and User Agent
     const forwarded = request.headers.get('x-forwarded-for');
     const ipAddress = forwarded ? forwarded.split(',')[0] : request.headers.get('x-real-ip') || 'unknown';
     const userAgent = request.headers.get('user-agent') || 'unknown';
 
-    // Criar submissão
+    // Create submission
     const submission = await prisma.consultationSubmission.create({
       data: {
         formId,
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
     const clinicLogo = form.doctor.clinicMemberships?.[0]?.clinic?.logo || undefined;
     const doctorName = form.doctor.name || '';
 
-    // Enviar email para o médico
+    // Send email to the doctor
     try {
       const doctorEmailHtml = createConsultationRequestEmail({
         patientName: name,
@@ -127,10 +127,10 @@ export async function POST(request: Request) {
         html: doctorEmailHtml
       });
     } catch (emailError) {
-      console.error('Erro ao enviar email para o médico:', emailError);
+      console.error('Error sending email to doctor:', emailError);
     }
 
-    // Enviar resposta automática se configurada
+    // Send auto-reply if configured
     if (form.thankYouMessage) {
       try {
         const patientEmailHtml = createConsultationConfirmationEmail({
@@ -150,11 +150,11 @@ export async function POST(request: Request) {
           html: patientEmailHtml
         });
       } catch (emailError) {
-        console.error('Erro ao enviar resposta automática:', emailError);
+        console.error('Error sending auto-reply:', emailError);
       }
     }
 
-    // Se há código de indicação válido, criar crédito para o indicador
+    // If there is a valid referral code, create credit for the referrer
     if (referrer) {
       try {
         await prisma.referralCredit.create({
@@ -165,18 +165,18 @@ export async function POST(request: Request) {
           }
         });
       } catch (creditError) {
-        console.error('Erro ao criar crédito de indicação:', creditError);
+        console.error('Error creating referral credit:', creditError);
       }
     }
 
     return NextResponse.json({ 
       success: true, 
       submissionId: submission.id,
-      message: 'Formulário enviado com sucesso!'
+      message: 'Form submitted successfully!'
     });
 
   } catch (error) {
-    console.error('Erro ao processar submissão:', error);
-    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
+    console.error('Error processing submission:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-} 
+}

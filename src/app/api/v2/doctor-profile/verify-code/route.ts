@@ -4,7 +4,7 @@ import { sign } from 'jsonwebtoken';
 
 /**
  * POST /api/v2/doctor-profile/verify-code
- * Verifica o código enviado e retorna um token de autenticação
+ * Verifies the code and returns an authentication token
  */
 export async function POST(request: NextRequest) {
   try {
@@ -12,12 +12,12 @@ export async function POST(request: NextRequest) {
 
     if (!email || !code || !doctorId) {
       return NextResponse.json(
-        { success: false, message: 'Email, código e ID do médico são obrigatórios' },
+        { success: false, message: 'Email, code, and doctor ID are required' },
         { status: 400 }
       );
     }
 
-    // Verificar se o usuário existe
+    // Check if user exists
     const user = await prisma.user.findFirst({
       where: {
         email: email.toLowerCase(),
@@ -25,10 +25,10 @@ export async function POST(request: NextRequest) {
       }
     });
     
-    // Flag para indicar se é um novo usuário
+    // Flag indicating if this is a new user
     const isNewUser = !user;
 
-    // Verificar se o médico existe
+    // Verify doctor exists
     const doctor = await prisma.user.findFirst({
       where: {
         id: doctorId,
@@ -39,12 +39,12 @@ export async function POST(request: NextRequest) {
 
     if (!doctor) {
       return NextResponse.json(
-        { success: false, message: 'Médico não encontrado' },
+        { success: false, message: 'Doctor not found' },
         { status: 404 }
       );
     }
 
-    // Buscar código de verificação válido
+    // Find a valid verification code
     const verificationCode = await prisma.verificationCode.findFirst({
       where: {
         code,
@@ -60,12 +60,12 @@ export async function POST(request: NextRequest) {
 
     if (!verificationCode) {
       return NextResponse.json(
-        { success: false, message: 'Código inválido ou expirado' },
+        { success: false, message: 'Invalid or expired code' },
         { status: 400 }
       );
     }
 
-    // Marcar código como usado
+    // Mark code as used
     await prisma.verificationCode.update({
       where: {
         id: verificationCode.id
@@ -75,24 +75,24 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Verificar se é um usuário temporário (ID começa com 'temp_')
+    // Check if this is a temporary user (ID starts with 'temp_')
     const isTemporaryUser = user?.id.startsWith('temp_');
     
-    // Se for um usuário temporário ou novo, retornar sucesso sem gerar token
-    // O token será gerado após o cadastro completo
+    // If temporary or new user, return success without generating a token
+    // Token will be generated after full registration
     if (isNewUser || isTemporaryUser) {
       return NextResponse.json({
         success: true,
         isNewUser: true,
-        message: 'Código verificado com sucesso. Continue o cadastro.',
+        message: 'Code verified successfully. Continue registration.',
         email: email.toLowerCase(),
         doctorId: doctor.id
       });
     }
     
-    // Para usuários existentes, gerar token JWT
+    // For existing users, generate JWT token
     const secret = process.env.NEXTAUTH_SECRET || 'default-secret-key';
-    console.log('Gerando token JWT para usuário existente:', user!.email);
+    console.log('Generating JWT token for existing user:', user!.email);
     
     const token = sign(
       {
@@ -106,24 +106,24 @@ export async function POST(request: NextRequest) {
       { expiresIn: '7d' }
     );
 
-    console.log('Token gerado com sucesso, primeiros caracteres:', token.substring(0, 20) + '...');
+    console.log('Token generated successfully, first characters:', token.substring(0, 20) + '...');
     
-    // Log de acesso para usuários existentes (comentado pois não há modelo de log no schema)
-    // TODO: Implementar registro de logs quando houver um modelo adequado
-    console.log(`Acesso via link do médico ${doctor.id} pelo usuário ${user!.id}`);
+    // Access log for existing users (commented out as there is no log model in the schema)
+    // TODO: Implement log recording when an appropriate model is available
+    console.log(`Access via doctor link ${doctor.id} by user ${user!.id}`);
 
-    // Verificar se o token foi gerado corretamente
+    // Verify token was generated correctly
     if (!token) {
-      console.error('Erro: Token não foi gerado corretamente');
+      console.error('Error: Token was not generated correctly');
       return NextResponse.json(
-        { success: false, message: 'Erro na geração do token' },
+        { success: false, message: 'Error generating token' },
         { status: 500 }
       );
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Código verificado com sucesso',
+      message: 'Code verified successfully',
       token,
       user: {
         id: user.id,
@@ -133,9 +133,9 @@ export async function POST(request: NextRequest) {
       }
     });
   } catch (error) {
-    console.error('Erro ao verificar código:', error);
+    console.error('Error verifying code:', error);
     return NextResponse.json(
-      { success: false, message: 'Erro interno do servidor' },
+      { success: false, message: 'Internal server error' },
       { status: 500 }
     );
   }

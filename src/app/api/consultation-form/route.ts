@@ -3,35 +3,35 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
-// GET /api/consultation-form - Buscar formulário do médico
+// GET /api/consultation-form - Fetch doctor's form
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verificar se é médico
+    // Verify user is a doctor
     const user = await prisma.user.findUnique({
       where: { id: session.user.id }
     });
 
     if (!user || user.role !== 'DOCTOR') {
-      return NextResponse.json({ error: 'Acesso negado. Apenas médicos podem acessar.' }, { status: 403 });
+      return NextResponse.json({ error: 'Access denied. Doctors only.' }, { status: 403 });
     }
 
-    // Buscar formulário existente
+    // Fetch existing form
     const form = await prisma.consultationForm.findUnique({
       where: { doctorId: session.user.id }
     });
 
     if (!form) {
-      // Retornar um formulário padrão se não existir
+      // Return a default form if none exists
       return NextResponse.json({
         id: null,
         doctorId: session.user.id,
-        title: 'Formulário de Consulta',
-        description: 'Preencha os dados abaixo para agendar sua consulta',
+        title: 'Consultation Form',
+        description: 'Please fill in the details below to schedule your consultation',
         fields: [],
         isActive: true,
         allowAnonymous: false,
@@ -39,93 +39,93 @@ export async function GET() {
         autoCreatePatient: true,
         emailNotifications: true,
         smsNotifications: false,
-        thankYouMessage: 'Obrigado! Entraremos em contato em breve.',
+        thankYouMessage: 'Thank you! We will contact you soon.',
         redirectUrl: null,
         customCss: null,
         // Campos de compatibilidade com o frontend
         welcomeMessage: null,
-        successMessage: 'Obrigado! Entraremos em contato em breve.',
-        nameLabel: 'Nome completo',
-        emailLabel: 'E-mail',
+        successMessage: 'Thank you! We will contact you soon.',
+        nameLabel: 'Full name',
+        emailLabel: 'Email',
         whatsappLabel: 'WhatsApp',
         showAgeField: false,
-        ageLabel: 'Idade',
+        ageLabel: 'Age',
         ageRequired: false,
         showSpecialtyField: false,
-        specialtyLabel: 'Especialidade',
+        specialtyLabel: 'Specialty',
         specialtyOptions: null,
         specialtyRequired: false,
         showMessageField: true,
-        messageLabel: 'Mensagem',
+        messageLabel: 'Message',
         messageRequired: false,
         primaryColor: '#3B82F6',
         backgroundColor: '#FFFFFF',
         textColor: '#1F2937',
         requireReferralCode: false,
         autoReply: true,
-        autoReplyMessage: 'Recebemos sua solicitação e entraremos em contato em breve.'
+        autoReplyMessage: 'We have received your request and will contact you soon.'
       });
     }
 
-    // Transformar para formato esperado pelo frontend
+    // Transform to the format expected by the frontend
     const transformedForm = {
       ...form,
       // Extrair campos do JSON fields para compatibilidade
       welcomeMessage: null,
-      successMessage: form.thankYouMessage || 'Obrigado! Entraremos em contato em breve.',
-      nameLabel: 'Nome completo',
-      emailLabel: 'E-mail',
+      successMessage: form.thankYouMessage || 'Thank you! We will contact you soon.',
+      nameLabel: 'Full name',
+      emailLabel: 'Email',
       whatsappLabel: 'WhatsApp',
       showAgeField: false,
-      ageLabel: 'Idade',
+      ageLabel: 'Age',
       ageRequired: false,
       showSpecialtyField: false,
-      specialtyLabel: 'Especialidade',
+      specialtyLabel: 'Specialty',
       specialtyOptions: null,
       specialtyRequired: false,
       showMessageField: true,
-      messageLabel: 'Mensagem',
+      messageLabel: 'Message',
       messageRequired: false,
       primaryColor: '#3B82F6',
       backgroundColor: '#FFFFFF',
       textColor: '#1F2937',
       requireReferralCode: false,
       autoReply: form.emailNotifications,
-      autoReplyMessage: form.thankYouMessage || 'Recebemos sua solicitação e entraremos em contato em breve.'
+      autoReplyMessage: form.thankYouMessage || 'We have received your request and will contact you soon.'
     };
 
     return NextResponse.json(transformedForm);
   } catch (error) {
-    console.error('Erro ao buscar formulário:', error instanceof Error ? error.message : 'Erro desconhecido');
-    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
+    console.error('Error fetching form:', error instanceof Error ? error.message : 'Unknown error');
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// POST /api/consultation-form - Criar ou atualizar formulário
+// POST /api/consultation-form - Create or update form
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verificar se é médico
+    // Verify user is a doctor
     const user = await prisma.user.findUnique({
       where: { id: session.user.id }
     });
 
     if (!user || user.role !== 'DOCTOR') {
-      return NextResponse.json({ error: 'Acesso negado. Apenas médicos podem acessar.' }, { status: 403 });
+      return NextResponse.json({ error: 'Access denied. Doctors only.' }, { status: 403 });
     }
 
     const data = await request.json();
 
-    // Validar dados obrigatórios
+    // Validate required data
     if (!data.title) {
-      return NextResponse.json({ error: 'Título é obrigatório' }, { status: 400 });
+      return NextResponse.json({ error: 'Title is required' }, { status: 400 });
     }
 
-    // Criar campos baseados nos dados recebidos
+    // Build fields based on received data
     const fields = [];
     
     if (data.nameLabel) {
@@ -134,7 +134,7 @@ export async function POST(request: Request) {
         name: 'name',
         label: data.nameLabel,
         required: true,
-        placeholder: 'Digite seu nome completo'
+        placeholder: 'Enter your full name'
       });
     }
     
@@ -144,7 +144,7 @@ export async function POST(request: Request) {
         name: 'email',
         label: data.emailLabel,
         required: true,
-        placeholder: 'Digite seu e-mail'
+        placeholder: 'Enter your email'
       });
     }
     
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
         name: 'whatsapp',
         label: data.whatsappLabel,
         required: true,
-        placeholder: 'Digite seu WhatsApp'
+        placeholder: 'Enter your WhatsApp'
       });
     }
     
@@ -162,9 +162,9 @@ export async function POST(request: Request) {
       fields.push({
         type: 'number',
         name: 'age',
-        label: data.ageLabel || 'Idade',
+        label: data.ageLabel || 'Age',
         required: data.ageRequired || false,
-        placeholder: 'Digite sua idade'
+        placeholder: 'Enter your age'
       });
     }
     
@@ -172,7 +172,7 @@ export async function POST(request: Request) {
       fields.push({
         type: 'select',
         name: 'specialty',
-        label: data.specialtyLabel || 'Especialidade',
+        label: data.specialtyLabel || 'Specialty',
         required: data.specialtyRequired || false,
         options: data.specialtyOptions || []
       });
@@ -182,13 +182,13 @@ export async function POST(request: Request) {
       fields.push({
         type: 'textarea',
         name: 'message',
-        label: data.messageLabel || 'Mensagem',
+        label: data.messageLabel || 'Message',
         required: data.messageRequired || false,
-        placeholder: 'Digite sua mensagem'
+        placeholder: 'Enter your message'
       });
     }
 
-    // Criar ou atualizar formulário
+    // Create or update form
     const form = await prisma.consultationForm.upsert({
       where: { doctorId: session.user.id },
       update: {
@@ -201,7 +201,7 @@ export async function POST(request: Request) {
         autoCreatePatient: true,
         emailNotifications: data.autoReply !== undefined ? data.autoReply : true,
         smsNotifications: false,
-        thankYouMessage: data.successMessage || data.autoReplyMessage || 'Obrigado! Entraremos em contato em breve.',
+        thankYouMessage: data.successMessage || data.autoReplyMessage || 'Thank you! We will contact you soon.',
         redirectUrl: null,
         customCss: data.primaryColor || data.backgroundColor || data.textColor ? 
           `:root { --primary-color: ${data.primaryColor || '#3B82F6'}; --bg-color: ${data.backgroundColor || '#FFFFFF'}; --text-color: ${data.textColor || '#1F2937'}; }` : 
@@ -218,7 +218,7 @@ export async function POST(request: Request) {
         autoCreatePatient: true,
         emailNotifications: data.autoReply !== undefined ? data.autoReply : true,
         smsNotifications: false,
-        thankYouMessage: data.successMessage || data.autoReplyMessage || 'Obrigado! Entraremos em contato em breve.',
+        thankYouMessage: data.successMessage || data.autoReplyMessage || 'Thank you! We will contact you soon.',
         redirectUrl: null,
         customCss: data.primaryColor || data.backgroundColor || data.textColor ? 
           `:root { --primary-color: ${data.primaryColor || '#3B82F6'}; --bg-color: ${data.backgroundColor || '#FFFFFF'}; --text-color: ${data.textColor || '#1F2937'}; }` : 
@@ -226,7 +226,7 @@ export async function POST(request: Request) {
       }
     });
 
-    // Transformar resposta para formato esperado
+    // Transform response to the expected format
     const transformedForm = {
       ...form,
       welcomeMessage: data.welcomeMessage,
@@ -254,7 +254,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json(transformedForm);
   } catch (error) {
-    console.error('Erro ao salvar formulário:', error instanceof Error ? error.message : 'Erro desconhecido');
-    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
+    console.error('Error saving form:', error instanceof Error ? error.message : 'Unknown error');
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-} 
+}
+ 

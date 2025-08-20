@@ -22,53 +22,53 @@ export async function POST(req: Request) {
   try {
     const { name, email, password } = await req.json();
 
-    // Validações básicas
+    // Basic validations
     if (!name || !email || !password) {
       return NextResponse.json(
-        { message: "Nome, email e senha são obrigatórios" },
+        { message: "Name, email and password are required" },
         { status: 400 }
       );
     }
 
     if (password.length < 6) {
       return NextResponse.json(
-        { message: "A senha deve ter pelo menos 6 caracteres" },
+        { message: "Password must be at least 6 characters long" },
         { status: 400 }
       );
     }
 
-    // Verificar se email já existe
+    // Check if email already exists
     const existingUser = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
     });
 
     if (existingUser) {
       return NextResponse.json(
-        { message: "Este email já está em uso" },
+        { message: "This email is already in use" },
         { status: 400 }
       );
     }
 
-    // Buscar plano padrão para médicos
+    // Find default plan for doctors
     const defaultPlan = await prisma.subscriptionPlan.findFirst({
       where: { isDefault: true }
     });
 
     if (!defaultPlan) {
       return NextResponse.json(
-        { message: "Plano padrão não encontrado" },
+        { message: "Default plan not found" },
         { status: 500 }
       );
     }
 
-    // Gerar código de verificação (6 dígitos)
+    // Generate verification code (6 digits)
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const codeExpiry = new Date(Date.now() + 3600000); // 1 hora
+    const codeExpiry = new Date(Date.now() + 3600000); // 1 hour
 
-    // Hash da senha
+    // Hash password
     const hashedPassword = await hash(password, 12);
 
-    // Criar médico
+    // Create doctor
     const doctor = await prisma.user.create({
       data: {
         name,
@@ -81,7 +81,7 @@ export async function POST(req: Request) {
       }
     });
 
-    // Criar assinatura trial
+    // Create trial subscription
     await prisma.doctorSubscription.create({
       data: {
         doctorId: doctor.id,
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
       }
     });
 
-    // Enviar email de verificação
+    // Send verification email
     try {
       await transporter.verify();
       console.log('SMTP connection verified');
@@ -115,7 +115,7 @@ export async function POST(req: Request) {
       console.log('Verification email sent successfully');
     } catch (emailError) {
       console.error('Email sending error:', emailError);
-      // Se o email falhar, deletar o médico criado
+      // If the email fails, delete the created doctor
       await prisma.doctorSubscription.deleteMany({
         where: { doctorId: doctor.id }
       });
@@ -127,7 +127,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       {
-        message: "Médico criado com sucesso. Verifique seu email para confirmar o cadastro.",
+        message: "Doctor created successfully. Please check your email to confirm registration.",
         doctorId: doctor.id
       },
       { status: 201 }
@@ -135,7 +135,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("Registration error:", error);
     return NextResponse.json(
-      { message: "Erro ao criar médico" },
+      { message: "Error creating doctor" },
       { status: 500 }
     );
   }

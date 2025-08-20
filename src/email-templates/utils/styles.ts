@@ -37,7 +37,7 @@ export const shadows = {
   lg: '0 10px 15px rgba(0, 0, 0, 0.1)'
 };
 
-// Estilos comuns reutilizáveis
+// Common reusable styles
 export const commonStyles = {
   container: `
     max-width: 600px;

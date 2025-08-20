@@ -84,6 +84,7 @@ export default function DoctorDashboard() {
   const [planName, setPlanName] = useState<string | null>(null);
   const [doctorSlug, setDoctorSlug] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [rewardsSummary, setRewardsSummary] = useState<{ configured: number; pending: number; redeemed: number }>({ configured: 0, pending: 0, redeemed: 0 });
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -113,6 +114,35 @@ export default function DoctorDashboard() {
           return;
         }
         const protocolsData = await protocolsResponse.json();
+
+        // Load referral KPIs (leads and revenue)
+        let kpisData: any = null;
+        try {
+          const kpisResponse = await fetch('/api/v2/doctor/referrals/kpis', { cache: 'no-store' });
+          if (kpisResponse.ok) {
+            const kpisJson = await kpisResponse.json();
+            if (kpisJson?.success && kpisJson?.data) {
+              kpisData = kpisJson.data;
+            }
+          }
+        } catch (e) {
+          console.error('Error loading referral KPIs:', e);
+        }
+
+        // Load rewards to compute configured/pending/redeemed
+        try {
+          const rewardsRes = await fetch('/api/referrals/rewards');
+          if (rewardsRes.ok) {
+            const rewardsJson = await rewardsRes.json();
+            const rewards = Array.isArray(rewardsJson?.rewards) ? rewardsJson.rewards : [];
+            const configured = rewards.filter((r: any) => r.isActive).length;
+            const pending = rewards.reduce((sum: number, r: any) => sum + (Array.isArray(r.redemptions) ? r.redemptions.filter((rd: any) => rd.status === 'PENDING').length : 0), 0);
+            const redeemed = rewards.reduce((sum: number, r: any) => sum + (Array.isArray(r.redemptions) ? r.redemptions.filter((rd: any) => rd.status === 'FULFILLED').length : 0), 0);
+            setRewardsSummary({ configured, pending, redeemed });
+          }
+        } catch (e) {
+          console.error('Error loading rewards summary:', e);
+        }
 
         // Transform patients data to match expected format
         const transformedPatients = Array.isArray(patientsData) ? patientsData.map((p: any) => ({
@@ -148,15 +178,15 @@ export default function DoctorDashboard() {
 
         // Set dashboard statistics from the dashboard endpoint
         if (dashboardData.success && dashboardData.data) {
-          setStats({
+          setStats((prev) => ({
+            ...prev,
             totalPatients: dashboardData.data.totalPatients,
             activeProtocols: dashboardData.data.activeProtocols,
             totalProtocols: dashboardData.data.totalProtocols,
             completedToday: dashboardData.data.completedToday,
-            revenueCollected: dashboardData.data.revenueCollected ?? dashboardData.data.revenue ?? 0,
-            referralsCount: dashboardData.data.referralsCount ?? dashboardData.data.referrals ?? 0,
-            usersCount: dashboardData.data.usersCount ?? dashboardData.data.totalPatients ?? 0
-          });
+            // Map users to totalPatients
+            usersCount: dashboardData.data.totalPatients
+          }));
         } else {
           // Fallback to calculated stats if dashboard endpoint fails
           const totalPatients = transformedPatients.length || 0;
@@ -166,15 +196,44 @@ export default function DoctorDashboard() {
             0
           );
           
-          setStats({
+          setStats((prev) => ({
+            ...prev,
             totalPatients,
             activeProtocols,
             totalProtocols,
             completedToday: 0,
-            revenueCollected: 0,
-            referralsCount: 0,
+            revenueCollected: prev.revenueCollected || 0,
+            referralsCount: prev.referralsCount || 0,
             usersCount: totalPatients
-          });
+          }));
+        }
+
+        // If KPIs available, map to dashboard KPIs
+        if (kpisData) {
+          const leadsRecebidosNum = Number(kpisData.leadsRecebidos);
+          const valorGeradoNum = Number(kpisData.valorGerado);
+          setStats((prev) => ({
+            ...prev,
+            referralsCount: Number.isFinite(leadsRecebidosNum) ? leadsRecebidosNum : prev.referralsCount,
+            revenueCollected: Number.isFinite(valorGeradoNum) ? valorGeradoNum : prev.revenueCollected,
+          }));
+        }
+
+        // Fallback: pull obtainedValue directly from manage endpoint (same source as referrals page)
+        try {
+          const leadsRes = await fetch(`/api/referrals/manage?page=1&limit=1`, { cache: 'no-store' });
+          if (leadsRes.ok) {
+            const leadsJson = await leadsRes.json();
+            const obtainedValue = Number(leadsJson?.stats?.obtainedValue || 0);
+            const totalLeads = Number(leadsJson?.pagination?.total || 0);
+            setStats((prev) => ({
+              ...prev,
+              referralsCount: prev.referralsCount || totalLeads,
+              revenueCollected: prev.revenueCollected || obtainedValue,
+            }));
+          }
+        } catch (e) {
+          console.error('Error computing revenue fallback from manage stats:', e);
         }
 
       } catch (error) {
@@ -311,30 +370,7 @@ export default function DoctorDashboard() {
             </div>
           )}
 
-          {/* Public company link (domain + slug) */}
-          <div className="mb-4 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-            {doctorSlug ? (
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] text-gray-500 font-medium">Your public link</p>
-                  <code className="block text-sm text-gray-900 truncate">{publicUrl}</code>
-                </div>
-                <Button onClick={copyPublicUrl} variant="outline" size="sm" className="h-8 border-gray-300 text-gray-800 shrink-0">
-                  {copied ? 'Copied' : 'Copy'}
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] text-gray-500 font-medium">Set your public link</p>
-                  <p className="text-sm text-gray-900">Define your slug in Profile to get a public link.</p>
-                </div>
-                <Button asChild variant="outline" size="sm" className="h-8 border-gray-300 text-gray-800 shrink-0">
-                  <Link href="/doctor/profile">Open Profile</Link>
-                </Button>
-              </div>
-            )}
-          </div>
+          
 
           {/* Stats (pill cards like KPIs) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-2">
@@ -377,7 +413,11 @@ export default function DoctorDashboard() {
               </CardHeader>
               <CardContent className="px-4 pb-4 pt-0">
                 <div className="grid grid-cols-3 gap-3">
-                  {[{label:'Configured',value:0},{label:'Pending',value:0},{label:'Redeemed',value:0}].map((m) => (
+                  {[
+                    {label:'Configured',value:rewardsSummary.configured},
+                    {label:'Pending',value:rewardsSummary.pending},
+                    {label:'Redeemed',value:rewardsSummary.redeemed}
+                  ].map((m) => (
                     <div key={m.label} className="px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 shadow-sm">
                       <p className="text-[11px] text-gray-600 font-medium">{m.label}</p>
                       <p className="text-[22px] leading-7 font-semibold text-gray-900">{m.value}</p>
@@ -386,6 +426,8 @@ export default function DoctorDashboard() {
                 </div>
               </CardContent>
             </Card>
+
+          
 
             {/* Referral projections (above Active Clients and Track Progress) */}
             <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl col-span-2">
@@ -499,8 +541,33 @@ export default function DoctorDashboard() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Public company link (domain + slug) - bottom */}
+          <div className="mt-6 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            {doctorSlug ? (
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] text-gray-500 font-medium">Your public link</p>
+                  <code className="block text-sm text-gray-900 truncate">{publicUrl}</code>
+                </div>
+                <Button onClick={copyPublicUrl} variant="outline" size="sm" className="h-8 border-gray-300 text-gray-800 shrink-0">
+                  {copied ? 'Copied' : 'Copy'}
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] text-gray-500 font-medium">Set your public link</p>
+                  <p className="text-sm text-gray-900">Define your slug in Profile to get a public link.</p>
+                </div>
+                <Button asChild variant="outline" size="sm" className="h-8 border-gray-300 text-gray-800 shrink-0">
+                  <Link href="/doctor/profile">Open Profile</Link>
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
-} 
+}

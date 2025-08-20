@@ -1,6 +1,9 @@
 import { FEATURES } from '@/lib/feature-flags';
 import { prisma } from '@/lib/prisma';
 import { notFound } from 'next/navigation';
+import { getUserByReferralCode } from '@/lib/referral-utils';
+import CampaignDynamicForm from '@/components/campaign-form/CampaignDynamicForm';
+import TrackingParams from '@/components/campaign-form/TrackingParams';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -71,6 +74,34 @@ export default async function CampaignPublicPage({
   const benefitTitle = design.benefit_title || (campaign.benefit_title as string | null);
   const benefitDescription = design.benefit_description || (campaign.benefit_description as string | null);
 
+  // Headline with placeholders
+  const rawHeadline: string | undefined = design.headline || undefined;
+  const businessName: string = design.business_name || doctor.name || '';
+  const offerAmount: string = (formConfig?.offer && typeof formConfig.offer.amount !== 'undefined')
+    ? String(formConfig.offer.amount)
+    : '';
+  // Resolve referrer name from code if present in URL
+  const refCode = (typeof searchParams?.referrerCode === 'string' && searchParams.referrerCode)
+    || (typeof searchParams?.ref === 'string' && searchParams.ref)
+    || null;
+  let referrerName: string | null = null;
+  if (refCode) {
+    try {
+      const refUser = await getUserByReferralCode(refCode);
+      if (refUser && typeof (refUser as any).name === 'string') {
+        referrerName = (refUser as any).name as string;
+      }
+    } catch {}
+  }
+  function resolveHeadline(tpl: string): string {
+    return tpl
+      .replaceAll('{user}', referrerName || '')
+      .replaceAll('{business}', businessName)
+      .replaceAll('{doctor}', doctor.name || '')
+      .replaceAll('{offer_amount}', offerAmount);
+  }
+  const headline: string | null = rawHeadline ? resolveHeadline(rawHeadline) : null;
+
   // Styles mirrored from slug page
   const styleConfig = {
     bgClass: 'bg-gradient-to-br from-gray-50 via-white to-gray-100',
@@ -82,20 +113,31 @@ export default async function CampaignPublicPage({
 
   return (
     <div className={`min-h-screen ${styleConfig.bgClass} relative overflow-hidden`}>
+      {/* Persist tracking params in cookie for backend fallback */}
+      <TrackingParams />
       <div className="absolute inset-0 bg-gradient-to-br from-gray-200/20 via-transparent to-gray-300/20" />
       <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gray-400/10 via-transparent to-transparent" />
       <div className="relative max-w-md mx-auto px-6 py-20">
-        {/* Header with doctor info */}
-        <div className="text-center mb-12">
-          <div className="relative mb-8">
+        {/* Header with doctor info (hero banner on top, name below) */}
+        <div className="mb-12">
+          {hero && (
+            <div className="relative rounded-3xl overflow-hidden h-64 md:h-72">
+              <div
+                className="absolute inset-0 bg-center bg-cover bg-no-repeat"
+                style={{ backgroundImage: `url(${hero})` }}
+              />
+              <div className="absolute inset-0 bg-white/10" />
+            </div>
+          )}
+          <div className="relative -mt-20 md:-mt-24 mb-6 flex justify-center">
             {doctor.image ? (
-              <div className="relative w-32 h-32 mx-auto">
+              <div className="relative w-32 h-32">
                 <div className="absolute inset-0 bg-gradient-to-r from-gray-400 to-gray-500 rounded-full opacity-75 blur-lg" />
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={doctor.image} alt={doctor.name} className="relative w-full h-full rounded-full object-cover border-4 border-white/30 shadow-2xl" />
               </div>
             ) : (
-              <div className="relative w-32 h-32 mx-auto">
+              <div className="relative w-32 h-32">
                 <div className="absolute inset-0 bg-gradient-to-r from-gray-400 to-gray-500 rounded-full opacity-75 blur-lg" />
                 <div className="relative w-full h-full rounded-full bg-gradient-to-r from-gray-500 to-gray-600 flex items-center justify-center border-4 border-white/30 shadow-2xl">
                   <span className="text-white text-4xl font-light">{doctor.name.charAt(0)}</span>
@@ -103,11 +145,16 @@ export default async function CampaignPublicPage({
               </div>
             )}
           </div>
-          <div className="space-y-3">
-            <p className={`text-lg md:text-xl font-light leading-relaxed ${styleConfig.titleClass}`}>
-              {title}
-            </p>
-            <h1 className={`text-xl md:text-2xl font-semibold ${styleConfig.titleClass}`}>{doctor.name}</h1>
+          <div className="text-center space-y-3">
+            {headline ? (
+              <>
+                <h1 className={`text-xl md:text-2xl font-semibold ${styleConfig.titleClass}`}>{headline}</h1>
+              </>
+            ) : (
+              <>
+                {/* No headline configured; hide doctor name per request */}
+              </>
+            )}
             {allowPreview && <p className="text-xs text-amber-600">Preview mode</p>}
           </div>
         </div>
@@ -115,36 +162,42 @@ export default async function CampaignPublicPage({
         {/* Card content */}
         <div className={`${styleConfig.cardClass} rounded-3xl p-8 shadow-2xl`}>
           <div className="space-y-4">
-            {description && (
-              <p className={`text-sm md:text-base ${styleConfig.subtitleClass}`}>{description}</p>
-            )}
+            {/* hero image moved to header background */}
+
+            {/* Dynamic custom form */}
+            <div className="mt-4">
+              <CampaignDynamicForm
+                campaignId={campaign.id}
+                formConfig={formConfig}
+                allowPreview={allowPreview}
+                classNames={{
+                  buttonClass: styleConfig.buttonClass,
+                  titleClass: styleConfig.titleClass,
+                  subtitleClass: styleConfig.subtitleClass,
+                }}
+              />
+            </div>
+
+            {/* Benefits at the bottom */}
             {(benefitTitle || benefitDescription) && (
-              <div className="space-y-1">
+              <div className="mt-8 border-t border-gray-200/60 pt-6">
                 {benefitTitle && (
                   <h2 className={`text-base md:text-lg font-semibold ${styleConfig.titleClass}`}>{benefitTitle}</h2>
                 )}
                 {benefitDescription && (
-                  <p className={`text-xs md:text-sm ${styleConfig.subtitleClass}`}>{benefitDescription}</p>
+                  <p className={`mt-1 text-sm md:text-base ${styleConfig.subtitleClass}`}>{benefitDescription}</p>
                 )}
               </div>
             )}
-
-            {hero && (
-              <div className="mt-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={hero} alt={title} className="w-full h-48 rounded-xl object-cover border border-gray-200/60" />
-              </div>
-            )}
-
-            {/* Placeholder for future custom form rendering */}
-            <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
-              Formulário personalizado em breve.
-            </div>
           </div>
         </div>
 
         <div className="text-center mt-12">
-          <p className={`text-xs ${styleConfig.subtitleClass} opacity-60`}>Por {doctor.name}</p>
+          <div className="flex items-center justify-center gap-2 opacity-70">
+            <span className={`text-xs ${styleConfig.subtitleClass}`}>Powered by</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Powered by" className="h-4 w-auto opacity-80" />
+          </div>
         </div>
       </div>
     </div>

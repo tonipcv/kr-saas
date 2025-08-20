@@ -20,14 +20,14 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// POST - Criar nova indicação
+// POST - Create new referral
 export async function POST(request: NextRequest) {
   try {
-    // Tentar autenticação web primeiro
+    // Try web authentication first
     const session = await getServerSession(authOptions);
     let userId = session?.user?.id;
 
-    // Se não há sessão web, tentar autenticação mobile
+    // If no web session, try mobile auth
     if (!userId) {
       const mobileUser = await verifyMobileAuth(request);
       if (mobileUser) {
@@ -36,10 +36,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (!userId) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verificar se é paciente
+    // Verify if user is a patient
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { 
@@ -63,30 +63,30 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user || user.role !== 'PATIENT') {
-      return NextResponse.json({ error: 'Acesso negado. Apenas pacientes podem criar indicações.' }, { status: 403 });
+      return NextResponse.json({ error: 'Access denied. Only patients can create referrals.' }, { status: 403 });
     }
 
     if (!user.doctorId) {
-      return NextResponse.json({ error: 'Você precisa estar vinculado a um médico para fazer indicações.' }, { status: 400 });
+      return NextResponse.json({ error: 'You need to be linked to a doctor to create referrals.' }, { status: 400 });
     }
 
     const { name, email, phone, notes } = await request.json();
 
-    // Validações
+    // Validations
     if (!name || !email) {
-      return NextResponse.json({ error: 'Nome e email são obrigatórios' }, { status: 400 });
+      return NextResponse.json({ error: 'Name and email are required' }, { status: 400 });
     }
 
-    // Verificar se o email já existe como usuário
+    // Check if email already exists as a user
     const existingUser = await prisma.user.findUnique({
       where: { email }
     });
 
     if (existingUser) {
-      return NextResponse.json({ error: 'Esta pessoa já possui uma conta no sistema' }, { status: 400 });
+      return NextResponse.json({ error: 'This person already has an account in the system' }, { status: 400 });
     }
 
-    // Verificar se já existe uma indicação pendente para este email
+    // Check if there is already a pending referral for this email
     const existingReferral = await prisma.referralLead.findFirst({
       where: {
         email,
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (existingReferral) {
-      return NextResponse.json({ error: 'Já existe uma indicação pendente para este email' }, { status: 400 });
+      return NextResponse.json({ error: 'There is already a pending referral for this email' }, { status: 400 });
     }
 
     // Buscar informações do médico e clínica
@@ -118,10 +118,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (!doctor) {
-      return NextResponse.json({ error: 'Médico não encontrado' }, { status: 404 });
+      return NextResponse.json({ error: 'Doctor not found' }, { status: 404 });
     }
 
-    // Criar a indicação
+    // Create referral
     const referral = await prisma.referralLead.create({
       data: {
         name,
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
     const clinicName = doctor.clinicMemberships?.[0]?.clinic?.name || doctor.name || 'CXLUS';
     const clinicLogo = doctor.clinicMemberships?.[0]?.clinic?.logo || undefined;
 
-    // Enviar notificação por email
+    // Send email notification
     try {
       const emailHtml = createReferralEmail({
         referralName: name,
@@ -155,11 +155,11 @@ export async function POST(request: NextRequest) {
           address: process.env.SMTP_FROM as string
         },
         to: doctor.email,
-        subject: `[Cxlus] Nova Indicação - ${name}`,
+        subject: `[Cxlus] New Referral - ${name}`,
         html: emailHtml
       });
 
-      // Enviar email de crédito para o paciente que indicou
+      // Send credit email to the referring patient
       const creditEmailHtml = createCreditEmail({
         name: user.name || '',
         amount: 1,
@@ -174,13 +174,13 @@ export async function POST(request: NextRequest) {
           address: process.env.SMTP_FROM as string
         },
         to: user.email,
-        subject: '[Cxlus] Novo Crédito de Indicação',
+        subject: '[Cxlus] New Referral Credit',
         html: creditEmailHtml
       });
 
     } catch (emailError) {
-      console.error('Erro ao enviar notificação de indicação:', emailError);
-      // Não falhar a criação da indicação por causa do email
+      console.error('Error sending referral notification:', emailError);
+      // Do not fail referral creation because of email
     }
 
     return NextResponse.json({
@@ -193,14 +193,15 @@ export async function POST(request: NextRequest) {
         status: referral.status,
         createdAt: referral.createdAt
       },
-      message: 'Indicação criada com sucesso! O médico será notificado.'
+      message: 'Referral created successfully! The doctor will be notified.'
     });
 
   } catch (error) {
-    console.error('Erro ao criar indicação:', error);
+    console.error('Error creating referral:', error);
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
-} 
+}
+ 

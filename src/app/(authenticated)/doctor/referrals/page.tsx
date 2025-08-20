@@ -45,11 +45,17 @@ interface ReferralLead {
   createdAt: string;
   lastContactAt?: string;
   notes?: string;
+  customFields?: {
+    offer?: { amount?: number } | null;
+    coupon?: { code: string; amount?: number | null } | null;
+    [k: string]: any;
+  } | null;
   referrer: {
     id: string;
     name: string;
     email: string;
   };
+  campaign?: { id: string; slug: string; title: string } | null;
   convertedUser?: {
     id: string;
     name: string;
@@ -68,6 +74,8 @@ interface ReferralStats {
   contacted: number;
   converted: number;
   rejected: number;
+  pendingValue?: number;
+  obtainedValue?: number;
 }
 
 const statusConfig = {
@@ -92,7 +100,8 @@ export default function DoctorReferralsPage() {
 
   const [updateForm, setUpdateForm] = useState({
     status: '',
-    notes: ''
+    notes: '',
+    offerAmount: '' as string,
   });
 
   // Load data
@@ -153,14 +162,15 @@ export default function DoctorReferralsPage() {
         body: JSON.stringify({
           leadId: selectedLead.id,
           status: updateForm.status,
-          notes: updateForm.notes
+          notes: updateForm.notes,
+          offerAmount: updateForm.offerAmount !== '' ? Number(updateForm.offerAmount) : undefined,
         })
       });
 
       if (response.ok) {
         await loadData();
         setSelectedLead(null);
-        setUpdateForm({ status: '', notes: '' });
+        setUpdateForm({ status: '', notes: '', offerAmount: '' });
       }
     } catch (error) {
       console.error('Error updating status:', error);
@@ -173,7 +183,8 @@ export default function DoctorReferralsPage() {
     setSelectedLead(lead);
     setUpdateForm({
       status: lead.status,
-      notes: lead.notes || ''
+      notes: lead.notes || '',
+      offerAmount: lead.customFields?.offer?.amount != null ? String(lead.customFields.offer.amount) : '',
     });
   };
 
@@ -411,6 +422,22 @@ export default function DoctorReferralsPage() {
                       </div>
                     </CardContent>
                   </Card>
+                  <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
+                    <CardContent className="p-5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-gray-600">Pending Value</p>
+                        <span className="text-xl font-bold text-gray-900">{(stats.pendingValue ?? 0).toFixed(2)}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
+                    <CardContent className="p-5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-gray-600">Obtained Value</p>
+                        <span className="text-xl font-bold text-gray-900">{(stats.obtainedValue ?? 0).toFixed(2)}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </>
               ) : (
                 <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
@@ -425,65 +452,7 @@ export default function DoctorReferralsPage() {
             </div>
           )}
 
-          {/* Referrals Pipeline (overview) */}
-          {(() => {
-            const allForTab = filteredLeads;
-            const byStatus = (s: string) => allForTab.filter(l => l.status === s);
-            const columns = [
-              { id: 'PENDING', title: 'Pending', color: 'bg-gray-50 text-gray-700 border-gray-200' },
-              { id: 'CONTACTED', title: 'Contacted', color: 'bg-gray-50 text-gray-700 border-gray-200' },
-              { id: 'CONVERTED', title: 'Converted', color: 'bg-gray-50 text-gray-700 border-gray-200' },
-              { id: 'REJECTED', title: 'Rejected', color: 'bg-gray-50 text-gray-700 border-gray-200' },
-            ];
-            return (
-              <div className="mb-8">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-bold text-gray-900">Referrals Pipeline</h2>
-                  <span className="text-sm text-gray-600 font-medium">Drag & drop is available on the full Pipeline page</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {columns.map(col => (
-                    <div key={col.id} className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-                      <div className={`px-4 py-3 border-b ${col.color} bg-opacity-40`}> 
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold">{col.title}</span>
-                          <span className="text-xs font-bold text-gray-700 bg-white/70 rounded-lg px-2 py-0.5 border border-gray-200">
-                            {byStatus(col.id).length}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="p-4 space-y-3 max-h-96 overflow-auto">
-                        {byStatus(col.id).slice(0, 8).map(lead => (
-                          <div key={lead.id} className="border border-gray-200 rounded-xl p-3 hover:shadow-sm transition bg-white">
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <p className="text-sm font-semibold text-gray-900">{lead.name}</p>
-                                <p className="text-xs text-gray-600">{lead.email}</p>
-                              </div>
-                              <Badge className={`bg-gray-100 text-gray-800 rounded-lg px-2 py-0.5 text-[10px] font-medium`}> 
-                                {statusConfig[lead.status as keyof typeof statusConfig]?.label || lead.status}
-                              </Badge>
-                            </div>
-                            <div className="mt-2 flex items-center justify-between">
-                              <span className="text-[11px] text-gray-500">{new Date(lead.createdAt).toLocaleDateString('en-US')}</span>
-                              <Button asChild variant="outline" size="sm" className="h-8 px-2 text-xs rounded-lg border-gray-300">
-                                <Link href="#" onClick={e => { e.preventDefault(); setSelectedLead(lead); setUpdateForm({ status: lead.status, notes: lead.notes || '' }); }}>
-                                  Manage
-                                </Link>
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                        {byStatus(col.id).length === 0 && (
-                          <div className="text-center text-xs text-gray-500 font-medium py-6 border border-dashed border-gray-200 rounded-xl">No leads</div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
+          
 
           {/* Referrals Table */}
           <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
@@ -504,6 +473,9 @@ export default function DoctorReferralsPage() {
                   <TableRow>
                     <TableHead className="text-sm font-semibold text-gray-900">Name</TableHead>
                     <TableHead className="text-sm font-semibold text-gray-900">Email</TableHead>
+                    <TableHead className="text-sm font-semibold text-gray-900">Campaign</TableHead>
+                    <TableHead className="text-sm font-semibold text-gray-900">Valor</TableHead>
+                    <TableHead className="text-sm font-semibold text-gray-900">Cupom</TableHead>
                     <TableHead className="text-sm font-semibold text-gray-900">Referred by</TableHead>
                     <TableHead className="text-sm font-semibold text-gray-900">Status</TableHead>
                     <TableHead className="text-sm font-semibold text-gray-900">Date</TableHead>
@@ -516,6 +488,24 @@ export default function DoctorReferralsPage() {
                       <TableRow key={lead.id}>
                         <TableCell className="text-sm font-semibold text-gray-900">{lead.name}</TableCell>
                         <TableCell className="text-sm text-gray-700">{lead.email}</TableCell>
+                        <TableCell className="text-sm text-gray-700">{lead.campaign?.title || '—'}</TableCell>
+                        <TableCell className="text-sm text-gray-700">{lead.customFields?.offer?.amount ?? '—'}</TableCell>
+                        <TableCell className="text-sm text-gray-700">
+                          {lead.customFields?.coupon?.code ? (
+                            <div className="inline-flex items-center gap-2">
+                              <code className="font-mono text-xs tracking-widest text-gray-900 bg-gray-100 rounded px-2 py-1">
+                                {lead.customFields.coupon.code}
+                              </code>
+                              <button
+                                type="button"
+                                className="text-[11px] text-[#5893ec] hover:underline"
+                                onClick={() => navigator.clipboard.writeText(lead.customFields!.coupon!.code)}
+                              >
+                                Copiar
+                              </button>
+                            </div>
+                          ) : '—'}
+                        </TableCell>
                         <TableCell>
                           <div>
                             <p className="text-sm font-semibold text-gray-900">{lead.referrer?.name ?? 'Anonymous'}</p>
@@ -556,8 +546,26 @@ export default function DoctorReferralsPage() {
                                     <p className="text-sm text-gray-900"><strong>Name:</strong> {selectedLead?.name}</p>
                                     <p className="text-sm text-gray-900"><strong>Email:</strong> {selectedLead?.email}</p>
                                     <p className="text-sm text-gray-900"><strong>Phone:</strong> {selectedLead?.phone || 'Not provided'}</p>
+                                    <p className="text-sm text-gray-900"><strong>Campaign:</strong> {selectedLead?.campaign?.title || '—'}</p>
+                                    <p className="text-sm text-gray-900"><strong>Valor:</strong> {selectedLead?.customFields?.offer?.amount ?? '—'}</p>
+                                    <p className="text-sm text-gray-900"><strong>Cupom:</strong> {selectedLead?.customFields?.coupon?.code ?? '—'}</p>
                                     <p className="text-sm text-gray-900"><strong>Referred by:</strong> {selectedLead?.referrer?.name ?? 'Anonymous'}</p>
                                   </div>
+                                </div>
+
+                                <div>
+                                  <Label htmlFor="offerAmount" className="text-sm font-semibold text-gray-900">Valor (interno)</Label>
+                                  <Input
+                                    id="offerAmount"
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={updateForm.offerAmount}
+                                    onChange={(e) => setUpdateForm(prev => ({ ...prev, offerAmount: e.target.value }))}
+                                    placeholder="Ex.: 199.90"
+                                    className="mt-2 bg-white border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] text-gray-900 rounded-xl h-10 font-medium"
+                                  />
+                                  <p className="text-xs text-gray-500 mt-1">Não exibido publicamente. Usado apenas para registro do lead.</p>
                                 </div>
 
                                 <div>

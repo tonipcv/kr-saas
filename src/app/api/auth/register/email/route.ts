@@ -21,27 +21,27 @@ export async function POST(req: Request) {
   try {
     const { email } = await req.json();
 
-    // Validações básicas
+    // Basic validations
     if (!email) {
       return NextResponse.json(
-        { message: "Email é obrigatório" },
+        { message: "Email is required" },
         { status: 400 }
       );
     }
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Verificar se email já existe
+    // Check if email already exists
     const existingUser = await prisma.user.findUnique({
       where: { email: normalizedEmail },
     });
 
     if (existingUser) {
-      // Gerar código de verificação para login (6 dígitos)
+      // Generate 6-digit verification code for login
       const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const codeExpiry = new Date(Date.now() + 3600000); // 1 hora
+      const codeExpiry = new Date(Date.now() + 3600000); // 1 hour
 
-      // Armazenar o código temporariamente
+      // Store the code temporarily
       await prisma.verificationToken.create({
         data: {
           identifier: normalizedEmail,
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
         }
       });
 
-      // Enviar email com código de verificação
+      // Send verification code email
       try {
         await transporter.verify();
         console.log('SMTP connection verified');
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
             address: process.env.SMTP_FROM as string
           },
           to: normalizedEmail,
-          subject: '[Cxlus] Seu código de verificação',
+          subject: '[Cxlus] Your verification code',
           html
         });
 
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
       } catch (emailError) {
         console.error('Email sending error:', emailError);
         
-        // Limpar o token se o email falhar
+        // Clean up token if email fails
         await prisma.verificationToken.deleteMany({
           where: { 
             identifier: normalizedEmail,
@@ -86,7 +86,7 @@ export async function POST(req: Request) {
 
       return NextResponse.json(
         {
-          message: "Email já cadastrado. Código de verificação enviado para login.",
+          message: "Email already registered. Verification code sent for login.",
           email: normalizedEmail,
           existingUser: true
         },
@@ -94,11 +94,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // Gerar código de verificação (6 dígitos)
+    // Generate verification code (6 digits)
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const codeExpiry = new Date(Date.now() + 3600000); // 1 hora
+    const codeExpiry = new Date(Date.now() + 3600000); // 1 hour
 
-    // Armazenar o código temporariamente
+    // Store the code temporarily
     await prisma.verificationToken.create({
       data: {
         identifier: normalizedEmail,
@@ -107,7 +107,7 @@ export async function POST(req: Request) {
       }
     });
 
-    // Enviar email com código de verificação
+    // Send verification code email
     try {
       await transporter.verify();
       console.log('SMTP connection verified');
@@ -122,7 +122,7 @@ export async function POST(req: Request) {
           address: process.env.SMTP_FROM as string
         },
         to: normalizedEmail,
-        subject: '[Cxlus] Seu código de verificação',
+        subject: '[Cxlus] Your verification code',
         html
       });
 
@@ -130,7 +130,7 @@ export async function POST(req: Request) {
     } catch (emailError) {
       console.error('Email sending error:', emailError);
       
-      // Limpar o token se o email falhar
+      // Clean up token if email fails
       await prisma.verificationToken.deleteMany({
         where: { 
           identifier: normalizedEmail,
@@ -143,7 +143,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       {
-        message: "Código de verificação enviado com sucesso",
+        message: "Verification code sent successfully",
         email: normalizedEmail
       },
       { status: 200 }
@@ -151,7 +151,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("Email verification error:", error);
     return NextResponse.json(
-      { message: "Erro ao enviar código de verificação" },
+      { message: "Failed to send verification code" },
       { status: 500 }
     );
   }

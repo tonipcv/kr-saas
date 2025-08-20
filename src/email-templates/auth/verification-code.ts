@@ -9,7 +9,7 @@ export function createVerificationCodeEmail({ code }: VerificationCodeEmailProps
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Verifique seu email</title>
+      <title>Verify your email</title>
       <style>
         body {
           font-family: 'Helvetica Neue', Arial, sans-serif;
@@ -68,15 +68,15 @@ export function createVerificationCodeEmail({ code }: VerificationCodeEmailProps
           <img src="https://cxlus.com/logo.png" alt="Cxlus Logo" class="logo">
         </div>
         <div class="content">
-          <h1>Verifique seu email</h1>
-          <p>Obrigado por se cadastrar na Cxlus. Para continuar com seu cadastro, utilize o código de verificação abaixo:</p>
+          <h1>Verify your email</h1>
+          <p>Thank you for signing up to Cxlus. To continue your registration, please use the verification code below:</p>
           
           <div class="verification-code">${code}</div>
           
-          <p>Este código é válido por 1 hora. Se você não solicitou este código, por favor ignore este email.</p>
+          <p>This code is valid for 1 hour. If you did not request this code, please ignore this email.</p>
         </div>
         <div class="footer">
-          <p>&copy; ${new Date().getFullYear()} Cxlus. Todos os direitos reservados.</p>
+          <p>&copy; ${new Date().getFullYear()} Cxlus. All rights reserved.</p>
         </div>
       </div>
     </body>

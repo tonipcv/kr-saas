@@ -5,7 +5,7 @@ import { sendVerificationCode } from '@/lib/email';
 
 /**
  * POST /api/v2/doctor-profile/send-code
- * Envia código de verificação para o email do usuário
+ * Sends a verification code to the user's email
  */
 export async function POST(request: NextRequest) {
   try {
@@ -13,12 +13,12 @@ export async function POST(request: NextRequest) {
 
     if (!email || !doctorId) {
       return NextResponse.json(
-        { success: false, message: 'Email e ID do médico são obrigatórios' },
+        { success: false, message: 'Email and doctor ID are required' },
         { status: 400 }
       );
     }
 
-    // Verificar se o médico existe
+    // Verify doctor exists
     const doctor = await prisma.user.findFirst({
       where: {
         id: doctorId,
@@ -33,12 +33,12 @@ export async function POST(request: NextRequest) {
 
     if (!doctor) {
       return NextResponse.json(
-        { success: false, message: 'Médico não encontrado' },
+        { success: false, message: 'Doctor not found' },
         { status: 404 }
       );
     }
 
-    // Verificar se o usuário existe
+    // Check if user exists
     const user = await prisma.user.findFirst({
       where: {
         email: email.toLowerCase(),
@@ -46,14 +46,14 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Flag para indicar se é um novo usuário ou usuário existente
+    // Flag indicating whether this is a new or existing user
     const isNewUser = !user;
     
-    // Se for um novo usuário, verificar se já existe um usuário temporário com este email
+    // If new user, check if a temporary user already exists for this email
     let userId: string = '';
     
     if (isNewUser) {
-      // Verificar se já existe um usuário com este email (incluindo temporários)
+      // Check if a user already exists with this email (including temporary users)
       const existingUser = await prisma.user.findFirst({
         where: {
           email: email.toLowerCase()
@@ -61,40 +61,40 @@ export async function POST(request: NextRequest) {
       });
       
       if (existingUser) {
-        // Se já existe um usuário com este email, usar seu ID
+        // If a user already exists with this email, use its ID
         userId = existingUser.id;
       } else {
-        // Gerar um ID único para o usuário temporário
+        // Generate a unique ID for the temporary user
         const tempUserId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
         
         try {
-          // Criar usuário temporário
+          // Create temporary user
           const tempUser = await prisma.user.create({
             data: {
               id: tempUserId,
               email: email.toLowerCase(),
-              name: 'Usuário Temporário',
+              name: 'Temporary User',
               role: 'PATIENT',
-              is_active: false, // Usuário inativo até completar o cadastro
-              password: '', // Senha vazia, será definida no cadastro completo
+              is_active: false, // Inactive until registration is completed
+              password: '', // Empty password, will be set on full registration
               doctor_slug: null
             }
           });
           
           userId = tempUser.id;
         } catch (error) {
-          console.error('Erro ao criar usuário temporário:', error);
+          console.error('Error creating temporary user:', error);
           return NextResponse.json(
-            { success: false, message: 'Erro ao processar solicitação' },
+            { success: false, message: 'Error processing request' },
             { status: 500 }
           );
         }
       }
     } else {
-      // Se for um usuário existente, usar seu ID
+      // Existing user: use their ID
       userId = user!.id;
       
-      // Verificar se tem prescrições deste médico
+      // Verify the user has prescriptions for this doctor
       const hasPrescriptions = await prisma.protocolPrescription.findFirst({
         where: {
           patient: {
@@ -108,41 +108,41 @@ export async function POST(request: NextRequest) {
 
       if (!hasPrescriptions) {
         return NextResponse.json(
-          { success: false, message: 'Você não tem protocolos ativos com este médico.' },
+          { success: false, message: 'You do not have active protocols with this doctor.' },
           { status: 403 }
         );
       }
     }
 
-    // Gerar código de 6 dígitos
+    // Generate 6-digit code
     const verificationCode = randomInt(100000, 999999).toString();
     
-    // Salvar código no banco de dados com expiração de 15 minutos
+    // Save code with 15-minute expiration
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 15);
 
-    // Criar o código de verificação
+    // Create verification code entry
     await prisma.verificationCode.create({
       data: {
         code: verificationCode,
-        user_id: userId, // Usar o ID do usuário existente ou temporário
+        user_id: userId, // Use existing or temporary user ID
         doctor_id: doctor.id,
         expires_at: expiresAt,
         type: 'DOCTOR_LINK'
       }
     });
 
-    // Enviar email com o código
-    await sendVerificationCode(email, verificationCode, doctor.name || 'seu médico');
+    // Send email with the code
+    await sendVerificationCode(email, verificationCode, doctor.name || 'your doctor');
 
     return NextResponse.json({
       success: true,
-      message: 'Código enviado com sucesso'
+      message: 'Code sent successfully'
     });
   } catch (error) {
-    console.error('Erro ao enviar código de verificação:', error);
+    console.error('Error sending verification code:', error);
     return NextResponse.json(
-      { success: false, message: 'Erro interno do servidor' },
+      { success: false, message: 'Internal server error' },
       { status: 500 }
     );
   }

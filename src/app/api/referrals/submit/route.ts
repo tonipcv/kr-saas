@@ -21,24 +21,24 @@ export async function POST(request: NextRequest) {
 
     let resolvedDoctorId: string | null = doctorId || null;
 
-    // Validações básicas
+    // Basic validations
     if (!name || !email) {
       return NextResponse.json(
-        { error: 'Nome e email são obrigatórios' },
+        { error: 'Name and email are required' },
         { status: 400 }
       );
     }
 
-    // Validar formato do email
+    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return NextResponse.json(
-        { error: 'Email inválido' },
+        { error: 'Invalid email address' },
         { status: 400 }
       );
     }
 
-    // Resolver médico por ID ou por slug
+    // Resolve doctor by ID or slug
     let doctor = null as null | { id: string } & any;
     if (resolvedDoctorId) {
       doctor = await prisma.user.findFirst({
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     if (!doctor) {
       return NextResponse.json(
-        { error: 'Médico não encontrado' },
+        { error: 'Doctor not found' },
         { status: 404 }
       );
     }
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
         doctorId: resolvedDoctorId,
       });
       return NextResponse.json(
-        { error: 'Esta pessoa já é paciente deste médico' },
+        { error: 'This person is already a patient of this doctor' },
         { status: 400 }
       );
     }
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
         leadStatus: existingLead.status,
       });
       return NextResponse.json(
-        { error: 'Já existe uma indicação pendente para este email' },
+        { error: 'There is already a pending referral for this email' },
         { status: 400 }
       );
     }
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     if (referrerCode) {
       referrer = await getUserByReferralCode(referrerCode);
 
-      // Debug detalhado da resolução do referrer
+      // Detailed debug for referrer resolution
       console.info('[referrals/submit] Referrer resolution attempt', {
         doctorSlug: doctorSlug || null,
         providedDoctorId: doctorId || null,
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
       if (!referrer) {
         console.warn('[referrals/submit] Rejecting: invalid referral code', { referrerCode });
         return NextResponse.json(
-          { error: 'Código de indicação inválido' },
+          { error: 'Invalid referral code' },
           { status: 400 }
         );
       }
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
       // Verificar se o referrer é paciente do mesmo médico
       let isReferrerPatientOfDoctor = (referrer as any).doctor_id === resolvedDoctorId;
 
-      // Fallback: se user.doctor_id estiver vazio, verificar via prescrições
+      // Fallback: if user.doctor_id is empty, check via prescriptions
       if (!isReferrerPatientOfDoctor && !(referrer as any).doctor_id) {
         const linkViaPrescription = await prisma.protocolPrescription.findFirst({
           where: {
@@ -174,13 +174,13 @@ export async function POST(request: NextRequest) {
           referrerId: (referrer as any).id,
         });
         return NextResponse.json(
-          { error: 'Código de indicação não válido para este médico' },
+          { error: 'Referral code is not valid for this doctor' },
           { status: 400 }
         );
       }
     }
 
-    // Gerar código único para esta indicação
+    // Generate unique code for this referral
     let leadReferralCode;
     let isUnique = false;
     let attempts = 0;
@@ -200,7 +200,7 @@ export async function POST(request: NextRequest) {
 
     if (!isUnique) {
       return NextResponse.json(
-        { error: 'Erro interno: não foi possível gerar código único' },
+        { error: 'Internal error: could not generate a unique code' },
         { status: 500 }
       );
     }
@@ -216,7 +216,7 @@ export async function POST(request: NextRequest) {
         doctorId: resolvedDoctorId as string,
         referrerId: referrer?.id || null,
         source: 'referral_form',
-        // Persistir o referrerCode fornecido para auditoria e eventuais backfills
+        // Persist provided referrerCode for auditing and possible backfills
         customFields: referrerCode ? { referrerCodeProvided: referrerCode } : undefined,
       }
     });
@@ -229,22 +229,22 @@ export async function POST(request: NextRequest) {
       createdAt: referralLead.createdAt,
     });
 
-    // Enviar notificações
+    // Send notifications
     sendReferralNotification(referralLead.id).catch(error => {
-      console.error('Erro ao enviar notificação de indicação:', error instanceof Error ? error.message : 'Erro desconhecido');
+      console.error('Error sending referral notification:', error instanceof Error ? error.message : 'Unknown error');
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Indicação enviada com sucesso!',
+      message: 'Referral submitted successfully!',
       referralCode: leadReferralCode,
       hasReferrer: !!referrer
     });
 
   } catch (error) {
-    console.error('Erro ao processar indicação:', error);
+    console.error('Error processing referral:', error);
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

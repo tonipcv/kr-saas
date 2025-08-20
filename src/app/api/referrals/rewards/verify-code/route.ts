@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     console.debug('[verify-code] session', {
       doctorId: session.user.id,
@@ -20,14 +20,14 @@ export async function POST(req: Request) {
 
     const { code, email } = await req.json();
     if (!code || !email) {
-      return NextResponse.json({ error: 'code e email são obrigatórios' }, { status: 400 });
+      return NextResponse.json({ error: 'code and email are required' }, { status: 400 });
     }
     
     const codeNorm = String(code).trim().toUpperCase();
     const emailNorm = String(email).trim().toLowerCase();
     console.debug('[verify-code] input', { codeNorm, emailNorm });
 
-    // 1) Validar e identificar a recompensa a partir do código informado
+    // 1) Validate and identify the reward from the provided code
     const codeRow = await prisma.referralRewardCode.findUnique({
       where: { code: codeNorm },
       select: { id: true, code: true, status: true, rewardId: true, redemptionId: true, reward: { select: { doctorId: true, title: true, costInCredits: true } } }
@@ -42,13 +42,13 @@ export async function POST(req: Request) {
     } : null);
 
     if (!codeRow) {
-      return NextResponse.json({ error: 'Código de recompensa inválido.' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid reward code.' }, { status: 400 });
     }
     if (codeRow.reward?.doctorId !== session.user.id) {
-      return NextResponse.json({ error: 'Este código não pertence a um reward seu.' }, { status: 403 });
+      return NextResponse.json({ error: 'This code does not belong to one of your rewards.' }, { status: 403 });
     }
 
-    // 2) Localizar paciente pelo e-mail
+    // 2) Find patient by email
     const patient = await prisma.user.findFirst({
       where: { email: emailNorm },
       select: { id: true, name: true, email: true }
@@ -56,10 +56,10 @@ export async function POST(req: Request) {
     console.debug('[verify-code] patient', patient ? { id: patient.id, email: patient.email } : null);
 
     if (!patient) {
-      return NextResponse.json({ error: 'Paciente não encontrado para este e-mail.' }, { status: 404 });
+      return NextResponse.json({ error: 'Patient not found for this email.' }, { status: 404 });
     }
 
-    // 3) Exigir um resgate PENDING já existente para este paciente e recompensa
+    // 3) Require an existing PENDING redemption for this patient and reward
     const pending = await prisma.rewardRedemption.findFirst({
       where: {
         userId: patient.id,
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
     console.debug('[verify-code] pending', pending ? { id: pending.id, status: pending.status } : null);
 
     if (!pending) {
-      // Não há PENDING. Verificar se já existe APPROVED/FULFILLED para este paciente/reward
+      // No PENDING found. Check if there is already APPROVED/FULFILLED for this patient/reward
       const approved = await prisma.rewardRedemption.findFirst({
         where: {
           userId: patient.id,
@@ -88,29 +88,29 @@ export async function POST(req: Request) {
           return NextResponse.json({
             success: true,
             alreadyApproved: true,
-            message: 'Este resgate já foi aprovado para este paciente e este código já está vinculado ao resgate.'
+            message: 'This redemption has already been approved for this patient and this code is already linked to the redemption.'
           });
         }
         if (codeRow.status === 'USED' && codeRow.redemptionId && codeRow.redemptionId !== approved.id) {
           console.debug('[verify-code] code used in different redemption', { codeRedemptionId: codeRow.redemptionId, approvedId: approved.id });
-          return NextResponse.json({ error: 'Este código já foi utilizado em outro resgate.' }, { status: 400 });
+          return NextResponse.json({ error: 'This code has already been used in another redemption.' }, { status: 400 });
         }
-        // Existe aprovado mas o código informado não está vinculado a ele
+        // There is an approved redemption but the provided code is not linked to it
         console.debug('[verify-code] approved exists but code not linked to it');
         return NextResponse.json({
-          error: 'O paciente já possui um resgate aprovado para esta recompensa. Não há necessidade de verificação.'
+          error: 'The patient already has an approved redemption for this reward. No verification needed.'
         }, { status: 409 });
       }
 
       return NextResponse.json({
-        error: 'Nenhum resgate pendente encontrado para este paciente nesta recompensa. Peça ao paciente iniciar o resgate no app antes de verificar o código.'
+        error: 'No pending redemption found for this patient for this reward. Ask the patient to initiate the redemption in the app before verifying the code.'
       }, { status: 404 });
     }
 
-    // Reservar o código para este resgate se ainda estiver UNUSED; se USED por outro, falhar
+    // Reserve the code for this redemption if still UNUSED; if USED by another, fail
     if (codeRow.status === 'USED' && codeRow.redemptionId && codeRow.redemptionId !== pending.id) {
       console.debug('[verify-code] code used in another pending redemption mismatch', { codeRedemptionId: codeRow.redemptionId, pendingId: pending.id });
-      return NextResponse.json({ error: 'Este código já foi utilizado em outro resgate.' }, { status: 400 });
+      return NextResponse.json({ error: 'This code has already been used in another redemption.' }, { status: 400 });
     }
     if (codeRow.status === 'UNUSED') {
       const updated = await prisma.referralRewardCode.updateMany({
@@ -119,13 +119,13 @@ export async function POST(req: Request) {
       });
       if (updated.count !== 1) {
         console.debug('[verify-code] failed to reserve code due to race condition');
-        return NextResponse.json({ error: 'Falha ao reservar o código. Tente novamente.' }, { status: 409 });
+        return NextResponse.json({ error: 'Failed to reserve the code. Please try again.' }, { status: 409 });
       }
     }
 
     const redemptionId = pending.id;
 
-    // 4) Criar token de verificação (reutilizando tabela VerificationToken)
+    // 4) Create verification token (reusing VerificationToken table)
     const token = randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
     const identifier = `reward-confirm:${redemptionId}`;
@@ -148,9 +148,9 @@ export async function POST(req: Request) {
     });
 
     console.debug('[verify-code] success: token created and email enqueued', { redemptionId });
-    return NextResponse.json({ success: true, message: 'E-mail de confirmação enviado ao paciente. Código reservado para este resgate.' });
+    return NextResponse.json({ success: true, message: 'Confirmation email sent to the patient. Code reserved for this redemption.' });
   } catch (error: any) {
-    const message = error?.message || 'Erro interno do servidor';
+    const message = error?.message || 'Internal server error';
     console.error('[verify-code] error', message, { stack: error?.stack });
     return NextResponse.json({ error: message }, { status: 500 });
   }

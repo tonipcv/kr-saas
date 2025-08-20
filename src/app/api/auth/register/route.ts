@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     // Basic validation
     if (!name || !email || !password) {
       return NextResponse.json(
-        { message: "Todos os campos são obrigatórios" },
+        { message: "All fields are required" },
         { status: 400 }
       );
     }
@@ -35,19 +35,19 @@ export async function POST(req: Request) {
       where: { email },
     });
 
-    // Variável para armazenar o ID do usuário (novo ou existente)
+    // Variable to store the user ID (new or existing)
     let userId;
 
-    // Se o usuário já existe, atualizar seus dados em vez de criar um novo
+    // If the user already exists, update their data instead of creating a new one
     if (existingUser) {
-      console.log('Usuário já existe, atualizando dados:', { email, name });
+      console.log('User already exists, updating data:', { email, name });
       
-      // Atualizar os dados do usuário existente
+      // Update existing user data
       const updatedUser = await prisma.user.update({
         where: { email },
         data: {
-          name, // Atualizar o nome se for diferente
-          is_active: true, // Garantir que o usuário esteja ativo
+          name, // Update the name if different
+          is_active: true, // Ensure the user is active
         },
       });
       
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     // Hash password
     const hashedPassword = await hash(password, 12);
 
-    // Verificar se o doctorId é válido, se fornecido
+    // Validate doctorId if provided
     let doctor = null;
     if (doctorId) {
       doctor = await prisma.user.findFirst({
@@ -74,20 +74,20 @@ export async function POST(req: Request) {
       
       if (!doctor) {
         return NextResponse.json(
-          { message: "Médico não encontrado" },
+          { message: "Doctor not found" },
           { status: 404 }
         );
       }
     }
 
-    // Criar ou usar usuário existente
+    // Create or use existing user
     let user;
     
     if (!existingUser) {
-      // Gerar um ID único para o novo usuário
+      // Generate a unique ID for the new user
       const newUserId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
       
-      // Criar novo usuário se não existir
+      // Create new user if not exists
       user = await prisma.user.create({
         data: {
           id: newUserId,
@@ -95,13 +95,13 @@ export async function POST(req: Request) {
           email,
           password: hashedPassword,
           email_verified: null,
-          role: 'PATIENT' // Garantir que o usuário seja criado como paciente
+          role: 'PATIENT' // Ensure the user is created as patient
         },
       });
       
       userId = user.id;
       
-      // Criar token de verificação para novos usuários
+      // Create verification token for new users
       await prisma.verificationToken.create({
         data: {
           identifier: email,
@@ -110,13 +110,13 @@ export async function POST(req: Request) {
         }
       });
     } else {
-      // Usar o usuário existente já atualizado
+      // Use the already updated existing user
       user = existingUser;
     }
     
-    // Se houver um médico associado, verificar se já existe relação e criar se não existir
+    // If there is an associated doctor, check if relationship exists and create if not
     if (doctor) {
-      // Verificar se já existe relação entre médico e paciente
+      // Check if there is already a doctor-patient relationship
       const existingRelation = await prisma.doctorPatientRelationship.findFirst({
         where: {
           doctorId: doctorId,
@@ -125,32 +125,32 @@ export async function POST(req: Request) {
       });
       
       if (!existingRelation) {
-        // Registrar que o paciente veio através do link do médico
+        // Log that the patient came via the doctor's link
         await prisma.doctorPatientRelationship.create({
           data: {
             doctorId: doctorId,
             patientId: user.id,
-            // Remover campo source que não existe no modelo
+            // Remove field source that does not exist in the model
             status: 'ACTIVE'
           }
         });
         
-        // Registrar log de aquisição (usando console.log pois o modelo accessLog não existe)
+        // Acquisition log (using console.log as accessLog model does not exist)
         console.log('PATIENT_REGISTRATION_VIA_DOCTOR_LINK', {
           user_id: user.id,
           action: 'PATIENT_REGISTRATION_VIA_DOCTOR_LINK',
-          details: `Registro via link do médico ${doctorId}`,
+          details: `Registration via doctor link ${doctorId}`,
           ip_address: req.headers.get('x-forwarded-for') || 'unknown'
         });
       } else {
-        console.log('Relação entre médico e paciente já existe:', {
+        console.log('Doctor-patient relationship already exists:', {
           doctor_id: doctorId,
           patient_id: user.id
         });
       }
     }
 
-    // Enviar e-mail de verificação apenas para novos usuários
+    // Send verification email only for new users
     if (!existingUser) {
       console.log('Sending verification email to new user:', email);
       
@@ -193,15 +193,15 @@ export async function POST(req: Request) {
         throw emailError;
       }
     } else {
-      console.log('Usuário existente, pulando envio de e-mail de verificação:', email);
+      console.log('Existing user, skipping verification email:', email);
     }
 
-    // Mensagem personalizada dependendo se é um novo usuário ou existente
+    // Custom message depending on whether it is a new or existing user
     const message = existingUser
-      ? "Conta atualizada com sucesso. Redirecionando para área do médico."
-      : "Usuário criado com sucesso. Verifique seu email para confirmar o cadastro.";
+      ? "Account updated successfully. Redirecting to the doctor area."
+      : "User created successfully. Check your email to confirm registration.";
     
-    const statusCode = existingUser ? 200 : 201; // 200 para atualização, 201 para criação
+    const statusCode = existingUser ? 200 : 201; // 200 for update, 201 for creation
     
     return NextResponse.json(
       {
@@ -214,12 +214,11 @@ export async function POST(req: Request) {
     );
   } catch (error) {
     console.error("Registration error:", error);
-    
-    // Fornecer mensagem de erro mais detalhada
-    let errorMessage = "Erro ao criar usuário";
+    // Provide a more detailed error message
+    let errorMessage = "Error creating user";
     
     if (error instanceof Error) {
-      errorMessage = `Erro ao criar usuário: ${error.message}`;
+      errorMessage = `Error creating user: ${error.message}`;
       console.error("Error details:", {
         name: error.name,
         message: error.message,
@@ -232,4 +231,5 @@ export async function POST(req: Request) {
       { status: 500 }
     );
   }
-} 
+}
+ 
