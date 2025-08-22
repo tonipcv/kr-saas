@@ -189,7 +189,7 @@ function ResetPasswordForm() {
               <p className="text-gray-600 mb-6">{error}</p>
               <button
                 onClick={() => router.push('/auth/signin')}
-                className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:from-[#4f88e2] hover:to-[#8fc4f5] rounded-lg transition-all duration-300"
+                className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#1d2b64] to-[#2b5876] hover:from-[#192455] hover:to-[#244861] rounded-lg transition-all duration-300"
               >
                 Back to Sign In
               </button>
@@ -355,7 +355,7 @@ function ResetPasswordForm() {
             <button
               type="submit"
               disabled={isLoading || password !== confirmPassword || password.length < 6}
-              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:from-[#4f88e2] hover:to-[#8fc4f5] rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#1d2b64] to-[#2b5876] hover:from-[#192455] hover:to-[#244861] rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <>

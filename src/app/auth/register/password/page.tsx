@@ -144,7 +144,7 @@ function RegisterPasswordInner() {
               </p>
               <Link
                 href="/doctor/dashboard"
-                className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:from-[#4f88e2] hover:to-[#8fc4f5] rounded-lg transition-all duration-300 flex items-center justify-center gap-2"
+                className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#1d2b64] to-[#2b5876] hover:from-[#192455] hover:to-[#244861] rounded-lg transition-all duration-300 flex items-center justify-center gap-2"
               >
                 Go to dashboard
                 <ArrowRight className="h-4 w-4" />
@@ -248,7 +248,7 @@ function RegisterPasswordInner() {
 
             <button
               type="submit"
-              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:from-[#4f88e2] hover:to-[#8fc4f5] rounded-lg transition-all duration-300 flex items-center justify-center gap-2"
+              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#1d2b64] to-[#2b5876] hover:from-[#192455] hover:to-[#244861] rounded-lg transition-all duration-300 flex items-center justify-center gap-2"
               disabled={isSubmitting}
             >
               {isSubmitting ? 'Finalizing...' : 'Finish registration'}

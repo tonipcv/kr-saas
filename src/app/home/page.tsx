@@ -19,7 +19,7 @@ export default function PublicHome() {
             </Link>
             <Link
               href="/auth/register"
-              className="hidden sm:inline-flex px-4 py-2 text-sm font-semibold text-white rounded-md shadow-sm bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:from-[#4f88e2] hover:to-[#8fc4f5]"
+              className="hidden sm:inline-flex px-4 py-2 text-sm font-semibold text-white rounded-md shadow-sm bg-gradient-to-r from-[#1d2b64] to-[#2b5876] hover:from-[#192455] hover:to-[#244861]"
             >
               Create account
             </Link>
@@ -53,7 +53,7 @@ export default function PublicHome() {
                 />
                 <button
                   type="submit"
-                  className="flex-none whitespace-nowrap px-5 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl text-sm md:text-lg text-white font-semibold shadow-sm bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:from-[#4f88e2] hover:to-[#8fc4f5]"
+                  className="flex-none whitespace-nowrap px-5 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl text-sm md:text-lg text-white font-semibold shadow-sm bg-gradient-to-r from-[#1d2b64] to-[#2b5876] hover:from-[#192455] hover:to-[#244861]"
                 >
                   Start now
                 </button>
@@ -129,7 +129,7 @@ export default function PublicHome() {
             <h3 className="text-xl md:text-3xl font-extrabold text-gray-900">Launch your rewards in minutes</h3>
             <p className="mt-2 text-gray-600 text-sm md:text-base">Referrals, points, and codes — one setup, built to scale.</p>
             <div className="mt-6">
-              <Link href="/auth/register" className="inline-flex items-center justify-center px-5 py-2.5 md:px-6 md:py-3 rounded-lg bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:from-[#4f88e2] hover:to-[#8fc4f5] text-white text-sm md:text-base font-semibold shadow-sm">
+              <Link href="/auth/register" className="inline-flex items-center justify-center px-5 py-2.5 md:px-6 md:py-3 rounded-lg bg-gradient-to-r from-[#1d2b64] to-[#2b5876] hover:from-[#192455] hover:to-[#244861] text-white text-sm md:text-base font-semibold shadow-sm">
                 Create free account
               </Link>
             </div>
