@@ -323,13 +323,15 @@ export default function AdminDashboard() {
                 </Button>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="divide-y divide-gray-100">
+                <div className="space-y-2">
                   {recentDoctors.length > 0 ? (
                     recentDoctors.slice(0, 5).map((doctor) => (
-                      <div key={doctor.id} className="flex items-center justify-between p-3 bg-white hover:bg-gray-50 transition-colors">
+                      <div key={doctor.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors">
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 bg-turquoise rounded-xl flex items-center justify-center text-black font-semibold">
-                            {getDoctorInitials(doctor.name)}
+                          <div className="p-2.5 bg-gray-100 rounded-lg">
+                            <span className="text-sm font-semibold text-gray-700 leading-none">
+                              {getDoctorInitials(doctor.name)}
+                            </span>
                           </div>
                           <div>
                             <p className="font-medium text-gray-900">{doctor.name}</p>
