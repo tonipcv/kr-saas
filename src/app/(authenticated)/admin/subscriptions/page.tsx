@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface SubscriptionPlan {
   id: string;
@@ -35,6 +36,8 @@ interface DoctorSubscription {
 
 export default function SubscriptionsPage() {
   const { data: session } = useSession();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [subscriptions, setSubscriptions] = useState<DoctorSubscription[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,6 +71,26 @@ export default function SubscriptionsPage() {
       loadData();
     }
   }, [session]);
+
+  // If doctorId is present in the URL, try to auto-redirect to that doctor's latest subscription edit page
+  useEffect(() => {
+    const doctorId = searchParams?.get('doctorId');
+    if (!doctorId || isLoading || subscriptions.length === 0) return;
+
+    const forDoctor = subscriptions.filter(s => s.doctor?.id === doctorId);
+    if (forDoctor.length === 0) return;
+
+    // Prefer the most recent by startDate desc
+    const sorted = [...forDoctor].sort((a, b) => {
+      const da = a.startDate ? new Date(a.startDate).getTime() : 0;
+      const db = b.startDate ? new Date(b.startDate).getTime() : 0;
+      return db - da;
+    });
+    const target = sorted[0];
+    if (target?.id) {
+      router.push(`/admin/subscriptions/${target.id}/edit`);
+    }
+  }, [searchParams, subscriptions, isLoading, router]);
 
   // Statistics calculations
   const activeCount = subscriptions.filter(s => s.status === 'ACTIVE').length;

@@ -987,7 +987,7 @@ return (
                   {/* Front Face */}
                   <div
                     className="absolute inset-0"
-                    style={{ backfaceVisibility: 'hidden', background: 'linear-gradient(135deg, #2b68f0 0%, #7bb8ff 50%, #9ad8ff 100%)' }}
+                    style={{ backfaceVisibility: 'hidden', background: 'linear-gradient(135deg, #1d2b64 0%, #2b5876 100%)' }}
                   >
                     {/* Decorative background */}
                     <div className="absolute inset-0 opacity-25">
@@ -1465,8 +1465,7 @@ return (
           <div className="relative">
             <button
               onClick={toggleMenu}
-              className="h-12 w-12 rounded-full text-white shadow-lg focus:outline-none focus:ring-2 flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #2b68f0 0%, #7bb8ff 50%, #9ad8ff 100%)' }}
+              className="h-12 w-12 rounded-full bg-white text-gray-700 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-200 border border-gray-200 flex items-center justify-center transition-shadow"
               aria-label="Toggle menu"
             >
               <div className="relative h-10 w-10">
@@ -1474,12 +1473,12 @@ return (
                   <Image
                     src={session.user.image}
                     alt={session.user.name || 'User profile'}
-                    className="rounded-full object-cover border-2 border-white/80 shadow"
+                    className="rounded-full object-cover border-2 border-gray-200"
                     fill
                   />
                 ) : (
                   <div className="h-10 w-10 rounded-full flex items-center justify-center">
-                    <MoreVertical className="h-5 w-5 text-white" />
+                    <MoreVertical className="h-5 w-5 text-gray-600" />
                   </div>
                 )}
               </div>
