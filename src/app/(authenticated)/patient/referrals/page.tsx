@@ -1210,114 +1210,6 @@ return (
                 </div>
               </div>
 
-              {/* Earn Points: Referral Link */}
-              <div
-                className="max-w-3xl mx-auto rounded-xl shadow-sm"
-                style={{ background: 'linear-gradient(180deg, #e5eaf5 0%, #f7f7fc 100%)' }}
-              >
-                <div className="p-4 lg:p-5 space-y-3 lg:space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="text-left">
-                      <h2 className="text-gray-900 text-base lg:text-lg font-semibold">Earn points</h2>
-                      <p className="text-xs lg:text-sm text-gray-600">Share your personal cupons to friend and earn points</p>
-                    </div>
-                    <div className="inline-flex rounded-full border border-gray-200 bg-white p-1">
-                      <button
-                        onClick={() => setViewSection('earn')}
-                        className={`px-3 py-1.5 text-xs rounded-full transition ${viewSection === 'earn' ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
-                      >Earn Points</button>
-                      <button
-                        onClick={() => setViewSection('products')}
-                        className={`ml-1 px-3 py-1.5 text-xs rounded-full transition ${viewSection === 'products' ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
-                      >Products</button>
-                    </div>
-                  </div>
-
-                  {viewSection === 'earn' ? (
-                    // Campaigns list
-                    campaigns.length > 0 ? (
-                      <div className="mt-3 lg:mt-4">
-                        <div className="grid grid-cols-1 gap-2">
-                          {campaigns.map((c) => {
-                            const hasCode = Boolean(referralCode);
-                            const path = `/${doctorSlug}/${c.campaign_slug}`;
-                            const href = hasCode ? `${path}?referrerCode=${encodeURIComponent(referralCode)}` : path;
-                            const origin = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_APP_URL || window.location.origin).replace(/\/\/+$/, '') : '';
-                            const fullUrl = `${origin}${href}`;
-                            return (
-                              <div
-                                key={c.campaign_slug}
-                                className="group rounded-lg border border-gray-200 bg-white px-3 py-2 hover:border-gray-300 hover:shadow-sm transition"
-                              >
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <div className="text-sm lg:text-base font-medium text-gray-900 truncate">{c.title}</div>
-                                    {c.description && (
-                                      <div className="text-[11px] lg:text-xs text-gray-600 truncate">{c.description}</div>
-                                    )}
-                                    <div className="mt-1 flex items-center gap-2">
-                                      <code className="flex-1 text-[11px] lg:text-xs font-mono text-gray-600 break-all truncate">{fullUrl}</code>
-                                      <Button
-                                        onClick={() => copyCampaignLink(c.campaign_slug, fullUrl)}
-                                        variant="outline"
-                                        className={`h-7 lg:h-8 px-2 border-gray-300 hover:bg-gray-50 ${copiedCampaign === c.campaign_slug ? 'text-green-700 border-green-300 bg-green-50' : 'text-gray-700'}`}
-                                      >
-                                        {copiedCampaign === c.campaign_slug ? (
-                                          <>
-                                            <Check className="h-3.5 w-3.5 mr-1" /> Copied
-                                          </>
-                                        ) : (
-                                          <>
-                                            <Copy className="h-3.5 w-3.5 mr-1" /> Copy
-                                          </>
-                                        )}
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-xs lg:text-sm text-gray-600">No campaigns available right now.</div>
-                    )
-                  ) : (
-                    // Products grid
-                    <div className="mt-2">
-                      {loadingProducts ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
-                          {Array.from({ length: 6 }).map((_, i) => (
-                            <div key={i} className="h-28 bg-white rounded-xl border border-gray-200 animate-pulse" />
-                          ))}
-                        </div>
-                      ) : doctorProducts.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-gray-200 bg-white p-6 text-center text-sm text-gray-600">
-                          Nenhum produto disponível no momento.
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
-                          {doctorProducts.map((p) => (
-                            <div key={p.id} className="bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition p-4">
-                              <div className="min-w-0">
-                                <h3 className="font-medium text-gray-900 truncate">{p.name}</h3>
-                                {p.category ? (
-                                  <span className="mt-1 inline-block text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200">{p.category}</span>
-                                ) : null}
-                              </div>
-                              {p.description && (
-                                <p className="mt-2 text-xs text-gray-600 line-clamp-3">{p.description}</p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
               {/* Your Referrals list (ways to earn feedback) */}
               <div className="group rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
                    style={{ background: 'linear-gradient(180deg, #e5eaf5 0%, #f7f7fc 100%)' }}>
@@ -1408,12 +1300,12 @@ return (
                       }}
                     >
                       {/* Image */}
-                      <div className="relative w-full h-28 lg:h-32 bg-gray-100">
+                      <div className="relative w-full h-28 lg:h-28 bg-gray-100">
                         {reward.imageUrl ? (
                           <img
                             src={reward.imageUrl}
                             alt={reward.title}
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-cover lg:object-contain lg:p-1"
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No image</div>

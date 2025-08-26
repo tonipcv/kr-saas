@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,8 +49,30 @@ export default function EditProductPage({ params }: PageProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [productId, setProductId] = useState<string>('');
-  const [formData, setFormData] = useState({
+  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState<boolean>(false);
+  const [creatingCategory, setCreatingCategory] = useState<boolean>(false);
+  const [newCategoryName, setNewCategoryName] = useState<string>('');
+
+  interface FormValues {
+    name: string;
+    subtitle: string;
+    description: string;
+    brand: string;
+    imageUrl: string;
+    originalPrice: string;
+    discountPrice: string;
+    discountPercentage: string;
+    purchaseUrl: string;
+    usageStats: string;
+    creditsPerUnit: string;
+    category: string;
+    isActive: boolean;
+  }
+
+  const [formData, setFormData] = useState<FormValues>({
     name: '',
+    subtitle: '',
     description: '',
     brand: '',
     imageUrl: '',
@@ -62,6 +85,11 @@ export default function EditProductPage({ params }: PageProps) {
     category: '',
     isActive: true
   });
+  const [images, setImages] = useState<Array<{ id?: string; url: string; kind?: string; orderIndex?: number }>>([]);
+  const [isImagesLoading, setIsImagesLoading] = useState(false);
+  const [isSavingImages, setIsSavingImages] = useState(false);
+  const [beforeImageUrl, setBeforeImageUrl] = useState<string>('');
+  const [afterImageUrl, setAfterImageUrl] = useState<string>('');
 
   useEffect(() => {
     const getParams = async () => {
@@ -77,6 +105,25 @@ export default function EditProductPage({ params }: PageProps) {
     }
   }, [productId]);
 
+  useEffect(() => {
+    // load categories for doctor
+    const fetchCategories = async () => {
+      try {
+        setCategoriesLoading(true);
+        const res = await fetch('/api/product-categories');
+        if (res.ok) {
+          const data = await res.json();
+          setCategories(data || []);
+        }
+      } catch (e) {
+        console.error('Error fetching categories', e);
+      } finally {
+        setCategoriesLoading(false);
+      }
+    };
+    fetchCategories();
+  }, []);
+
   const loadProduct = async () => {
     try {
       setIsLoading(true);
@@ -86,6 +133,7 @@ export default function EditProductPage({ params }: PageProps) {
         setProduct(data);
         setFormData({
           name: data.name || '',
+          subtitle: data.subtitle || '',
           description: data.description || '',
           brand: data.brand || '',
           imageUrl: data.imageUrl || '',
@@ -98,6 +146,14 @@ export default function EditProductPage({ params }: PageProps) {
           category: data.category || '',
           isActive: data.isActive
         });
+        if (Array.isArray(data.images)) {
+          const before = data.images.find((it: any) => (it.kind || '').toUpperCase() === 'BEFORE');
+          const after = data.images.find((it: any) => (it.kind || '').toUpperCase() === 'AFTER');
+          setBeforeImageUrl(before?.url || '');
+          setAfterImageUrl(after?.url || '');
+          const gallery = data.images.filter((it: any) => (it.kind || '').toUpperCase() === 'GALLERY' || !it.kind);
+          setImages(gallery.map((it: any) => ({ id: it.id, url: it.url, kind: 'GALLERY', orderIndex: it.orderIndex })));
+        }
       } else {
         router.push('/doctor/products');
       }
@@ -147,15 +203,12 @@ export default function EditProductPage({ params }: PageProps) {
         // API expects originalPrice and creditsPerUnit
         originalPrice: formData.originalPrice ? Number(formData.originalPrice) : undefined,
         creditsPerUnit: formData.creditsPerUnit ? Number(formData.creditsPerUnit) : undefined,
+        imageUrl: formData.imageUrl?.trim() ? formData.imageUrl.trim() : null,
         category: formData.category,
         isActive: formData.isActive,
         // extra fields preserved (ignored by API but safe)
-        brand: formData.brand,
-        imageUrl: formData.imageUrl,
         discountPrice: formData.discountPrice ? Number(formData.discountPrice) : undefined,
         discountPercentage: formData.discountPercentage ? Number(formData.discountPercentage) : undefined,
-        purchaseUrl: formData.purchaseUrl,
-        usageStats: formData.usageStats ? Number(formData.usageStats) : undefined,
       };
 
       const response = await fetch(`/api/products/${productId}`, {
@@ -205,8 +258,6 @@ export default function EditProductPage({ params }: PageProps) {
       setIsDeleting(false);
     }
   };
-
-  
 
   const getDiscountPercentage = () => {
     const original = parseFloat(formData.originalPrice);
@@ -277,7 +328,9 @@ export default function EditProductPage({ params }: PageProps) {
           <div className="flex-1 flex items-center justify-between">
             <div>
               <h1 className="text-[20px] font-semibold text-gray-900 tracking-[-0.01em]">Edit Product</h1>
-              <p className="text-sm text-gray-500 mt-1">Update product details</p>
+              <p className="text-sm text-gray-500 mt-1">
+                Update product details
+              </p>
             </div>
             <Button 
               variant="outline" 
@@ -305,12 +358,12 @@ export default function EditProductPage({ params }: PageProps) {
           <div>
             <form onSubmit={handleSubmit} className="space-y-6">
               
-              {/* Basic Information */}
+              {/* Gallery Manager */}
               <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-semibold text-gray-900">Basic Information</CardTitle>
+                  <CardTitle className="text-base font-semibold text-gray-900">Galeria de imagens</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-6">
+                <CardContent className="space-y-4">
                   {/* Product Image */}
                   <div>
                     <Label className="text-gray-900 font-medium">Product Image</Label>
@@ -336,12 +389,12 @@ export default function EditProductPage({ params }: PageProps) {
                   </div>
 
                   <div>
-                    <Label htmlFor="brand" className="text-gray-900 font-medium">Brand</Label>
+                    <Label htmlFor="subtitle" className="text-gray-900 font-medium">Subtitle</Label>
                     <Input
-                      id="brand"
-                      value={formData.brand}
-                      onChange={(e) => handleInputChange('brand', e.target.value)}
-                      placeholder="e.g., La Roche-Posay"
+                      id="subtitle"
+                      value={formData.subtitle}
+                      onChange={(e) => handleInputChange('subtitle', e.target.value)}
+                      placeholder="Breve subtítulo do produto"
                       className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
                     />
                   </div>
@@ -359,16 +412,94 @@ export default function EditProductPage({ params }: PageProps) {
                   </div>
 
                   <div>
-                    <Label htmlFor="imageUrl" className="text-gray-900 font-medium">Image URL</Label>
-                    <Input
-                      id="imageUrl"
-                      value={formData.imageUrl}
-                      onChange={(e) => handleInputChange('imageUrl', e.target.value)}
-                      placeholder="https://example.com/image.jpg"
-                      type="url"
-                      className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
-                    />
+                    <Label htmlFor="category" className="text-gray-900 font-medium">Category</Label>
+                    <div className="mt-2">
+                      <Select
+                        value={formData.category || ''}
+                        onValueChange={(val) => {
+                          if (val === '__create__') {
+                            // trigger create mode
+                            setCreatingCategory(true);
+                            return;
+                          }
+                          setCreatingCategory(false);
+                          handleInputChange('category', val);
+                        }}
+                      >
+                        <SelectTrigger className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 rounded-xl h-10">
+                          <SelectValue placeholder={categoriesLoading ? 'Loading...' : 'Select a category'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {/* Current value if not in list */}
+                          {formData.category && !categories.some(c => c.name === formData.category) && (
+                            <SelectItem value={formData.category}>{formData.category}</SelectItem>
+                          )}
+                          {categories.map(c => (
+                            <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                          ))}
+                          <SelectItem value="__create__">+ Create new category…</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {creatingCategory && (
+                      <div className="mt-3 flex gap-2">
+                        <Input
+                          id="newCategory"
+                          value={newCategoryName}
+                          onChange={(e) => setNewCategoryName(e.target.value)}
+                          placeholder="New category name"
+                          className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10 flex-1"
+                        />
+                        <Button
+                          type="button"
+                          className="bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl h-10"
+                          disabled={!newCategoryName.trim()}
+                          onClick={async () => {
+                            const name = newCategoryName.trim();
+                            if (!name) return;
+                            try {
+                              const res = await fetch('/api/product-categories', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ name })
+                              });
+                              if (res.ok) {
+                                const created = await res.json();
+                                // refresh list
+                                const listRes = await fetch('/api/product-categories');
+                                if (listRes.ok) {
+                                  const list = await listRes.json();
+                                  setCategories(list || []);
+                                }
+                                handleInputChange('category', created?.name || name);
+                                setNewCategoryName('');
+                                setCreatingCategory(false);
+                              } else {
+                                const err = await res.json();
+                                alert(err.error || 'Erro ao criar categoria');
+                              }
+                            } catch (e) {
+                              console.error('Error creating category', e);
+                              alert('Erro ao criar categoria');
+                            }
+                          }}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-xl h-10"
+                          onClick={() => { setCreatingCategory(false); setNewCategoryName(''); }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-500 mt-2">Se deixar vazio, será usada a categoria 'Geral'.</p>
                   </div>
+
+                  
                 </CardContent>
               </Card>
 
@@ -439,42 +570,7 @@ export default function EditProductPage({ params }: PageProps) {
                 </CardContent>
               </Card>
 
-              {/* Purchase Details */}
-              <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-semibold text-gray-900">Purchase Details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div>
-                    <Label htmlFor="purchaseUrl" className="text-gray-900 font-medium">Purchase Link</Label>
-                    <Input
-                      id="purchaseUrl"
-                      value={formData.purchaseUrl}
-                      onChange={(e) => handleInputChange('purchaseUrl', e.target.value)}
-                      placeholder="https://store.com/product"
-                      type="url"
-                      className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="usageStats" className="text-gray-900 font-medium">Usage Statistics (%)</Label>
-                    <Input
-                      id="usageStats"
-                      value={formData.usageStats}
-                      onChange={(e) => handleInputChange('usageStats', e.target.value)}
-                      placeholder="0"
-                      type="number"
-                      min="0"
-                      max="100"
-                      className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
-                    />
-                    <p className="text-sm text-gray-500 font-medium mt-2">
-                      Percentage of clients who use this product
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+              
 
               {/* Status */}
               <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">

@@ -1,7 +1,6 @@
 import React from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
+import ProductsGrid from '@/components/products/ProductsGrid';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -41,19 +40,26 @@ export default async function DoctorProductsPage({ params }: { params: { slug: s
             <div className="flex flex-col items-center text-center">
               {doctor ? (
                 <>
-                  {doctor.image ? (
-                    <img
-                      src={doctor.image}
-                      alt={doctor.name}
-                      className="h-16 w-16 rounded-full object-cover ring-2 ring-gray-100"
-                    />
-                  ) : (
-                    <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-lg font-medium ring-2 ring-gray-100">
-                      {doctor.name?.charAt(0) || 'D'}
-                    </div>
-                  )}
-                  <h1 className="mt-3 text-xl sm:text-2xl font-semibold tracking-tight text-gray-900">{doctor.name}</h1>
-                  <p className="mt-1 text-sm text-gray-600">Produtos e serviços da clínica</p>
+                  <div className="relative mb-2">
+                    {doctor.image ? (
+                      <div className="relative w-28 h-28 sm:w-32 sm:h-32 mx-auto">
+                        <div className="absolute inset-0 bg-gradient-to-r from-gray-400 to-gray-500 rounded-full opacity-75 blur-lg" />
+                        <img
+                          src={doctor.image}
+                          alt={doctor.name}
+                          className="relative w-full h-full rounded-full object-cover border-4 border-white/30 shadow-2xl"
+                        />
+                      </div>
+                    ) : (
+                      <div className="relative w-28 h-28 sm:w-32 sm:h-32 mx-auto">
+                        <div className="absolute inset-0 bg-gradient-to-r from-gray-400 to-gray-500 rounded-full opacity-75 blur-lg" />
+                        <div className="relative w-full h-full rounded-full bg-gradient-to-r from-gray-500 to-gray-600 flex items-center justify-center border-4 border-white/30 shadow-2xl">
+                          <span className="text-white text-4xl font-light">{doctor.name?.charAt(0) || 'D'}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <h1 className="mt-1 text-xl sm:text-2xl font-semibold tracking-tight bg-gradient-to-b from-gray-800 via-gray-600 to-gray-500 bg-clip-text text-transparent">{doctor.name}</h1>
                 </>
               ) : (
                 <>
@@ -73,54 +79,20 @@ export default async function DoctorProductsPage({ params }: { params: { slug: s
             Nenhum produto disponível no momento.
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {products.map((p: any) => (
-              <div key={p.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition p-4">
-                <div className="aspect-w-16 aspect-h-9 mb-3 bg-gray-100 rounded-xl overflow-hidden">
-                  {p.imageUrl ? (
-                    <img 
-                      src={p.imageUrl} 
-                      alt={p.name} 
-                      className="w-full h-48 object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-48 flex items-center justify-center bg-gray-100">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                      </svg>
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-semibold text-gray-900 truncate">{p.name}</h3>
-                  {typeof p.price === 'number' ? (
-                    <span className="text-sm font-medium text-gray-900">R$ {p.price.toFixed(2)}</span>
-                  ) : null}
-                </div>
-                {p.category ? (
-                  <span className="mt-1 inline-block text-[10px] px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 border border-gray-200">{p.category}</span>
-                ) : null}
-                {p.description ? (
-                  <p className="mt-2 text-xs text-gray-600 line-clamp-3">{p.description}</p>
-                ) : null}
-                <div className="mt-3">
-                  <Link
-                    href={`/${slug}`}
-                    className="hidden"
-                  >
-                    Voltar
-                  </Link>
-                  <Link
-                    href={`/patient/appointments/${doctor.id}?productId=${p.id}&from=${encodeURIComponent(slug)}`}
-                    className="inline-flex items-center justify-center rounded-md bg-blue-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
-                  >
-                    Agendar serviço
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ProductsGrid slug={slug} doctorId={doctor.id as any} products={products as any} />
         )}
+      </div>
+      {/* Footer */}
+      <div className="mt-10 pb-8 flex justify-center">
+        <a
+          href="https://zuzuvu.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700"
+        >
+          <span>Powered by</span>
+          <img src="/logo.png" alt="Zuzuvu" className="h-4 w-auto opacity-80" />
+        </a>
       </div>
     </main>
   );

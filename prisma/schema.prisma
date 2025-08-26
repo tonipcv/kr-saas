@@ -277,9 +277,26 @@ model UserLesson {
   @@map("user_lessons")
 }
 
+model ProductCategory {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String?    @unique
+  doctorId  String?
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @default(now()) @updatedAt
+
+  doctor    User?      @relation("DoctorCategories", fields: [doctorId], references: [id])
+  products  products[]
+
+  @@unique([doctorId, name])
+  @@map("product_categories")
+}
+
 model products {
   id                String              @id
   name              String
+  subtitle          String?
   description       String?
   price             Decimal             @db.Decimal(10, 2)
   creditsPerUnit    Decimal             @default(0) @db.Decimal(10, 2)
@@ -289,11 +306,14 @@ model products {
   updatedAt         DateTime            @default(now())
   doctorId          String?
   imageUrl          String?
+  categoryId        String?
   doctor            User?               @relation("DoctorProducts", fields: [doctorId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  productCategory   ProductCategory?    @relation(fields: [categoryId], references: [id])
   protocol_products protocol_products[]
   purchases         Purchase[]
 
   @@index([doctorId])
+  @@index([categoryId])
 }
 
 model protocol_products {
@@ -1055,6 +1075,7 @@ model User {
   patient_documents_doctor  patient_documents[]         @relation("patient_documents_doctor_idToUser")
   patient_documents_patient patient_documents[]         @relation("patient_documents_patient_idToUser")
   created_products          products[]                  @relation("DoctorProducts")
+  created_categories        ProductCategory[]           @relation("DoctorCategories")
   prescribed_protocols      ProtocolPrescription[]      @relation("DoctorPrescriptions")
   patient_prescriptions     ProtocolPrescription[]      @relation("PatientPrescriptions")
   created_protocols         Protocol[]                  @relation("DoctorProtocols")

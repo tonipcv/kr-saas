@@ -13,7 +13,8 @@ import {
   XMarkIcon,
   LinkIcon,
   ChevronLeftIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  DocumentDuplicateIcon
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 
@@ -58,6 +59,7 @@ export default function ProductsPage() {
   const [isPlansOpen, setIsPlansOpen] = useState(false);
   const [plansLoading, setPlansLoading] = useState(false);
   const [availablePlans, setAvailablePlans] = useState<any[]>([]);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   useEffect(() => {
     const checkPlanAndLoad = async () => {
@@ -129,6 +131,24 @@ export default function ProductsPage() {
       console.error('Error loading product details:', error);
     } finally {
       setIsLoadingProduct(false);
+    }
+  };
+
+  const duplicateProduct = async (productId: string) => {
+    try {
+      setDuplicatingId(productId);
+      const res = await fetch(`/api/products/${productId}/duplicate`, {
+        method: 'POST'
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || 'Failed to duplicate product');
+      }
+      await loadProducts();
+    } catch (e) {
+      console.error('Failed to duplicate product', e);
+    } finally {
+      setDuplicatingId(null);
     }
   };
 
@@ -366,9 +386,6 @@ export default function ProductsPage() {
                           </div>
                           <div className="flex flex-col">
                             <span>{product.name}</span>
-                            {product.description && (
-                              <span className="text-xs text-gray-500 line-clamp-1">{product.description}</span>
-                            )}
                           </div>
                         </div>
                       </td>
@@ -406,6 +423,16 @@ export default function ProductsPage() {
                             disabled={isLoadingProduct}
                           >
                             <EyeIcon className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => duplicateProduct(product.id)}
+                            className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg h-8 w-8 p-0"
+                            disabled={duplicatingId === product.id}
+                            title="Duplicar produto (ficará inativo)"
+                          >
+                            <DocumentDuplicateIcon className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
