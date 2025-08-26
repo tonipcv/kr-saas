@@ -75,7 +75,7 @@ export async function GET(request: Request) {
         ...product,
         // Adicionar campos que o frontend espera mas que não existem na tabela
         brand: null,
-        imageUrl: null,
+        imageUrl: (product as any)?.imageUrl ?? null,
         originalPrice: product?.price != null ? Number(product.price) : null,
         discountPrice: null,
         discountPercentage: null,
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
     const transformedProduct = {
       ...product,
       brand: null,
-      imageUrl: null,
+      imageUrl: (product as any)?.imageUrl ?? null,
       originalPrice: product?.price != null ? Number(product.price) : null,
       discountPrice: null,
       discountPercentage: null,

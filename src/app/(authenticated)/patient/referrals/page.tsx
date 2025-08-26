@@ -23,13 +23,15 @@ import {
   CheckCircle,
   Clock,
   Star,
+  Lock,
   UserPlus,
   MessageCircle,
   Mail,
   Phone,
   User,
   MoreVertical,
-  LogOut
+  LogOut,
+  CalendarDays
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
@@ -247,6 +249,7 @@ interface Reward {
   maxRedemptions?: number;
   currentRedemptions: number;
   isActive: boolean;
+  imageUrl?: string | null;
 }
 
 interface Redemption {
@@ -259,6 +262,7 @@ interface Redemption {
     title: string;
     description: string;
     creditsRequired: number;
+    imageUrl?: string | null;
   };
 }
 
@@ -300,10 +304,19 @@ export default function PatientReferralsPage() {
   const [campaigns, setCampaigns] = useState<Array<{ campaign_slug: string; title: string; description?: string | null }>>([]);
   // UI state: which campaign link was copied recently
   const [copiedCampaign, setCopiedCampaign] = useState<string | null>(null);
+  // Local toggle for top content: Earn Points vs Products
+  const [viewSection, setViewSection] = useState<'earn' | 'products'>('earn');
+  // Products derived from doctor's prescriptions as patient-safe source
+  const [doctorProducts, setDoctorProducts] = useState<Array<{ id: string; name: string; description: string; category?: string; originalPrice?: number | null; creditsPerUnit?: number }>>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  // Modals for Earn actions
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
   // Friendly fallback name for design preview and empty states
   const displayDoctorName = doctorName || 'Dr. Especialista';
   // Points card display: use real balance if available, otherwise a pleasant placeholder
   const displayPoints = creditsBalance;
+  const hasGoogleReview = creditsHistory.some((c) => (c.type || '').toUpperCase().includes('GOOGLE'));
 
   // Toggle menu function
   const toggleMenu = () => {
@@ -549,6 +562,42 @@ export default function PatientReferralsPage() {
       aborted = true;
     };
   }, [doctorSlug]);
+
+  // When user opens Products tab, fetch products from public patient-safe endpoint
+  useEffect(() => {
+    if (viewSection !== 'products') return;
+    const did = (doctorId || '').trim();
+    if (!did) return;
+    let aborted = false;
+    const run = async () => {
+      setLoadingProducts(true);
+      try {
+        const res = await fetch(`/api/v2/patients/doctors/${encodeURIComponent(did)}/products`);
+        const json = await res.json().catch(() => ({ success: false }));
+        if (aborted) return;
+        if (res.ok && json?.success && Array.isArray(json.data)) {
+          const list = (json.data as any[]).map((p) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description || '',
+            category: p.category || '',
+            originalPrice: p.price ?? null,
+            creditsPerUnit: p.creditsPerUnit ?? 0,
+          }));
+          setDoctorProducts(list);
+        } else {
+          setDoctorProducts([]);
+        }
+      } catch (e) {
+        console.warn('[PatientReferrals] products fetch error', e);
+        setDoctorProducts([]);
+      } finally {
+        if (!aborted) setLoadingProducts(false);
+      }
+    };
+    run();
+    return () => { aborted = true; };
+  }, [viewSection, doctorId]);
 
   const handleRedeemReward = async (rewardId: string) => {
     setRedeeming(rewardId);
@@ -913,23 +962,6 @@ if (loading) {
             <div className="h-5 lg:h-6 bg-gray-100 rounded w-48 mb-2 animate-pulse" />
             <div className="h-3 lg:h-4 bg-gray-200 rounded w-64 animate-pulse" />
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-            <div className="rounded-xl border border-gray-200 bg-white p-4 lg:p-6">
-              <div className="h-5 bg-gray-100 rounded w-40 mb-3 animate-pulse" />
-              <div className="space-y-3">
-                <div className="h-16 bg-gray-50 rounded border border-gray-200 animate-pulse" />
-                <div className="h-16 bg-gray-50 rounded border border-gray-200 animate-pulse" />
-              </div>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4 lg:p-6">
-              <div className="h-5 bg-gray-100 rounded w-40 mb-3 animate-pulse" />
-              <div className="space-y-3">
-                <div className="h-14 bg-gray-50 rounded border border-gray-200 animate-pulse" />
-                <div className="h-14 bg-gray-50 rounded border border-gray-200 animate-pulse" />
-                <div className="h-14 bg-gray-50 rounded border border-gray-200 animate-pulse" />
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -1124,64 +1156,164 @@ return (
         <div className="max-w-6xl mx-auto px-3 lg:px-6 space-y-6 lg:space-y-8">
           {activeTab === 'earn' && (
             <>
+              {/* Need more points? quick actions */}
+              <div className="max-w-3xl mx-auto rounded-2xl bg-white border border-gray-200 shadow-sm">
+                <div className="p-4 lg:p-6">
+                  <h3 className="text-gray-900 text-base lg:text-lg font-semibold mb-3 lg:mb-4">Need more points?</h3>
+                  <div className="space-y-2">
+                    {/* Agendar serviço (navegação direta) */}
+                    <Link
+                      href={doctorSlug ? `/${doctorSlug}/products` : '#'}
+                      className={`w-full flex items-center justify-between rounded-xl px-4 py-3 shadow-sm transition ${doctorSlug ? '' : 'pointer-events-none opacity-60'}`}
+                      style={{ background: 'linear-gradient(135deg, #1d2b64 0%, #2b5876 100%)', color: 'white' }}
+                    >
+                      <span className="flex items-center gap-3">
+                        <CalendarDays className="h-5 w-5" />
+                        <span className="text-sm lg:text-base font-medium">Agendar serviço</span>
+                      </span>
+                      <span className="inline-flex items-center rounded-full text-xs font-semibold px-3 py-1 bg-white/95 text-gray-800 border border-white/60">
+                        +100 points
+                      </span>
+                    </Link>
+                    {/* Refer a friend */}
+                    <button
+                      type="button"
+                      onClick={() => setShareModalOpen(true)}
+                      className="w-full flex items-center justify-between rounded-xl px-4 py-3 shadow-sm transition"
+                      style={{ background: 'linear-gradient(135deg, #1d2b64 0%, #2b5876 100%)', color: 'white' }}
+                    >
+                      <span className="flex items-center gap-3">
+                        <Users className="h-5 w-5" />
+                        <span className="text-sm lg:text-base font-medium">Refer a friend</span>
+                      </span>
+                      <span className="inline-flex items-center rounded-full text-xs font-semibold px-3 py-1 bg-white/95 text-gray-800 border border-white/60">
+                        +100 points
+                      </span>
+                    </button>
+
+                    {/* Review on Google */}
+                    <button
+                      type="button"
+                      onClick={() => setReviewModalOpen(true)}
+                      className="w-full flex items-center justify-between rounded-xl px-4 py-3 shadow-sm transition"
+                      style={{ background: 'linear-gradient(135deg, #1d2b64 0%, #2b5876 100%)', color: 'white' }}
+                    >
+                      <span className="flex items-center gap-3">
+                        <Image src="/google.png" alt="Google" width={20} height={20} />
+                        <span className="text-sm lg:text-base font-medium">Review on Google</span>
+                      </span>
+                      <span className={`inline-flex items-center rounded-full text-xs font-semibold px-3 py-1 ${hasGoogleReview ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-white/95 text-gray-800 border border-white/60'}`}>
+                        {hasGoogleReview ? 'Done ✓' : 'How to'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* Earn Points: Referral Link */}
               <div
                 className="max-w-3xl mx-auto rounded-xl shadow-sm"
                 style={{ background: 'linear-gradient(180deg, #e5eaf5 0%, #f7f7fc 100%)' }}
               >
                 <div className="p-4 lg:p-5 space-y-3 lg:space-y-4">
-                  <div className="text-left">
-                    <h2 className="text-gray-900 text-base lg:text-lg font-semibold">Earn points</h2>
-                    <p className="text-xs lg:text-sm text-gray-600">Share your personal cupons to friend and earn points</p>
+                  <div className="flex items-center justify-between">
+                    <div className="text-left">
+                      <h2 className="text-gray-900 text-base lg:text-lg font-semibold">Earn points</h2>
+                      <p className="text-xs lg:text-sm text-gray-600">Share your personal cupons to friend and earn points</p>
+                    </div>
+                    <div className="inline-flex rounded-full border border-gray-200 bg-white p-1">
+                      <button
+                        onClick={() => setViewSection('earn')}
+                        className={`px-3 py-1.5 text-xs rounded-full transition ${viewSection === 'earn' ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                      >Earn Points</button>
+                      <button
+                        onClick={() => setViewSection('products')}
+                        className={`ml-1 px-3 py-1.5 text-xs rounded-full transition ${viewSection === 'products' ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                      >Products</button>
+                    </div>
                   </div>
-                  {/* Show only campaign links (doctor personal link hidden) */}
-                  {campaigns.length > 0 ? (
-                    <div className="mt-3 lg:mt-4">
-                      <div className="grid grid-cols-1 gap-2">
-                        {campaigns.map((c) => {
-                          const hasCode = Boolean(referralCode);
-                          const path = `/${doctorSlug}/${c.campaign_slug}`;
-                          const href = hasCode ? `${path}?referrerCode=${encodeURIComponent(referralCode)}` : path;
-                          const origin = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_APP_URL || window.location.origin).replace(/\/+$/, '') : '';
-                          const fullUrl = `${origin}${href}`;
-                          return (
-                            <div
-                              key={c.campaign_slug}
-                              className="group rounded-lg border border-gray-200 bg-white px-3 py-2 hover:border-gray-300 hover:shadow-sm transition"
-                            >
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="text-sm lg:text-base font-medium text-gray-900 truncate">{c.title}</div>
-                                  {c.description && (
-                                    <div className="text-[11px] lg:text-xs text-gray-600 truncate">{c.description}</div>
-                                  )}
-                                  <div className="mt-1 flex items-center gap-2">
-                                    <code className="flex-1 text-[11px] lg:text-xs font-mono text-gray-600 break-all truncate">{fullUrl}</code>
-                                    <Button
-                                      onClick={() => copyCampaignLink(c.campaign_slug, fullUrl)}
-                                      variant="outline"
-                                      className={`h-7 lg:h-8 px-2 border-gray-300 hover:bg-gray-50 ${copiedCampaign === c.campaign_slug ? 'text-green-700 border-green-300 bg-green-50' : 'text-gray-700'}`}
-                                    >
-                                      {copiedCampaign === c.campaign_slug ? (
-                                        <>
-                                          <Check className="h-3.5 w-3.5 mr-1" /> Copied
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Copy className="h-3.5 w-3.5 mr-1" /> Copy
-                                        </>
-                                      )}
-                                    </Button>
+
+                  {viewSection === 'earn' ? (
+                    // Campaigns list
+                    campaigns.length > 0 ? (
+                      <div className="mt-3 lg:mt-4">
+                        <div className="grid grid-cols-1 gap-2">
+                          {campaigns.map((c) => {
+                            const hasCode = Boolean(referralCode);
+                            const path = `/${doctorSlug}/${c.campaign_slug}`;
+                            const href = hasCode ? `${path}?referrerCode=${encodeURIComponent(referralCode)}` : path;
+                            const origin = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_APP_URL || window.location.origin).replace(/\/\/+$/, '') : '';
+                            const fullUrl = `${origin}${href}`;
+                            return (
+                              <div
+                                key={c.campaign_slug}
+                                className="group rounded-lg border border-gray-200 bg-white px-3 py-2 hover:border-gray-300 hover:shadow-sm transition"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="text-sm lg:text-base font-medium text-gray-900 truncate">{c.title}</div>
+                                    {c.description && (
+                                      <div className="text-[11px] lg:text-xs text-gray-600 truncate">{c.description}</div>
+                                    )}
+                                    <div className="mt-1 flex items-center gap-2">
+                                      <code className="flex-1 text-[11px] lg:text-xs font-mono text-gray-600 break-all truncate">{fullUrl}</code>
+                                      <Button
+                                        onClick={() => copyCampaignLink(c.campaign_slug, fullUrl)}
+                                        variant="outline"
+                                        className={`h-7 lg:h-8 px-2 border-gray-300 hover:bg-gray-50 ${copiedCampaign === c.campaign_slug ? 'text-green-700 border-green-300 bg-green-50' : 'text-gray-700'}`}
+                                      >
+                                        {copiedCampaign === c.campaign_slug ? (
+                                          <>
+                                            <Check className="h-3.5 w-3.5 mr-1" /> Copied
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Copy className="h-3.5 w-3.5 mr-1" /> Copy
+                                          </>
+                                        )}
+                                      </Button>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="text-xs lg:text-sm text-gray-600">No campaigns available right now.</div>
+                    )
                   ) : (
-                    <div className="text-xs lg:text-sm text-gray-600">No campaigns available right now.</div>
+                    // Products grid
+                    <div className="mt-2">
+                      {loadingProducts ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
+                          {Array.from({ length: 6 }).map((_, i) => (
+                            <div key={i} className="h-28 bg-white rounded-xl border border-gray-200 animate-pulse" />
+                          ))}
+                        </div>
+                      ) : doctorProducts.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-gray-200 bg-white p-6 text-center text-sm text-gray-600">
+                          Nenhum produto disponível no momento.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
+                          {doctorProducts.map((p) => (
+                            <div key={p.id} className="bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition p-4">
+                              <div className="min-w-0">
+                                <h3 className="font-medium text-gray-900 truncate">{p.name}</h3>
+                                {p.category ? (
+                                  <span className="mt-1 inline-block text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200">{p.category}</span>
+                                ) : null}
+                              </div>
+                              {p.description && (
+                                <p className="mt-2 text-xs text-gray-600 line-clamp-3">{p.description}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -1260,71 +1392,52 @@ return (
                   </div>
                 </div>
               </div>
-              <div className="p-4 lg:p-6 space-y-3 lg:space-y-4">
-                {availableRewards.map((reward) => (
-                  <div key={reward.id} className="bg-white rounded-lg p-4 lg:p-5 border border-gray-200 hover:border-gray-300 transition-colors">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-gray-900 text-sm lg:text-base font-medium leading-6 truncate">{reward.title}</h3>
-                        {reward.description && (
-                          <p className="text-gray-600 text-xs lg:text-sm mt-1 line-clamp-2">{reward.description}</p>
-                        )}
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-gray-700">
-                          <Star className="h-3.5 w-3.5" />
-                          <span className="text-xs lg:text-sm font-medium">
-                            {reward.creditsRequired} {reward.creditsRequired === 1 ? 'point' : 'points'}
-                          </span>
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 pt-3 lg:pt-4 border-t border-gray-100">
-                      <Button
-                        onClick={() => openConfirmRedeem(reward)}
-                        disabled={
-                          creditsBalance < reward.creditsRequired ||
-                          redeeming === reward.id ||
-                          (reward.maxRedemptions ? reward.currentRedemptions >= reward.maxRedemptions : false)
-                        }
-                        className="w-full text-white font-semibold disabled:bg-gray-200 disabled:text-gray-500 text-xs lg:text-sm h-8 lg:h-9 shadow-sm rounded-full"
-                        style={!(creditsBalance < reward.creditsRequired || (reward.maxRedemptions ? reward.currentRedemptions >= reward.maxRedemptions : false)) ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : undefined}
-                      >
-                        {redeeming === reward.id ? (
-                          <>
-                            <Loader2 className="mr-1.5 lg:mr-2 h-3 w-3 lg:h-4 lg:w-4 animate-spin" />
-                            {t.redeeming}
-                          </>
-                        ) : creditsBalance < reward.creditsRequired ? (
-                          <span className="flex items-center gap-1.5 text-gray-600">
-                            <Clock className="h-3.5 w-3.5" />
-                            {t.insufficientCredits}
-                          </span>
-                        ) : (reward.maxRedemptions && reward.currentRedemptions >= reward.maxRedemptions) ? (
-                          <span className="flex items-center gap-1.5 text-gray-600">
-                            <Gift className="h-3.5 w-3.5" />
-                            {t.soldOut}
-                          </span>
+              <div className="p-4 lg:p-6 grid grid-cols-2 gap-3 lg:gap-4">
+                {availableRewards.map((reward) => {
+                  const soldOut = reward.maxRedemptions ? reward.currentRedemptions >= reward.maxRedemptions : false;
+                  const locked = creditsBalance < reward.creditsRequired || soldOut;
+                  return (
+                    <div
+                      key={reward.id}
+                      className={
+                        `relative rounded-xl overflow-hidden border ${locked ? 'border-gray-200' : 'border-gray-200 hover:border-gray-300'} bg-white shadow-sm transition-all ` +
+                        (locked ? 'opacity-80 cursor-not-allowed' : 'cursor-pointer')
+                      }
+                      onClick={() => {
+                        if (!locked) openConfirmRedeem(reward);
+                      }}
+                    >
+                      {/* Image */}
+                      <div className="relative w-full h-28 lg:h-32 bg-gray-100">
+                        {reward.imageUrl ? (
+                          <img
+                            src={reward.imageUrl}
+                            alt={reward.title}
+                            className="w-full h-full object-cover"
+                          />
                         ) : (
-                          <span className="flex items-center gap-1.5">
-                            {t.redeem}
-                          </span>
+                          <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No image</div>
                         )}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                        {/* Points chip */}
+                        <div className="absolute top-2 left-2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-white/90 backdrop-blur px-2 py-1 text-[10px] lg:text-xs font-medium text-gray-800 shadow">
+                            {locked ? <Lock className="h-3.5 w-3.5" /> : <Star className="h-3.5 w-3.5 text-yellow-500" />}
+                            {reward.creditsRequired} {reward.creditsRequired === 1 ? 'POINT' : 'POINTS'}
+                          </span>
+                        </div>
+                      </div>
 
-                {availableRewards.length === 0 && (
-                  <div className="text-center py-8 lg:py-12">
-                    <div className="w-12 h-12 lg:w-16 lg:h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 lg:mb-4">
-                      <Gift className="h-5 w-5 lg:h-6 lg:w-6 text-gray-500" />
+                      {/* Body */}
+                      <div className="px-3 pt-2 pb-3">
+                        <h3 className="text-gray-900 text-sm font-medium leading-5 line-clamp-2 min-h-[2.5rem]">{reward.title}</h3>
+                        {/* Status */}
+                        <div className="mt-2 text-[11px] text-gray-500">
+                          {locked ? 'Locked' : 'Available'}
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-gray-500 text-sm lg:text-base mb-1 lg:mb-2">{t.noRewardsAvailable}</div>
-                    <div className="text-gray-600 text-xs lg:text-sm">{t.waitForRewards}</div>
-                  </div>
-                )}
+                  );
+                })}
               </div>
             </div>
             </>
@@ -1351,11 +1464,20 @@ return (
                     return (
                       <div key={redemption.id} className="bg-white rounded-lg p-4 lg:p-5 border border-gray-200 hover:border-gray-300 transition-colors">
                         <div className="flex justify-between items-start">
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-medium text-gray-900 text-sm lg:text-base truncate">{redemption.reward.title}</h3>
-                            {redemption.reward.description && (
-                              <p className="text-gray-600 text-xs lg:text-sm mt-1 line-clamp-2">{redemption.reward.description}</p>
-                            )}
+                          <div className="flex items-start gap-3 min-w-0 flex-1">
+                            {redemption.reward.imageUrl ? (
+                              <img
+                                src={redemption.reward.imageUrl}
+                                alt={redemption.reward.title}
+                                className="w-12 h-12 lg:w-14 lg:h-14 rounded-md object-cover border border-gray-200"
+                              />
+                            ) : null}
+                            <div className="min-w-0">
+                              <h3 className="font-medium text-gray-900 text-sm lg:text-base truncate">{redemption.reward.title}</h3>
+                              {redemption.reward.description && (
+                                <p className="text-gray-600 text-xs lg:text-sm mt-1 line-clamp-2">{redemption.reward.description}</p>
+                              )}
+                            </div>
                           </div>
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] lg:text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">
                             <StatusIcon className="h-3 w-3" />
@@ -1417,14 +1539,14 @@ return (
         </div>
 
         {/* Minimal Footer */}
-        <div className="mt-8 lg:mt-10">
+        <footer className="mt-16 lg:mt-20 pb-6">
           <div className="max-w-6xl mx-auto px-3 lg:px-6">
-            <div className="flex items-center justify-center gap-2 text-gray-400 text-xs">
+            <div className="flex items-center justify-center gap-2 text-gray-400 text-[10px] lg:text-xs">
               <span>Powered by</span>
-              <Image src="/logo.png" alt="Logo" width={40} height={10} className="opacity-70" />
+              <Image src="/logo.png" alt="Logo" width={28} height={8} className="opacity-60" />
             </div>
           </div>
-        </div>
+        </footer>
 
         {/* Confirm Redeem Modal */}
         <Dialog
@@ -1456,6 +1578,71 @@ return (
               >
                 {rewardToConfirm && redeeming === rewardToConfirm.id ? 'Redeeming...' : 'Confirm and Redeem'}
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        
+
+        {/* Share Referral Modal */}
+        <Dialog open={shareModalOpen} onOpenChange={setShareModalOpen}>
+          <DialogContent className="bg-white border border-gray-200 text-gray-900">
+            <DialogHeader>
+              <DialogTitle className="text-gray-900">Share your referral</DialogTitle>
+              <DialogDescription className="text-gray-600">
+                Send your link via WhatsApp, SMS, or Email, or copy it.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-2">
+                <Button variant="outline" className="h-10" onClick={shareViaWhatsApp}>
+                  <MessageCircle className="h-4 w-4 mr-1" /> WhatsApp
+                </Button>
+                <Button variant="outline" className="h-10" onClick={shareViaSMS}>
+                  <Phone className="h-4 w-4 mr-1" /> SMS
+                </Button>
+                <Button variant="outline" className="h-10" onClick={shareViaEmail}>
+                  <Mail className="h-4 w-4 mr-1" /> Email
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs lg:text-sm font-mono bg-gray-50 border border-gray-200 rounded px-2 py-2 overflow-x-auto">
+                  {generateReferralLink('default') || 'Link not ready'}
+                </code>
+                <Button variant="secondary" className="h-10" onClick={copyReferralLink}>
+                  <Copy className="h-4 w-4 mr-1" /> Copy
+                </Button>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" className="border-gray-300" onClick={() => setShareModalOpen(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Google Review Tutorial Modal */}
+        <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>
+          <DialogContent className="bg-white border border-gray-200 text-gray-900 max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Image src="/google.png" alt="Google" width={20} height={20} />
+                How to leave a Google review
+              </DialogTitle>
+              <DialogDescription className="text-gray-600">
+                Follow these steps to leave a review and earn points.
+              </DialogDescription>
+            </DialogHeader>
+            <ol className="list-decimal pl-5 space-y-2 text-sm text-gray-800">
+              <li>Open Google Maps and search for your doctor’s clinic.</li>
+              <li>Tap the clinic, scroll to Reviews, and tap “Write a review”.</li>
+              <li>Rate, write your feedback, and submit.</li>
+              <li>Send a screenshot to the clinic if requested.</li>
+            </ol>
+            <div className="mt-3 text-xs text-gray-500">
+              Tip: If you have the clinic’s direct review link, use it for faster access.
+            </div>
+            <DialogFooter>
+              <Button variant="outline" className="border-gray-300" onClick={() => setReviewModalOpen(false)}>Close</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

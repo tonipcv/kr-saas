@@ -20,11 +20,14 @@ import {
 } from '@/components/ui/dialog';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import Image from 'next/image';
+import { ProtocolImagePicker } from '@/components/protocol/protocol-image-picker';
 
 interface Reward {
   id: string;
   title: string;
   description: string;
+  imageUrl?: string | null;
   creditsRequired: number;
   maxRedemptions?: number;
   currentRedemptions: number;
@@ -161,6 +164,7 @@ export default function DoctorRewardsPage() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
+    imageUrl: '',
     creditsRequired: '',
     maxRedemptions: ''
   });
@@ -234,6 +238,7 @@ export default function DoctorRewardsPage() {
     setFormData({
       title: '',
       description: '',
+      imageUrl: '',
       creditsRequired: '',
       maxRedemptions: ''
     });
@@ -252,6 +257,7 @@ export default function DoctorRewardsPage() {
         body: JSON.stringify({
           title: formData.title,
           description: formData.description,
+          imageUrl: formData.imageUrl || null,
           creditsRequired: parseInt(formData.creditsRequired),
           maxRedemptions: formData.maxRedemptions ? parseInt(formData.maxRedemptions) : null
         })
@@ -283,6 +289,7 @@ export default function DoctorRewardsPage() {
           rewardId: selectedReward.id,
           title: formData.title,
           description: formData.description,
+          imageUrl: formData.imageUrl || null,
           creditsRequired: parseInt(formData.creditsRequired),
           maxRedemptions: formData.maxRedemptions ? parseInt(formData.maxRedemptions) : null
         })
@@ -346,6 +353,7 @@ export default function DoctorRewardsPage() {
     setFormData({
       title: reward.title,
       description: reward.description,
+      imageUrl: reward.imageUrl || '',
       creditsRequired: reward.creditsRequired.toString(),
       maxRedemptions: reward.maxRedemptions?.toString() || ''
     });
@@ -511,6 +519,11 @@ export default function DoctorRewardsPage() {
                 key={reward.id}
                 className={`relative bg-white border border-gray-200 rounded-xl hover:border-gray-300 transition ${!reward.isActive ? 'opacity-60' : ''}`}
               >
+                {reward.imageUrl ? (
+                  <div className="relative h-28 w-full overflow-hidden rounded-t-xl">
+                    <Image src={reward.imageUrl} alt={reward.title} fill className="object-cover" />
+                  </div>
+                ) : null}
                 <CardHeader className="pb-4">
                   <div className="flex justify-between items-start">
                     <div className="min-w-0">
@@ -693,6 +706,16 @@ export default function DoctorRewardsPage() {
               </DialogHeader>
               
               <div className="space-y-6">
+                <div>
+                  <Label className="text-gray-900 font-semibold">Image</Label>
+                  <div className="mt-2">
+                    <ProtocolImagePicker
+                      selectedImage={formData.imageUrl}
+                      onSelectImage={(url) => setFormData(prev => ({ ...prev, imageUrl: url }))}
+                      mode="upload-only"
+                    />
+                  </div>
+                </div>
                 <div>
                   <Label htmlFor="title" className="text-gray-900 font-semibold">Title *</Label>
                   <Input
@@ -885,6 +908,15 @@ export default function DoctorRewardsPage() {
               </DialogHeader>
               
               <div className="space-y-6">
+                <div>
+                  <Label className="text-gray-900 font-semibold">Image</Label>
+                  <div className="mt-2">
+                    <ProtocolImagePicker
+                      selectedImage={formData.imageUrl}
+                      onSelectImage={(url) => setFormData(prev => ({ ...prev, imageUrl: url }))}
+                    />
+                  </div>
+                </div>
                 <div>
                   <Label htmlFor="edit-title" className="text-gray-900 font-semibold">Title *</Label>
                   <Input

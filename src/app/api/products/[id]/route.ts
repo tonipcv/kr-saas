@@ -60,7 +60,7 @@ export async function GET(
       ...product,
       // Adicionar campos que o frontend espera mas que não existem na tabela
       brand: null,
-      imageUrl: null,
+      imageUrl: (product as any)?.imageUrl ?? null,
       originalPrice: product?.price != null ? Number(product.price) : null,
       discountPrice: null,
       discountPercentage: null,
@@ -115,6 +115,7 @@ export async function PUT(
       description, 
       originalPrice,
       creditsPerUnit,
+      imageUrl,
       category = 'Geral',
       isActive = true
     } = body;
@@ -142,6 +143,8 @@ export async function PUT(
         description,
         price: originalPrice ? parseFloat(originalPrice) : existingProduct.price,
         creditsPerUnit: typeof creditsPerUnit === 'number' ? creditsPerUnit : (creditsPerUnit != null ? parseFloat(creditsPerUnit) : existingProduct.creditsPerUnit),
+        // Atualizar imageUrl quando enviado
+        imageUrl: imageUrl ?? (existingProduct as any)?.imageUrl ?? null,
         category,
         isActive
       }
@@ -151,7 +154,7 @@ export async function PUT(
     const transformedProduct = {
       ...updatedProduct,
       brand: null,
-      imageUrl: null,
+      imageUrl: (updatedProduct as any)?.imageUrl ?? null,
       originalPrice: updatedProduct?.price != null ? Number(updatedProduct.price) : null,
       discountPrice: null,
       discountPercentage: null,

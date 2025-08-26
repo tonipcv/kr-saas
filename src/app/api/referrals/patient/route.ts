@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
       where: { userId: userId },
       include: {
         reward: {
-          select: { title: true, description: true, costInCredits: true }
+          select: { title: true, description: true, costInCredits: true, imageUrl: true }
         }
       },
       orderBy: { redeemedAt: 'desc' },
@@ -187,7 +187,8 @@ export async function GET(request: NextRequest) {
         creditsRequired: Number(reward.costInCredits),
         maxRedemptions: reward.maxRedemptions,
         currentRedemptions: Array.isArray((reward as any).redemptions) ? (reward as any).redemptions.length : 0,
-        isActive: reward.isActive
+        isActive: reward.isActive,
+        imageUrl: (reward as any).imageUrl || null
       })),
       redemptionsHistory: redemptionsHistory.map((redemption: any) => ({
         id: redemption.id,
@@ -198,7 +199,8 @@ export async function GET(request: NextRequest) {
         reward: {
           title: redemption.reward.title,
           description: redemption.reward.description,
-          creditsRequired: Number(redemption.reward.costInCredits)
+          creditsRequired: Number(redemption.reward.costInCredits),
+          imageUrl: (redemption.reward as any)?.imageUrl || null
         }
       })),
       doctorId: resolvedDoctorId,

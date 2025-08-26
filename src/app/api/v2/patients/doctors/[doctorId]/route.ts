@@ -19,11 +19,11 @@ type PrescriptionWithProtocol = ProtocolPrescription & {
 // GET /api/v2/patients/doctors/[doctorId] - Obter informações do médico e suas prescrições para o paciente autenticado
 export async function GET(
   request: NextRequest,
-  { params }: { params: { doctorId: string } }
+  { params }: { params: Promise<{ doctorId: string }> }
 ) {
   try {
-    // Extrair o ID do médico da URL
-    const { doctorId } = params;
+    // Extrair o ID do médico da URL (params precisa ser aguardado)
+    const { doctorId } = await params;
     
     // Verificar autenticação e obter usuário do token JWT
     const user = await requireMobileAuth(request);

@@ -350,11 +350,26 @@ export default function ProductsPage() {
                   {currentProducts.map((product) => (
                     <tr key={product.id} className="hover:bg-gray-50/60">
                       <td className="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
-                        <div className="flex flex-col">
-                          <span>{product.name}</span>
-                          {product.description && (
-                            <span className="text-xs text-gray-500 line-clamp-1">{product.description}</span>
-                          )}
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 flex items-center justify-center">
+                            {product.imageUrl ? (
+                              // Use a regular img to avoid Next/Image domain restrictions inside app table
+                              <img
+                                src={product.imageUrl}
+                                alt={product.name}
+                                className="h-full w-full object-cover"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <ShoppingBagIcon className="h-5 w-5 text-gray-400" />
+                            )}
+                          </div>
+                          <div className="flex flex-col">
+                            <span>{product.name}</span>
+                            {product.description && (
+                              <span className="text-xs text-gray-500 line-clamp-1">{product.description}</span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">

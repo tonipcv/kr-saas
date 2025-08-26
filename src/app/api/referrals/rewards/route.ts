@@ -50,6 +50,7 @@ export async function GET(req: Request) {
         id: r.id,
         title: r.title,
         description: r.description,
+        imageUrl: r.imageUrl || null,
         // UI expects creditsRequired; backend stores costInCredits/value as Decimal
         creditsRequired: toNum(r.costInCredits) || toNum(r.value) || 0,
         maxRedemptions: r.maxRedemptions ?? null,
@@ -86,7 +87,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const { title, description, creditsRequired, maxRedemptions } = await req.json();
+    const { title, description, creditsRequired, maxRedemptions, imageUrl } = await req.json();
 
     if (!title || !description || !creditsRequired) {
       return NextResponse.json(
@@ -116,6 +117,7 @@ export async function POST(req: Request) {
         doctorId: session.user.id,
         title,
         description,
+        imageUrl: imageUrl || null,
         value: parseInt(creditsRequired),
         costInCredits: parseInt(creditsRequired),
         maxRedemptions: maxRedemptions ? parseInt(maxRedemptions) : null,
@@ -146,7 +148,7 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const { rewardId, title, description, creditsRequired, maxRedemptions, isActive } = await req.json();
+    const { rewardId, title, description, creditsRequired, maxRedemptions, isActive, imageUrl } = await req.json();
 
     if (!rewardId) {
       return NextResponse.json(
@@ -173,6 +175,7 @@ export async function PUT(req: Request) {
     const updateData: any = {};
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
+    if (imageUrl !== undefined) updateData.imageUrl = imageUrl || null;
     if (creditsRequired !== undefined) {
       updateData.value = parseInt(creditsRequired);
       updateData.costInCredits = parseInt(creditsRequired);

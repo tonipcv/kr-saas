@@ -17,6 +17,7 @@ import {
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { ProtocolImagePicker } from '@/components/protocol/protocol-image-picker';
 
 interface Product {
   id: string;
@@ -310,6 +311,18 @@ export default function EditProductPage({ params }: PageProps) {
                   <CardTitle className="text-base font-semibold text-gray-900">Basic Information</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  {/* Product Image */}
+                  <div>
+                    <Label className="text-gray-900 font-medium">Product Image</Label>
+                    <div className="mt-2">
+                      <ProtocolImagePicker
+                        selectedImage={formData.imageUrl || ''}
+                        onSelectImage={(url) => handleInputChange('imageUrl', url)}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">Faça upload de uma imagem ou cole uma URL abaixo.</p>
+                  </div>
+
                   <div>
                     <Label htmlFor="name" className="text-gray-900 font-medium">Product Name *</Label>
                     <Input
