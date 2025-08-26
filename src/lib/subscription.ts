@@ -29,49 +29,65 @@ export interface PlanFeatures {
   price?: number;
 }
 
-// Resolve the clinic for a user, preferring a personal clinic with id=userId
-async function findClinicForUser(userId: string): Promise<{ id: string } | null> {
-  // Personal clinic (created by auto-provisioner) ensures FK compatibility
+// Resolve all clinics associated to a user (personal, owned, memberships)
+async function findClinicsForUser(userId: string): Promise<string[]> {
+  const ids = new Set<string>();
+  // Personal clinic (created by auto-provisioner)
   const personal = await prisma.clinic.findUnique({ where: { id: userId }, select: { id: true } });
-  if (personal) return personal;
-  // Otherwise owned clinic
-  const owned = await prisma.clinic.findFirst({ where: { ownerId: userId }, select: { id: true } });
-  if (owned) return owned;
-  // Otherwise any active membership
-  const membership = await prisma.clinicMember.findFirst({ where: { userId, isActive: true }, select: { clinicId: true } });
-  if (membership) return { id: membership.clinicId };
-  return null;
+  if (personal?.id) ids.add(personal.id);
+  // Owned clinics
+  const owned = await prisma.clinic.findMany({ where: { ownerId: userId }, select: { id: true } });
+  owned.forEach(c => ids.add(c.id));
+  // Active memberships
+  const memberships = await prisma.clinicMember.findMany({ where: { userId, isActive: true }, select: { clinicId: true } });
+  memberships.forEach(m => ids.add(m.clinicId));
+  return Array.from(ids);
 }
 
-// Get current active or trial subscription and plan. Prefer CLINIC; fallback to DOCTOR.
+// Get current active or trial subscription and plan.
+// Consider BOTH CLINIC (across all associated clinics) and DOCTOR level.
+// Pick the best by: highest price, then status (ACTIVE > TRIAL), then newest created.
 async function getClinicSubscription(userId: string) {
-  const clinic = await findClinicForUser(userId);
+  const clinicIds = await findClinicsForUser(userId);
 
-  if (clinic) {
-    const clinicSub = await prisma.unified_subscriptions.findFirst({
+  const [clinicSubs, doctorSubs] = await Promise.all([
+    clinicIds.length
+      ? prisma.unified_subscriptions.findMany({
+          where: {
+            type: 'CLINIC',
+            subscriber_id: { in: clinicIds },
+            status: { in: ['ACTIVE', 'TRIAL'] },
+          },
+          include: { subscription_plans: true },
+        })
+      : Promise.resolve([]),
+    prisma.unified_subscriptions.findMany({
       where: {
-        type: 'CLINIC',
-        subscriber_id: clinic.id,
-        status: { in: ['ACTIVE', 'TRIAL'] }
+        type: 'DOCTOR',
+        subscriber_id: userId,
+        status: { in: ['ACTIVE', 'TRIAL'] },
       },
       include: { subscription_plans: true },
-      orderBy: { created_at: 'desc' }
-    });
-    if (clinicSub) return { clinicId: clinic.id, sub: clinicSub };
-  }
+    }),
+  ]);
 
-  // Fallback: DOCTOR-level subscription
-  const doctorSub = await prisma.unified_subscriptions.findFirst({
-    where: {
-      type: 'DOCTOR',
-      subscriber_id: userId,
-      status: { in: ['ACTIVE', 'TRIAL'] }
-    },
-    include: { subscription_plans: true },
-    orderBy: { created_at: 'desc' }
+  const all = [...clinicSubs, ...doctorSubs];
+  if (all.length === 0) return null;
+
+  const statusRank = (s: string) => (s === 'ACTIVE' ? 2 : s === 'TRIAL' ? 1 : 0);
+  all.sort((a, b) => {
+    const pa = (a.subscription_plans?.price ?? 0) as number;
+    const pb = (b.subscription_plans?.price ?? 0) as number;
+    if (pb !== pa) return pb - pa; // higher price first
+    const sr = statusRank(b.status) - statusRank(a.status);
+    if (sr !== 0) return sr; // ACTIVE before TRIAL
+    const da = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const db = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return db - da; // newest first
   });
-  if (!doctorSub) return null;
-  return { clinicId: clinic?.id ?? '', sub: doctorSub };
+
+  const best = all[0];
+  return { clinicId: best.type === 'CLINIC' ? best.subscriber_id : '', sub: best } as const;
 }
 
 export async function getClinicSubscriptionStatus(userId: string): Promise<SubscriptionStatus | null> {
@@ -134,36 +150,40 @@ export async function getClinicSubscriptionStatus(userId: string): Promise<Subsc
 
 // Count helpers across clinic members
 async function countClinicPatients(userId: string): Promise<number> {
-  const clinic = await findClinicForUser(userId);
-  if (!clinic) return 0;
-  const members = await prisma.clinicMember.findMany({ where: { clinicId: clinic.id, isActive: true }, select: { userId: true } });
+  const clinicIds = await findClinicsForUser(userId);
+  if (clinicIds.length === 0) return 0;
+  const clinicId = clinicIds[0];
+  const members = await prisma.clinicMember.findMany({ where: { clinicId, isActive: true }, select: { userId: true } });
   const ids = members.map(m => m.userId);
   if (ids.length === 0) return 0;
   return prisma.user.count({ where: { role: 'PATIENT', doctorId: { in: ids } } });
 }
 
 async function countClinicProtocols(userId: string): Promise<number> {
-  const clinic = await findClinicForUser(userId);
-  if (!clinic) return 0;
-  const members = await prisma.clinicMember.findMany({ where: { clinicId: clinic.id, isActive: true }, select: { userId: true } });
+  const clinicIds = await findClinicsForUser(userId);
+  if (clinicIds.length === 0) return 0;
+  const clinicId = clinicIds[0];
+  const members = await prisma.clinicMember.findMany({ where: { clinicId, isActive: true }, select: { userId: true } });
   const ids = members.map(m => m.userId);
   if (ids.length === 0) return 0;
   return prisma.protocol.count({ where: { doctor_id: { in: ids } } });
 }
 
 async function countClinicCourses(userId: string): Promise<number> {
-  const clinic = await findClinicForUser(userId);
-  if (!clinic) return 0;
-  const members = await prisma.clinicMember.findMany({ where: { clinicId: clinic.id, isActive: true }, select: { userId: true } });
+  const clinicIds = await findClinicsForUser(userId);
+  if (clinicIds.length === 0) return 0;
+  const clinicId = clinicIds[0];
+  const members = await prisma.clinicMember.findMany({ where: { clinicId, isActive: true }, select: { userId: true } });
   const ids = members.map(m => m.userId);
   if (ids.length === 0) return 0;
   return prisma.course.count({ where: { doctorId: { in: ids } } });
 }
 
 async function countClinicProducts(userId: string): Promise<number> {
-  const clinic = await findClinicForUser(userId);
-  if (!clinic) return 0;
-  const members = await prisma.clinicMember.findMany({ where: { clinicId: clinic.id, isActive: true }, select: { userId: true } });
+  const clinicIds = await findClinicsForUser(userId);
+  if (clinicIds.length === 0) return 0;
+  const clinicId = clinicIds[0];
+  const members = await prisma.clinicMember.findMany({ where: { clinicId, isActive: true }, select: { userId: true } });
   const ids = members.map(m => m.userId);
   if (ids.length === 0) return 0;
   return prisma.products.count({ where: { doctorId: { in: ids } } });
@@ -184,9 +204,10 @@ export async function canAddPatient(userId: string): Promise<{ allowed: boolean;
 
 // New feature checks
 async function getClinicMemberIds(userId: string): Promise<string[]> {
-  const clinic = await findClinicForUser(userId);
-  if (!clinic) return [];
-  const members = await prisma.clinicMember.findMany({ where: { clinicId: clinic.id, isActive: true }, select: { userId: true } });
+  const clinicIds = await findClinicsForUser(userId);
+  if (clinicIds.length === 0) return [];
+  const clinicId = clinicIds[0];
+  const members = await prisma.clinicMember.findMany({ where: { clinicId, isActive: true }, select: { userId: true } });
   return members.map(m => m.userId);
 }
 
