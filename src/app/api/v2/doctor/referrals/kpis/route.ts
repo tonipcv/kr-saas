@@ -38,19 +38,15 @@ export async function GET(_req: NextRequest) {
       }
     });
 
-    // Valor Gerado: soma de creditValue dos leads convertidos
-    const convertedLeads = await prisma.referralLead.findMany({
-      where: {
-        doctorId,
-        OR: [
-          { convertedUserId: { not: null } },
-          { status: 'CONVERTED' }
-        ]
-      },
-      select: { creditValue: true }
-    });
-
-    const valorGerado = convertedLeads.reduce((sum, l) => sum + Number(l.creditValue || 0), 0);
+    // Valor Gerado (alinhado com /api/referrals/manage):
+    // soma de customFields.offer.amount para leads CONVERTED do médico
+    const [obtainedRow] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COALESCE(SUM(COALESCE(("customFields"->'offer'->>'amount')::numeric, 0)), 0) as total
+       FROM referral_leads
+       WHERE "doctorId" = $1 AND status = 'CONVERTED'`,
+      doctorId
+    );
+    const valorGerado = Number(obtainedRow?.total || 0);
 
     // Recompensas Pendentes: reward_redemptions com status PENDING para rewards do médico
     const recompensasPendentes = await prisma.rewardRedemption.count({

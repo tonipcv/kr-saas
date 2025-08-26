@@ -86,62 +86,53 @@ export default function DoctorDashboard() {
   const [copied, setCopied] = useState(false);
   const [rewardsSummary, setRewardsSummary] = useState<{ configured: number; pending: number; redeemed: number }>({ configured: 0, pending: 0, redeemed: 0 });
 
+  // Simple skeleton helpers
+  const SkeletonLine = ({ className = '' }: { className?: string }) => (
+    <div className={`animate-pulse rounded bg-gray-200 ${className}`} />
+  );
+  const SkeletonBox = ({ className = '' }: { className?: string }) => (
+    <div className={`animate-pulse rounded-2xl bg-gray-100 border border-gray-200 ${className}`} />
+  );
+
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
         setIsLoading(true);
+        // Kick off all core requests in parallel to avoid waterfall
+        const dashboardPromise = fetch('/api/v2/doctor/dashboard-summary');
+        const patientsPromise = fetch('/api/patients');
+        const protocolsPromise = fetch('/api/protocols');
 
-        // Load dashboard summary stats
-        const dashboardResponse = await fetch('/api/v2/doctor/dashboard-summary');
-        if (!dashboardResponse.ok) {
+        // Non-critical (deferred) requests in parallel, will be processed after first paint
+        const kpisPromise = fetch('/api/v2/doctor/referrals/kpis', { cache: 'no-store' }).catch(() => null);
+        const rewardsPromise = fetch('/api/referrals/rewards').catch(() => null);
+
+        // Await only the core requests for first render
+        const [dashboardResponse, patientsResponse, protocolsResponse] = await Promise.all([
+          dashboardPromise,
+          patientsPromise,
+          protocolsPromise,
+        ]);
+
+        let dashboardData: any = { success: false };
+        if (dashboardResponse?.ok) {
+          dashboardData = await dashboardResponse.json();
+        } else if (dashboardResponse) {
           console.error('Error loading dashboard stats:', dashboardResponse.status);
-          return;
         }
-        const dashboardData = await dashboardResponse.json();
-        
-        // Load clients with default parameters
-        const patientsResponse = await fetch('/api/patients');
-        if (!patientsResponse.ok) {
+
+        let patientsData: any[] = [];
+        if (patientsResponse?.ok) {
+          patientsData = await patientsResponse.json();
+        } else if (patientsResponse) {
           console.error('Error loading clients:', patientsResponse.status);
-          return;
         }
-        const patientsData = await patientsResponse.json();
-        
-        // Load protocols
-        const protocolsResponse = await fetch('/api/protocols');
-        if (!protocolsResponse.ok) {
+
+        let protocolsData: any[] = [];
+        if (protocolsResponse?.ok) {
+          protocolsData = await protocolsResponse.json();
+        } else if (protocolsResponse) {
           console.error('Error loading protocols:', protocolsResponse.status);
-          return;
-        }
-        const protocolsData = await protocolsResponse.json();
-
-        // Load referral KPIs (leads and revenue)
-        let kpisData: any = null;
-        try {
-          const kpisResponse = await fetch('/api/v2/doctor/referrals/kpis', { cache: 'no-store' });
-          if (kpisResponse.ok) {
-            const kpisJson = await kpisResponse.json();
-            if (kpisJson?.success && kpisJson?.data) {
-              kpisData = kpisJson.data;
-            }
-          }
-        } catch (e) {
-          console.error('Error loading referral KPIs:', e);
-        }
-
-        // Load rewards to compute configured/pending/redeemed
-        try {
-          const rewardsRes = await fetch('/api/referrals/rewards');
-          if (rewardsRes.ok) {
-            const rewardsJson = await rewardsRes.json();
-            const rewards = Array.isArray(rewardsJson?.rewards) ? rewardsJson.rewards : [];
-            const configured = rewards.filter((r: any) => r.isActive).length;
-            const pending = rewards.reduce((sum: number, r: any) => sum + (Array.isArray(r.redemptions) ? r.redemptions.filter((rd: any) => rd.status === 'PENDING').length : 0), 0);
-            const redeemed = rewards.reduce((sum: number, r: any) => sum + (Array.isArray(r.redemptions) ? r.redemptions.filter((rd: any) => rd.status === 'FULFILLED').length : 0), 0);
-            setRewardsSummary({ configured, pending, redeemed });
-          }
-        } catch (e) {
-          console.error('Error loading rewards summary:', e);
         }
 
         // Transform patients data to match expected format
@@ -208,33 +199,73 @@ export default function DoctorDashboard() {
           }));
         }
 
-        // If KPIs available, map to dashboard KPIs
-        if (kpisData) {
-          const leadsRecebidosNum = Number(kpisData.leadsRecebidos);
-          const valorGeradoNum = Number(kpisData.valorGerado);
-          setStats((prev) => ({
-            ...prev,
-            referralsCount: Number.isFinite(leadsRecebidosNum) ? leadsRecebidosNum : prev.referralsCount,
-            revenueCollected: Number.isFinite(valorGeradoNum) ? valorGeradoNum : prev.revenueCollected,
-          }));
-        }
+        // Process deferred requests without blocking first render
+        Promise.allSettled([kpisPromise, rewardsPromise]).then(async (results) => {
+          const [kpisResSet, rewardsResSet] = results;
 
-        // Fallback: pull obtainedValue directly from manage endpoint (same source as referrals page)
-        try {
-          const leadsRes = await fetch(`/api/referrals/manage?page=1&limit=1`, { cache: 'no-store' });
-          if (leadsRes.ok) {
-            const leadsJson = await leadsRes.json();
-            const obtainedValue = Number(leadsJson?.stats?.obtainedValue || 0);
-            const totalLeads = Number(leadsJson?.pagination?.total || 0);
-            setStats((prev) => ({
-              ...prev,
-              referralsCount: prev.referralsCount || totalLeads,
-              revenueCollected: prev.revenueCollected || obtainedValue,
-            }));
+          // KPIs
+          try {
+            const kpisRes = (kpisResSet as PromiseFulfilledResult<Response>)?.value;
+            if (kpisRes && kpisRes.ok) {
+              const kpisJson = await kpisRes.json();
+              const kdata = kpisJson?.success && kpisJson?.data ? kpisJson.data : null;
+              if (kdata) {
+                const leadsRecebidosNum = Number(kdata.leadsRecebidos);
+                const valorGeradoNum = Number(kdata.valorGerado);
+                setStats((prev) => ({
+                  ...prev,
+                  referralsCount: Number.isFinite(leadsRecebidosNum) ? leadsRecebidosNum : prev.referralsCount,
+                  revenueCollected: Number.isFinite(valorGeradoNum) ? valorGeradoNum : prev.revenueCollected,
+                }));
+              }
+            }
+          } catch (e) {
+            console.error('Error loading referral KPIs (deferred):', e);
           }
-        } catch (e) {
-          console.error('Error computing revenue fallback from manage stats:', e);
-        }
+
+          // Rewards
+          try {
+            const rewardsRes = (rewardsResSet as PromiseFulfilledResult<Response>)?.value;
+            if (rewardsRes && rewardsRes.ok) {
+              const rewardsJson = await rewardsRes.json();
+              const rewards = Array.isArray(rewardsJson?.rewards) ? rewardsJson.rewards : [];
+              const configured = rewards.filter((r: any) => r.isActive).length;
+              const pending = rewards.reduce((sum: number, r: any) => sum + (Array.isArray(r.redemptions) ? r.redemptions.filter((rd: any) => rd.status === 'PENDING').length : 0), 0);
+              const redeemed = rewards.reduce((sum: number, r: any) => sum + (Array.isArray(r.redemptions) ? r.redemptions.filter((rd: any) => rd.status === 'FULFILLED').length : 0), 0);
+              setRewardsSummary({ configured, pending, redeemed });
+            }
+          } catch (e) {
+            console.error('Error loading rewards summary (deferred):', e);
+          }
+
+          // Final safety fallback: manage stats, only if revenue/referrals still zero
+          try {
+            if (typeof window !== 'undefined') {
+              const needRevenueOrReferrals = (prev: DashboardStats) => !prev.revenueCollected || !prev.referralsCount;
+              // lightweight re-check of current stats
+              let shouldFetchManage = false;
+              setStats((prev) => {
+                shouldFetchManage = needRevenueOrReferrals(prev);
+                return prev;
+              });
+              if (shouldFetchManage) {
+                const leadsRes = await fetch(`/api/referrals/manage?page=1&limit=1`, { cache: 'no-store' });
+                if (leadsRes.ok) {
+                  const leadsJson = await leadsRes.json();
+                  const obtainedValue = Number(leadsJson?.stats?.obtainedValue || 0);
+                  const totalLeads = Number(leadsJson?.pagination?.total || 0);
+                  setStats((prev) => ({
+                    ...prev,
+                    referralsCount: prev.referralsCount || totalLeads,
+                    revenueCollected: prev.revenueCollected || obtainedValue,
+                  }));
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Error computing revenue fallback from manage stats (deferred):', e);
+          }
+        });
 
       } catch (error) {
         console.error('Error loading dashboard data:', error);
@@ -358,7 +389,7 @@ export default function DoctorDashboard() {
           </div>
 
           {/* Free plan banner */}
-          {planName && planName.toLowerCase() === 'free' && (
+          {(planName ?? '').toLowerCase() === 'free' && (
             <div className="mb-4 rounded-2xl px-4 py-4 text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] shadow-sm">
               <p className="text-sm font-semibold">You are on the Free plan — limited features.</p>
               <p className="text-xs mt-1 opacity-95">Upgrade to unlock all features.</p>
@@ -374,27 +405,35 @@ export default function DoctorDashboard() {
 
           {/* Stats (pill cards like KPIs) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-2">
-            {[{
-              title: 'Revenue collected',
-              value: formatCurrency(stats.revenueCollected),
-              note: 'total'
-            }, {
-              title: 'Referrals',
-              value: stats.referralsCount,
-              note: 'last 30 days'
-            }, {
-              title: 'Users',
-              value: stats.usersCount,
-              note: 'total'
-            }].map((kpi) => (
-              <div key={String(kpi.title)} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-gray-500">{kpi.title}</span>
-                  <span className="text-[10px] text-gray-400">{kpi.note}</span>
+            {isLoading ? (
+              <>
+                <SkeletonBox className="h-16" />
+                <SkeletonBox className="h-16" />
+                <SkeletonBox className="h-16" />
+              </>
+            ) : (
+              [{
+                title: 'Revenue collected',
+                value: formatCurrency(stats.revenueCollected),
+                note: 'total'
+              }, {
+                title: 'Referrals',
+                value: stats.referralsCount,
+                note: 'last 30 days'
+              }, {
+                title: 'Users',
+                value: stats.usersCount,
+                note: 'total'
+              }].map((kpi) => (
+                <div key={String(kpi.title)} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-medium text-gray-500">{kpi.title}</span>
+                    <span className="text-[10px] text-gray-400">{kpi.note}</span>
+                  </div>
+                  <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{kpi.value as any}</div>
                 </div>
-                <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{kpi.value as any}</div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
  
           <div className="grid lg:grid-cols-2 gap-3">
@@ -413,16 +452,24 @@ export default function DoctorDashboard() {
               </CardHeader>
               <CardContent className="px-4 pb-4 pt-0">
                 <div className="grid grid-cols-3 gap-3">
-                  {[
-                    {label:'Configured',value:rewardsSummary.configured},
-                    {label:'Pending',value:rewardsSummary.pending},
-                    {label:'Redeemed',value:rewardsSummary.redeemed}
-                  ].map((m) => (
-                    <div key={m.label} className="px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 shadow-sm">
-                      <p className="text-[11px] text-gray-600 font-medium">{m.label}</p>
-                      <p className="text-[22px] leading-7 font-semibold text-gray-900">{m.value}</p>
-                    </div>
-                  ))}
+                  {isLoading ? (
+                    <>
+                      <SkeletonBox className="h-16" />
+                      <SkeletonBox className="h-16" />
+                      <SkeletonBox className="h-16" />
+                    </>
+                  ) : (
+                    [
+                      {label:'Configured',value:rewardsSummary.configured},
+                      {label:'Pending',value:rewardsSummary.pending},
+                      {label:'Redeemed',value:rewardsSummary.redeemed}
+                    ].map((m) => (
+                      <div key={m.label} className="px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 shadow-sm">
+                        <p className="text-[11px] text-gray-600 font-medium">{m.label}</p>
+                        <p className="text-[22px] leading-7 font-semibold text-gray-900">{m.value}</p>
+                      </div>
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -432,11 +479,17 @@ export default function DoctorDashboard() {
             {/* Referral projections (above Active Clients and Track Progress) */}
             <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl col-span-2">
               <CardContent className="p-0">
-                <ProjectionLineChart 
-                  title="Referral projections"
-                  past={pastSeries}
-                  height={320}
-                />
+                {isLoading ? (
+                  <div className="p-4">
+                    <SkeletonBox className="h-80 w-full" />
+                  </div>
+                ) : (
+                  <ProjectionLineChart 
+                    title="Referral projections"
+                    past={pastSeries}
+                    height={320}
+                  />
+                )}
               </CardContent>
             </Card>
 
@@ -451,7 +504,21 @@ export default function DoctorDashboard() {
                 </Button>
               </CardHeader>
               <CardContent className="px-2 pb-2 pt-0">
-                {patients.length === 0 ? (
+                {isLoading ? (
+                  <div className="divide-y divide-gray-200">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="flex items-center justify-between py-3 px-2">
+                        <div className="flex items-center gap-3 min-w-0 w-full">
+                          <SkeletonLine className="h-8 w-8 rounded-lg" />
+                          <div className="min-w-0 flex-1">
+                            <SkeletonLine className="h-4 w-32 mb-2" />
+                            <SkeletonLine className="h-3 w-48" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : patients.length === 0 ? (
                   <div className="text-center py-10">
                     <UsersIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
                     <p className="text-gray-500 mb-4 font-medium">No clients registered</p>
