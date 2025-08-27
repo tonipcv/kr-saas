@@ -5,8 +5,10 @@ import ProductsGrid from '@/components/products/ProductsGrid';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export default async function DoctorProductsPage({ params }: { params: { slug: string } }) {
-  const { slug } = params;
+export default async function DoctorProductsPage({ params }: { params: Promise<{ slug: string }> | { slug: string } }) {
+  // Next.js 15: params may be a Promise
+  const resolvedParams = (params as any)?.then ? await (params as Promise<{ slug: string }>) : (params as { slug: string });
+  const { slug } = resolvedParams;
 
   // Resolve doctor by slug
   const doctor = await prisma.user.findFirst({

@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { Suspense, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function ThankYouPage() {
+function ThankYouContent() {
   const params = useSearchParams();
   const name = params.get('name') || '';
   const email = params.get('email') || '';
@@ -73,5 +73,13 @@ export default function ThankYouPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ThankYouPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white" />}> 
+      <ThankYouContent />
+    </Suspense>
   );
 }
