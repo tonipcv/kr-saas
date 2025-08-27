@@ -48,6 +48,9 @@ interface ReferralLead {
   customFields?: {
     offer?: { amount?: number } | null;
     coupon?: { code: string; amount?: number | null } | null;
+    productPrice?: number | null;
+    productName?: string | null;
+    productCategory?: string | null;
     [k: string]: any;
   } | null;
   referrer: {
@@ -498,7 +501,13 @@ export default function DoctorReferralsPage() {
                           ) : '—'}
                         </TableCell>
                         <TableCell className="text-sm text-gray-700">{lead.campaign?.title || '—'}</TableCell>
-                        <TableCell className="text-sm text-gray-700">{lead.customFields?.offer?.amount ?? '—'}</TableCell>
+                        <TableCell className="text-sm text-gray-700">
+                          {typeof lead.customFields?.productPrice === 'number'
+                            ? (lead.customFields!.productPrice as number).toFixed(2)
+                            : (typeof lead.customFields?.offer?.amount === 'number'
+                                ? (lead.customFields!.offer!.amount as number).toFixed(2)
+                                : '—')}
+                        </TableCell>
                         <TableCell className="text-sm text-gray-700">
                           {lead.customFields?.coupon?.code ? (
                             <div className="inline-flex items-center gap-2">
@@ -556,7 +565,12 @@ export default function DoctorReferralsPage() {
                                     <p className="text-sm text-gray-900"><strong>Phone:</strong> {selectedLead?.phone || 'Not provided'}</p>
                                     <p className="text-sm text-gray-900"><strong>Product:</strong> {selectedLead?.customFields?.productName ?? '—'}{selectedLead?.customFields?.productCategory ? ` (${selectedLead?.customFields?.productCategory})` : ''}</p>
                                     <p className="text-sm text-gray-900"><strong>Campaign:</strong> {selectedLead?.campaign?.title || '—'}</p>
-                                    <p className="text-sm text-gray-900"><strong>Valor:</strong> {selectedLead?.customFields?.offer?.amount ?? '—'}</p>
+                                    <p className="text-sm text-gray-900"><strong>Valor:</strong> {typeof selectedLead?.customFields?.productPrice === 'number'
+                                      ? (selectedLead!.customFields!.productPrice as number).toFixed(2)
+                                      : (typeof selectedLead?.customFields?.offer?.amount === 'number'
+                                          ? (selectedLead!.customFields!.offer!.amount as number).toFixed(2)
+                                          : '—')}
+                                    </p>
                                     <p className="text-sm text-gray-900"><strong>Cupom:</strong> {selectedLead?.customFields?.coupon?.code ?? '—'}</p>
                                     <p className="text-sm text-gray-900"><strong>Referred by:</strong> {selectedLead?.referrer?.name ?? 'Direct'}</p>
                                   </div>

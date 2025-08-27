@@ -1,6 +1,7 @@
 import React from 'react';
 import { prisma } from '@/lib/prisma';
 import ProductsGrid from '@/components/products/ProductsGrid';
+import ReferrerBanner from '@/components/referrals/ReferrerBanner';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -17,7 +18,7 @@ export default async function DoctorProductsPage({ params }: { params: Promise<{
   });
 
   // List active products
-  const products = doctor
+  const raw = doctor
     ? await prisma.products.findMany({
         where: { doctorId: doctor.id, isActive: true } as any,
         orderBy: { createdAt: 'desc' } as any,
@@ -33,6 +34,22 @@ export default async function DoctorProductsPage({ params }: { params: Promise<{
         } as any,
       })
     : [];
+
+  // Normalize Decimal/BigInt values to numbers for Client Component consumption
+  const toNum = (v: any) => {
+    if (v == null) return null;
+    try {
+      const n = Number.parseFloat(v.toString());
+      return Number.isFinite(n) ? n : null;
+    } catch {
+      return null;
+    }
+  };
+  const products = (raw as any[]).map((p) => ({
+    ...p,
+    price: toNum(p?.price),
+    creditsPerUnit: toNum(p?.creditsPerUnit),
+  }));
 
   return (
     <main className="min-h-screen bg-[#f7f8ff] text-gray-900">
@@ -73,6 +90,8 @@ export default async function DoctorProductsPage({ params }: { params: Promise<{
             </div>
           </div>
         </div>
+        {/* Referrer banner if ?code= is present */}
+        <ReferrerBanner slug={slug} />
         {!doctor ? (
           <div className="rounded-xl border border-dashed border-gray-200 bg-white p-6 text-center text-sm text-gray-600">
             Não foi possível encontrar a clínica.

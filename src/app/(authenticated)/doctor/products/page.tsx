@@ -184,7 +184,8 @@ export default function ProductsPage() {
     }).format(new Date(date));
   };
 
-  const isFree = (planName || '').toLowerCase() === 'free';
+  // Unlock products for all plans
+  const isFree = false;
 
   if (isLoading) {
     return (
@@ -252,32 +253,17 @@ export default function ProductsPage() {
                 <h1 className="text-[20px] font-semibold text-gray-900 tracking-[-0.01em]">Products</h1>
                 <p className="text-sm text-gray-500 mt-1">Manage products recommended in your protocols</p>
               </div>
-              {planName && planName.toLowerCase() === 'free' ? (
-                <Button onClick={openPlansModal} className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium">
+              <Button asChild className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium">
+                <Link href="/doctor/products/create">
                   <PlusIcon className="h-4 w-4 mr-2" />
                   New Product
-                </Button>
-              ) : (
-                <Button asChild className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium">
-                  <Link href="/doctor/products/create">
-                    <PlusIcon className="h-4 w-4 mr-2" />
-                    New Product
-                  </Link>
-                </Button>
-              )}
+                </Link>
+              </Button>
             </div>
           </div>
 
-          {planName && planName.toLowerCase() === 'free' && (
-            <div className="mb-4 rounded-2xl px-4 py-4 text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] shadow-sm">
-              <p className="text-sm font-semibold">You're on the Free plan — access to the Products page is not included.</p>
-              <p className="text-xs mt-1 opacity-95">Upgrade to a paid plan to unlock this feature.</p>
-              <div className="mt-3">
-                <Button size="sm" variant="secondary" className="h-8 rounded-lg bg-white text-gray-800 hover:bg-gray-100" onClick={openPlansModal}>
-                  See plans
-                </Button>
-              </div>
-            </div>
+          {false && (
+            <div className="mb-4 rounded-2xl px-4 py-4 text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] shadow-sm" />
           )}
 
           {/* Toolbar rendered only when products exist */}

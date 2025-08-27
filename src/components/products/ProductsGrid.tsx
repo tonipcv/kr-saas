@@ -31,8 +31,12 @@ export default function ProductsGrid({
   const [query, setQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
   const [error, setError] = useState<string>("");
   const [referrerCode, setReferrerCode] = useState<string | null>(null);
+  const [coupon, setCoupon] = useState<string | null>(null);
+  const [discountPercent, setDiscountPercent] = useState<number | null>(null);
+  const [leadReferralCode, setLeadReferralCode] = useState<string | null>(null);
 
   const priceFormatter = useMemo(
     () => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }),
@@ -82,12 +86,22 @@ export default function ProductsGrid({
             productId: selected.id,
             productName: selected.name,
             productCategory: selected.category || null,
+            offer: {
+              amount: typeof selected.price === 'number' ? selected.price : undefined,
+            },
+            campaign: {
+              coupon: coupon || undefined,
+              discountPercent: discountPercent ?? undefined,
+            }
           }
         })
       });
       const data = await resp.json();
       if (!resp.ok) {
         throw new Error(data?.error || 'Falha ao enviar indicação');
+      }
+      if (data?.referralCode) {
+        setLeadReferralCode(String(data.referralCode));
       }
       // Redirect to product confirmationUrl if provided by the doctor
       const conf = (selected.confirmationUrl || '').trim();
@@ -101,10 +115,38 @@ export default function ProductsGrid({
           if (name.trim()) params.set('name', name.trim());
           if (whatsapp.trim()) params.set('phone', whatsapp.trim());
           if (data?.referralCode) params.set('referral', String(data.referralCode));
+          if (typeof selected.price === 'number') params.set('price', String(selected.price));
+          if (coupon) params.set('coupon', coupon);
+          if (discountPercent != null) params.set('discountPercent', String(discountPercent));
+          if (data?.referralCode) params.set('couponCode', String(data.referralCode));
           // merge params into target
           params.forEach((v, k) => target.searchParams.set(k, v));
-          window.location.href = target.toString();
-          return;
+
+          // If WhatsApp link, inject the referral code into the text message
+          try {
+            const host = target.hostname.toLowerCase();
+            const isWhatsApp = /(^(?:wa\.me|api\.whatsapp\.com|wa\.link)$)|((?:^|\.)whatsapp\.com$)/i.test(host);
+            if (isWhatsApp && data?.referralCode) {
+              const existing = target.searchParams.get('text') || '';
+              const noteLines: string[] = [];
+              noteLines.push(`Meu código de indicação: ${String(data.referralCode)}`);
+              if (coupon) {
+                if (discountPercent != null) noteLines.push(`Campanha: ${coupon} (${discountPercent}% off)`);
+                else noteLines.push(`Campanha: ${coupon}`);
+              }
+              const appendix = noteLines.join('\n');
+              const merged = existing ? `${existing}\n\n${appendix}` : appendix;
+              target.searchParams.set('text', merged);
+            }
+          } catch {}
+          // Show success UI and then redirect after a brief delay
+          const finalUrl = target.toString();
+          setRedirectUrl(finalUrl);
+          setSuccess(true);
+          setTimeout(() => {
+            try { window.location.href = finalUrl; } catch {}
+          }, 500);
+          return; // prevent falling through to generic success
         } catch (e) {
           // If URL is malformed, fallback to success state
           console.warn('Invalid confirmationUrl, showing success modal instead');
@@ -142,12 +184,23 @@ export default function ProductsGrid({
     return list;
   }, [products, selectedCategory, query]);
 
-  // Capture referrer code from URL query
+  // Capture referrer code and coupon from URL query
   useEffect(() => {
     try {
       const u = new URL(window.location.href);
       const code = u.searchParams.get('code');
+      const rawCoupon = u.searchParams.get('cupom') || u.searchParams.get('coupon');
       if (code) setReferrerCode(code);
+      if (rawCoupon) {
+        setCoupon(rawCoupon);
+        const m = /^off(\d{1,2})$/i.exec(rawCoupon.trim());
+        if (m) {
+          const pct = parseInt(m[1], 10);
+          if (!Number.isNaN(pct)) setDiscountPercent(pct);
+        } else {
+          setDiscountPercent(null);
+        }
+      }
     } catch {}
   }, []);
 
@@ -237,9 +290,7 @@ export default function ProductsGrid({
             </div>
             <div className="flex items-start justify-between gap-2">
               <h3 className="font-semibold text-gray-900 truncate">{p.name}</h3>
-              {typeof p.price === "number" ? (
-                <span className="text-sm font-medium text-gray-900">{priceFormatter.format(p.price)}</span>
-              ) : null}
+              {/* Price hidden on public clinic page */}
             </div>
             {p.category ? (
               <span className="mt-1 inline-block text-[10px] px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 border border-gray-200">{p.category}</span>
@@ -253,7 +304,7 @@ export default function ProductsGrid({
                 onClick={() => onOpen(p)}
                 className="inline-flex items-center justify-center rounded-md bg-blue-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
               >
-                Saber mais
+                Quero agendar
               </button>
             </div>
           </div>
@@ -292,7 +343,25 @@ export default function ProductsGrid({
                 <div className="mx-auto w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
                   <span className="text-green-600 text-2xl">✓</span>
                 </div>
-                <p className="text-sm text-gray-700">Recebemos seu interesse! Em breve entraremos em contato.</p>
+                <p className="text-sm text-gray-700">
+                  {redirectUrl
+                    ? 'Parabéns, estamos redirecionando você para um dos nossos atendentes...'
+                    : 'Em breve um dos nossos atendentes entrará em contato com você!'}
+                </p>
+                {leadReferralCode ? (
+                  <div className="text-xs text-gray-600">
+                    Seu CUPOM é: <span className="font-semibold text-gray-800">{leadReferralCode}</span>
+                  </div>
+                ) : null}
+                {redirectUrl ? (
+                  <div className="flex items-center justify-center gap-3 text-xs text-gray-600">
+                    <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"></path>
+                    </svg>
+                    <a href={redirectUrl} className="underline hover:no-underline">Abrir agora</a>
+                  </div>
+                ) : null}
                 <div className="flex items-center justify-center gap-2">
                   <button
                     type="button"
@@ -334,7 +403,7 @@ export default function ProductsGrid({
                   disabled={submitting}
                   className="w-full inline-flex items-center justify-center rounded-md bg-blue-500 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-600 disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
                 >
-                  {submitting ? 'Enviando…' : 'Tenho interesse'}
+                  {submitting ? 'Enviando…' : 'Quero agendar'}
                 </button>
               </form>
             )}

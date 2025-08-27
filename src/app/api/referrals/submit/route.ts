@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { name, email, phone, doctorId, referrerCode } = body;
+    const rawCustomFields = typeof body.customFields === 'object' && body.customFields ? body.customFields : undefined;
     // Accept slug as alternative to doctorId for backward compatibility
     const doctorSlug: string | undefined = body.doctor_slug || body.doctorSlug;
 
@@ -107,7 +108,57 @@ export async function POST(request: NextRequest) {
         );
       }
     } else if (phone) {
-      // Permitir duplicados por telefone — apenas logar para auditoria
+      // Permitir duplicados por telefone — porém, se for o MESMO produto, reutilizar o mesmo lead/código
+      const productIdFromBody = rawCustomFields?.productId ?? undefined;
+      if (productIdFromBody != null) {
+        const candidates = await prisma.referralLead.findMany({
+          where: {
+            phone,
+            doctorId: resolvedDoctorId as string,
+            status: { in: ['PENDING', 'CONTACTED'] },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        const sameProduct = candidates.find((l: any) => l?.customFields?.productId === productIdFromBody);
+        if (sameProduct) {
+          // Merge minimal fields and keep referralCode (coupon)
+          const existingCustom = (sameProduct as any).customFields || {};
+          const campaign = (rawCustomFields as any)?.campaign || undefined;
+          const mergedCustom = {
+            ...existingCustom,
+            ...(rawCustomFields || {}),
+            coupon: {
+              ...(existingCustom?.coupon || {}),
+              code: sameProduct.referralCode,
+              amount: (rawCustomFields as any)?.offer?.amount ?? (rawCustomFields as any)?.productPrice ?? (existingCustom?.coupon?.amount ?? null),
+              campaignCoupon: campaign?.coupon ?? (existingCustom?.coupon?.campaignCoupon ?? null),
+              discountPercent: typeof campaign?.discountPercent === 'number' ? campaign.discountPercent : (existingCustom?.coupon?.discountPercent ?? null),
+            },
+          } as any;
+
+          const emailForUpdate = email || sameProduct.email || `lead+${sameProduct.referralCode}@noemail.local`;
+          await prisma.referralLead.update({
+            where: { id: sameProduct.id },
+            data: {
+              name: name ?? sameProduct.name,
+              email: emailForUpdate,
+              phone: phone || sameProduct.phone,
+              // keep status as is; update customFields and referrerId if provided
+              referrerId: referrerCode ? (await getUserByReferralCode(referrerCode))?.id ?? sameProduct.referrerId : sameProduct.referrerId,
+              customFields: mergedCustom,
+            },
+          });
+
+          return NextResponse.json({
+            success: true,
+            message: 'Referral updated successfully',
+            referralCode: sameProduct.referralCode,
+            reused: true,
+          });
+        }
+      }
+
+      // Caso não seja o mesmo produto, apenas logar e permitir criar um novo lead
       existingLead = await prisma.referralLead.findFirst({
         where: {
           phone,
@@ -117,7 +168,7 @@ export async function POST(request: NextRequest) {
         select: { id: true, status: true },
       });
       if (existingLead) {
-        console.info('[referrals/submit] Proceeding despite existing lead with same phone', {
+        console.info('[referrals/submit] Proceeding despite existing lead with same phone (different product or not provided)', {
           phone,
           doctorId: resolvedDoctorId,
           leadId: existingLead.id,
@@ -232,11 +283,22 @@ export async function POST(request: NextRequest) {
 
     // Criar a indicação
     // Merge provided custom fields with auditing info
-    const providedCustom = typeof body.customFields === 'object' && body.customFields ? body.customFields : undefined;
+    const providedCustom = rawCustomFields;
     const mergedCustomFields = {
       ...(providedCustom || {}),
       ...(referrerCode ? { referrerCodeProvided: referrerCode } : {}),
     } as any;
+
+    // Persist a unique coupon object tied to this lead using the generated referralCode
+    // Keep backward compatibility: UI expects customFields.coupon.code and optional amount
+    // If campaign exists in provided custom fields, carry its info alongside
+    const campaign = (providedCustom as any)?.campaign || undefined;
+    (mergedCustomFields as any).coupon = {
+      code: undefined as any, // set below once code is generated
+      amount: (providedCustom as any)?.offer?.amount ?? (providedCustom as any)?.productPrice ?? null,
+      campaignCoupon: campaign?.coupon ?? null,
+      discountPercent: typeof campaign?.discountPercent === 'number' ? campaign.discountPercent : null,
+    };
 
     // Prisma schema requires email (non-null). If not provided, synthesize a unique placeholder to satisfy constraints.
     const emailToSave = email || `lead+${leadReferralCode}@noemail.local`;
@@ -255,7 +317,16 @@ export async function POST(request: NextRequest) {
         referrerId: referrer?.id || null,
         source: 'referral_form',
         // Persist provided referrerCode and any product context for auditing and UI
-        customFields: Object.keys(mergedCustomFields).length ? mergedCustomFields : undefined,
+        customFields: Object.keys(mergedCustomFields).length
+          ? {
+              ...mergedCustomFields,
+              // finalize coupon code with the generated leadReferralCode for uniqueness
+              coupon: {
+                ...(mergedCustomFields as any).coupon,
+                code: leadReferralCode,
+              },
+            }
+          : { coupon: { code: leadReferralCode, amount: null } },
       }
     });
 
