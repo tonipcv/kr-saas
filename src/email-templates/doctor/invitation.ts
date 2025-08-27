@@ -9,7 +9,7 @@ export const createDoctorInvitationEmail = ({
 }: DoctorInvitationEmailProps) => {
   const content = `
     <div>
-      <p>Welcome to Cxlus</p>
+      <p>Welcome to Zuzz</p>
       
       <p>
         Set up your doctor account →<br>
@@ -32,6 +32,6 @@ export const createDoctorInvitationEmail = ({
 
   return baseTemplate({
     content,
-    clinicName: 'Cxlus'
+    clinicName: 'Zuzz'
   });
 } 

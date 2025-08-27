@@ -85,6 +85,7 @@ export default function DoctorDashboard() {
   const [doctorSlug, setDoctorSlug] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [rewardsSummary, setRewardsSummary] = useState<{ configured: number; pending: number; redeemed: number }>({ configured: 0, pending: 0, redeemed: 0 });
+  const [showLinksPanel, setShowLinksPanel] = useState(false);
 
   // Simple skeleton helpers
   const SkeletonLine = ({ className = '' }: { className?: string }) => (
@@ -299,6 +300,8 @@ export default function DoctorDashboard() {
     ? `${(process.env.NEXT_PUBLIC_APP_URL as string) || (typeof window !== 'undefined' ? window.location.origin : '')}/${doctorSlug}`
     : '';
 
+  const patientLoginUrl = publicUrl ? `${publicUrl}/login` : '';
+
   const copyPublicUrl = async () => {
     if (!publicUrl) return;
     try {
@@ -307,6 +310,17 @@ export default function DoctorDashboard() {
       setTimeout(() => setCopied(false), 1500);
     } catch (e) {
       console.error('Failed to copy public URL:', e);
+    }
+  };
+
+  const copyPatientLoginUrl = async () => {
+    if (!patientLoginUrl) return;
+    try {
+      await navigator.clipboard.writeText(patientLoginUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (e) {
+      console.error('Failed to copy patient login URL:', e);
     }
   };
 
@@ -374,7 +388,7 @@ export default function DoctorDashboard() {
         
           {/* Header (compact, like KPIs) */}
           <div className="flex flex-col gap-3 mb-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between relative">
               <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Overview</h1>
               <div className="flex items-center gap-2">
                 <button
@@ -383,7 +397,46 @@ export default function DoctorDashboard() {
                 >
                   New client
                 </button>
+                <button
+                  onClick={() => setShowLinksPanel((v) => !v)}
+                  className="inline-flex h-8 items-center rounded-full px-3 text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300"
+                >
+                  Your links
+                </button>
               </div>
+
+              {showLinksPanel && (
+                <div className="absolute right-0 top-10 z-20 w-[360px] rounded-xl border border-gray-200 bg-white shadow-xl p-4">
+                  <p className="text-[11px] text-gray-500 font-medium mb-2">Links públicos</p>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-[11px] text-gray-600 mb-1">Login para pacientes</p>
+                      <div className="flex items-center gap-2">
+                        <code className="block text-[11px] text-gray-900 truncate border border-gray-200 rounded px-2 py-1 bg-gray-50 max-w-[240px]">{patientLoginUrl || 'Defina seu slug no perfil'}</code>
+                        {patientLoginUrl && (
+                          <>
+                            <button onClick={copyPatientLoginUrl} className="text-[11px] text-gray-600 hover:text-gray-900">Copiar</button>
+                            <a href={patientLoginUrl} target="_blank" className="text-[11px] text-blue-600 hover:text-blue-700">Abrir</a>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-gray-600 mb-1">Página pública da clínica</p>
+                      <div className="flex items-center gap-2">
+                        <code className="block text-[11px] text-gray-900 truncate border border-gray-200 rounded px-2 py-1 bg-gray-50 max-w-[240px]">{publicUrl || 'Defina seu slug no perfil'}</code>
+                        {publicUrl && (
+                          <>
+                            <button onClick={copyPublicUrl} className="text-[11px] text-gray-600 hover:text-gray-900">Copiar</button>
+                            <a href={publicUrl} target="_blank" className="text-[11px] text-blue-600 hover:text-blue-700">Abrir</a>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-3">Cada paciente receberá um link individualizado para indicações baseado nas campanhas criadas.</p>
+                </div>
+              )}
 
             </div>
           </div>

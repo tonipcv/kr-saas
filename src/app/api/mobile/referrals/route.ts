@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    const clinicName = doctor.clinicMemberships?.[0]?.clinic?.name || doctor.name || 'CXLUS';
+    const clinicName = doctor.clinicMemberships?.[0]?.clinic?.name || doctor.name || 'Zuzz';
     const clinicLogo = doctor.clinicMemberships?.[0]?.clinic?.logo || undefined;
 
     // Send email notification
@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
           address: process.env.SMTP_FROM as string
         },
         to: doctor.email,
-        subject: `[Cxlus] New Referral - ${name}`,
+        subject: `[Zuzz] New Referral - ${name}`,
         html: emailHtml
       });
 
@@ -228,7 +228,7 @@ export async function POST(request: NextRequest) {
           address: process.env.SMTP_FROM as string
         },
         to: userDetails.email,
-        subject: '[Cxlus] New Referral Credit',
+        subject: '[Zuzz] New Referral Credit',
         html: creditEmailHtml
       });
 

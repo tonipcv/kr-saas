@@ -17,7 +17,7 @@ export const createPatientWelcomeEmail = ({
 }: PatientWelcomeProps) => {
   const content = `
     <div>
-      <p>Welcome to Cxlus</p>
+      <p>Welcome to Zuzz</p>
       
       <p>
         Dr. ${doctorName} will help you with your treatment
@@ -42,6 +42,6 @@ export const createPatientWelcomeEmail = ({
 
   return baseTemplate({
     content,
-    clinicName: 'Cxlus'
+    clinicName: 'Zuzz'
   });
 }; 

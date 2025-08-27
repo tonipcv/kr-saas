@@ -46,7 +46,7 @@ export const createReferralNotification = ({
 
   return baseTemplate({
     content,
-    clinicName: 'Cxlus'
+    clinicName: 'Zuzz'
   });
 };
 
@@ -70,7 +70,7 @@ export const createReferralEmail = ({
 
   return baseTemplate({
     content,
-    clinicName: 'Cxlus',
+    clinicName: 'Zuzz',
     doctorName
   });
 } 

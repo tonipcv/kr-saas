@@ -23,7 +23,7 @@ export function baseTemplate({
         <!-- Footer -->
         <div style="margin-top: 32px; padding-top: 32px; border-top: 1px solid #eee; color: #666;">
           <p style="margin: 0; font-size: 12px; color: #666;">
-            Sent by Cxlus
+            Sent by Zuzz
           </p>
         </div>
       </div>

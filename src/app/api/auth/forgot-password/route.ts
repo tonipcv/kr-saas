@@ -112,7 +112,7 @@ export async function POST(req: Request) {
           address: process.env.SMTP_FROM as string
         },
         to: email,
-        subject: `[Cxlus] Password Reset Request - ${clinicName}`,
+        subject: `[Zuzz] Password Reset Request - ${clinicName}`,
         html: emailHtml
       });
 

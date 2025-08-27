@@ -24,11 +24,11 @@ async function sendPasswordResetEmail(email: string, token: string) {
     const resetUrl = `${process.env.NEXTAUTH_URL}/auth/set-password?token=${token}`;
     
     const mailOptions = {
-      from: `"CXLUS" <${process.env.SMTP_FROM}>`,
+      from: `"Zuzz" <${process.env.SMTP_FROM}>`,
       to: email,
       subject: 'Password Reset',
       html: `
-        <p>You requested a password reset for your CXLUS account.</p>
+        <p>You requested a password reset for your Zuzz account.</p>
         <p>Click the link below to set a new password:</p>
         <p><a href="${resetUrl}">${resetUrl}</a></p>
         <p>If you did not request this reset, please ignore this email.</p>

@@ -23,6 +23,7 @@ export default function DoctorForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [showNotMemberModal, setShowNotMemberModal] = useState(false);
 
   useEffect(() => {
     const fetchDoctor = async () => {
@@ -52,6 +53,24 @@ export default function DoctorForgotPasswordPage() {
     setIsLoading(true);
 
     try {
+      // 1) Validate membership by email for this slug
+      try {
+        const res = await fetch(`/api/v2/patient/is-member-by-email/${slug}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json?.success) {
+          if (!json.isMember) {
+            setShowNotMemberModal(true);
+            return; // Stop here, don't send reset email
+          }
+        }
+        // If endpoint fails, we continue to standard flow as a fallback
+      } catch {}
+
+      // 2) Proceed with standard forgot password request
       const response = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -206,6 +225,33 @@ export default function DoctorForgotPasswordPage() {
             </div>
           </div>
         </div>
+        {/* Modal: Not a member */}
+        {showNotMemberModal && (
+          <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-md bg-white rounded-xl shadow-xl p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Você não está cadastrado como paciente deste médico</h2>
+              <p className="text-sm text-gray-600 mb-6">
+                Para continuar, você pode conhecer os produtos e serviços disponíveis desta clínica.
+              </p>
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900"
+                  onClick={() => setShowNotMemberModal(false)}
+                >
+                  Fechar
+                </button>
+                <Link
+                  href={`/${slug}`}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+                  onClick={() => setShowNotMemberModal(false)}
+                >
+                  Ver produtos
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -21,6 +21,7 @@ export default function DoctorLoginPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [showNotMemberModal, setShowNotMemberModal] = useState(false);
 
   // Fetch doctor public info
   useEffect(() => {
@@ -67,11 +68,34 @@ export default function DoctorLoginPage() {
       if (result?.error) {
         setError('Email ou senha incorretos');
       } else if (result?.ok) {
-        // Follow the same behavior as src/app/auth/signin: let Home handle role-based redirect
-        setTimeout(() => {
-          router.push('/');
-          router.refresh();
-        }, 500);
+        // Depois do login, checar se o paciente é membro deste médico (slug)
+        try {
+          const res = await fetch(`/api/v2/patient/is-member/${slug}`);
+          const json = await res.json().catch(() => ({}));
+          if (res.ok && json?.success) {
+            if (json.isMember) {
+              // Membro: segue fluxo normal
+              setTimeout(() => {
+                router.push('/');
+                router.refresh();
+              }, 300);
+            } else {
+              // Não é membro: mostrar modal sugerindo ver produtos
+              setShowNotMemberModal(true);
+            }
+          } else {
+            // Se a checagem falhar, manter comportamento anterior
+            setTimeout(() => {
+              router.push('/');
+              router.refresh();
+            }, 300);
+          }
+        } catch {
+          setTimeout(() => {
+            router.push('/');
+            router.refresh();
+          }, 300);
+        }
       }
     } catch (err) {
       setError('Erro durante o login');
@@ -148,11 +172,12 @@ export default function DoctorLoginPage() {
 
           {/* Footer links */}
           <div className="mt-6 text-center space-y-3">
+            <div className="text-sm text-gray-700">Don’t have an account?</div>
             <Link
-              href={`/${slug}/register`}
-              className="text-sm text-gray-700 hover:text-gray-900 transition-colors duration-200 block"
+              href={`/${slug}`}
+              className="text-sm text-blue-600 hover:text-blue-700 transition-colors duration-200 block"
             >
-              Don’t have an account? Sign up
+              See all services
             </Link>
             <Link
               href={`/${slug}/forgot-password`}
@@ -168,6 +193,33 @@ export default function DoctorLoginPage() {
             </div>
           </div>
         </div>
+        {/* Modal: Não é membro */}
+        {showNotMemberModal && (
+          <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-md bg-white rounded-xl shadow-xl p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Você não está cadastrado como paciente deste médico</h2>
+              <p className="text-sm text-gray-600 mb-6">
+                Para continuar, você pode conhecer os produtos e serviços disponíveis desta clínica.
+              </p>
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900"
+                  onClick={() => setShowNotMemberModal(false)}
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+                  onClick={() => { setShowNotMemberModal(false); router.push(`/${slug}`); }}
+                >
+                  Ver produtos
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

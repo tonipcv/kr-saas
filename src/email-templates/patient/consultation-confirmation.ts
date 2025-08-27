@@ -24,7 +24,7 @@ export const createConsultationConfirmationEmail = ({
 
   return baseTemplate({
     content,
-    clinicName: 'Cxlus',
+    clinicName: 'Zuzz',
     doctorName
   });
 } 

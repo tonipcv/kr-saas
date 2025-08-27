@@ -415,16 +415,16 @@ export async function POST(request: NextRequest) {
         resetUrl,
         doctorName: doctor?.name || 'Your doctor',
         isExistingClient,
-        clinicName: 'Cxlus'
+        clinicName: 'Zuzz'
       });
 
       await transporter.sendMail({
         from: {
-          name: 'CXLUS',
+          name: 'Zuzz',
           address: process.env.SMTP_FROM as string
         },
         to: email,
-        subject: isExistingClient ? '[Cxlus] Doctor Invitation' : '[Cxlus] Welcome to Cxlus',
+        subject: isExistingClient ? '[Zuzz] Doctor Invitation' : '[Zuzz] Welcome to Zuzz',
         html: emailHtml
       });
 

@@ -71,11 +71,11 @@ export async function POST(req: Request) {
 
       await transporter.sendMail({
         from: {
-          name: 'Cxlus',
+          name: 'Zuzz',
           address: process.env.SMTP_FROM as string
         },
         to: email,
-        subject: '[Cxlus] Verify Your Email',
+        subject: '[Zuzz] Verify Your Email',
         html
       });
 

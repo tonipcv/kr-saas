@@ -28,13 +28,13 @@ export const createSetPasswordEmail = ({
         
         <p>
           Hi ${name}, ${currentDoctorName}'s client!<br>
-          ${doctorName} invited you to join their protocols on Cxlus
+          ${doctorName} invited you to join their protocols on Zuzz
         </p>
       ` : `
-        <p>Welcome to Cxlus</p>
+        <p>Welcome to Zuzz</p>
         
         <p>
-          ${doctorName || 'Your doctor'} invited you to join Cxlus<br>
+          ${doctorName || 'Your doctor'} invited you to join Zuzz<br>
           Set up your password to get started →
         </p>
       `}
@@ -47,6 +47,6 @@ export const createSetPasswordEmail = ({
 
   return baseTemplate({
     content,
-    clinicName: 'Cxlus'
+    clinicName: 'Zuzz'
   });
 }; 

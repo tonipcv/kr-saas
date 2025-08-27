@@ -65,18 +65,18 @@ export function createVerificationCodeEmail({ code }: VerificationCodeEmailProps
     <body>
       <div class="container">
         <div class="header">
-          <img src="https://cxlus.com/logo.png" alt="Cxlus Logo" class="logo">
+          <img src="https://cxlus.com/logo.png" alt="Zuzz Logo" class="logo">
         </div>
         <div class="content">
           <h1>Verify your email</h1>
-          <p>Thank you for signing up to Cxlus. To continue your registration, please use the verification code below:</p>
+          <p>Thank you for signing up to Zuzz. To continue your registration, please use the verification code below:</p>
           
           <div class="verification-code">${code}</div>
           
           <p>This code is valid for 1 hour. If you did not request this code, please ignore this email.</p>
         </div>
         <div class="footer">
-          <p>&copy; ${new Date().getFullYear()} Cxlus. All rights reserved.</p>
+          <p>&copy; ${new Date().getFullYear()} Zuzz. All rights reserved.</p>
         </div>
       </div>
     </body>

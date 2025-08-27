@@ -13,7 +13,7 @@ export const createVerificationEmail = ({
 }: VerificationEmailProps) => {
   const content = `
     <div>
-      <p>Welcome to Cxlus</p>
+      <p>Welcome to Zuzz</p>
       
       <p>
         Here's your verification code →<br>
@@ -26,6 +26,6 @@ export const createVerificationEmail = ({
 
   return baseTemplate({
     content,
-    clinicName: 'Cxlus'
+    clinicName: 'Zuzz'
   });
 }; 
