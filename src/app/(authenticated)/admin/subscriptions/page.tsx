@@ -41,14 +41,18 @@ export default function SubscriptionsPage() {
   const [subscriptions, setSubscriptions] = useState<DoctorSubscription[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [doctors, setDoctors] = useState<Array<{ id: string; name: string; email: string }>>([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createForm, setCreateForm] = useState<{ doctorId: string; planId: string; status: 'TRIAL' | 'ACTIVE'; autoRenew: boolean }>({ doctorId: '', planId: '', status: 'TRIAL', autoRenew: true });
 
-  useEffect(() => {
-    const loadData = async () => {
+  const loadData = async () => {
       try {
         setIsLoading(true);
-        const [subscriptionsResponse, plansResponse] = await Promise.all([
+        const [subscriptionsResponse, plansResponse, doctorsResponse] = await Promise.all([
           fetch('/api/admin/subscriptions'),
-          fetch('/api/admin/plans')
+          fetch('/api/admin/plans'),
+          fetch('/api/admin/doctors')
         ]);
         
         if (subscriptionsResponse.ok) {
@@ -60,6 +64,10 @@ export default function SubscriptionsPage() {
           const plansData = await plansResponse.json();
           setPlans(plansData.plans || []);
         }
+        if (doctorsResponse.ok) {
+          const doctorsData = await doctorsResponse.json();
+          setDoctors((doctorsData.doctors || []).map((d: any) => ({ id: d.id, name: d.name || 'Sem nome', email: d.email })));
+        }
       } catch (error) {
         console.error('Error loading data:', error);
       } finally {
@@ -67,9 +75,9 @@ export default function SubscriptionsPage() {
       }
     };
 
-    if (session) {
-      loadData();
-    }
+  useEffect(() => {
+    if (!session) return;
+    loadData();
   }, [session]);
 
   // If doctorId is present in the URL, try to auto-redirect to that doctor's latest subscription edit page
@@ -78,7 +86,12 @@ export default function SubscriptionsPage() {
     if (!doctorId || isLoading || subscriptions.length === 0) return;
 
     const forDoctor = subscriptions.filter(s => s.doctor?.id === doctorId);
-    if (forDoctor.length === 0) return;
+    if (forDoctor.length === 0) {
+      // If doctor has no subscription, open create modal preselected
+      setCreateForm((prev) => ({ ...prev, doctorId }));
+      setShowCreate(true);
+      return;
+    }
 
     // Prefer the most recent by startDate desc
     const sorted = [...forDoctor].sort((a, b) => {
@@ -182,6 +195,12 @@ export default function SubscriptionsPage() {
               <div className="flex items-center gap-2">
                 <Link href="/admin" className="hidden lg:inline-flex h-8 items-center rounded-full border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50">Dashboard</Link>
                 <Link href="/admin/plans" className="inline-flex h-8 items-center rounded-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] px-3 text-xs font-medium text-white hover:opacity-90 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5893ec]">Plans</Link>
+                <button
+                  onClick={() => setShowCreate(true)}
+                  className="inline-flex h-8 items-center rounded-full border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  New Subscription
+                </button>
               </div>
             </div>
             <div className="flex items-center gap-2 overflow-auto">
@@ -291,9 +310,108 @@ export default function SubscriptionsPage() {
             </CardContent>
           </Card>
 
-          {/* Removed Available Plans section to keep page minimal */}
+          {/* Create Subscription Modal */}
+          {showCreate && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/30" onClick={() => !creating && setShowCreate(false)} />
+              <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+                <div className="mb-3">
+                  <h2 className="text-base font-semibold text-gray-900">New Subscription</h2>
+                  <p className="text-xs text-gray-600">Create a subscription for a doctor</p>
+                </div>
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    try {
+                      setCreating(true);
+                      const res = await fetch('/api/admin/subscriptions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          doctorId: createForm.doctorId,
+                          planId: createForm.planId,
+                          status: createForm.status,
+                          autoRenew: createForm.autoRenew,
+                        })
+                      });
+                      if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        throw new Error(data.error || 'Failed to create');
+                      }
+                      await loadData();
+                      setShowCreate(false);
+                      setCreateForm({ doctorId: '', planId: '', status: 'TRIAL', autoRenew: true });
+                    } catch (err) {
+                      console.error(err);
+                      alert((err as Error).message);
+                    } finally {
+                      setCreating(false);
+                    }
+                  }}
+                  className="space-y-3"
+                >
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Doctor</label>
+                    <select
+                      value={createForm.doctorId}
+                      onChange={(e) => setCreateForm({ ...createForm, doctorId: e.target.value })}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    >
+                      <option value="" disabled>Select a doctor</option>
+                      {doctors.map((d) => (
+                        <option key={d.id} value={d.id}>{d.name} — {d.email}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Plan</label>
+                    <select
+                      value={createForm.planId}
+                      onChange={(e) => setCreateForm({ ...createForm, planId: e.target.value })}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    >
+                      <option value="" disabled>Select a plan</option>
+                      {plans.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name} {p.price ? `(R$ ${p.price}/month)` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                      <select
+                        value={createForm.status}
+                        onChange={(e) => setCreateForm({ ...createForm, status: e.target.value as any })}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="TRIAL">Trial</option>
+                        <option value="ACTIVE">Active</option>
+                      </select>
+                    </div>
+                    <div className="flex items-end">
+                      <label className="inline-flex items-center gap-2 text-xs text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={createForm.autoRenew}
+                          onChange={(e) => setCreateForm({ ...createForm, autoRenew: e.target.checked })}
+                          className="rounded border-gray-300"
+                        />
+                        Auto-renew
+                      </label>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button type="button" onClick={() => !creating && setShowCreate(false)} className="inline-flex h-8 items-center rounded-full border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+                    <button type="submit" disabled={creating || !createForm.doctorId || !createForm.planId} className="inline-flex h-8 items-center rounded-full bg-blue-600 px-3 text-xs font-medium text-white disabled:opacity-50">{creating ? 'Creating…' : 'Create'}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
-} 
+}

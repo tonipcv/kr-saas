@@ -9,6 +9,7 @@
     "lint": "next lint",
     "seed": "node prisma/seed.js",
     "seed:js": "node scripts/seed-complete-system.js",
+    "migrate:add-confirmation-url": "node scripts/migrate-add-confirmation-url.js",
     "create-clinic-referrals": "node scripts/create-clinic-referrals-table.js",
     "test-clinic-referrals": "node scripts/test-clinic-referrals.js",
     "test-admin-clinic-referrals": "node scripts/test-admin-clinic-referrals.js",

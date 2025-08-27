@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 type Product = {
   id: string | number;
@@ -10,6 +10,7 @@ type Product = {
   creditsPerUnit?: number | null;
   price?: number | null;
   imageUrl?: string | null;
+  confirmationUrl?: string | null;
 };
 
 export default function ProductsGrid({
@@ -26,6 +27,12 @@ export default function ProductsGrid({
   const [name, setName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("Todos");
+  const [submitting, setSubmitting] = useState(false);
+  const [query, setQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string>("");
+  const [referrerCode, setReferrerCode] = useState<string | null>(null);
 
   const priceFormatter = useMemo(
     () => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }),
@@ -42,18 +49,73 @@ export default function ProductsGrid({
     setSelected(null);
     setName("");
     setWhatsapp("");
+    setSuccess(false);
+    setError("");
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) return;
-    const params = new URLSearchParams({
-      productId: String(selected.id),
-      from: slug,
-    });
-    if (name.trim()) params.set("name", name.trim());
-    if (whatsapp.trim()) params.set("whatsapp", whatsapp.trim());
-    window.location.href = `/patient/appointments/${doctorId}?${params.toString()}`;
+
+    // Require phone (WhatsApp)
+    if (!whatsapp.trim()) {
+      setError("Informe seu WhatsApp");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    try {
+      const resp = await fetch('/api/referrals/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim() || undefined,
+          phone: whatsapp.trim() || undefined,
+          doctorId,
+          // keep for auditing/linking
+          referrerCode: referrerCode || undefined,
+          // optionally include slug for future compatibility
+          doctor_slug: slug,
+          // tie the product context (auditing)
+          customFields: {
+            productId: selected.id,
+            productName: selected.name,
+            productCategory: selected.category || null,
+          }
+        })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data?.error || 'Falha ao enviar indicação');
+      }
+      // Redirect to product confirmationUrl if provided by the doctor
+      const conf = (selected.confirmationUrl || '').trim();
+      if (conf) {
+        try {
+          const target = conf.startsWith('http') ? new URL(conf) : new URL(conf, window.location.origin);
+          // Carry context to destination
+          const params = new URLSearchParams();
+          params.set('productId', String(selected.id));
+          params.set('from', slug);
+          if (name.trim()) params.set('name', name.trim());
+          if (whatsapp.trim()) params.set('phone', whatsapp.trim());
+          if (data?.referralCode) params.set('referral', String(data.referralCode));
+          // merge params into target
+          params.forEach((v, k) => target.searchParams.set(k, v));
+          window.location.href = target.toString();
+          return;
+        } catch (e) {
+          // If URL is malformed, fallback to success state
+          console.warn('Invalid confirmationUrl, showing success modal instead');
+        }
+      }
+      setSuccess(true);
+    } catch (err: any) {
+      setError(err?.message || 'Erro inesperado');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   // Build unique categories and derive visible products
@@ -67,33 +129,96 @@ export default function ProductsGrid({
   }, [products]);
 
   const visibleProducts = useMemo<Product[]>(() => {
-    if (selectedCategory === "Todos") return products;
-    return (products || []).filter((p) => (p.category || "").trim() === selectedCategory);
-  }, [products, selectedCategory]);
+    let list = selectedCategory === "Todos"
+      ? (products || [])
+      : (products || []).filter((p) => (p.category || "").trim() === selectedCategory);
+
+    const q = query.trim().toLowerCase();
+    if (q) {
+      list = list.filter((p) =>
+        p.name.toLowerCase().includes(q) || (p.description || "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [products, selectedCategory, query]);
+
+  // Capture referrer code from URL query
+  useEffect(() => {
+    try {
+      const u = new URL(window.location.href);
+      const code = u.searchParams.get('code');
+      if (code) setReferrerCode(code);
+    } catch {}
+  }, []);
 
   return (
     <>
-      <div className="mb-5 overflow-x-auto">
-        <div className="flex items-center justify-center gap-3 whitespace-nowrap">
-          {categories.map((cat: string) => {
-            const active = cat === selectedCategory;
-            return (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setSelectedCategory(cat)}
-                className={
-                  (active
-                    ? "text-[#5154e7] bg-[#5154e7]/10 border border-[#5154e7]/30 "
-                    : "text-gray-600 hover:text-gray-900 border border-transparent ") +
-                  "px-3 py-1 rounded-full text-sm transition-colors"
-                }
-              >
-                {cat}
-              </button>
-            );
-          })}
-        </div>
+      <div className="mb-5">
+        {showSearch ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Fechar busca"
+              onClick={() => { setShowSearch(false); setQuery(""); }}
+              className="p-1 rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                <path fillRule="evenodd" d="M6.72 6.72a.75.75 0 011.06 0L12 10.94l4.22-4.22a.75.75 0 111.06 1.06L13.06 12l4.22 4.22a.75.75 0 11-1.06 1.06L12 13.06l-4.22 4.22a.75.75 0 11-1.06-1.06L10.94 12 6.72 7.78a.75.75 0 010-1.06z" clipRule="evenodd" />
+              </svg>
+            </button>
+            <div className="relative flex-1">
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                  <path fillRule="evenodd" d="M10.5 3.75a6.75 6.75 0 104.243 12.03l3.739 3.738a.75.75 0 101.06-1.06l-3.738-3.74A6.75 6.75 0 0010.5 3.75zm-5.25 6.75a5.25 5.25 0 1110.5 0 5.25 5.25 0 01-10.5 0z" clipRule="evenodd" />
+                </svg>
+              </span>
+              <input
+                id="product-search"
+                type="text"
+                value={query}
+                autoFocus
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Pesquisar produtos…"
+                className="w-full rounded-full border border-gray-300 bg-white px-8 py-1.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0 overflow-x-auto">
+              <div className="flex items-center justify-start gap-3 whitespace-nowrap">
+                {categories.map((cat: string) => {
+                  const active = cat === selectedCategory;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat)}
+                      className={
+                        (active
+                          ? "text-[#5154e7] bg-[#5154e7]/10 border border-[#5154e7]/30 "
+                          : "text-gray-600 hover:text-gray-900 border border-transparent ") +
+                        "px-3 py-1 rounded-full text-sm transition-colors"
+                      }
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <button
+              type="button"
+              aria-label="Pesquisar"
+              onClick={() => setShowSearch(true)}
+              className="shrink-0 p-1.5 rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                <path fillRule="evenodd" d="M10.5 3.75a6.75 6.75 0 104.243 12.03l3.739 3.738a.75.75 0 101.06-1.06l-3.738-3.74A6.75 6.75 0 0010.5 3.75zm-5.25 6.75a5.25 5.25 0 1110.5 0 5.25 5.25 0 01-10.5 0z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -156,42 +281,63 @@ export default function ProductsGrid({
                 </svg>
               </button>
             </div>
-
             {selected.description ? (
               <p className="mt-3 text-sm text-gray-700 whitespace-pre-line">{selected.description}</p>
             ) : (
               <p className="mt-3 text-sm text-gray-500">Sem descrição disponível.</p>
             )}
 
-            <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700">Nome</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Seu nome"
-                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                />
+            {success ? (
+              <div className="mt-4 space-y-3 text-center">
+                <div className="mx-auto w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                  <span className="text-green-600 text-2xl">✓</span>
+                </div>
+                <p className="text-sm text-gray-700">Recebemos seu interesse! Em breve entraremos em contato.</p>
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="mt-1 inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Fechar
+                  </button>
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700">WhatsApp</label>
-                <input
-                  type="tel"
-                  inputMode="tel"
-                  value={whatsapp}
-                  onChange={(e) => setWhatsapp(e.target.value)}
-                  placeholder="(xx) xxxxx-xxxx"
-                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full inline-flex items-center justify-center rounded-md bg-blue-500 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
-              >
-                Agendar agora
-              </button>
-            </form>
+            ) : (
+              <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700">Nome</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Seu nome"
+                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700">WhatsApp</label>
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    value={whatsapp}
+                    onChange={(e) => setWhatsapp(e.target.value)}
+                    placeholder="(xx) xxxxx-xxxx"
+                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                </div>
+                {error ? (
+                  <div className="text-sm text-red-600">{error}</div>
+                ) : null}
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full inline-flex items-center justify-center rounded-md bg-blue-500 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-600 disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
+                >
+                  {submitting ? 'Enviando…' : 'Tenho interesse'}
+                </button>
+              </form>
+            )}
           </div>
         </div>
       ) : null}

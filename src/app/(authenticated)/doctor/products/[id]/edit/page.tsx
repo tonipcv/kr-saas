@@ -68,6 +68,7 @@ export default function EditProductPage({ params }: PageProps) {
     creditsPerUnit: string;
     category: string;
     isActive: boolean;
+    confirmationUrl?: string;
   }
 
   const [formData, setFormData] = useState<FormValues>({
@@ -83,13 +84,25 @@ export default function EditProductPage({ params }: PageProps) {
     usageStats: '0',
     creditsPerUnit: '',
     category: '',
-    isActive: true
+    isActive: true,
+    confirmationUrl: ''
   });
   const [images, setImages] = useState<Array<{ id?: string; url: string; kind?: string; orderIndex?: number }>>([]);
   const [isImagesLoading, setIsImagesLoading] = useState(false);
   const [isSavingImages, setIsSavingImages] = useState(false);
   const [beforeImageUrl, setBeforeImageUrl] = useState<string>('');
   const [afterImageUrl, setAfterImageUrl] = useState<string>('');
+  // WhatsApp modal state
+  const [waModalOpen, setWaModalOpen] = useState<boolean>(false);
+  const [waNumber, setWaNumber] = useState<string>('');
+  const [waText, setWaText] = useState<string>('Olá, tenho interesse no {{nome do produto}}!');
+
+  const getWhatsAppLink = () => {
+    const digits = (waNumber || '').replace(/\D/g, '');
+    if (!digits) return '';
+    const message = (waText || '').replace(/\{\{\s*nome do produto\s*\}\}/gi, formData.name || 'produto');
+    return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+  };
 
   useEffect(() => {
     const getParams = async () => {
@@ -144,7 +157,8 @@ export default function EditProductPage({ params }: PageProps) {
           usageStats: (data.usageStats ?? '0')?.toString(),
           creditsPerUnit: (data.creditsPerUnit ?? '')?.toString() || '',
           category: data.category || '',
-          isActive: data.isActive
+          isActive: data.isActive,
+          confirmationUrl: data.confirmationUrl || ''
         });
         if (Array.isArray(data.images)) {
           const before = data.images.find((it: any) => (it.kind || '').toUpperCase() === 'BEFORE');
@@ -206,6 +220,7 @@ export default function EditProductPage({ params }: PageProps) {
         imageUrl: formData.imageUrl?.trim() ? formData.imageUrl.trim() : null,
         category: formData.category,
         isActive: formData.isActive,
+        confirmationUrl: formData.confirmationUrl?.trim() || null,
         // extra fields preserved (ignored by API but safe)
         discountPrice: formData.discountPrice ? Number(formData.discountPrice) : undefined,
         discountPercentage: formData.discountPercentage ? Number(formData.discountPercentage) : undefined,
@@ -409,6 +424,27 @@ export default function EditProductPage({ params }: PageProps) {
                       rows={4}
                       className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl"
                     />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="confirmationUrl" className="text-gray-900 font-medium">Confirmation URL</Label>
+                      <button
+                        type="button"
+                        className="text-xs text-[#5154e7] hover:underline"
+                        onClick={() => setWaModalOpen(true)}
+                      >
+                        Gerar link de WhatsApp
+                      </button>
+                    </div>
+                    <Input
+                      id="confirmationUrl"
+                      value={formData.confirmationUrl || ''}
+                      onChange={(e) => handleInputChange('confirmationUrl', e.target.value)}
+                      placeholder="Ex.: /thank-you ou https://seusite.com/obrigado"
+                      className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
+                    />
+                    <p className="text-xs text-gray-500 mt-2">Após o cadastro pelo público, redirecionaremos para esta URL. Pode ser relativa (no mesmo domínio) ou absoluta.</p>
                   </div>
 
                   <div>
@@ -621,6 +657,66 @@ export default function EditProductPage({ params }: PageProps) {
         </div>
       </div>
       </div>
+
+      {/* WhatsApp Generator Modal */}
+      {waModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setWaModalOpen(false)} />
+          <div className="relative z-10 w-full max-w-md mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-5">
+            <div className="flex items-start justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Gerar link de WhatsApp</h3>
+              <button onClick={() => setWaModalOpen(false)} className="text-gray-400 hover:text-gray-600" aria-label="Fechar">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                  <path fillRule="evenodd" d="M5.47 5.47a.75.75 0 011.06 0L12 10.94l5.47-5.47a.75.75 0 111.06 1.06L13.06 12l5.47 5.47a.75.75 0 11-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 01-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 010-1.06z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <Label className="text-gray-900 font-medium">Número de WhatsApp</Label>
+                <Input
+                  value={waNumber}
+                  onChange={(e) => setWaNumber(e.target.value)}
+                  placeholder="Ex.: 5591999999999"
+                  className="mt-1 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
+                />
+              </div>
+              <div>
+                <Label className="text-gray-900 font-medium">Mensagem</Label>
+                <Textarea
+                  value={waText}
+                  onChange={(e) => setWaText(e.target.value)}
+                  rows={3}
+                  className="mt-1 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl"
+                />
+                <p className="text-xs text-gray-500 mt-1">Use {'{{nome do produto}}'} para inserir automaticamente o nome do produto.</p>
+              </div>
+              <div className="text-xs text-gray-500">
+                Pré-visualização: <a className="text-[#5154e7] underline break-all" target="_blank" href={getWhatsAppLink()}>{getWhatsAppLink() || '—'}</a>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button
+                  type="button"
+                  className="bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl h-10 flex-1"
+                  onClick={() => {
+                    const link = getWhatsAppLink();
+                    if (!link) {
+                      alert('Informe um número válido.');
+                      return;
+                    }
+                    handleInputChange('confirmationUrl', link);
+                    setWaModalOpen(false);
+                  }}
+                >
+                  Usar este link
+                </Button>
+                <Button type="button" variant="outline" className="flex-1" onClick={() => setWaModalOpen(false)}>Cancelar</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

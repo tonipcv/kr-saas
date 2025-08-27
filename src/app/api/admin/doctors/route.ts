@@ -60,11 +60,14 @@ export async function GET(request: NextRequest) {
       include: {
         subscription_plans: {
           select: {
+            id: true,
             name: true,
+            price: true,
             maxPatients: true,
             maxProtocols: true,
             maxCourses: true,
             maxProducts: true,
+            trialDays: true,
           }
         }
       }
@@ -90,17 +93,21 @@ export async function GET(request: NextRequest) {
 
       const normalizedSubscription = subscription
         ? {
+            id: subscription.id,
             status: subscription.status,
             startDate: subscription.start_date?.toISOString?.() ?? null,
             endDate: subscription.end_date?.toISOString?.() ?? null,
             trialEndDate: subscription.trial_end_date?.toISOString?.() ?? null,
             plan: subscription.subscription_plans
               ? {
+                  id: subscription.subscription_plans.id,
                   name: subscription.subscription_plans.name,
+                  price: (subscription.subscription_plans.price as unknown as number) ?? 0,
                   maxPatients: subscription.subscription_plans.maxPatients ?? 0,
                   maxProtocols: subscription.subscription_plans.maxProtocols ?? 0,
                   maxCourses: subscription.subscription_plans.maxCourses ?? 0,
                   maxProducts: subscription.subscription_plans.maxProducts ?? 0,
+                  trialDays: subscription.subscription_plans.trialDays ?? 0,
                 }
               : null,
           }

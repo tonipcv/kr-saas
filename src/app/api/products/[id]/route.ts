@@ -117,7 +117,8 @@ export async function PUT(
       creditsPerUnit,
       imageUrl,
       category = 'Geral',
-      isActive = true
+      isActive = true,
+      confirmationUrl
     } = body;
 
     // Verificar se o produto existe
@@ -146,7 +147,8 @@ export async function PUT(
         // Atualizar imageUrl quando enviado
         imageUrl: imageUrl ?? (existingProduct as any)?.imageUrl ?? null,
         category,
-        isActive
+        isActive,
+        confirmationUrl: confirmationUrl ?? (existingProduct as any)?.confirmationUrl ?? null
       }
     });
 

@@ -472,7 +472,8 @@ export default function DoctorReferralsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-sm font-semibold text-gray-900">Name</TableHead>
-                    <TableHead className="text-sm font-semibold text-gray-900">Email</TableHead>
+                    <TableHead className="text-sm font-semibold text-gray-900">Phone</TableHead>
+                    <TableHead className="text-sm font-semibold text-gray-900">Product</TableHead>
                     <TableHead className="text-sm font-semibold text-gray-900">Campaign</TableHead>
                     <TableHead className="text-sm font-semibold text-gray-900">Valor</TableHead>
                     <TableHead className="text-sm font-semibold text-gray-900">Cupom</TableHead>
@@ -487,7 +488,15 @@ export default function DoctorReferralsPage() {
                     return (
                       <TableRow key={lead.id}>
                         <TableCell className="text-sm font-semibold text-gray-900">{lead.name}</TableCell>
-                        <TableCell className="text-sm text-gray-700">{lead.email}</TableCell>
+                        <TableCell className="text-sm text-gray-700">{lead.phone || '—'}</TableCell>
+                        <TableCell className="text-sm text-gray-700">
+                          {lead.customFields?.productName ? (
+                            <div>
+                              <p className="text-sm text-gray-900">{lead.customFields.productName}</p>
+                              <p className="text-xs text-gray-500">{lead.customFields.productCategory || '—'}</p>
+                            </div>
+                          ) : '—'}
+                        </TableCell>
                         <TableCell className="text-sm text-gray-700">{lead.campaign?.title || '—'}</TableCell>
                         <TableCell className="text-sm text-gray-700">{lead.customFields?.offer?.amount ?? '—'}</TableCell>
                         <TableCell className="text-sm text-gray-700">
@@ -508,7 +517,7 @@ export default function DoctorReferralsPage() {
                         </TableCell>
                         <TableCell>
                           <div>
-                            <p className="text-sm font-semibold text-gray-900">{lead.referrer?.name ?? 'Anonymous'}</p>
+                            <p className="text-sm font-semibold text-gray-900">{lead.referrer?.name ?? 'Direct'}</p>
                             <p className="text-xs text-gray-500">{lead.referrer?.email ?? '—'}</p>
                           </div>
                         </TableCell>
@@ -544,12 +553,12 @@ export default function DoctorReferralsPage() {
                                   <Label className="text-sm font-semibold text-gray-900">Referral Data</Label>
                                   <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mt-2">
                                     <p className="text-sm text-gray-900"><strong>Name:</strong> {selectedLead?.name}</p>
-                                    <p className="text-sm text-gray-900"><strong>Email:</strong> {selectedLead?.email}</p>
                                     <p className="text-sm text-gray-900"><strong>Phone:</strong> {selectedLead?.phone || 'Not provided'}</p>
+                                    <p className="text-sm text-gray-900"><strong>Product:</strong> {selectedLead?.customFields?.productName ?? '—'}{selectedLead?.customFields?.productCategory ? ` (${selectedLead?.customFields?.productCategory})` : ''}</p>
                                     <p className="text-sm text-gray-900"><strong>Campaign:</strong> {selectedLead?.campaign?.title || '—'}</p>
                                     <p className="text-sm text-gray-900"><strong>Valor:</strong> {selectedLead?.customFields?.offer?.amount ?? '—'}</p>
                                     <p className="text-sm text-gray-900"><strong>Cupom:</strong> {selectedLead?.customFields?.coupon?.code ?? '—'}</p>
-                                    <p className="text-sm text-gray-900"><strong>Referred by:</strong> {selectedLead?.referrer?.name ?? 'Anonymous'}</p>
+                                    <p className="text-sm text-gray-900"><strong>Referred by:</strong> {selectedLead?.referrer?.name ?? 'Direct'}</p>
                                   </div>
                                 </div>
 

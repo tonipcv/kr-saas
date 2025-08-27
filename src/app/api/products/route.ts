@@ -124,7 +124,8 @@ export async function POST(request: Request) {
       description, 
       originalPrice,
       creditsPerUnit,
-      category = 'Geral'
+      category = 'Geral',
+      confirmationUrl
     } = body;
 
     // Validar campos obrigatórios
@@ -146,6 +147,7 @@ export async function POST(request: Request) {
       category,
       isActive: true,
       doctorId: session.user.id,
+      confirmationUrl: confirmationUrl ?? null,
     };
 
     // Attach creditsPerUnit initially

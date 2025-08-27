@@ -21,21 +21,23 @@ export async function POST(request: NextRequest) {
 
     let resolvedDoctorId: string | null = doctorId || null;
 
-    // Basic validations
-    if (!name || !email) {
+    // Basic validations: require at least one contact method (email or phone)
+    if (!email && !phone) {
       return NextResponse.json(
-        { error: 'Name and email are required' },
+        { error: 'Either email or phone is required' },
         { status: 400 }
       );
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return NextResponse.json(
-        { error: 'Invalid email address' },
-        { status: 400 }
-      );
+    // Validate email format only if provided
+    if (email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return NextResponse.json(
+          { error: 'Invalid email address' },
+          { status: 400 }
+        );
+      }
     }
 
     // Resolve doctor by ID or slug
@@ -66,39 +68,62 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verificar se já é paciente existente
-    const isExisting = await isExistingPatient(email, resolvedDoctorId as string);
-    if (isExisting) {
-      console.info('[referrals/submit] Rejecting: email already patient of doctor', {
-        email,
-        doctorId: resolvedDoctorId,
-      });
-      return NextResponse.json(
-        { error: 'This person is already a patient of this doctor' },
-        { status: 400 }
-      );
+    // Verificar se já é paciente existente (somente quando email for informado)
+    if (email) {
+      const isExisting = await isExistingPatient(email, resolvedDoctorId as string);
+      if (isExisting) {
+        console.info('[referrals/submit] Rejecting: email already patient of doctor', {
+          email,
+          doctorId: resolvedDoctorId,
+        });
+        return NextResponse.json(
+          { error: 'This person is already a patient of this doctor' },
+          { status: 400 }
+        );
+      }
     }
 
     // Verificar se já existe indicação pendente
-    const existingLead = await prisma.referralLead.findFirst({
-      where: {
-        email,
-        doctorId: resolvedDoctorId as string,
-        status: { in: ['PENDING', 'CONTACTED'] }
-      }
-    });
-
-    if (existingLead) {
-      console.info('[referrals/submit] Rejecting: existing pending/contacted lead', {
-        email,
-        doctorId: resolvedDoctorId,
-        leadId: existingLead.id,
-        leadStatus: existingLead.status,
+    // Regra: se email foi informado, impedimos duplicado por email; se só phone foi informado, permitimos duplicados
+    let existingLead = null as any;
+    if (email) {
+      existingLead = await prisma.referralLead.findFirst({
+        where: {
+          email,
+          doctorId: resolvedDoctorId as string,
+          status: { in: ['PENDING', 'CONTACTED'] },
+        },
       });
-      return NextResponse.json(
-        { error: 'There is already a pending referral for this email' },
-        { status: 400 }
-      );
+      if (existingLead) {
+        console.info('[referrals/submit] Rejecting: existing pending/contacted lead (email)', {
+          email,
+          doctorId: resolvedDoctorId,
+          leadId: existingLead.id,
+          leadStatus: existingLead.status,
+        });
+        return NextResponse.json(
+          { error: 'There is already a pending referral for this email' },
+          { status: 400 }
+        );
+      }
+    } else if (phone) {
+      // Permitir duplicados por telefone — apenas logar para auditoria
+      existingLead = await prisma.referralLead.findFirst({
+        where: {
+          phone,
+          doctorId: resolvedDoctorId as string,
+          status: { in: ['PENDING', 'CONTACTED'] },
+        },
+        select: { id: true, status: true },
+      });
+      if (existingLead) {
+        console.info('[referrals/submit] Proceeding despite existing lead with same phone', {
+          phone,
+          doctorId: resolvedDoctorId,
+          leadId: existingLead.id,
+          leadStatus: existingLead.status,
+        });
+      }
     }
 
     // Buscar quem está indicando (se fornecido)
@@ -206,18 +231,31 @@ export async function POST(request: NextRequest) {
     }
 
     // Criar a indicação
+    // Merge provided custom fields with auditing info
+    const providedCustom = typeof body.customFields === 'object' && body.customFields ? body.customFields : undefined;
+    const mergedCustomFields = {
+      ...(providedCustom || {}),
+      ...(referrerCode ? { referrerCodeProvided: referrerCode } : {}),
+    } as any;
+
+    // Prisma schema requires email (non-null). If not provided, synthesize a unique placeholder to satisfy constraints.
+    const emailToSave = email || `lead+${leadReferralCode}@noemail.local`;
+    if (!email) {
+      (mergedCustomFields as any).emailSynthesized = true;
+    }
+
     const referralLead = await prisma.referralLead.create({
       data: {
         name,
-        email,
+        email: emailToSave,
         phone,
         referralCode: leadReferralCode!,
         status: REFERRAL_STATUS.PENDING,
         doctorId: resolvedDoctorId as string,
         referrerId: referrer?.id || null,
         source: 'referral_form',
-        // Persist provided referrerCode for auditing and possible backfills
-        customFields: referrerCode ? { referrerCodeProvided: referrerCode } : undefined,
+        // Persist provided referrerCode and any product context for auditing and UI
+        customFields: Object.keys(mergedCustomFields).length ? mergedCustomFields : undefined,
       }
     });
 

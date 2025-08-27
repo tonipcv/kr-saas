@@ -27,6 +27,7 @@ export default async function DoctorProductsPage({ params }: { params: { slug: s
           creditsPerUnit: true,
           price: true,
           imageUrl: true,
+          confirmationUrl: true,
         } as any,
       })
     : [];

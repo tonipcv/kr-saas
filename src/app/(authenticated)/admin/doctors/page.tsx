@@ -31,17 +31,21 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 
 interface DoctorSubscription {
+  id?: string;
   status: string;
   startDate?: string | null;
   endDate?: string | null;
-  trialEndDate?: string;
+  trialEndDate?: string | null;
   plan?: {
+    id?: string;
     name: string;
+    price?: number;
     maxPatients: number;
     maxProtocols: number;
     maxCourses: number;
     maxProducts: number;
-  };
+    trialDays?: number;
+  } | null;
 }
 
 interface Doctor {
@@ -490,7 +494,20 @@ export default function DoctorsPage() {
                                     )}
                                   </div>
                                   <div className="text-xs text-gray-600">
-                                    <div>Plan: <span className="font-medium text-gray-800">{subscription.plan?.name || '-'}</span></div>
+                                    <div className="flex items-center gap-2">
+                                      <span>Plan: <span className="font-medium text-gray-800">{subscription.plan?.name || '-'}</span></span>
+                                      {typeof subscription.plan?.price === 'number' && (
+                                        <span className="text-gray-500">• R$ {subscription.plan?.price}/month</span>
+                                      )}
+                                      {subscription.id && (
+                                        <Link
+                                          href={`/admin/subscriptions/${subscription.id}/edit`}
+                                          className="inline-flex items-center rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+                                        >
+                                          Change plan
+                                        </Link>
+                                      )}
+                                    </div>
                                     <div className="flex gap-4">
                                       <span>Start: <span className="font-medium text-gray-800">{formatDate(subscription.startDate)}</span></span>
                                       <span>Expires: <span className="font-medium text-gray-800">{formatDate(subscription.trialEndDate || subscription.endDate)}</span></span>
@@ -602,7 +619,22 @@ export default function DoctorsPage() {
                   {selectedDoctor.subscription?.plan && (
                     <div className="rounded-lg border border-gray-200 p-4 bg-gray-50">
                       <div className="text-xs font-semibold text-gray-600 mb-2">Plan</div>
-                      <div className="text-sm font-medium text-gray-900">{selectedDoctor.subscription.plan.name}</div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium text-gray-900">{selectedDoctor.subscription.plan.name}</div>
+                        <div className="flex items-center gap-2">
+                          {typeof selectedDoctor.subscription.plan.price === 'number' && (
+                            <span className="text-sm font-semibold text-gray-800">R$ {selectedDoctor.subscription.plan.price}/month</span>
+                          )}
+                          {selectedDoctor.subscription.id && (
+                            <Link
+                              href={`/admin/subscriptions/${selectedDoctor.subscription.id}/edit`}
+                              className="inline-flex items-center rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+                            >
+                              Change plan
+                            </Link>
+                          )}
+                        </div>
+                      </div>
                       <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-gray-700">
                         <div><span className="text-gray-500">Max patients:</span> {selectedDoctor.subscription.plan.maxPatients}</div>
                         <div><span className="text-gray-500">Max protocols:</span> {selectedDoctor.subscription.plan.maxProtocols}</div>
