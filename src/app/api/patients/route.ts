@@ -147,12 +147,56 @@ export async function POST(request: NextRequest) {
 
     // Check if email already exists
     const existingUser = await prisma.user.findUnique({
-      where: { email }
+      where: { email },
+      select: { id: true }
     });
 
     if (existingUser) {
+      // If user exists, link or reactivate relationship instead of blocking
+      const existingRel = await prisma.doctorPatientRelationship.findUnique({
+        where: {
+          patientId_doctorId: {
+            patientId: existingUser.id,
+            doctorId: doctor.id
+          }
+        },
+        select: { id: true, isActive: true }
+      });
+
+      if (!existingRel) {
+        await prisma.doctorPatientRelationship.create({
+          data: {
+            doctorId: doctor.id,
+            patientId: existingUser.id,
+            isActive: true,
+            isPrimary: false
+          }
+        });
+
+        return NextResponse.json({
+          id: existingUser.id,
+          name,
+          email,
+          phone
+        });
+      }
+
+      if (!existingRel.isActive) {
+        await prisma.doctorPatientRelationship.update({
+          where: { id: existingRel.id },
+          data: { isActive: true }
+        });
+
+        return NextResponse.json({
+          id: existingUser.id,
+          name,
+          email,
+          phone
+        });
+      }
+
       return NextResponse.json(
-        { error: 'Email already registered' },
+        { error: 'This email is already linked to this doctor' },
         { status: 409 }
       );
     }

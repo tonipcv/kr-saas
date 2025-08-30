@@ -2,6 +2,7 @@ import React from 'react';
 import { prisma } from '@/lib/prisma';
 import ProductsGrid from '@/components/products/ProductsGrid';
 import ReferrerBanner from '@/components/referrals/ReferrerBanner';
+import FloatingProductChat from '@/components/ai/FloatingProductChat';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -21,7 +22,7 @@ export default async function DoctorProductsPage({ params }: { params: Promise<{
   const raw = doctor
     ? await prisma.products.findMany({
         where: { doctorId: doctor.id, isActive: true } as any,
-        orderBy: { createdAt: 'desc' } as any,
+        orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }] as any,
         select: {
           id: true,
           name: true,
@@ -31,6 +32,7 @@ export default async function DoctorProductsPage({ params }: { params: Promise<{
           price: true,
           imageUrl: true,
           confirmationUrl: true,
+          priority: true,
         } as any,
       })
     : [];
@@ -104,6 +106,8 @@ export default async function DoctorProductsPage({ params }: { params: Promise<{
           <ProductsGrid slug={slug} doctorId={doctor.id as any} products={products as any} />
         )}
       </div>
+      {/* Floating Chat (Zendesk-like) */}
+      <FloatingProductChat slug={slug} />
       {/* Footer */}
       <div className="mt-10 pb-8 flex justify-center">
         <a

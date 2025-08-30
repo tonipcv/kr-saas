@@ -156,7 +156,8 @@ async function countClinicPatients(userId: string): Promise<number> {
   const members = await prisma.clinicMember.findMany({ where: { clinicId, isActive: true }, select: { userId: true } });
   const ids = members.map(m => m.userId);
   if (ids.length === 0) return 0;
-  return prisma.user.count({ where: { role: 'PATIENT', doctorId: { in: ids } } });
+  // User model uses snake_case field `doctor_id`
+  return prisma.user.count({ where: { role: 'PATIENT', doctor_id: { in: ids } } });
 }
 
 async function countClinicProtocols(userId: string): Promise<number> {
@@ -240,20 +241,8 @@ export async function canCreateReferral(userId: string): Promise<{ allowed: bool
 }
 
 export async function canCreateReward(userId: string): Promise<{ allowed: boolean; message?: string }> {
-  const status = await getClinicSubscriptionStatus(userId);
-  if (!status) return { allowed: false, message: 'Subscription não encontrada' };
-  if (!status.isActive) return { allowed: false, message: 'Subscription inativa ou expirada' };
-
-  const limit = status.planFeatures?.maxRewards ?? 0;
-  if (limit <= 0) return { allowed: false, message: 'Seu plano não permite criar rewards' };
-
-  const memberIds = await getClinicMemberIds(userId);
-  if (memberIds.length === 0) return { allowed: false, message: 'Sem membros na clínica' };
-
-  const count = await prisma.referralReward.count({ where: { doctorId: { in: memberIds } } });
-  if (count >= limit) {
-    return { allowed: false, message: `Limite de ${limit} rewards atingido. Faça upgrade do seu plano.` };
-  }
+  // Rewards are now unlimited and not gated by subscription or clinic membership.
+  // Keeping the signature for compatibility with existing callers.
   return { allowed: true };
 }
 

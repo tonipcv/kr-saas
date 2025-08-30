@@ -42,7 +42,8 @@ export default function CreateProductPage() {
     creditsPerUnit: '',
     category: '',
     isActive: true,
-    confirmationUrl: ''
+    confirmationUrl: '',
+    priority: '0'
   });
 
   useEffect(() => {
@@ -101,10 +102,12 @@ export default function CreateProductPage() {
       const payload: any = {
         name: formData.name,
         description: formData.description,
+        imageUrl: formData.imageUrl || undefined,
         originalPrice: formData.originalPrice ? Number(formData.originalPrice) : undefined,
         creditsPerUnit: formData.creditsPerUnit ? Number(formData.creditsPerUnit) : undefined,
         category: formData.category || 'Geral',
         confirmationUrl: formData.confirmationUrl?.trim() || undefined,
+        priority: formData.priority !== '' ? Number(formData.priority) : undefined,
       };
 
       const response = await fetch('/api/products', {
@@ -401,6 +404,18 @@ export default function CreateProductPage() {
                         min="0"
                         className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
                       />
+                    </div>
+                    <div className="mt-6">
+                      <Label htmlFor="priority" className="text-gray-900 font-medium">Priority (higher shows first)</Label>
+                      <Input
+                        id="priority"
+                        value={formData.priority}
+                        onChange={(e) => handleInputChange('priority', e.target.value)}
+                        placeholder="0"
+                        type="number"
+                        className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
+                      />
+                      <p className="text-xs text-gray-500 mt-2">Use to control display order. Higher numbers appear first.</p>
                     </div>
                   </CardContent>
                 </Card>

@@ -14,7 +14,8 @@ import {
   LinkIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  DocumentDuplicateIcon
+  DocumentDuplicateIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 
@@ -54,12 +55,13 @@ export default function ProductsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoadingProduct, setIsLoadingProduct] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(6);
+  const [itemsPerPage] = useState(10);
   const [planName, setPlanName] = useState<string | null>(null);
   const [isPlansOpen, setIsPlansOpen] = useState(false);
   const [plansLoading, setPlansLoading] = useState(false);
   const [availablePlans, setAvailablePlans] = useState<any[]>([]);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     const checkPlanAndLoad = async () => {
@@ -149,6 +151,25 @@ export default function ProductsPage() {
       console.error('Failed to duplicate product', e);
     } finally {
       setDuplicatingId(null);
+    }
+  };
+
+  const deleteProduct = async (productId: string) => {
+    const ok = confirm('Tem certeza que deseja excluir este produto? Esta ação não pode ser desfeita.');
+    if (!ok) return;
+    try {
+      setDeletingId(productId);
+      const res = await fetch(`/api/products/${productId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || 'Erro ao excluir produto');
+      }
+      await loadProducts();
+    } catch (e) {
+      console.error('Failed to delete product', e);
+      alert((e as Error).message || 'Erro ao excluir produto');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -429,6 +450,16 @@ export default function ProductsPage() {
                             <Link href={`/doctor/products/${product.id}/edit`}>
                               <PencilIcon className="h-3.5 w-3.5" />
                             </Link>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteProduct(product.id)}
+                            className="text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg h-8 w-8 p-0"
+                            disabled={deletingId === product.id}
+                            title="Excluir produto"
+                          >
+                            <TrashIcon className="h-3.5 w-3.5" />
                           </Button>
                         </div>
                       </td>

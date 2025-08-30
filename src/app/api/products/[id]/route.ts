@@ -47,7 +47,14 @@ export async function GET(
               }
             }
           }
-        }
+        },
+        // include categories through pivot
+        categories: {
+          include: {
+            category: true
+          }
+        },
+        productCategory: true // Manter a relação 1:N legada para compatibilidade
       }
     });
 
@@ -68,6 +75,8 @@ export async function GET(
       usageStats: 0,
       doctorId: session.user.id, // Simular que pertence ao médico atual
       creditsPerUnit: (product as any)?.creditsPerUnit != null ? Number((product as any).creditsPerUnit) : null,
+      categories: (product as any)?.categories?.map((cp: any) => ({ id: cp.category.id, name: cp.category.name })) ?? [],
+      categoryIds: (product as any)?.categories?.map((cp: any) => cp.category.id) ?? [],
       _count: {
         protocolProducts: product._count.protocol_products
       },
@@ -118,7 +127,9 @@ export async function PUT(
       imageUrl,
       category = 'Geral',
       isActive = true,
-      confirmationUrl
+      confirmationUrl,
+      categoryIds,
+      priority
     } = body;
 
     // Verificar se o produto existe
@@ -148,11 +159,56 @@ export async function PUT(
         imageUrl: imageUrl ?? (existingProduct as any)?.imageUrl ?? null,
         category,
         isActive,
-        confirmationUrl: confirmationUrl ?? (existingProduct as any)?.confirmationUrl ?? null
+        confirmationUrl: confirmationUrl ?? (existingProduct as any)?.confirmationUrl ?? null,
+        priority: typeof priority === 'number' ? priority : (priority != null ? Number(priority) : (existingProduct as any)?.priority ?? 0)
       }
     });
 
+    // Sync categories pivot if categoryIds is provided (array of strings)
+    if (Array.isArray(categoryIds)) {
+      // Optionally validate categoryIds belong to same doctor (if product has doctorId)
+      if (existingProduct.doctorId) {
+        const validIds = await prisma.productCategory.findMany({
+          where: {
+            id: { in: categoryIds },
+            OR: [
+              { doctorId: existingProduct.doctorId },
+              { doctorId: null }
+            ],
+            isActive: true
+          },
+          select: { id: true }
+        });
+        const validSet = new Set(validIds.map((c) => c.id));
+        const filtered = categoryIds.filter((id: string) => validSet.has(id));
+        // Replace links: delete all then create selected
+        await prisma.categoriesOnProducts.deleteMany({ where: { productId } });
+        if (filtered.length > 0) {
+          await prisma.categoriesOnProducts.createMany({
+            data: filtered.map((cid: string) => ({ productId, categoryId: cid }))
+          });
+        }
+      } else {
+        // If product has no doctorId, just replace without validation
+        await prisma.categoriesOnProducts.deleteMany({ where: { productId } });
+        if (categoryIds.length > 0) {
+          await prisma.categoriesOnProducts.createMany({
+            data: categoryIds.map((cid: string) => ({ productId, categoryId: cid }))
+          });
+        }
+      }
+    }
+
     // Retornar no formato esperado pelo frontend
+    // Re-fetch categories for response
+    const withCategories = await prisma.products.findFirst({
+      where: { id: productId },
+      include: {
+        categories: { include: { category: true } },
+        productCategory: true // Manter a relação 1:N legada para compatibilidade
+      }
+    });
+
     const transformedProduct = {
       ...updatedProduct,
       brand: null,
@@ -163,7 +219,9 @@ export async function PUT(
       purchaseUrl: null,
       usageStats: 0,
       doctorId: session.user.id,
-      creditsPerUnit: (updatedProduct as any)?.creditsPerUnit != null ? Number((updatedProduct as any).creditsPerUnit) : null
+      creditsPerUnit: (updatedProduct as any)?.creditsPerUnit != null ? Number((updatedProduct as any).creditsPerUnit) : null,
+      categories: (withCategories as any)?.categories?.map((cp: any) => ({ id: cp.category.id, name: cp.category.name })) ?? [],
+      categoryIds: (withCategories as any)?.categories?.map((cp: any) => cp.category.id) ?? []
     };
 
     return NextResponse.json(transformedProduct);

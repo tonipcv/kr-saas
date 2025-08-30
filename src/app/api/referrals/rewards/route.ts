@@ -87,7 +87,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    // Debug: request context
+    const startTs = Date.now();
+    console.debug('[rewards][POST] start', {
+      userId: session.user.id,
+      url: req.url,
+    });
+
     const { title, description, creditsRequired, maxRedemptions, imageUrl } = await req.json();
+    console.debug('[rewards][POST] body', {
+      title,
+      hasDescription: !!description,
+      creditsRequired,
+      maxRedemptions,
+      hasImageUrl: !!imageUrl,
+    });
 
     if (!title || !description || !creditsRequired) {
       return NextResponse.json(
@@ -105,7 +119,15 @@ export async function POST(req: Request) {
 
     // Enforce plan limit for creating rewards
     const limitCheck = await canCreateReward(session.user.id);
+    console.debug('[rewards][POST] canCreateReward()', {
+      allowed: limitCheck.allowed,
+      message: limitCheck.message || null,
+    });
     if (!limitCheck.allowed) {
+      console.warn('[rewards][POST] blocked by plan/limits', {
+        userId: session.user.id,
+        reason: limitCheck.message || 'not allowed',
+      });
       return NextResponse.json(
         { error: limitCheck.message || 'Seu plano não permite criar mais rewards' },
         { status: 403 }
@@ -125,13 +147,15 @@ export async function POST(req: Request) {
       }
     });
 
+    const durationMs = Date.now() - startTs;
+    console.debug('[rewards][POST] success', { rewardId: reward.id, durationMs });
     return NextResponse.json({ 
       success: true, 
       reward 
     });
 
-  } catch (error) {
-    console.error('Erro ao criar recompensa:', error);
+  } catch (error: any) {
+    console.error('[rewards][POST] error', error?.message || error, { stack: error?.stack });
     return NextResponse.json(
       { error: 'Erro interno do servidor' },
       { status: 500 }

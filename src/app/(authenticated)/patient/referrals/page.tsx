@@ -268,9 +268,9 @@ interface Redemption {
 
 export default function PatientReferralsPage() {
   const { data: session } = useSession();
-  // Keep dynamic language for any logic, but bind UI strings to English
-  const language = useLanguage();
-  const t = translations.en;
+  // Force Portuguese on this page regardless of browser language
+  const language: 'pt' | 'en' = 'pt';
+  const t = translations.pt;
   
   const [loading, setLoading] = useState(true);
   const [redeeming, setRedeeming] = useState<string | null>(null);
@@ -333,14 +333,14 @@ export default function PatientReferralsPage() {
     url.searchParams.delete('confirm_usage');
     window.history.replaceState({}, '', url.toString());
     const msgMap: Record<string, string> = {
-      ok: language === 'pt' ? 'Uso confirmado. Recompensa concluída!' : 'Usage confirmed. Reward fulfilled!',
-      already: language === 'pt' ? 'Este resgate já estava concluído.' : 'This redemption was already fulfilled.',
-      expired: language === 'pt' ? 'Link expirado. Solicite uma nova confirmação ao médico.' : 'Link expired. Please request a new confirmation from your doctor.',
-      not_found: language === 'pt' ? 'Resgate não encontrado.' : 'Redemption not found.',
-      invalid_status: language === 'pt' ? 'Resgate não está em estado aprovável para uso.' : 'Redemption status is not valid for usage confirmation.',
-      error: language === 'pt' ? 'Erro ao confirmar uso.' : 'Error confirming usage.'
+      ok: 'Uso confirmado. Recompensa concluída!',
+      already: 'Este resgate já estava concluído.',
+      expired: 'Link expirado. Solicite uma nova confirmação ao médico.',
+      not_found: 'Resgate não encontrado.',
+      invalid_status: 'Resgate não está em estado aprovável para uso.',
+      error: 'Erro ao confirmar uso.'
     };
-    const text = msgMap[status] || (language === 'pt' ? 'Operação concluída.' : 'Operation completed.');
+    const text = msgMap[status] || 'Operação concluída.';
     toast(text);
     // Optionally refresh dashboard data to reflect new status
     loadDashboard();
@@ -627,7 +627,7 @@ export default function PatientReferralsPage() {
   // Cancel a PENDING redemption
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const handleCancelRedemption = async (redemptionId: string) => {
-    const confirmMsg = language === 'en' ? 'Cancel this pending redemption and release your points?' : 'Cancelar este resgate pendente e liberar seus pontos?';
+    const confirmMsg = 'Cancelar este resgate pendente e liberar seus pontos?';
     if (!window.confirm(confirmMsg)) return;
     setCancellingId(redemptionId);
     try {
@@ -638,14 +638,14 @@ export default function PatientReferralsPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        toast.success(data.message || (language === 'en' ? 'Redemption cancelled.' : 'Resgate cancelado.'));
+        toast.success(data.message || 'Resgate cancelado.');
         await loadDashboard();
       } else {
-        toast.error(data.error || (language === 'en' ? 'Unable to cancel redemption.' : 'Não foi possível cancelar o resgate.'));
+        toast.error(data.error || 'Não foi possível cancelar o resgate.');
       }
     } catch (e) {
       console.error('[PatientReferrals] cancel error', e);
-      toast.error(language === 'en' ? 'Connection error.' : 'Erro de conexão.');
+      toast.error('Erro de conexão.');
     } finally {
       setCancellingId(null);
     }
@@ -946,9 +946,7 @@ export default function PatientReferralsPage() {
 // Format date based on language
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
-  return language === 'en' 
-    ? date.toLocaleDateString('en-US')
-    : date.toLocaleDateString('pt-BR');
+  return date.toLocaleDateString('pt-BR');
 };
 
 // While loading, show a neutral skeleton without real data
@@ -998,7 +996,7 @@ return (
               )}
             </div>
             <Badge className="mb-2 uppercase tracking-wide text-[10px] lg:text-xs bg-gray-100 text-gray-700 border border-gray-200" variant="outline">
-              Rewards
+              Recompensas
             </Badge>
             <h2 className="text-xl lg:text-2xl font-medium text-gray-900 mb-3 lg:mb-4 text-center">
               {displayDoctorName}
@@ -1007,7 +1005,7 @@ return (
             <div className="w-full max-w-md lg:max-w-xl mx-auto mb-5 lg:mb-6" style={{ perspective: '1000px' }}>
               <div
                 role="button"
-                aria-label="Show membership number"
+                aria-label="Mostrar número de membro"
                 onClick={() => setIsCardFlipped((v) => !v)}
                 className="relative rounded-2xl shadow-xl overflow-hidden border border-white/10 cursor-pointer select-none h-[200px] lg:h-[300px]"
               >
@@ -1029,7 +1027,7 @@ return (
 
                     <div className="relative h-full p-6 lg:p-8 flex flex-col">
                       <div className="flex items-center justify-between">
-                        <div className="text-[10px] lg:text-sm uppercase tracking-[0.2em] text-white/80">Membership</div>
+                        <div className="text-[10px] lg:text-sm uppercase tracking-[0.2em] text-white/80">Assinatura</div>
                         <div className="flex items-center gap-2 text-white/80">
                           <div className="h-6 w-9 rounded bg-white/20 backdrop-blur-sm" />
                           <div className="h-6 w-6 rounded-full bg-white/20 backdrop-blur-sm" />
@@ -1037,22 +1035,22 @@ return (
                       </div>
 
                       <div className="mt-3 lg:mt-4">
-                        <div className="text-white/80 text-[12px] lg:text-base">Your Balance</div>
+                        <div className="text-white/80 text-[12px] lg:text-base">Seu Saldo</div>
                         <div className="mt-1 text-4xl lg:text-6xl font-light text-white">
                           {displayPoints}
-                          <span className="ml-2 text-lg lg:text-2xl text-white/85 align-[10%]">Points</span>
+                          <span className="ml-2 text-lg lg:text-2xl text-white/85 align-[10%]">Créditos</span>
                         </div>
                       </div>
 
                       <div className="mt-auto flex items-center justify-between text-white">
                         <div className="min-w-0">
-                          <div className="text-[12px] lg:text-base text-white/70">Member</div>
+                          <div className="text-[12px] lg:text-base text-white/70">Membro</div>
                           <div className="text-base lg:text-xl font-medium truncate max-w-[320px]">
                             {session?.user?.name || 'Paciente'}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-[12px] lg:text-base text-white/70">Membership Number</div>
+                          <div className="text-[12px] lg:text-base text-white/70">Número de Membro</div>
                           {/* Hidden on front: masked */}
                           <div className="text-base lg:text-xl tracking-widest">
                             • • • •
@@ -1072,11 +1070,11 @@ return (
                     </div>
                     <div className="relative h-full p-6 lg:p-8 flex flex-col text-white">
                       <div className="flex items-center justify-end">
-                        <div className="text-[11px] lg:text-xs text-white/70">Tap to hide</div>
+                        <div className="text-[11px] lg:text-xs text-white/70">Toque para ocultar</div>
                       </div>
 
                       <div className="mt-4 lg:mt-8 text-center">
-                        <div className="text-xs lg:text-base text-white/70">Membership Number</div>
+                        <div className="text-xs lg:text-base text-white/70">Número de Membro</div>
                         <div className="mt-2 text-3xl lg:text-4xl font-mono tracking-[0.35em]">
                           {referralCode || '— — — —'}
                         </div>
@@ -1094,7 +1092,7 @@ return (
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
                             <path d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
                           </svg>
-                          Copy number
+                          Copiar número
                         </button>
                       </div>
                     </div>
@@ -1123,7 +1121,7 @@ return (
                           : 'text-gray-700 border-gray-200 hover:bg-gray-50 bg-white'}`}
                       style={activeTab==='earn' ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : undefined}
                     >
-                      Earn Points
+                      Ganhar pontos
                     </button>
                     <button
                       onClick={() => setActiveTab('use')}
@@ -1133,7 +1131,7 @@ return (
                           : 'text-gray-700 border-gray-200 hover:bg-gray-50 bg-white'}`}
                       style={activeTab==='use' ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : undefined}
                     >
-                      Use Points
+                      Usar pontos
                     </button>
                     <button
                       onClick={() => setActiveTab('history')}
@@ -1143,7 +1141,7 @@ return (
                           : 'text-gray-700 border-gray-200 hover:bg-gray-50 bg-white'}`}
                       style={activeTab==='history' ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : undefined}
                     >
-                      History
+                      Histórico
                     </button>
                   </div>
                 </div>
@@ -1159,7 +1157,7 @@ return (
               {/* Need more points? quick actions */}
               <div className="max-w-3xl mx-auto rounded-2xl bg-white border border-gray-200 shadow-sm">
                 <div className="p-4 lg:p-6">
-                  <h3 className="text-gray-900 text-base lg:text-lg font-semibold mb-3 lg:mb-4">Need more points?</h3>
+                  <h3 className="text-gray-900 text-base lg:text-lg font-semibold mb-3 lg:mb-4">Precisa de mais pontos?</h3>
                   <div className="space-y-2">
                     {/* Agendar serviço (navegação direta) */}
                     <Link
@@ -1172,7 +1170,7 @@ return (
                         <span className="text-sm lg:text-base font-medium">Agendar serviço</span>
                       </span>
                       <span className="inline-flex items-center rounded-full text-xs font-semibold px-3 py-1 bg-white/95 text-gray-800 border border-white/60">
-                        +100 points
+                        +100 pontos
                       </span>
                     </Link>
                     {/* Refer a friend */}
@@ -1184,10 +1182,10 @@ return (
                     >
                       <span className="flex items-center gap-3">
                         <Users className="h-5 w-5" />
-                        <span className="text-sm lg:text-base font-medium">Refer a friend</span>
+                        <span className="text-sm lg:text-base font-medium">Indicar um amigo</span>
                       </span>
                       <span className="inline-flex items-center rounded-full text-xs font-semibold px-3 py-1 bg-white/95 text-gray-800 border border-white/60">
-                        +100 points
+                        +100 pontos
                       </span>
                     </button>
 
@@ -1200,10 +1198,10 @@ return (
                     >
                       <span className="flex items-center gap-3">
                         <Image src="/google.png" alt="Google" width={20} height={20} />
-                        <span className="text-sm lg:text-base font-medium">Review on Google</span>
+                        <span className="text-sm lg:text-base font-medium">Avaliar no Google</span>
                       </span>
                       <span className={`inline-flex items-center rounded-full text-xs font-semibold px-3 py-1 ${hasGoogleReview ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-white/95 text-gray-800 border border-white/60'}`}>
-                        {hasGoogleReview ? 'Done ✓' : 'How to'}
+                        {hasGoogleReview ? 'Concluído ✓' : 'Como fazer'}
                       </span>
                     </button>
                   </div>
@@ -1216,8 +1214,8 @@ return (
                 <div className="p-4 lg:p-6 border-b border-gray-200">
                   <div className="flex items-center">
                     <div>
-                      <h2 className="text-gray-900 text-base lg:text-lg font-semibold">Your referrals</h2>
-                      <p className="text-gray-600 text-xs lg:text-sm">Track who you referred and credits earned</p>
+                      <h2 className="text-gray-900 text-base lg:text-lg font-semibold">Suas indicações</h2>
+                      <p className="text-gray-600 text-xs lg:text-sm">Acompanhe quem você indicou e créditos ganhos</p>
                     </div>
                   </div>
                 </div>
@@ -1232,7 +1230,7 @@ return (
                             {referral.status === 'CONVERTED' ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] lg:text-xs font-medium bg-green-50 text-green-700 border border-green-200">
                                 <Star className="h-3 w-3" />
-                                Converted
+                                Convertido
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] lg:text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">
@@ -1249,7 +1247,7 @@ return (
                         {referral.credits.length > 0 && (
                           <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] lg:text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">
                             <Star className="h-3 w-3" />
-                            +{referral.credits.reduce((sum, credit) => sum + credit.amount, 0)} points earned
+                            +{referral.credits.reduce((sum, credit) => sum + credit.amount, 0)} créditos ganhos
                           </div>
                         )}
                       </div>
@@ -1260,8 +1258,8 @@ return (
                       <div className="w-12 h-12 lg:w-16 lg:h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 lg:mb-4">
                         <UserPlus className="h-5 w-5 lg:h-6 lg:w-6 text-gray-500" />
                       </div>
-                      <div className="text-gray-500 text-sm lg:text-base mb-1 lg:mb-2">No referrals yet</div>
-                      <div className="text-gray-600 text-xs lg:text-sm mb-3 lg:mb-4">Start referring people to earn points</div>
+                      <div className="text-gray-500 text-sm lg:text-base mb-1 lg:mb-2">Nenhuma indicação ainda</div>
+                      <div className="text-gray-600 text-xs lg:text-sm mb-3 lg:mb-4">Comece a indicar pessoas para ganhar créditos</div>
                     </div>
                   )}
                 </div>
@@ -1279,8 +1277,8 @@ return (
               <div className="p-4 lg:p-6 border-b border-gray-200">
                 <div className="flex items-center">
                   <div>
-                    <h2 className="text-gray-900 text-base lg:text-lg font-semibold">Rewards</h2>
-                    <p className="text-gray-600 text-xs lg:text-sm">Use your points to redeem rewards</p>
+                    <h2 className="text-gray-900 text-base lg:text-lg font-semibold">Recompensas</h2>
+                    <p className="text-gray-600 text-xs lg:text-sm">Use seus créditos para resgatar recompensas</p>
                   </div>
                 </div>
               </div>
@@ -1308,13 +1306,13 @@ return (
                             className="w-full h-full object-cover lg:object-contain lg:p-1"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No image</div>
+                          <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">Sem imagem</div>
                         )}
                         {/* Points chip */}
                         <div className="absolute top-2 left-2">
                           <span className="inline-flex items-center gap-1 rounded-full bg-white/90 backdrop-blur px-2 py-1 text-[10px] lg:text-xs font-medium text-gray-800 shadow">
                             {locked ? <Lock className="h-3.5 w-3.5" /> : <Star className="h-3.5 w-3.5 text-yellow-500" />}
-                            {reward.creditsRequired} {reward.creditsRequired === 1 ? 'POINT' : 'POINTS'}
+                            {reward.creditsRequired} {reward.creditsRequired === 1 ? 'crédito' : 'créditos'}
                           </span>
                         </div>
                       </div>
@@ -1324,7 +1322,7 @@ return (
                         <h3 className="text-gray-900 text-sm font-medium leading-5 line-clamp-2 min-h-[2.5rem]">{reward.title}</h3>
                         {/* Status */}
                         <div className="mt-2 text-[11px] text-gray-500">
-                          {locked ? 'Locked' : 'Available'}
+                          {locked ? 'Bloqueado' : 'Disponível'}
                         </div>
                       </div>
                     </div>
@@ -1378,14 +1376,14 @@ return (
                         </div>
                         <div className="mt-1.5 flex items-center justify-between text-[11px] lg:text-xs text-gray-500">
                           <span>
-                            {redemption.creditsUsed} {redemption.creditsUsed === 1 ? 'point used' : 'points used'}
+                            {redemption.creditsUsed} {redemption.creditsUsed === 1 ? 'crédito usado' : 'créditos usados'}
                           </span>
                           <span className="text-gray-400">•</span>
                           <span>{formatDate(redemption.redeemedAt)}</span>
                         </div>
                         {redemption.status === 'APPROVED' && redemption.uniqueCode && (
                           <div className="mt-2 flex items-center gap-2">
-                            <span className="text-[11px] lg:text-xs text-gray-600">Code:</span>
+                            <span className="text-[11px] lg:text-xs text-gray-600">Código:</span>
                             <code className="px-2 py-1 rounded bg-gray-50 border border-gray-200 text-gray-700 text-[11px] lg:text-xs font-mono break-all">
                               {redemption.uniqueCode}
                             </code>
@@ -1395,7 +1393,7 @@ return (
                               className="h-7 px-2 text-xs border-gray-300 text-gray-700 hover:bg-gray-50"
                               onClick={() => copyUniqueCode(redemption.uniqueCode || '')}
                             >
-                              <Copy className="h-3 w-3 mr-1" /> Copy
+                              <Copy className="h-3 w-3 mr-1" /> Copiar
                             </Button>
                           </div>
                         )}
@@ -1408,7 +1406,7 @@ return (
                               disabled={cancellingId === redemption.id}
                               onClick={() => handleCancelRedemption(redemption.id)}
                             >
-                              {cancellingId === redemption.id ? 'Cancelling…' : 'Cancel'}
+                              {cancellingId === redemption.id ? 'Cancelando…' : 'Cancelar'}
                             </Button>
                           </div>
                         )}
@@ -1421,7 +1419,7 @@ return (
                       <div className="w-12 h-12 lg:w-16 lg:h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 lg:mb-4">
                         <Gift className="h-5 w-5 lg:h-6 lg:w-6 text-gray-500" />
                       </div>
-                      <div className="text-gray-500 text-sm lg:text-base mb-1 lg:mb-2">No redemptions yet</div>
+                      <div className="text-gray-500 text-sm lg:text-base mb-1 lg:mb-2">Nenhum resgate ainda</div>
                     </div>
                   )}
                 </div>
@@ -1450,9 +1448,9 @@ return (
         >
           <DialogContent className="bg-white border border-gray-200 text-gray-900">
             <DialogHeader>
-              <DialogTitle className="text-gray-900">Confirm Redemption?</DialogTitle>
+              <DialogTitle className="text-gray-900">Confirmar resgate?</DialogTitle>
               <DialogDescription className="text-gray-600">
-                {`You are about to use ${rewardToConfirm?.creditsRequired ?? ''} points to redeem ${rewardToConfirm?.title ?? ''}.`}
+                {`Você está prestes a usar ${rewardToConfirm?.creditsRequired ?? ''} créditos para resgatar ${rewardToConfirm?.title ?? ''}.`}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -1461,14 +1459,14 @@ return (
                 onClick={() => setConfirmOpen(false)}
                 className="border-gray-300"
               >
-                Cancel
+                Cancelar
               </Button>
               <Button
                 onClick={confirmRedeem}
                 disabled={!rewardToConfirm || (redeeming !== null && rewardToConfirm?.id === redeeming)}
                 className="text-black font-semibold bg-[#91f2ce] hover:bg-[#7eeec0] ring-1 ring-[#7eeec0]/70"
               >
-                {rewardToConfirm && redeeming === rewardToConfirm.id ? 'Redeeming...' : 'Confirm and Redeem'}
+                {rewardToConfirm && redeeming === rewardToConfirm.id ? 'Resgatando...' : 'Confirmar e Resgatar'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1480,9 +1478,9 @@ return (
         <Dialog open={shareModalOpen} onOpenChange={setShareModalOpen}>
           <DialogContent className="bg-white border border-gray-200 text-gray-900">
             <DialogHeader>
-              <DialogTitle className="text-gray-900">Share your referral</DialogTitle>
+              <DialogTitle className="text-gray-900">Compartilhe sua indicação</DialogTitle>
               <DialogDescription className="text-gray-600">
-                Send your link via WhatsApp, SMS, or Email, or copy it.
+                Envie seu link via WhatsApp, SMS ou Email, ou copie-o.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
@@ -1499,15 +1497,15 @@ return (
               </div>
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-xs lg:text-sm font-mono bg-gray-50 border border-gray-200 rounded px-2 py-2 overflow-x-auto">
-                  {generateReferralLink('default') || 'Link not ready'}
+                  {generateReferralLink('default') || 'Link não pronto'}
                 </code>
                 <Button variant="secondary" className="h-10" onClick={copyReferralLink}>
-                  <Copy className="h-4 w-4 mr-1" /> Copy
+                  <Copy className="h-4 w-4 mr-1" /> Copiar
                 </Button>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" className="border-gray-300" onClick={() => setShareModalOpen(false)}>Close</Button>
+              <Button variant="outline" className="border-gray-300" onClick={() => setShareModalOpen(false)}>Fechar</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1518,23 +1516,23 @@ return (
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Image src="/google.png" alt="Google" width={20} height={20} />
-                How to leave a Google review
+                Como deixar uma avaliação no Google
               </DialogTitle>
               <DialogDescription className="text-gray-600">
-                Follow these steps to leave a review and earn points.
+                Siga os passos para deixar sua avaliação e ganhar pontos.
               </DialogDescription>
             </DialogHeader>
             <ol className="list-decimal pl-5 space-y-2 text-sm text-gray-800">
-              <li>Open Google Maps and search for your doctor’s clinic.</li>
-              <li>Tap the clinic, scroll to Reviews, and tap “Write a review”.</li>
-              <li>Rate, write your feedback, and submit.</li>
-              <li>Send a screenshot to the clinic if requested.</li>
+              <li>Abra o Google Maps e pesquise pela clínica do seu médico.</li>
+              <li>Toque na clínica, role até Avaliações e toque em “Escrever uma avaliação”.</li>
+              <li>Avalie, escreva seu feedback e envie.</li>
+              <li>Envie um print para a clínica, se solicitado.</li>
             </ol>
             <div className="mt-3 text-xs text-gray-500">
-              Tip: If you have the clinic’s direct review link, use it for faster access.
+              Dica: se você tiver o link direto de avaliação da clínica, use-o para acesso mais rápido.
             </div>
             <DialogFooter>
-              <Button variant="outline" className="border-gray-300" onClick={() => setReviewModalOpen(false)}>Close</Button>
+              <Button variant="outline" className="border-gray-300" onClick={() => setReviewModalOpen(false)}>Fechar</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

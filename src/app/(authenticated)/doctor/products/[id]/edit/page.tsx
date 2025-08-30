@@ -36,6 +36,7 @@ interface Product {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  priority?: number;
 }
 
 interface PageProps {
@@ -66,9 +67,11 @@ export default function EditProductPage({ params }: PageProps) {
     purchaseUrl: string;
     usageStats: string;
     creditsPerUnit: string;
-    category: string;
+    category: string; // legacy single category name
+    categoryIds: string[]; // new multi-category support
     isActive: boolean;
     confirmationUrl?: string;
+    priority: string;
   }
 
   const [formData, setFormData] = useState<FormValues>({
@@ -84,8 +87,10 @@ export default function EditProductPage({ params }: PageProps) {
     usageStats: '0',
     creditsPerUnit: '',
     category: '',
+    categoryIds: [],
     isActive: true,
-    confirmationUrl: ''
+    confirmationUrl: '',
+    priority: '0'
   });
   const [images, setImages] = useState<Array<{ id?: string; url: string; kind?: string; orderIndex?: number }>>([]);
   const [isImagesLoading, setIsImagesLoading] = useState(false);
@@ -102,6 +107,18 @@ export default function EditProductPage({ params }: PageProps) {
     if (!digits) return '';
     const message = (waText || '').replace(/\{\{\s*nome do produto\s*\}\}/gi, formData.name || 'produto');
     return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+  };
+
+  const toggleCategoryId = (id: string) => {
+    setFormData(prev => {
+      const exists = prev.categoryIds.includes(id);
+      return {
+        ...prev,
+        categoryIds: exists
+          ? prev.categoryIds.filter(cid => cid !== id)
+          : [...prev.categoryIds, id]
+      };
+    });
   };
 
   useEffect(() => {
@@ -157,8 +174,10 @@ export default function EditProductPage({ params }: PageProps) {
           usageStats: (data.usageStats ?? '0')?.toString(),
           creditsPerUnit: (data.creditsPerUnit ?? '')?.toString() || '',
           category: data.category || '',
+          categoryIds: Array.isArray(data.categoryIds) ? data.categoryIds : [],
           isActive: data.isActive,
-          confirmationUrl: data.confirmationUrl || ''
+          confirmationUrl: data.confirmationUrl || '',
+          priority: (data.priority ?? 0).toString()
         });
         if (Array.isArray(data.images)) {
           const before = data.images.find((it: any) => (it.kind || '').toUpperCase() === 'BEFORE');
@@ -219,11 +238,13 @@ export default function EditProductPage({ params }: PageProps) {
         creditsPerUnit: formData.creditsPerUnit ? Number(formData.creditsPerUnit) : undefined,
         imageUrl: formData.imageUrl?.trim() ? formData.imageUrl.trim() : null,
         category: formData.category,
+        categoryIds: formData.categoryIds,
         isActive: formData.isActive,
         confirmationUrl: formData.confirmationUrl?.trim() || null,
         // extra fields preserved (ignored by API but safe)
         discountPrice: formData.discountPrice ? Number(formData.discountPrice) : undefined,
         discountPercentage: formData.discountPercentage ? Number(formData.discountPercentage) : undefined,
+        priority: formData.priority !== '' ? Number(formData.priority) : undefined,
       };
 
       const response = await fetch(`/api/products/${productId}`, {
@@ -448,7 +469,7 @@ export default function EditProductPage({ params }: PageProps) {
                   </div>
 
                   <div>
-                    <Label htmlFor="category" className="text-gray-900 font-medium">Category</Label>
+                    <Label htmlFor="category" className="text-gray-900 font-medium">Category (legacy)</Label>
                     <div className="mt-2">
                       <Select
                         value={formData.category || ''}
@@ -508,6 +529,13 @@ export default function EditProductPage({ params }: PageProps) {
                                   setCategories(list || []);
                                 }
                                 handleInputChange('category', created?.name || name);
+                                // auto-select the created category in multi-select as well (if id available)
+                                if (created?.id) {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    categoryIds: Array.from(new Set([...(prev.categoryIds || []), created.id]))
+                                  }));
+                                }
                                 setNewCategoryName('');
                                 setCreatingCategory(false);
                               } else {
@@ -533,6 +561,30 @@ export default function EditProductPage({ params }: PageProps) {
                       </div>
                     )}
                     <p className="text-xs text-gray-500 mt-2">Se deixar vazio, será usada a categoria 'Geral'.</p>
+                  </div>
+
+                  {/* Multi-category selection */}
+                  <div>
+                    <Label className="text-gray-900 font-medium">Categories (multiple)</Label>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {categories.map((c) => {
+                        const checked = formData.categoryIds.includes(c.id);
+                        return (
+                          <label key={c.id} className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-sm cursor-pointer select-none ${checked ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4"
+                              checked={checked}
+                              onChange={() => toggleCategoryId(c.id)}
+                            />
+                            <span>{c.name}</span>
+                          </label>
+                        );
+                      })}
+                      {categories.length === 0 && (
+                        <span className="text-sm text-gray-500">Nenhuma categoria. Crie uma acima.</span>
+                      )}
+                    </div>
                   </div>
 
                   
@@ -602,6 +654,18 @@ export default function EditProductPage({ params }: PageProps) {
                       min="0"
                       className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
                     />
+                  </div>
+                  <div className="mt-6">
+                    <Label htmlFor="priority" className="text-gray-900 font-medium">Priority (higher shows first)</Label>
+                    <Input
+                      id="priority"
+                      value={formData.priority}
+                      onChange={(e) => handleInputChange('priority', e.target.value)}
+                      placeholder="0"
+                      type="number"
+                      className="mt-2 border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10"
+                    />
+                    <p className="text-xs text-gray-500 mt-2">Use to control display order. Higher numbers appear first.</p>
                   </div>
                 </CardContent>
               </Card>

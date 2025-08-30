@@ -61,32 +61,59 @@ export async function GET(request: Request) {
             select: {
               protocol_products: true
             }
-          }
+          },
+          // Usar a relação correta definida no schema
+          categories: { 
+            include: { 
+              category: true 
+            } 
+          },
+          productCategory: true // Manter a relação 1:N legada para compatibilidade
         },
-        orderBy: {
-          createdAt: 'desc'
-        }
+        orderBy: [
+          { priority: 'desc' },
+          { createdAt: 'desc' }
+        ]
       });
 
       console.log('📦 Products found:', products.length);
 
       // Transformar para o formato esperado pelo frontend
-      const transformedProducts = products.map((product: any) => ({
-        ...product,
-        // Adicionar campos que o frontend espera mas que não existem na tabela
-        brand: null,
-        imageUrl: (product as any)?.imageUrl ?? null,
-        originalPrice: product?.price != null ? Number(product.price) : null,
-        discountPrice: null,
-        discountPercentage: null,
-        purchaseUrl: null,
-        usageStats: 0,
-        doctorId: session.user.id, // Simular que pertence ao médico atual
-        creditsPerUnit: product?.creditsPerUnit != null ? Number(product.creditsPerUnit) : null,
-        _count: {
-          protocolProducts: product._count?.protocol_products || 0
+      const transformedProducts = products.map((product: any) => {
+        // Extrair categorias da relação N:N
+        const categories = product.categories?.map((cp: any) => ({
+          id: cp.category.id,
+          name: cp.category.name
+        })) || [];
+        
+        // Adicionar categoria legada se existir e não estiver já nas categorias
+        if (product.productCategory && !categories.some((c: any) => c.id === product.productCategory.id)) {
+          categories.push({
+            id: product.productCategory.id,
+            name: product.productCategory.name
+          });
         }
-      }));
+        
+        return {
+          ...product,
+          // Adicionar campos que o frontend espera mas que não existem na tabela
+          brand: null,
+          imageUrl: product?.imageUrl ?? null,
+          originalPrice: product?.price != null ? Number(product.price) : null,
+          discountPrice: null,
+          discountPercentage: null,
+          purchaseUrl: null,
+          usageStats: 0,
+          doctorId: session.user.id, // Simular que pertence ao médico atual
+          creditsPerUnit: product?.creditsPerUnit != null ? Number(product.creditsPerUnit) : null,
+          // Usar as categorias extraídas
+          categories,
+          categoryIds: categories.map((c: any) => c.id),
+          _count: {
+            protocolProducts: product._count?.protocol_products || 0
+          }
+        };
+      });
 
       console.log('✅ Returning transformed products:', transformedProducts.length);
       return NextResponse.json(transformedProducts);
@@ -125,7 +152,10 @@ export async function POST(request: Request) {
       originalPrice,
       creditsPerUnit,
       category = 'Geral',
-      confirmationUrl
+      confirmationUrl,
+      imageUrl,
+      categoryIds,
+      priority
     } = body;
 
     // Validar campos obrigatórios
@@ -148,6 +178,8 @@ export async function POST(request: Request) {
       isActive: true,
       doctorId: session.user.id,
       confirmationUrl: confirmationUrl ?? null,
+      imageUrl: imageUrl ?? null,
+      priority: typeof priority === 'number' ? priority : (priority != null ? Number(priority) : 0),
     };
 
     // Attach creditsPerUnit initially
@@ -169,18 +201,63 @@ export async function POST(request: Request) {
       }
     }
 
+    // Insert pivot links if categoryIds provided
+    if (Array.isArray(categoryIds) && categoryIds.length > 0) {
+      const valid = await prisma.productCategory.findMany({
+        where: {
+          id: { in: categoryIds },
+          OR: [{ doctorId: session.user.id }, { doctorId: null }],
+          isActive: true
+        },
+        select: { id: true }
+      });
+      const validSet = new Set(valid.map((c) => c.id));
+      const filtered = categoryIds.filter((id: string) => validSet.has(id));
+      if (filtered.length > 0) {
+        await prisma.categoriesOnProducts.createMany({
+          data: filtered.map((cid: string) => ({ productId: product.id, categoryId: cid }))
+        });
+      }
+    }
+
     // Retornar no formato esperado pelo frontend
+    // Re-fetch with categories
+    const createdWithCategories = await prisma.products.findFirst({
+      where: { id: product.id },
+      include: { 
+        categories: { include: { category: true } },
+        productCategory: true // Manter a relação 1:N legada para compatibilidade
+      }
+    });
+
+    // Extrair categorias da relação N:N
+    const categories = (createdWithCategories as any)?.categories?.map((cp: any) => ({
+      id: cp.category.id,
+      name: cp.category.name
+    })) || [];
+    
+    // Adicionar categoria legada se existir e não estiver já nas categorias
+    if ((createdWithCategories as any)?.productCategory && 
+        !categories.some((c: any) => c.id === (createdWithCategories as any).productCategory.id)) {
+      categories.push({
+        id: (createdWithCategories as any).productCategory.id,
+        name: (createdWithCategories as any).productCategory.name
+      });
+    }
+    
     const transformedProduct = {
-      ...product,
+      ...createdWithCategories,
       brand: null,
-      imageUrl: (product as any)?.imageUrl ?? null,
-      originalPrice: product?.price != null ? Number(product.price) : null,
+      imageUrl: (createdWithCategories as any)?.imageUrl ?? null,
+      originalPrice: (createdWithCategories as any)?.price != null ? Number((createdWithCategories as any).price) : null,
       discountPrice: null,
       discountPercentage: null,
       purchaseUrl: null,
       usageStats: 0,
       doctorId: session.user.id,
-      creditsPerUnit: (product as any)?.creditsPerUnit != null ? Number((product as any).creditsPerUnit) : null
+      creditsPerUnit: (createdWithCategories as any)?.creditsPerUnit != null ? Number((createdWithCategories as any).creditsPerUnit) : null,
+      categories,
+      categoryIds: categories.map((c: any) => c.id)
     };
 
     return NextResponse.json(transformedProduct, { status: 201 });

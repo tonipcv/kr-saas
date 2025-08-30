@@ -776,13 +776,19 @@ export default function PatientsPage() {
               <p className="mt-1 text-sm text-gray-500">Start by adding your first client</p>
               <div className="mt-6">
                 <Button
-                  asChild
                   className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl font-medium"
+                  onClick={async () => {
+                    const res = await checkLimit('patients');
+                    if (!res.allowed) {
+                      toast.error(res.message || 'Upgrade required to add more clients');
+                      return;
+                    }
+                    resetForm();
+                    setShowAddPatient(true);
+                  }}
                 >
-                  <Link href="/doctor/patients/smart-add">
-                    <UserPlusIcon className="h-4 w-4 mr-2" />
-                    Add First Client
-                  </Link>
+                  <UserPlusIcon className="h-4 w-4 mr-2" />
+                  Add First Client
                 </Button>
               </div>
             </div>
