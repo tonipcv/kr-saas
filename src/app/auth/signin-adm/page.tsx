@@ -109,7 +109,7 @@ export default function Login() {
 
             <button 
               type="submit" 
-              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-all duration-300 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
+              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#2a075e] via-[#7131b8] to-[#caa8f5] hover:opacity-90 rounded-lg transition-all duration-300 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#7131b8] shadow-lg hover:shadow-xl"
               disabled={isSubmitting}
             >
               {isSubmitting ? 'Signing in...' : 'Sign in'}

@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,7 +93,6 @@ interface ImportResults {
 
 export default function PatientsPage() {
   const { data: session } = useSession();
-  const searchParams = useSearchParams();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -149,20 +147,23 @@ export default function PatientsPage() {
 
   // Auto-open Add Client modal when coming from dashboard with ?add=1 (or ?new=1)
   useEffect(() => {
-    const openParam = searchParams?.get('add') || searchParams?.get('new');
-    if (!openParam) return;
-    (async () => {
-      const res = await checkLimit('patients');
-      if (!res.allowed) {
-        toast.error(res.message || 'Upgrade required to add more clients');
-        return;
-      }
-      resetForm();
-      setShowAddPatient(true);
-    })();
-    // Only run on initial mount or when URL param changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams?.toString()]);
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const openParam = params.get('add') || params.get('new');
+      if (!openParam) return;
+      (async () => {
+        const res = await checkLimit('patients');
+        if (!res.allowed) {
+          toast.error(res.message || 'Upgrade required to add more clients');
+          return;
+        }
+        resetForm();
+        setShowAddPatient(true);
+      })();
+    } catch {
+      // no-op on server
+    }
+  }, []);
 
   const loadPatients = async () => {
     try {

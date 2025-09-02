@@ -393,7 +393,7 @@ export default function DoctorDashboard() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => router.push('/doctor/patients?add=1')}
-                  className="inline-flex h-8 items-center rounded-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] px-3 text-xs font-medium text-white hover:opacity-90 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5893ec]"
+                  className="inline-flex h-8 items-center rounded-full bg-gradient-to-r from-[#2a075e] via-[#7131b8] to-[#caa8f5] px-3 text-xs font-medium text-white hover:opacity-90 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2a075e]"
                 >
                   New client
                 </button>

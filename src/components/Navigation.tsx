@@ -792,7 +792,7 @@ export default function Navigation() {
                         className={cn(
                           "w-full h-10 flex items-center justify-center rounded-full transition-all duration-300",
                           isActive
-                            ? "bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white shadow-lg scale-110"
+                            ? "bg-gradient-to-r from-[#1b0b3d] via-[#5a23a7] to-[#9b7ae3] text-white shadow-lg scale-110"
                             : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 hover:scale-105"
                         )}
                       >

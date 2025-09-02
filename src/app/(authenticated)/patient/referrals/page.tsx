@@ -1135,18 +1135,18 @@ return (
                 <Image
                   src={doctorImage}
                   alt={displayDoctorName}
-                  className="rounded-full border-2 border-turquoise shadow-lg object-cover"
+                  className="rounded-full border-2 border-purple-300 shadow-lg object-cover"
                   fill
                 />
               ) : session?.user?.image ? (
                 <Image
                   src={session.user.image}
                   alt={session.user.name || 'User profile'}
-                  className="rounded-full border-2 border-turquoise shadow-lg object-cover"
+                  className="rounded-full border-2 border-purple-300 shadow-lg object-cover"
                   fill
                 />
               ) : (
-                <div className="w-full h-full rounded-full bg-gray-100 border-2 border-turquoise shadow-lg flex items-center justify-center">
+                <div className="w-full h-full rounded-full bg-gray-100 border-2 border-purple-300 shadow-lg flex items-center justify-center">
                   <User className="h-10 w-10 lg:h-12 lg:w-12 text-gray-400" />
                 </div>
               )}
@@ -1173,12 +1173,12 @@ return (
                   {/* Front Face */}
                   <div
                     className="absolute inset-0"
-                    style={{ backfaceVisibility: 'hidden', background: 'linear-gradient(135deg, #1d2b64 0%, #2b5876 100%)' }}
+                    style={{ backfaceVisibility: 'hidden', background: 'linear-gradient(135deg, #180e33 0%, #4f3aa9 100%)' }}
                   >
                     {/* Decorative background */}
-                    <div className="absolute inset-0 opacity-25">
-                      <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/20 blur-2xl" />
-                      <div className="absolute -bottom-12 -left-8 w-48 h-48 rounded-full bg-white/10 blur-2xl" />
+                    <div className="absolute inset-0 opacity-10">
+                      <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl" />
+                      <div className="absolute -bottom-12 -left-8 w-48 h-48 rounded-full bg-white/5 blur-2xl" />
                     </div>
 
                     <div className="relative h-full p-6 lg:p-8 flex flex-col">
@@ -1219,10 +1219,10 @@ return (
                   {/* Back Face */}
                   <div
                     className="absolute inset-0"
-                    style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)', background: 'linear-gradient(135deg, #1d2b64 0%, #2b5876 100%)' }}
+                    style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)', background: 'linear-gradient(135deg, #180e33 0%, #4f3aa9 100%)' }}
                   >
-                    <div className="absolute inset-0 opacity-20">
-                      <div className="absolute -top-8 -right-6 w-36 h-36 rounded-full bg-white/20 blur-2xl" />
+                    <div className="absolute inset-0 opacity-5">
+                      <div className="absolute -top-8 -right-6 w-36 h-36 rounded-full bg-white/10 blur-2xl" />
                     </div>
                     <div className="relative h-full p-6 lg:p-8 flex flex-col text-white">
                       <div className="flex items-center justify-end">
@@ -1275,7 +1275,7 @@ return (
                         ${activeTab==='earn'
                           ? 'text-white border-transparent'
                           : 'text-gray-700 border-gray-200 hover:bg-gray-50 bg-white'}`}
-                      style={activeTab==='earn' ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : undefined}
+                      style={activeTab==='earn' ? { background: 'linear-gradient(135deg, #180e33 0%, #4f3aa9 100%)' } : undefined}
                     >
                       Ganhar pontos
                     </button>
@@ -1285,7 +1285,7 @@ return (
                         ${activeTab==='use'
                           ? 'text-white border-transparent'
                           : 'text-gray-700 border-gray-200 hover:bg-gray-50 bg-white'}`}
-                      style={activeTab==='use' ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : undefined}
+                      style={activeTab==='use' ? { background: 'linear-gradient(135deg, #180e33 0%, #4f3aa9 100%)' } : undefined}
                     >
                       Usar pontos
                     </button>
@@ -1295,7 +1295,7 @@ return (
                         ${activeTab==='history'
                           ? 'text-white border-transparent'
                           : 'text-gray-700 border-gray-200 hover:bg-gray-50 bg-white'}`}
-                      style={activeTab==='history' ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : undefined}
+                      style={activeTab==='history' ? { background: 'linear-gradient(135deg, #180e33 0%, #4f3aa9 100%)' } : undefined}
                     >
                       Histórico
                     </button>
@@ -1319,7 +1319,7 @@ return (
                     <Link
                       href={doctorSlug ? `/${doctorSlug}/products` : '#'}
                       className={`w-full flex items-center justify-between rounded-xl px-4 py-3 shadow-sm transition ${doctorSlug ? '' : 'pointer-events-none opacity-60'}`}
-                      style={{ background: 'linear-gradient(135deg, #1d2b64 0%, #2b5876 100%)', color: 'white' }}
+                      style={{ background: 'linear-gradient(135deg, #180e33 0%, #4f3aa9 100%)', color: 'white' }}
                     >
                       <span className="flex items-center gap-3">
                         <CalendarDays className="h-5 w-5" />
@@ -1334,7 +1334,7 @@ return (
                       type="button"
                       onClick={() => setShareModalOpen(true)}
                       className="w-full flex items-center justify-between rounded-xl px-4 py-3 shadow-sm transition"
-                      style={{ background: 'linear-gradient(135deg, #1d2b64 0%, #2b5876 100%)', color: 'white' }}
+                      style={{ background: 'linear-gradient(135deg, #180e33 0%, #4f3aa9 100%)', color: 'white' }}
                     >
                       <span className="flex items-center gap-3">
                         <Users className="h-5 w-5" />
@@ -1350,7 +1350,7 @@ return (
                       type="button"
                       onClick={() => setReviewModalOpen(true)}
                       className="w-full flex items-center justify-between rounded-xl px-4 py-3 shadow-sm transition"
-                      style={{ background: 'linear-gradient(135deg, #1d2b64 0%, #2b5876 100%)', color: 'white' }}
+                      style={{ background: 'linear-gradient(135deg, #180e33 0%, #4f3aa9 100%)', color: 'white' }}
                     >
                       <span className="flex items-center gap-3">
                         <Image src="/google.png" alt="Google" width={20} height={20} />
@@ -1387,7 +1387,7 @@ return (
                         key={tab.k}
                         onClick={() => setReferralsTab(tab.k as any)}
                         className={`px-3 py-1.5 rounded-full text-xs border shadow-sm ${referralsTab===tab.k ? 'text-white border-transparent' : 'text-gray-700 border-gray-200 bg-white hover:bg-gray-50'}`}
-                        style={referralsTab===tab.k ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : undefined}
+                        style={referralsTab===tab.k ? { background: 'linear-gradient(135deg, #180e33 0%, #4f3aa9 100%)' } : undefined}
                       >
                         {tab.label}
                       </button>
@@ -1457,7 +1457,7 @@ return (
                             key={p}
                             onClick={() => { setVisibleTxCount(10); setPeriodFilter(p as any); }}
                             className={`px-3 py-1.5 text-xs rounded-full ${periodFilter===p ? 'text-white' : 'text-gray-700'} `}
-                            style={periodFilter===p ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : {}}
+                            style={periodFilter===p ? { background: 'linear-gradient(135deg, #180e33 0%, #4f3aa9 100%)' } : {}}
                           >
                             {p === '7d' ? '7d' : p === '30d' ? '30d' : 'Tudo'}
                           </button>
@@ -1473,7 +1473,7 @@ return (
                             key={t.k}
                             onClick={() => { setVisibleTxCount(10); setTypeFilter(t.k as any); }}
                             className={`px-3 py-1.5 text-xs rounded-full ${typeFilter===t.k ? 'text-white' : 'text-gray-700'}`}
-                            style={typeFilter===t.k ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : {}}
+                            style={typeFilter===t.k ? { background: 'linear-gradient(135deg, #180e33 0%, #4f3aa9 100%)' } : {}}
                           >
                             {t.label}
                           </button>
@@ -1734,7 +1734,7 @@ return (
               <Button
                 onClick={confirmRedeem}
                 disabled={!rewardToConfirm || (redeeming !== null && rewardToConfirm?.id === redeeming)}
-                className="text-black font-semibold bg-[#91f2ce] hover:bg-[#7eeec0] ring-1 ring-[#7eeec0]/70"
+                className="text-white font-semibold bg-purple-600 hover:bg-purple-700 ring-1 ring-purple-700/40"
               >
                 {rewardToConfirm && redeeming === rewardToConfirm.id ? 'Resgatando...' : 'Confirmar e Resgatar'}
               </Button>
@@ -1812,7 +1812,7 @@ return (
           <div className="relative">
             <button
               onClick={toggleMenu}
-              className="h-12 w-12 rounded-full bg-white text-gray-700 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-200 border border-gray-200 flex items-center justify-center transition-shadow"
+              className="h-12 w-12 rounded-full bg-white text-gray-700 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-purple-200 border border-gray-200 flex items-center justify-center transition-shadow"
               aria-label="Toggle menu"
             >
               <div className="relative h-10 w-10">
