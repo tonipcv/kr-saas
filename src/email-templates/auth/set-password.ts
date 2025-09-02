@@ -9,6 +9,7 @@ export interface SetPasswordEmailProps {
   clinicLogo?: string;
   isExistingClient?: boolean;
   currentDoctorName?: string;
+  expiryHours?: number;
 }
 
 export const createSetPasswordEmail = ({
@@ -19,7 +20,8 @@ export const createSetPasswordEmail = ({
   clinicName,
   clinicLogo,
   isExistingClient,
-  currentDoctorName
+  currentDoctorName,
+  expiryHours = 24,
 }: SetPasswordEmailProps) => {
   const content = `
     <div>
@@ -41,12 +43,14 @@ export const createSetPasswordEmail = ({
       
       <p><a href="${resetUrl}">${isExistingClient ? 'Accept invitation' : 'Set password'} →</a></p>
       
-      <p>This ${isExistingClient ? 'invitation' : 'link'} expires in 24h</p>
+      <p>This ${isExistingClient ? 'invitation' : 'link'} expires in ${expiryHours}h</p>
     </div>
   `;
 
   return baseTemplate({
     content,
-    clinicName: 'Zuzz'
+    clinicName: clinicName || 'Zuzz',
+    clinicLogo,
+    doctorName,
   });
 }; 

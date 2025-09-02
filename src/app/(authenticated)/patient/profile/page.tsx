@@ -459,7 +459,7 @@ export default function ProfilePage() {
                       style={{ boxShadow: 'none' }}
                       onClick={() => {
                         if (clinicSlug) {
-                          signOut({ callbackUrl: `/login/${clinicSlug}` });
+                          signOut({ callbackUrl: `/${clinicSlug}/login` });
                         } else {
                           signOut({ callbackUrl: '/auth/signin' });
                         }
@@ -496,16 +496,16 @@ export default function ProfilePage() {
             </button>
             {menuOpen && (
               <div className="absolute bottom-14 right-0 bg-white border border-gray-200 rounded-xl shadow-xl w-56 p-2">
-                <Link href="/patient/profile" className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
+                <Link href={clinicSlug ? `/${clinicSlug}/profile` : '/patient/profile'} className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
                   <LucideUser className="mr-2 h-4 w-4 text-gray-600" />
                   Profile
                 </Link>
-                <Link href="/patient/referrals" className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
+                <Link href={clinicSlug ? `/${clinicSlug}/referrals` : '/patient/referrals'} className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
                   <Share2 className="mr-2 h-4 w-4 text-gray-600" />
                   Referrals
                 </Link>
                 <button
-                  onClick={() => signOut({ callbackUrl: '/' })}
+                  onClick={() => signOut({ callbackUrl: clinicSlug ? `/${clinicSlug}/login` : '/' })}
                   className="w-full flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50"
                 >
                   <LogOut className="mr-2 h-4 w-4 text-gray-600" />

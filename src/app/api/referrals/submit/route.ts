@@ -134,6 +134,8 @@ export async function POST(request: NextRequest) {
               campaignCoupon: campaign?.coupon ?? (existingCustom?.coupon?.campaignCoupon ?? null),
               discountPercent: typeof campaign?.discountPercent === 'number' ? campaign.discountPercent : (existingCustom?.coupon?.discountPercent ?? null),
             },
+            // Expose coupon name as campaign slug for reporting screens
+            ...(campaign?.coupon ? { campaignSlug: campaign.coupon } : {}),
           } as any;
 
           const emailForUpdate = email || sameProduct.email || `lead+${sameProduct.referralCode}@noemail.local`;
@@ -299,6 +301,10 @@ export async function POST(request: NextRequest) {
       campaignCoupon: campaign?.coupon ?? null,
       discountPercent: typeof campaign?.discountPercent === 'number' ? campaign.discountPercent : null,
     };
+    // Also expose the coupon as a top-level campaignSlug so /doctor/referrals can show it as campaign name
+    if (campaign?.coupon && !(mergedCustomFields as any).campaignSlug) {
+      (mergedCustomFields as any).campaignSlug = campaign.coupon;
+    }
 
     // Prisma schema requires email (non-null). If not provided, synthesize a unique placeholder to satisfy constraints.
     const emailToSave = email || `lead+${leadReferralCode}@noemail.local`;

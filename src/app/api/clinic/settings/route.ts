@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { generateUniqueSlugForClinic } from '@/lib/clinic-utils';
+import { generateUniqueSlugForClinic, getUserClinic } from '@/lib/clinic-utils';
 
 export async function PUT(request: NextRequest) {
   try {
@@ -73,48 +73,17 @@ export async function PUT(request: NextRequest) {
         country: country?.trim() || null,
         website: website?.trim() || null,
         updatedAt: new Date()
-      },
-      include: {
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        },
-        members: {
-          where: { isActive: true },
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true
-              }
-            }
-          }
-        },
-        subscription: {
-          include: {
-            plan: {
-              select: {
-                name: true,
-                maxPatients: true,
-                maxProtocols: true,
-                maxCourses: true
-              }
-            }
-          }
-        }
       }
     });
 
     console.log(`✅ Configurações da clínica atualizadas: ${updatedClinic.name}`);
 
+    // Buscar clínica completa (com members, owner e subscription unificada)
+    const fullClinic = await getUserClinic(session.user.id);
+
     return NextResponse.json({ 
       success: true,
-      clinic: updatedClinic,
+      clinic: fullClinic,
       message: 'Configurações da clínica atualizadas com sucesso'
     });
 

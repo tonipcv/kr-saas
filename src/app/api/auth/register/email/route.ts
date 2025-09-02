@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import nodemailer from "nodemailer";
 import { createVerificationCodeEmail } from "@/email-templates/auth/verification-code";
+import { getDoctorBySlug, getClinicBrandingByDoctorId } from "@/lib/tenant-slug";
 
 if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD || !process.env.SMTP_FROM) {
   throw new Error('Missing SMTP configuration environment variables');
@@ -19,7 +20,7 @@ const transporter = nodemailer.createTransport({
 
 export async function POST(req: Request) {
   try {
-    const { email } = await req.json();
+    const { email, slug } = await req.json();
 
     // Basic validations
     if (!email) {
@@ -30,6 +31,18 @@ export async function POST(req: Request) {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+
+    // Resolve optional tenant branding if slug provided
+    let clinicName: string | undefined;
+    let clinicLogo: string | undefined;
+    if (typeof slug === 'string' && slug.trim()) {
+      const doctor = await getDoctorBySlug(slug.trim());
+      if (doctor) {
+        const branding = await getClinicBrandingByDoctorId(doctor.id);
+        clinicName = branding.clinicName;
+        clinicLogo = branding.clinicLogo || undefined;
+      }
+    }
 
     // Check if email already exists
     const existingUser = await prisma.user.findUnique({
@@ -56,7 +69,9 @@ export async function POST(req: Request) {
         console.log('SMTP connection verified');
 
         const html = createVerificationCodeEmail({
-          code: verificationCode
+          code: verificationCode,
+          clinicName,
+          clinicLogo,
         });
 
         await transporter.sendMail({
@@ -113,7 +128,9 @@ export async function POST(req: Request) {
       console.log('SMTP connection verified');
 
       const html = createVerificationCodeEmail({
-        code: verificationCode
+        code: verificationCode,
+        clinicName,
+        clinicLogo,
       });
 
       await transporter.sendMail({

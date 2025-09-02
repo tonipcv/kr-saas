@@ -64,6 +64,36 @@ export async function GET(request: NextRequest) {
       take: 10
     });
 
+    // Build displayDescription for PURCHASE credits
+    // Handles new format: "Créditos por compra: <qty>x <name>"
+    // Handles legacy format: "Créditos por compra do produto <productId> (qtd <n>)"
+    const productIdRegex = /produto\s+([a-z0-9]+)\b/i;
+    const qtyRegex = /qtd\s*(\d+)/i;
+
+    // Collect product IDs from legacy descriptions
+    const legacyProductIds: string[] = [];
+    for (const credit of creditsHistory) {
+      if ((credit.type || '').toUpperCase().includes('PURCHASE') && credit.description) {
+        const desc = credit.description;
+        const hasNewFormat = /:\s*\d+x\s+.+/i.test(desc);
+        if (!hasNewFormat) {
+          const idMatch = desc.match(productIdRegex);
+          if (idMatch && idMatch[1]) legacyProductIds.push(idMatch[1]);
+        }
+      }
+    }
+
+    // Fetch product names in bulk
+    const uniqueIds = Array.from(new Set(legacyProductIds));
+    const productsById: Record<string, { id: string; name: string | null }> = {};
+    if (uniqueIds.length > 0) {
+      const prods = await prisma.products.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true, name: true }
+      });
+      for (const p of prods) productsById[p.id] = { id: p.id, name: p.name };
+    }
+
     // Get referrals made by the user
     const referralsMade = await prisma.referralLead.findMany({
       where: { referrerId: userId },
@@ -156,17 +186,47 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       stats,
       creditsBalance,
-      creditsHistory: creditsHistory.map((credit: any) => ({
-        id: credit.id,
-        amount: Number(credit.amount),
-        type: credit.type,
-        createdAt: credit.createdAt,
-        lead: credit.referral_leads ? {
-          name: credit.referral_leads.name,
-          email: credit.referral_leads.email,
-          status: credit.referral_leads.status
-        } : null
-      })),
+      creditsHistory: creditsHistory.map((credit: any) => {
+        let displayDescription: string | null = null;
+        const typeUp = (credit.type || '').toUpperCase();
+        const desc: string = credit.description || '';
+        if (typeUp.includes('PURCHASE') && desc) {
+          // New format: "...: <qty>x <name>" -> keep minimal
+          const afterColonIdx = desc.indexOf(':');
+          const tail = afterColonIdx >= 0 ? desc.slice(afterColonIdx + 1).trim() : desc.trim();
+          const newFmt = tail.match(/^(\d+)x\s+(.+)$/i);
+          if (newFmt) {
+            const qty = newFmt[1];
+            let name = newFmt[2];
+            name = name.replace(/\(\s*qtd\s*\d+\s*\)$/i, '').trim();
+            displayDescription = `${qty}x ${name}`;
+          } else {
+            // Legacy: contains product id and (qtd n)
+            const idMatch = desc.match(productIdRegex);
+            const qtyMatch = desc.match(qtyRegex);
+            const pid = idMatch?.[1];
+            const qty = qtyMatch?.[1] || '1';
+            if (pid) {
+              const prod = productsById[pid];
+              const name = (prod?.name || pid).trim();
+              displayDescription = `${qty}x ${name}`;
+            }
+          }
+        }
+        return {
+          id: credit.id,
+          amount: Number(credit.amount),
+          type: credit.type,
+          description: credit.description || null,
+          displayDescription,
+          createdAt: credit.createdAt,
+          lead: credit.referral_leads ? {
+            name: credit.referral_leads.name,
+            email: credit.referral_leads.email,
+            status: credit.referral_leads.status
+          } : null
+        };
+      }),
       referralsMade: referralsMade.map((referral: any) => ({
         id: referral.id,
         name: referral.name,

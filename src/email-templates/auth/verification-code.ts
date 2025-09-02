@@ -1,15 +1,17 @@
 interface VerificationCodeEmailProps {
   code: string;
+  clinicName?: string;
+  clinicLogo?: string;
 }
 
-export function createVerificationCodeEmail({ code }: VerificationCodeEmailProps): string {
+export function createVerificationCodeEmail({ code, clinicName = 'Zuzz', clinicLogo }: VerificationCodeEmailProps): string {
   return `
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Verify your email</title>
+      <title>${clinicName} - Verify your email</title>
       <style>
         body {
           font-family: 'Helvetica Neue', Arial, sans-serif;
@@ -65,18 +67,18 @@ export function createVerificationCodeEmail({ code }: VerificationCodeEmailProps
     <body>
       <div class="container">
         <div class="header">
-          <img src="https://cxlus.com/logo.png" alt="Zuzz Logo" class="logo">
+          ${clinicLogo ? `<img src="${clinicLogo}" alt="${clinicName} Logo" class="logo">` : ''}
         </div>
         <div class="content">
           <h1>Verify your email</h1>
-          <p>Thank you for signing up to Zuzz. To continue your registration, please use the verification code below:</p>
+          <p>Thank you for signing up. To continue your registration${clinicName ? ` with ${clinicName}` : ''}, please use the verification code below:</p>
           
           <div class="verification-code">${code}</div>
           
           <p>This code is valid for 1 hour. If you did not request this code, please ignore this email.</p>
         </div>
         <div class="footer">
-          <p>&copy; ${new Date().getFullYear()} Zuzz. All rights reserved.</p>
+          <p>&copy; ${new Date().getFullYear()} ${clinicName}. All rights reserved.</p>
         </div>
       </div>
     </body>

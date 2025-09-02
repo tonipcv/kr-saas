@@ -4,13 +4,14 @@ import React, { useState, FormEvent, useEffect, Suspense } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signIn } from "next-auth/react"
+import { signIn, signOut } from "next-auth/react"
 import { ArrowRight } from 'lucide-react';
 
 function LoginForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
+  const [showBusinessModal, setShowBusinessModal] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -74,8 +75,23 @@ function LoginForm() {
               
               if (result?.ok) {
                 console.log('Autenticação com token bem-sucedida');
-                // Redirecionar para a área de indicações do paciente
-                router.push('/patient/referrals/');
+                // DOCTOR-only guard for this page: checar role e bloquear PATIENT
+                fetch('/api/profile')
+                  .then(r => r.ok ? r.json() : Promise.reject(new Error('profile fail')))
+                  .then(async (profile) => {
+                    if (profile?.role !== 'DOCTOR') {
+                      await signOut({ redirect: false });
+                      setShowBusinessModal(true);
+                      return;
+                    }
+                    // É DOCTOR: segue fluxo normal
+                    router.push('/');
+                  })
+                  .catch(async () => {
+                    // Em caso de falha no profile, por segurança desloga e mantém na página
+                    await signOut({ redirect: false });
+                    setShowBusinessModal(true);
+                  });
               }
             });
           } else {
@@ -117,21 +133,26 @@ function LoginForm() {
       }
 
       if (result?.ok) {
-        console.log('Login bem sucedido, redirecionando...');
-        
+        console.log('Login bem sucedido, verificando role...');
+        // DOCTOR-only guard para esta rota
         try {
-          // Redireciona para a página inicial que fará o redirecionamento baseado no role
-          console.log('Tentando redirecionar para a página inicial');
-          
-          // Forçar um pequeno atraso para garantir que a sessão seja estabelecida
+          const r = await fetch('/api/profile');
+          if (!r.ok) throw new Error('profile fetch failed');
+          const profile = await r.json();
+          if (profile?.role !== 'DOCTOR') {
+            await signOut({ redirect: false });
+            setShowBusinessModal(true);
+            return;
+          }
+          // É DOCTOR: segue fluxo normal
           setTimeout(() => {
             router.push('/');
             router.refresh();
-          }, 500);
+          }, 300);
         } catch (redirectError) {
-          console.error('Erro ao redirecionar:', redirectError);
-          // Fallback para redirecionar diretamente para a página de protocolos
-          router.push('/patient/protocols');
+          console.error('Erro ao validar role:', redirectError);
+          await signOut({ redirect: false });
+          setShowBusinessModal(true);
         }
       }
     } catch (err) {
@@ -229,6 +250,32 @@ function LoginForm() {
           </div>
         </div>
       </div>
+
+      {/* Modal para criar conta business (aparece quando login não-DOCTOR) */}
+      {showBusinessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Conta Business</h3>
+            <p className="text-sm text-gray-600 mb-5">
+              Este login é exclusivo para clínicas/profissionais. Deseja criar uma conta business?
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowBusinessModal(false)}
+                className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <Link
+                href="/auth/register-doctor"
+                className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white hover:bg-black"
+              >
+                Criar conta business
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

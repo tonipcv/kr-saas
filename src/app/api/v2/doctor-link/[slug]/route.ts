@@ -7,10 +7,10 @@ import { prisma } from '@/lib/prisma';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { slug: string } }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const { slug } = params;
+    const { slug } = await params;
 
     if (!slug) {
       return NextResponse.json(
@@ -19,12 +19,11 @@ export async function GET(
       );
     }
 
-    // Buscar médico pelo slug
-    const doctor = await prisma.user.findFirst({
+    // 1) Tentar como slug de médico (user.doctor_slug)
+    let doctor = await prisma.user.findFirst({
       where: {
         doctor_slug: slug,
-        role: 'DOCTOR',
-        is_active: true
+        role: 'DOCTOR'
       },
       select: {
         id: true,
@@ -33,10 +32,55 @@ export async function GET(
         email: true
       }
     });
+    const debug: Record<string, any> = {
+      slug,
+      triedDoctorSlug: true,
+      doctorByDoctorSlugFound: Boolean(doctor),
+    };
+
+    // 2) Se não achou, tentar como slug de clínica: pegar owner ou algum membro médico ativo
+    if (!doctor) {
+      const clinic = await prisma.clinic.findFirst({
+        where: { slug, isActive: true },
+        select: { id: true, ownerId: true }
+      });
+
+      debug.triedClinicSlug = true;
+      debug.clinicFound = Boolean(clinic);
+
+      if (clinic) {
+        // Owner primeiro
+        if (clinic.ownerId) {
+          const owner = await prisma.user.findFirst({
+            where: { id: clinic.ownerId, role: 'DOCTOR' },
+            select: { id: true, name: true, image: true, email: true }
+          });
+          debug.ownerTried = true;
+          debug.ownerFound = Boolean(owner);
+          if (owner) {
+            doctor = owner;
+          }
+        }
+
+        // Se não houver owner válido, procurar um membro médico ativo
+        if (!doctor) {
+          const member = await prisma.clinicMember.findFirst({
+            where: { clinicId: clinic.id, isActive: true, user: { role: 'DOCTOR' } },
+            include: { user: { select: { id: true, name: true, image: true, email: true } } }
+          });
+          debug.memberTried = true;
+          debug.memberFound = Boolean(member?.user);
+          if (member?.user) {
+            doctor = member.user as typeof doctor;
+          }
+        }
+      }
+    }
 
     if (!doctor) {
+      console.warn('[doctor-link] Médico não encontrado', debug);
       return NextResponse.json(
-        { success: false, message: 'Médico não encontrado' },
+        { success: false, message: 'Médico não encontrado', debug },
         { status: 404 }
       );
     }

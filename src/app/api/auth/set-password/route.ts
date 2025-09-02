@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     const hashedPassword = await hash(password, 12);
 
     // Update user's password, verify email, and clear invite token
-    await prisma.user.update({
+    const updated = await prisma.user.update({
       where: { id: user.id },
       data: {
         password: hashedPassword,
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json(
-      { message: "Senha definida com sucesso! Você já pode fazer login." },
+      { message: "Senha definida com sucesso! Você já pode fazer login.", email: updated.email },
       { status: 200 }
     );
   } catch (error) {

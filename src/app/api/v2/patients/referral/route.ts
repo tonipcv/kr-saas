@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
-        // Bring a few relationships to decide priority on the app side
+        // Bring a few relationships to decide priority on the app side (when the user is PATIENT)
         patient_relationships: {
           include: {
             doctor: { select: { id: true, name: true, email: true, image: true, doctor_slug: true } }
@@ -43,7 +43,28 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    if (!user || user.role !== 'PATIENT') {
+    if (!user) {
+      return NextResponse.json({ success: false, message: 'Forbidden: only patients' }, { status: 403 });
+    }
+
+    // Determine if this user can act as a patient in the current context
+    let asPatient = user.role === 'PATIENT';
+    let rels = ((user as any)?.patient_relationships as any[]) || [];
+
+    // If not a PATIENT by role, see if this user has any doctor-patient relationship as a patient
+    if (!asPatient) {
+      const rel = await prisma.doctorPatientRelationship.findFirst({
+        where: { patientId: userId },
+        include: { doctor: { select: { id: true, name: true, email: true, image: true, doctor_slug: true } } },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (rel) {
+        asPatient = true;
+        rels = [rel as any];
+      }
+    }
+
+    if (!asPatient) {
       return NextResponse.json({ success: false, message: 'Forbidden: only patients' }, { status: 403 });
     }
 
@@ -63,7 +84,7 @@ export async function GET(request: NextRequest) {
       if (doc) doctor = doc;
     }
 
-    const rels = ((user as any)?.patient_relationships as any[]) || [];
+    // rels already computed above
     console.debug('[patients/referral] relationships summary', {
       count: rels.length,
       sample: rels.slice(0, 5).map((r: any) => ({

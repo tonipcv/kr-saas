@@ -51,6 +51,8 @@ export default function DoctorProfilePage() {
   const [userStats, setUserStats] = useState<UserStats>({});
   const [googleReviewLink, setGoogleReviewLink] = useState('');
   const [doctorSlug, setDoctorSlug] = useState('');
+  const [publicCoverImageUrl, setPublicCoverImageUrl] = useState('');
+  const [publicPageTemplate, setPublicPageTemplate] = useState<'DEFAULT' | 'MINIMAL' | 'HERO_CENTER' | 'HERO_LEFT'>('DEFAULT');
   const [planName, setPlanName] = useState<string | null>(null);
   const [planStatus, setPlanStatus] = useState<string | null>(null);
   const [isPlansOpen, setIsPlansOpen] = useState(false);
@@ -107,6 +109,8 @@ export default function DoctorProfilePage() {
             setName(profileData.name || '');
             setEmail(profileData.email || '');
             setGoogleReviewLink(profileData.google_review_link || profileData.googleReviewLink || '');
+            setPublicCoverImageUrl(profileData.public_cover_image_url || '');
+            setPublicPageTemplate(profileData.public_page_template || 'DEFAULT');
             const incomingSlug = profileData.doctor_slug || '';
             if (incomingSlug) {
               setDoctorSlug(incomingSlug);
@@ -250,6 +254,8 @@ export default function DoctorProfilePage() {
           image: newImage || image,
           google_review_link: googleReviewLink,
           doctor_slug: doctorSlug,
+          public_cover_image_url: publicCoverImageUrl || null,
+          public_page_template: publicPageTemplate,
         }),
       });
 
@@ -388,6 +394,8 @@ export default function DoctorProfilePage() {
                           if (response.ok) {
                             const data = await response.json();
                             setGoogleReviewLink(data.google_review_link || data.googleReviewLink || '');
+                            setPublicCoverImageUrl(data.public_cover_image_url || '');
+                            setPublicPageTemplate(data.public_page_template || 'DEFAULT');
                             if (data.doctor_slug) {
                               setDoctorSlug(data.doctor_slug);
                             } else if (data.name) {
@@ -528,6 +536,45 @@ export default function DoctorProfilePage() {
                         <p className="text-xs text-gray-500">
                           Link para avaliações do Google que será mostrado aos pacientes após reset de senha
                         </p>
+                      </div>
+
+                      {/* Public Cover Image URL */}
+                      <div className="space-y-2 md:col-span-2">
+                        <label className="text-sm font-semibold text-gray-900">Public Cover Image URL</label>
+                        <Input
+                          value={publicCoverImageUrl}
+                          onChange={(e) => setPublicCoverImageUrl(e.target.value)}
+                          disabled={!isEditing}
+                          placeholder="https://.../cover.jpg"
+                          className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 rounded-md h-8"
+                        />
+                        {publicCoverImageUrl ? (
+                          <div className="mt-2">
+                            <div className="relative w-full max-w-xl h-32 rounded-md overflow-hidden border border-gray-200">
+                              <Image src={publicCoverImageUrl} alt="Public cover" fill className="object-cover" unoptimized />
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">Preview of your public page cover.</p>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-500">Optional. Appears on your public page header.</p>
+                        )}
+                      </div>
+
+                      {/* Public Page Template */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-gray-900">Public Page Template</label>
+                        <select
+                          value={publicPageTemplate}
+                          onChange={(e) => setPublicPageTemplate(e.target.value as any)}
+                          disabled={!isEditing}
+                          className="h-8 rounded-md bg-white border border-gray-300 text-gray-900 px-2 text-sm"
+                        >
+                          <option value="DEFAULT">Default</option>
+                          <option value="MINIMAL">Minimal</option>
+                          <option value="HERO_CENTER">Hero Center</option>
+                          <option value="HERO_LEFT">Hero Left</option>
+                        </select>
+                        <p className="text-xs text-gray-500">Choose how your public page looks.</p>
                       </div>
                     </div>
 

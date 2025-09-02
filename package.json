@@ -7,13 +7,20 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
+    "migrate:public-fields": "node scripts/run-public-fields-migration.js",
     "seed": "node prisma/seed.js",
     "seed:js": "node scripts/seed-complete-system.js",
+    "copy:db": "node scripts/copy-data-between-postgres.js",
+    "copy:db:sql": "node scripts/copy-postgres-sql.js",
+    "copy:db:safe": "node scripts/copy-postgres-safe.js",
+    "copy:db:retry": "node scripts/copy-postgres-retry.js",
+    "copy:db:fixed": "node scripts/copy-postgres-fixed.js",
     "migrate:add-confirmation-url": "node scripts/migrate-add-confirmation-url.js",
     "create-clinic-referrals": "node scripts/create-clinic-referrals-table.js",
     "test-clinic-referrals": "node scripts/test-clinic-referrals.js",
     "test-admin-clinic-referrals": "node scripts/test-admin-clinic-referrals.js",
-    "test:emails": "ts-node src/tests/email-templates/test-emails.ts"
+    "test:emails": "ts-node src/tests/email-templates/test-emails.ts",
+    "migrate:patient-profiles": "node scripts/migrate-patient-profiles.js"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",

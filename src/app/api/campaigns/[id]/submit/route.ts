@@ -200,13 +200,32 @@ export async function POST(
     } as Record<string, string | undefined>;
 
     // Extract offer snapshot from campaign.form_config (if provided by doctor)
-    let offerSnapshot: { amount?: number } | undefined;
+    type OfferSnapshot = {
+      type?: 'FREE' | 'PERCENT_OFF' | 'AMOUNT_OFF';
+      percent?: number;
+      amount?: number;
+      currency?: string;
+      display?: string;
+    };
+    let offerSnapshot: OfferSnapshot | undefined;
     try {
       const cfg = typeof campaign.form_config === 'string' ? JSON.parse(campaign.form_config) : (campaign.form_config || {});
       const off = cfg?.offer || {};
+      const type = typeof off.type === 'string' ? off.type.toUpperCase() : undefined;
+      const percent = typeof off.percent === 'string' ? Number(off.percent) : (typeof off.percent === 'number' ? off.percent : undefined);
       const amount = typeof off.amount === 'string' ? Number(off.amount) : (typeof off.amount === 'number' ? off.amount : undefined);
-      if (amount != null && !Number.isNaN(amount)) {
-        offerSnapshot = { amount };
+      const currency = typeof off.currency === 'string' ? off.currency : undefined;
+      const display = typeof off.display === 'string' ? off.display : undefined;
+
+      const snap: OfferSnapshot = {};
+      if (type === 'FREE' || type === 'PERCENT_OFF' || type === 'AMOUNT_OFF') snap.type = type;
+      if (percent != null && !Number.isNaN(percent)) snap.percent = percent;
+      if (amount != null && !Number.isNaN(amount)) snap.amount = amount;
+      if (currency) snap.currency = currency;
+      if (display) snap.display = display;
+
+      if (Object.keys(snap).length > 0) {
+        offerSnapshot = snap;
       }
     } catch (_) {}
 
@@ -281,8 +300,11 @@ export async function POST(
               ...(lead as any).customFields,
               coupon: {
                 code: couponCode,
-                type: 'DISCOUNT',
+                type: offerSnapshot?.type || (offerSnapshot?.amount ? 'AMOUNT_OFF' : (offerSnapshot?.percent ? 'PERCENT_OFF' : 'FREE')),
+                percent: offerSnapshot?.percent ?? null,
                 amount: offerSnapshot?.amount ?? null,
+                currency: offerSnapshot?.currency ?? null,
+                display: offerSnapshot?.display ?? null,
                 createdAt: new Date().toISOString(),
               },
             },

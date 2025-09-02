@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import { createResetPasswordEmail } from "@/email-templates/auth/reset-password";
+import { getDoctorBySlug, getClinicBrandingByDoctorId } from "@/lib/tenant-slug";
 
 if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD || !process.env.SMTP_FROM) {
   throw new Error('Missing SMTP configuration environment variables');
@@ -23,7 +24,7 @@ const transporter = nodemailer.createTransport({
 
 export async function POST(req: Request) {
   try {
-    const { email } = await req.json();
+    const { email, slug } = await req.json();
 
     if (!email) {
       return NextResponse.json(
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
       );
     }
 
-    console.log('Looking up user:', email);
+    console.log('Looking up user:', email, slug ? `(slug: ${slug})` : '');
     // Check if user exists
     const user = await prisma.user.findUnique({
       where: { email },
@@ -85,13 +86,35 @@ export async function POST(req: Request) {
                    process.env.NEXTAUTH_URL || 
                    'http://localhost:3000';
     
-    const resetUrl = `${baseUrl}/auth/reset-password?token=${resetToken}`;
+    let resetUrl = `${baseUrl}/auth/reset-password?token=${resetToken}`;
+    let clinicName = 'Your Healthcare Provider';
+    let clinicLogo: string | undefined;
+
+    // If a tenant slug was provided, try to scope URL and branding
+    if (typeof slug === 'string' && slug.trim().length > 0) {
+      const doctor = await getDoctorBySlug(slug.trim());
+      if (doctor) {
+        // Verify patient relationship
+        const rel = await prisma.doctorPatientRelationship.findFirst({
+          where: { doctorId: doctor.id, patientId: user.id, isActive: true },
+          select: { id: true },
+        });
+        if (rel) {
+          resetUrl = `${baseUrl}/${slug.trim()}/reset-password?token=${resetToken}`;
+          const branding = await getClinicBrandingByDoctorId(doctor.id);
+          clinicName = branding.clinicName || clinicName;
+          clinicLogo = branding.clinicLogo || clinicLogo;
+        }
+      }
+    }
     console.log('Reset URL generated:', resetUrl);
 
-    // Use type assertion to access clinic_memberships property
+    // If no tenant branding resolved, fallback to user's first active clinic membership
     const clinicMemberships = (user as any).clinic_memberships || [];
-    const clinicName = clinicMemberships[0]?.clinic?.name || 'Your Healthcare Provider';
-    const clinicLogo = clinicMemberships[0]?.clinic?.logo;
+    if (!clinicLogo && clinicName === 'Your Healthcare Provider') {
+      clinicName = clinicMemberships[0]?.clinic?.name || clinicName;
+      clinicLogo = clinicMemberships[0]?.clinic?.logo || clinicLogo;
+    }
 
     console.log('Attempting to send email');
     try {
@@ -103,7 +126,8 @@ export async function POST(req: Request) {
         resetUrl,
         expiryHours: 1, // Token expires in 1 hour
         clinicName,
-        clinicLogo
+        clinicLogo: clinicLogo || undefined,
+        doctorName: undefined,
       });
 
       await transporter.sendMail({

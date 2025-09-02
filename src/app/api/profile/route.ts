@@ -19,6 +19,8 @@ export async function GET(req: Request) {
         image: true,
         role: true,
         google_review_link: true,
+        public_cover_image_url: true,
+        public_page_template: true,
         is_active: true,
         created_at: true,
         updated_at: true,
@@ -68,7 +70,7 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const { name, image, google_review_link, doctor_slug } = body;
+    const { name, image, google_review_link, doctor_slug, public_cover_image_url, public_page_template } = body;
 
     // Get current user to check role
     const currentUser = await prisma.user.findUnique({
@@ -86,6 +88,21 @@ export async function PUT(req: Request) {
     // Only doctors can update google_review_link
     if (currentUser.role === 'DOCTOR' && google_review_link !== undefined) {
       updateData.google_review_link = google_review_link;
+    }
+
+    // Only doctors can update public cover image and template
+    if (currentUser.role === 'DOCTOR') {
+      if (typeof public_cover_image_url === 'string' || public_cover_image_url === null) {
+        updateData.public_cover_image_url = public_cover_image_url || null;
+      }
+      if (typeof public_page_template === 'string') {
+        const allowed = ['DEFAULT', 'MINIMAL', 'HERO_CENTER', 'HERO_LEFT'];
+        const upper = public_page_template.toUpperCase();
+        if (!allowed.includes(upper)) {
+          return NextResponse.json({ error: 'Invalid template' }, { status: 400 });
+        }
+        updateData.public_page_template = upper as any;
+      }
     }
 
     // Allow doctors to update doctor_slug with validation

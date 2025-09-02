@@ -70,11 +70,11 @@ export default function DoctorForgotPasswordPage() {
         // If endpoint fails, we continue to standard flow as a fallback
       } catch {}
 
-      // 2) Proceed with standard forgot password request
+      // 2) Proceed with standard forgot password request (pass slug for tenant context)
       const response = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, slug }),
       });
 
       const data = await response.json();

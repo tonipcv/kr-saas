@@ -21,11 +21,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Get doctor's patients through relationships
+    // Get doctor's patients through relationships with PatientProfile scoped to this doctor
     const relationships = await prisma.doctorPatientRelationship.findMany({
       where: {
         doctorId: doctor.id,
-        isActive: true
+        isActive: true,
       },
       include: {
         patient: {
@@ -44,53 +44,70 @@ export async function GET(request: NextRequest) {
             medications: true,
             notes: true,
             is_active: true,
+            // Active prescriptions for context
             patient_prescriptions: {
               where: { status: 'ACTIVE' },
               select: {
                 id: true,
                 protocol: {
-                  select: {
-                    id: true,
-                    name: true,
-                    duration: true
-                  }
+                  select: { id: true, name: true, duration: true },
                 },
                 planned_start_date: true,
                 planned_end_date: true,
-                status: true
-              }
-            }
-          }
-        }
+                status: true,
+              },
+            },
+            // Bring tenant-scoped profile (0..1) for this doctor
+            patient_profiles: {
+              where: { doctorId: doctor.id },
+              take: 1,
+              select: {
+                name: true,
+                phone: true,
+                address: true,
+                emergency_contact: true,
+                emergency_phone: true,
+                medical_history: true,
+                allergies: true,
+                medications: true,
+                notes: true,
+                isActive: true,
+              },
+            },
+          },
+        },
       },
-      orderBy: {
-        createdAt: 'desc'
-      }
+      orderBy: { createdAt: 'desc' },
     });
 
     // Transform to legacy format
-    const patients = relationships.map(rel => ({
-      id: rel.patient.id,
-      name: rel.patient.name,
-      email: rel.patient.email,
-      phone: rel.patient.phone,
-      birthDate: rel.patient.birth_date,
-      gender: rel.patient.gender,
-      address: rel.patient.address,
-      emergencyContact: rel.patient.emergency_contact,
-      emergencyPhone: rel.patient.emergency_phone,
-      medicalHistory: rel.patient.medical_history,
-      allergies: rel.patient.allergies,
-      medications: rel.patient.medications,
-      notes: rel.patient.notes,
-      assignedProtocols: rel.patient.patient_prescriptions?.map(p => ({
-        id: p.id,
-        protocol: p.protocol,
-        startDate: p.planned_start_date,
-        endDate: p.planned_end_date,
-        isActive: p.status === 'ACTIVE'
-      })) || []
-    }));
+    const patients = relationships.map((rel) => {
+      const profile = rel.patient.patient_profiles?.[0];
+      return {
+        id: rel.patient.id,
+        name: profile?.name ?? rel.patient.name,
+        email: rel.patient.email,
+        phone: profile?.phone ?? rel.patient.phone,
+        birthDate: rel.patient.birth_date,
+        gender: rel.patient.gender,
+        address: profile?.address ?? rel.patient.address,
+        emergencyContact: profile?.emergency_contact ?? rel.patient.emergency_contact,
+        emergencyPhone: profile?.emergency_phone ?? rel.patient.emergency_phone,
+        medicalHistory: profile?.medical_history ?? rel.patient.medical_history,
+        allergies: profile?.allergies ?? rel.patient.allergies,
+        medications: profile?.medications ?? rel.patient.medications,
+        notes: profile?.notes ?? rel.patient.notes,
+        isActive: profile?.isActive ?? rel.patient.is_active,
+        assignedProtocols:
+          rel.patient.patient_prescriptions?.map((p) => ({
+            id: p.id,
+            protocol: p.protocol,
+            startDate: p.planned_start_date,
+            endDate: p.planned_end_date,
+            isActive: p.status === 'ACTIVE',
+          })) || [],
+      };
+    });
 
     return NextResponse.json(patients);
 
@@ -148,19 +165,19 @@ export async function POST(request: NextRequest) {
     // Check if email already exists
     const existingUser = await prisma.user.findUnique({
       where: { email },
-      select: { id: true }
+      select: { id: true, name: true, email: true }
     });
 
     if (existingUser) {
-      // If user exists, link or reactivate relationship instead of blocking
+      // If user exists, link/reactivate and upsert a PatientProfile scoped to this doctor
       const existingRel = await prisma.doctorPatientRelationship.findUnique({
         where: {
           patientId_doctorId: {
             patientId: existingUser.id,
-            doctorId: doctor.id
-          }
+            doctorId: doctor.id,
+          },
         },
-        select: { id: true, isActive: true }
+        select: { id: true, isActive: true },
       });
 
       if (!existingRel) {
@@ -169,36 +186,55 @@ export async function POST(request: NextRequest) {
             doctorId: doctor.id,
             patientId: existingUser.id,
             isActive: true,
-            isPrimary: false
-          }
+            isPrimary: false,
+          },
         });
-
-        return NextResponse.json({
-          id: existingUser.id,
-          name,
-          email,
-          phone
-        });
-      }
-
-      if (!existingRel.isActive) {
+      } else if (!existingRel.isActive) {
         await prisma.doctorPatientRelationship.update({
           where: { id: existingRel.id },
-          data: { isActive: true }
-        });
-
-        return NextResponse.json({
-          id: existingUser.id,
-          name,
-          email,
-          phone
+          data: { isActive: true },
         });
       }
 
-      return NextResponse.json(
-        { error: 'This email is already linked to this doctor' },
-        { status: 409 }
-      );
+      // Upsert the per-doctor profile with the provided fields
+      await prisma.patientProfile.upsert({
+        where: {
+          doctorId_userId: { doctorId: doctor.id, userId: existingUser.id },
+        },
+        create: {
+          doctorId: doctor.id,
+          userId: existingUser.id,
+          name,
+          phone,
+          address,
+          emergency_contact: emergencyContact,
+          emergency_phone: emergencyPhone,
+          medical_history: medicalHistory,
+          allergies,
+          medications,
+          notes,
+          isActive: true,
+        },
+        update: {
+          name,
+          phone,
+          address,
+          emergency_contact: emergencyContact,
+          emergency_phone: emergencyPhone,
+          medical_history: medicalHistory,
+          allergies,
+          medications,
+          notes,
+          isActive: true,
+        },
+      });
+
+      return NextResponse.json({
+        id: existingUser.id,
+        name,
+        email: existingUser.email,
+        phone,
+      });
     }
 
     // Create patient and relationship in a transaction
@@ -234,14 +270,32 @@ export async function POST(request: NextRequest) {
         }
       });
 
+      // Create the per-doctor PatientProfile
+      await tx.patientProfile.create({
+        data: {
+          doctorId: doctor.id,
+          userId: patient.id,
+          name,
+          phone,
+          address,
+          emergency_contact: emergencyContact,
+          emergency_phone: emergencyPhone,
+          medical_history: medicalHistory,
+          allergies,
+          medications,
+          notes,
+          isActive: true,
+        },
+      });
+
       return patient;
     });
 
     return NextResponse.json({
       id: result.id,
-      name: result.name,
+      name: name,
       email: result.email,
-      phone: result.phone
+      phone: phone
     });
 
   } catch (error) {
@@ -251,4 +305,5 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-} 
+}
+ 

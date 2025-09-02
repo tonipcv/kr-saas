@@ -118,7 +118,8 @@ export default function ProductsGrid({
           if (typeof selected.price === 'number') params.set('price', String(selected.price));
           if (coupon) params.set('coupon', coupon);
           if (discountPercent != null) params.set('discountPercent', String(discountPercent));
-          if (data?.referralCode) params.set('couponCode', String(data.referralCode));
+          // Only expose couponCode externally if there is a valid campaign coupon
+          if (coupon && data?.referralCode) params.set('couponCode', String(data.referralCode));
           // merge params into target
           params.forEach((v, k) => target.searchParams.set(k, v));
 
@@ -203,6 +204,37 @@ export default function ProductsGrid({
       }
     } catch {}
   }, []);
+
+  // Validate coupon against campaigns and coupon templates; if invalid, clear it
+  useEffect(() => {
+    let cancelled = false;
+    async function validateCoupon() {
+      const key = (coupon || '').trim();
+      if (!key) return;
+      try {
+        const qs1 = new URLSearchParams({ slug });
+        qs1.append('cupom', key);
+        const [res1, res2] = await Promise.all([
+          fetch(`/api/campaigns/resolve?${qs1.toString()}`, { cache: 'no-store' }),
+          fetch(`/api/coupon-templates/resolve?${qs1.toString()}`, { cache: 'no-store' }),
+        ]);
+        const j1 = res1.ok ? await res1.json() : { data: [] };
+        const j2 = res2.ok ? await res2.json() : { data: [] };
+        const hasAny = Array.isArray(j1?.data) && j1.data.length > 0
+          ? true
+          : (Array.isArray(j2?.data) && j2.data.length > 0);
+        if (!cancelled && !hasAny) {
+          // Invalid coupon: behave like pure slug
+          setCoupon(null);
+          setDiscountPercent(null);
+        }
+      } catch {
+        // On failure, keep current behavior (don’t block)
+      }
+    }
+    validateCoupon();
+    return () => { cancelled = true; };
+  }, [coupon, slug]);
 
   return (
     <>
@@ -348,7 +380,7 @@ export default function ProductsGrid({
                     ? 'Parabéns, estamos redirecionando você para um dos nossos atendentes...'
                     : 'Em breve um dos nossos atendentes entrará em contato com você!'}
                 </p>
-                {leadReferralCode ? (
+                {leadReferralCode && coupon ? (
                   <div className="text-xs text-gray-600">
                     Seu CUPOM é: <span className="font-semibold text-gray-800">{leadReferralCode}</span>
                   </div>

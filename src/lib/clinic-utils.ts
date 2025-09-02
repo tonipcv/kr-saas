@@ -182,7 +182,7 @@ export async function canCreateProtocol(userId: string): Promise<boolean> {
   const clinic = await getUserClinic(userId);
   if (!clinic) return false;
   const memberIds = clinic.members.map(m => m.user.id);
-  const protocolCount = await prisma.protocol.count({ where: { doctorId: { in: memberIds } } });
+  const protocolCount = await prisma.protocol.count({ where: { doctor_id: { in: memberIds } } });
   const maxProtocols = status.limits.maxProtocols ?? 0;
   return protocolCount < maxProtocols;
 }
@@ -443,7 +443,7 @@ export async function getClinicStats(clinicId: string) {
 
   const [protocolCount, patientCount, courseCount] = await Promise.all([
     prisma.protocol.count({
-      where: { doctorId: { in: memberIds } }
+      where: { doctor_id: { in: memberIds } }
     }),
     prisma.user.count({
       where: {

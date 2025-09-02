@@ -357,7 +357,7 @@ export default function ClinicDashboard() {
             </div>
 
             {/* Main Content Skeleton */}
-            <div className="grid lg:grid-cols-3 gap-8">
+            <div className="grid lg:grid-cols-3 gap-4">
               {/* Team Section Skeleton - 2 columns */}
               <div className="lg:col-span-2 space-y-6">
                 <div className="flex items-center justify-between">
@@ -395,7 +395,7 @@ export default function ClinicDashboard() {
               </div>
 
               {/* Sidebar Skeleton - 1 column */}
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {/* Subscription Card Skeleton */}
                 <div className="bg-white border border-gray-200 shadow-lg rounded-2xl p-6">
                   <div className="flex items-center justify-between mb-6">
@@ -415,22 +415,10 @@ export default function ClinicDashboard() {
                         </div>
                       ))}
                     </div>
-                    <div className="h-12 bg-gray-200 rounded-xl animate-pulse"></div>
-                  </div>
-                </div>
-
-                {/* Quick Actions Skeleton */}
-                <div className="bg-white border border-gray-200 shadow-lg rounded-2xl p-6">
-                  <div className="h-6 bg-gray-200 rounded w-32 mb-4 animate-pulse"></div>
-                  <div className="space-y-3">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="h-12 bg-gray-50 border border-gray-200 rounded-xl animate-pulse"></div>
-                    ))}
                   </div>
                 </div>
               </div>
             </div>
-
           </div>
         </div>
       </div>
@@ -464,26 +452,26 @@ export default function ClinicDashboard() {
   return (
     <div className="min-h-screen bg-white">
       <div className="lg:ml-64">
-        <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
+        <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 bg-gray-50">
           
           {/* Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-            <div className="space-y-2">
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">{clinic.name}</h1>
-              <p className="text-gray-600 font-medium">{clinic.description || 'No description available'}</p>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+            <div className="space-y-1">
+              <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">{clinic.name}</h1>
+              <p className="text-sm text-gray-600">{clinic.description || 'No description available'}</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <Badge 
                 variant={clinic.subscription?.status === 'ACTIVE' ? 'default' : 'secondary'}
-                className={clinic.subscription?.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700 border-emerald-200 font-semibold px-3 py-1 rounded-xl' : 'font-semibold px-3 py-1 rounded-xl'}
+                className={clinic.subscription?.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700 border-emerald-200 font-semibold px-2 py-0.5 rounded-full text-[11px]' : 'font-semibold px-2 py-0.5 rounded-full text-[11px]'}
               >
                 {clinic.subscription?.status || 'No Plan'}
               </Badge>
               {isAdmin && (
                 <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-10 px-4 font-semibold"
+                  variant="outline"
+                  size="sm"
+                  className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-full h-8 px-3 text-xs font-medium"
                   onClick={() => setShowSettingsModal(true)}
                 >
                   <Settings className="h-4 w-4 mr-2" />
@@ -493,144 +481,91 @@ export default function ClinicDashboard() {
             </div>
           </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-[#5154e7]/10 rounded-xl">
-                    <Users className="h-6 w-6 text-[#5154e7]" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-gray-500 font-semibold">Doctors</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats?.totalDoctors || 0}</p>
-                    <p className="text-xs text-gray-500 font-medium">
-                      of {clinic.subscription?.maxDoctors || 1} allowed
-                    </p>
-                  </div>
+          {/* Stats (match dashboard KPI style: simple, no colored icon blocks) */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-2">
+            {[
+              { title: 'Doctors', value: stats?.totalDoctors || 0, note: `of ${clinic.subscription?.maxDoctors ?? 1} allowed` },
+              { title: 'Clients', value: stats?.totalPatients || 0, note: `of ${clinic.subscription?.plan.maxPatients ?? 0} allowed` },
+              { title: 'Protocols', value: stats?.totalProtocols || 0, note: `of ${clinic.subscription?.plan.maxProtocols ?? 0} allowed` },
+              { title: 'Courses', value: stats?.totalCourses || 0, note: `of ${clinic.subscription?.plan.maxCourses ?? 0} allowed` },
+            ].map((kpi) => (
+              <div key={kpi.title} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-gray-500">{kpi.title}</span>
+                  <span className="text-[10px] text-gray-400">{kpi.note}</span>
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-emerald-100 rounded-xl">
-                    <Users className="h-6 w-6 text-emerald-600" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-gray-500 font-semibold">Clients</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats?.totalPatients || 0}</p>
-                    <p className="text-xs text-gray-500 font-medium">
-                      of {clinic.subscription?.plan.maxPatients || 0} allowed
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-teal-100 rounded-xl">
-                    <FileText className="h-6 w-6 text-teal-600" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-gray-500 font-semibold">Protocols</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats?.totalProtocols || 0}</p>
-                    <p className="text-xs text-gray-500 font-medium">
-                      of {clinic.subscription?.plan.maxProtocols || 0} allowed
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-orange-100 rounded-xl">
-                    <BarChart3 className="h-6 w-6 text-orange-600" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-gray-500 font-semibold">Courses</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats?.totalCourses || 0}</p>
-                    <p className="text-xs text-gray-500 font-medium">
-                      of {clinic.subscription?.plan.maxCourses || 0} allowed
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{kpi.value as any}</div>
+              </div>
+            ))}
           </div>
 
           {/* Main Content Grid */}
-          <div className="grid lg:grid-cols-3 gap-8">
+          <div className="grid lg:grid-cols-3 gap-4">
             
             {/* Team Section - Takes 2 columns */}
             <div className="lg:col-span-2 space-y-6">
               
-              {/* Team Header */}
+              {/* Team Header (compact like dashboard) */}
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Team</h2>
-                  <p className="text-gray-600 mt-1 font-medium">
-                    {clinic.members.length} {clinic.members.length === 1 ? 'member' : 'members'} • 
+                  <h2 className="text-sm font-semibold text-gray-900">Team</h2>
+                  <p className="text-xs text-gray-600 mt-1 font-medium">
+                    {clinic.members.length} {clinic.members.length === 1 ? 'member' : 'members'} •
                     {clinic.subscription?.maxDoctors ? ` ${clinic.subscription.maxDoctors - clinic.members.length} spots available` : ' No limit'}
                   </p>
                 </div>
                 {isAdmin && (
                   <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
                     <DialogTrigger asChild>
-                      <Button size="sm" className="bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl h-10 px-4 font-semibold">
+                      <Button size="sm" className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-full h-8 px-3 text-xs font-medium shadow-sm">
                         <UserPlus className="h-4 w-4 mr-2" />
                         Invite
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="bg-white border-gray-200 rounded-2xl">
-                      <DialogHeader>
-                        <DialogTitle className="text-gray-900 font-bold">Invite Doctor</DialogTitle>
-                        <DialogDescription className="text-gray-600 font-medium">
+                    <DialogContent className="bg-white border border-gray-200 rounded-2xl p-0">
+                      <DialogHeader className="px-4 py-3">
+                        <DialogTitle className="text-sm font-semibold text-gray-900">Invite Doctor</DialogTitle>
+                        <DialogDescription className="text-[11px] text-gray-600">
                           Add an existing doctor to your team. The doctor must already be registered in the system.
                         </DialogDescription>
                       </DialogHeader>
-                      <div className="space-y-4">
+                      <div className="space-y-3 px-4 pb-4 pt-0">
                         <div>
-                          <Label htmlFor="email" className="text-gray-700 font-semibold">Doctor's Email</Label>
+                          <Label htmlFor="email" className="text-gray-700 font-medium">Doctor's Email</Label>
                           <Input
                             id="email"
                             type="email"
                             placeholder="doctor@example.com"
                             value={newMemberEmail}
                             onChange={(e) => setNewMemberEmail(e.target.value)}
-                            className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 placeholder:text-gray-500 rounded-xl h-12 mt-2"
+                            className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 placeholder:text-gray-500 rounded-lg h-9 mt-2"
                           />
                         </div>
                         <div>
-                          <Label htmlFor="role" className="text-gray-700 font-semibold">Role</Label>
+                          <Label htmlFor="role" className="text-gray-700 font-medium">Role</Label>
                           <select
                             id="role"
                             value={newMemberRole}
                             onChange={(e) => setNewMemberRole(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-gray-900 focus:border-[#5154e7] focus:outline-none focus:ring-1 focus:ring-[#5154e7] mt-2 h-12"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:border-[#5154e7] focus:outline-none focus:ring-1 focus:ring-[#5154e7] mt-2 h-9"
                           >
                             <option value="DOCTOR">Doctor</option>
                             <option value="ADMIN">Administrator</option>
                             <option value="VIEWER">Viewer</option>
                           </select>
                         </div>
-                        <div className="flex gap-3 pt-4">
+                        <div className="flex gap-2 pt-3">
                           <Button 
                             onClick={addMember} 
                             disabled={addingMember || !newMemberEmail.trim()}
-                            className="flex-1 bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl h-12 font-semibold"
+                            className="flex-1 bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-full h-8 text-xs font-medium shadow-sm"
                           >
                             {addingMember ? 'Sending invite...' : 'Send Invite'}
                           </Button>
                           <Button 
                             variant="outline"
                             onClick={() => setShowInviteDialog(false)}
-                            className="border-gray-300 text-gray-700 hover:bg-gray-50 bg-white rounded-xl h-12 font-semibold"
+                            className="border-gray-300 text-gray-800 hover:bg-gray-50 bg-white rounded-full h-8 text-xs font-medium"
                           >
                             Cancel
                           </Button>
@@ -641,57 +576,45 @@ export default function ClinicDashboard() {
                 )}
               </div>
 
-              {/* Team Members */}
-              <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
+              {/* Team Members (compact list like dashboard) */}
+              <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
                 <CardContent className="p-0">
-                  <div className="divide-y divide-gray-100">
-                    {clinic.members.map((member, index) => (
-                      <div key={member.id} className="p-6 hover:bg-gray-50 transition-colors">
+                  <div className="divide-y divide-gray-200">
+                    {clinic.members.map((member) => (
+                      <div key={member.id} className="py-3 px-2 hover:bg-gray-50 transition-colors">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
+                          <div className="flex items-center gap-3 min-w-0">
                             {/* Avatar */}
-                            <div className="w-12 h-12 bg-gradient-to-br from-[#5154e7] to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-sm">
-                              {member.user.name ? member.user.name.split(' ').map(n => n[0]).join('').toUpperCase() : member.user.email?.[0].toUpperCase()}
+                            <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center text-[11px] font-semibold text-gray-600">
+                              {member.user.name ? member.user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2) : member.user.email?.[0].toUpperCase()}
                             </div>
-                            
                             {/* User Info */}
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <h3 className="font-bold text-gray-900">
-                                  {member.user.name || member.user.email?.split('@')[0]}
-                                </h3>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate flex items-center gap-1">
+                                {member.user.name || member.user.email?.split('@')[0]}
                                 {member.user.id === clinic.ownerId && (
-                                  <Crown className="h-4 w-4 text-yellow-600" />
+                                  <Crown className="h-4 w-4 text-yellow-600 shrink-0" />
                                 )}
-                              </div>
-                              <p className="text-sm text-gray-600 font-medium">{member.user.email}</p>
+                              </p>
+                              <p className="text-xs text-gray-500 truncate">{member.user.email}</p>
                             </div>
                           </div>
-
                           {/* Role and Actions */}
-                          <div className="flex items-center space-x-4">
-                            <div className="text-right">
-                              <Badge 
-                                variant="outline"
-                                className={
-                                  member.role === 'ADMIN' ? 'bg-[#5154e7] text-white border-[#5154e7] font-semibold rounded-xl' :
-                                  member.role === 'DOCTOR' ? 'bg-emerald-100 text-emerald-700 border-emerald-200 font-semibold rounded-xl' :
-                                  'bg-gray-100 text-gray-700 border-gray-200 font-semibold rounded-xl'
-                                }
-                              >
-                                {member.role === 'ADMIN' ? 'Admin' : 
-                                 member.role === 'DOCTOR' ? 'Doctor' : 'Viewer'}
-                              </Badge>
-                              <p className="text-xs text-gray-500 mt-1 font-medium">
-                                Since {new Date(member.joinedAt).toLocaleDateString('en-US', { 
-                                  day: '2-digit', 
-                                  month: 'short' 
-                                })}
-                              </p>
-                            </div>
-                            
+                          <div className="flex items-center gap-3 shrink-0">
+                            <Badge
+                              variant="outline"
+                              className={
+                                member.role === 'ADMIN'
+                                  ? 'bg-gray-900 text-white border-gray-900 font-medium rounded-full px-2 py-0.5 text-[11px]'
+                                  : member.role === 'DOCTOR'
+                                  ? 'bg-emerald-100 text-emerald-700 border-emerald-200 font-medium rounded-full px-2 py-0.5 text-[11px]'
+                                  : 'bg-gray-100 text-gray-700 border-gray-200 font-medium rounded-full px-2 py-0.5 text-[11px]'
+                              }
+                            >
+                              {member.role === 'ADMIN' ? 'Admin' : member.role === 'DOCTOR' ? 'Doctor' : 'Viewer'}
+                            </Badge>
                             {isAdmin && member.user.id !== clinic.ownerId && (
-                              <Button variant="ghost" size="sm" className="text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl">
+                              <Button variant="ghost" size="sm" className="h-8 px-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full">
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             )}
@@ -707,58 +630,46 @@ export default function ClinicDashboard() {
             {/* Sidebar - Takes 1 column */}
             <div className="space-y-6">
               
-              {/* Subscription Card */}
-              <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                <CardHeader className="pb-4 p-6">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-xl font-bold text-gray-900">Current Plan</CardTitle>
-                    <Badge 
-                      variant={clinic.subscription?.status === 'ACTIVE' ? 'default' : 'secondary'}
-                      className={clinic.subscription?.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700 border-emerald-200 font-semibold rounded-xl' : 'font-semibold rounded-xl'}
-                    >
-                      {clinic.subscription?.status || 'Inactive'}
-                    </Badge>
-                  </div>
+              {/* Subscription Card (compact titles and badges) */}
+              <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
+                <CardHeader className="flex flex-row items-center justify-between px-4 py-3">
+                  <CardTitle className="text-sm font-semibold text-gray-900">Current Plan</CardTitle>
+                  <Badge 
+                    variant={clinic.subscription?.status === 'ACTIVE' ? 'default' : 'secondary'}
+                    className={clinic.subscription?.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700 border-emerald-200 font-medium rounded-full px-2 py-0.5 text-[11px]' : 'font-medium rounded-full px-2 py-0.5 text-[11px]'}
+                  >
+                    {clinic.subscription?.status || 'Inactive'}
+                  </Badge>
                 </CardHeader>
-                <CardContent className="space-y-6 px-6 pb-6">
+                <CardContent className="space-y-4 px-4 pb-4 pt-0">
                   {clinic.subscription ? (
                     <>
                       {/* Plan Name and Price */}
-                      <div className="text-center py-6 bg-gradient-to-br from-[#5154e7]/10 to-purple-50 rounded-2xl border border-[#5154e7]/20">
-                        <h3 className="text-2xl font-bold text-gray-900">{clinic.subscription.plan.name}</h3>
-                        <p className="text-sm text-gray-600 mt-2 font-medium">
+                      <div className="text-center py-4 bg-gray-50 rounded-xl border border-gray-200">
+                        <h3 className="text-sm font-semibold text-gray-900">{clinic.subscription.plan.name}</h3>
+                        <p className="text-xs text-gray-600 mt-1 font-medium">
                           Renews on {clinic.subscription.endDate 
                             ? new Date(clinic.subscription.endDate).toLocaleDateString('en-US', { 
-                                day: '2-digit', 
-                                month: 'long' 
-                              })
+                              day: '2-digit', 
+                              month: 'long' 
+                            })
                             : 'No expiration'
                           }
                         </p>
                       </div>
 
                       {/* Quick Stats */}
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="text-center p-4 bg-gray-50 rounded-xl">
-                          <div className="text-xl font-bold text-gray-900">{clinic.subscription.maxDoctors}</div>
-                          <div className="text-xs text-gray-600 font-semibold">Doctors</div>
-                        </div>
-                        <div className="text-center p-4 bg-gray-50 rounded-xl">
-                          <div className="text-xl font-bold text-gray-900">{clinic.subscription.plan.maxPatients}</div>
-                          <div className="text-xs text-gray-600 font-semibold">Clients</div>
-                        </div>
-                        <div className="text-center p-4 bg-gray-50 rounded-xl">
-                          <div className="text-xl font-bold text-gray-900">{clinic.subscription.plan.maxProtocols}</div>
-                          <div className="text-xs text-gray-600 font-semibold">Protocols</div>
-                        </div>
-                        <div className="text-center p-4 bg-gray-50 rounded-xl">
-                          <div className="text-xl font-bold text-gray-900">{clinic.subscription.plan.maxCourses}</div>
-                          <div className="text-xs text-gray-600 font-semibold">Courses</div>
-                        </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[{label:'Doctors',value:clinic.subscription.maxDoctors},{label:'Clients',value:clinic.subscription.plan.maxPatients},{label:'Protocols',value:clinic.subscription.plan.maxProtocols},{label:'Courses',value:clinic.subscription.plan.maxCourses}].map((m) => (
+                          <div key={m.label} className="px-4 py-3 border border-gray-200 rounded-xl bg-white shadow-sm text-center">
+                            <p className="text-[11px] text-gray-600 font-medium">{m.label}</p>
+                            <p className="text-[22px] leading-7 font-semibold text-gray-900">{m.value}</p>
+                          </div>
+                        ))}
                       </div>
 
                       {isAdmin && (
-                        <Button className="w-full bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl h-12 font-semibold" asChild>
+                        <Button className="w-full h-8 rounded-full text-xs font-medium bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm" asChild>
                           <Link href="/clinic/subscription">
                             <CreditCard className="h-4 w-4 mr-2" />
                             Manage Plan
@@ -767,13 +678,13 @@ export default function ClinicDashboard() {
                       )}
                     </>
                   ) : (
-                    <div className="text-center py-8">
-                      <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                        <CreditCard className="h-8 w-8 text-gray-400" />
+                    <div className="text-center py-6">
+                      <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                        <CreditCard className="h-6 w-6 text-gray-400" />
                       </div>
-                      <p className="text-gray-600 mb-6 font-medium">No active plan</p>
+                      <p className="text-sm text-gray-600 mb-4 font-medium">No active plan</p>
                       {isAdmin && (
-                        <Button className="bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl h-12 font-semibold" asChild>
+                        <Button className="h-8 rounded-full text-xs font-medium bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm" asChild>
                           <Link href="/clinic/subscription">
                             <Plus className="h-4 w-4 mr-2" />
                             Choose Plan
@@ -785,33 +696,31 @@ export default function ClinicDashboard() {
                 </CardContent>
               </Card>
 
-              {/* Quick Actions */}
-              <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                <CardHeader className="pb-4 p-6">
-                  <CardTitle className="text-xl font-bold text-gray-900">Quick Actions</CardTitle>
+              {/* Quick Actions (compact outline buttons like dashboard) */}
+              <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
+                <CardHeader className="flex flex-row items-center justify-between px-4 py-3">
+                  <CardTitle className="text-sm font-semibold text-gray-900">Quick Actions</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3 px-6 pb-6">
-                  <Button variant="outline" className="w-full justify-start border-gray-200 text-gray-700 hover:bg-gray-50 bg-white rounded-xl h-12 font-semibold" asChild>
+                <CardContent className="space-y-2 px-4 pb-4 pt-0">
+                  <Button variant="outline" className="w-full justify-start border-gray-300 text-gray-800 hover:bg-gray-50 bg-white rounded-full h-8 text-xs font-medium" asChild>
                     <Link href="/doctor/dashboard">
-                      <BarChart3 className="h-4 w-4 mr-3" />
+                      <BarChart3 className="h-4 w-4 mr-2" />
                       View Dashboard
                     </Link>
                   </Button>
-                  <Button variant="outline" className="w-full justify-start border-gray-200 text-gray-700 hover:bg-gray-50 bg-white rounded-xl h-12 font-semibold" asChild>
+                  <Button variant="outline" className="w-full justify-start border-gray-300 text-gray-800 hover:bg-gray-50 bg-white rounded-full h-8 text-xs font-medium" asChild>
                     <Link href="/patient/protocols">
-                      <Button className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold px-6 py-3 rounded-xl shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105">
-                        <CheckCircle className="h-5 w-5 mr-2" />
-                        Ver Protocolos
-                      </Button>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      View Protocols
                     </Link>
                   </Button>
                   {isAdmin && (
                     <Button 
                       variant="outline" 
-                      className="w-full justify-start border-gray-200 text-gray-700 hover:bg-gray-50 bg-white rounded-xl h-12 font-semibold"
+                      className="w-full justify-start border-gray-300 text-gray-800 hover:bg-gray-50 bg-white rounded-full h-8 text-xs font-medium"
                       onClick={() => setShowSettingsModal(true)}
                     >
-                      <Settings className="h-4 w-4 mr-3" />
+                      <Settings className="h-4 w-4 mr-2" />
                       Settings
                     </Button>
                   )}
@@ -822,43 +731,43 @@ export default function ClinicDashboard() {
 
           {/* Settings Modal */}
           <Dialog open={showSettingsModal} onOpenChange={setShowSettingsModal}>
-            <DialogContent className="bg-white border-gray-200 rounded-2xl">
-              <DialogHeader>
-                <DialogTitle className="text-gray-900 font-bold">Clinic Settings</DialogTitle>
-                <DialogDescription className="text-gray-600 font-medium">
+            <DialogContent className="bg-white border border-gray-200 rounded-2xl p-0">
+              <DialogHeader className="px-4 py-3">
+                <DialogTitle className="text-sm font-semibold text-gray-900">Clinic Settings</DialogTitle>
+                <DialogDescription className="text-[11px] text-gray-600">
                   Manage your clinic information
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
+              <div className="space-y-3 px-4 pb-4 pt-0">
                 <div>
-                  <Label htmlFor="clinic-name-edit" className="text-gray-700 font-semibold">Clinic Name</Label>
+                  <Label htmlFor="clinic-name-edit" className="text-gray-700 font-medium">Clinic Name</Label>
                   <Input 
                     id="clinic-name-edit" 
                     value={editingClinicName} 
                     onChange={(e) => setEditingClinicName(e.target.value)}
                     disabled={!isAdmin}
-                    className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 placeholder:text-gray-500 rounded-xl h-12 mt-2"
+                    className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 placeholder:text-gray-500 rounded-lg h-9 mt-2"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="clinic-description-edit" className="text-gray-700 font-semibold">Description</Label>
+                  <Label htmlFor="clinic-description-edit" className="text-gray-700 font-medium">Description</Label>
                   <Input 
                     id="clinic-description-edit" 
                     value={editingClinicDescription} 
                     onChange={(e) => setEditingClinicDescription(e.target.value)}
                     disabled={!isAdmin}
-                    className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 placeholder:text-gray-500 rounded-xl h-12 mt-2"
+                    className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 placeholder:text-gray-500 rounded-lg h-9 mt-2"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="clinic-slug-display" className="text-gray-700 font-semibold">Clinic URL</Label>
+                  <Label htmlFor="clinic-slug-display" className="text-gray-700 font-medium">Clinic URL</Label>
                   <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-xl">
                     <div className="flex items-center justify-between">
-                      <p className="text-sm text-gray-600 font-medium flex-1">
+                      <p className="text-xs text-gray-600 font-medium flex-1">
                         {clinic?.slug ? (
                           <>
                             <span className="text-gray-500">{baseUrl}/login/</span>
-                            <span className="font-bold text-gray-900">{clinic.slug}</span>
+                            <span className="font-semibold text-gray-900">{clinic.slug}</span>
                           </>
                         ) : (
                           <span className="text-gray-400">No URL configured</span>
@@ -869,19 +778,19 @@ export default function ClinicDashboard() {
                           variant="ghost"
                           size="sm"
                           onClick={copyClinicUrl}
-                          className="ml-2 h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-200"
+                          className="ml-2 h-8 w-8 p-0 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-full"
                         >
                           <Copy className="h-4 w-4" />
                         </Button>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-[11px] text-gray-500 mt-1">
                       This is your clinic's unique login URL that patients can use to access their accounts.
                     </p>
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="clinic-logo-edit" className="text-gray-700 font-semibold">Clinic Logo</Label>
+                  <Label htmlFor="clinic-logo-edit" className="text-gray-700 font-medium">Clinic Logo</Label>
                   <div className="mt-2 space-y-3">
                     {/* Current Logo or Preview */}
                     <div className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50">
@@ -907,34 +816,34 @@ export default function ClinicDashboard() {
                       accept="image/*"
                       onChange={handleLogoChange}
                       disabled={!isAdmin || uploadingLogo}
-                      className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 rounded-xl h-12"
+                      className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 rounded-lg h-9"
                     />
-                    <p className="text-xs text-gray-500">
+                    <p className="text-[11px] text-gray-500">
                       Supported formats: JPG, PNG, GIF. Max size: 5MB.
                     </p>
                   </div>
                 </div>
                 <div>
-                  <Label className="text-gray-700 font-semibold">Owner</Label>
-                  <p className="font-bold text-gray-900 mt-1">{clinic.owner.name} ({clinic.owner.email})</p>
+                  <Label className="text-gray-700 font-medium">Owner</Label>
+                  <p className="text-sm font-semibold text-gray-900 mt-1">{clinic.owner.name} ({clinic.owner.email})</p>
                 </div>
                 <div>
-                  <Label className="text-gray-700 font-semibold">Created on</Label>
-                  <p className="font-bold text-gray-900 mt-1">{new Date(clinic.createdAt).toLocaleDateString('en-US')}</p>
+                  <Label className="text-gray-700 font-medium">Created on</Label>
+                  <p className="text-sm font-semibold text-gray-900 mt-1">{new Date(clinic.createdAt).toLocaleDateString('en-US')}</p>
                 </div>
                 {isAdmin && (
-                  <div className="flex gap-3 pt-4">
+                  <div className="flex gap-2 pt-3">
                     <Button 
                       onClick={saveSettings}
                       disabled={savingSettings || uploadingLogo}
-                      className="flex-1 bg-[#5154e7] hover:bg-[#4145d1] text-white rounded-xl h-12 font-semibold"
+                      className="flex-1 bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-full h-8 text-xs font-medium shadow-sm"
                     >
                       {uploadingLogo ? 'Uploading Logo...' : savingSettings ? 'Saving...' : 'Save Changes'}
                     </Button>
                     <Button 
                       variant="outline"
                       onClick={() => setShowSettingsModal(false)}
-                      className="border-gray-300 text-gray-700 hover:bg-gray-50 bg-white rounded-xl h-12 font-semibold"
+                      className="border-gray-300 text-gray-800 hover:bg-gray-50 bg-white rounded-full h-8 text-xs font-medium"
                     >
                       Cancel
                     </Button>
@@ -946,41 +855,41 @@ export default function ClinicDashboard() {
 
           {/* Beautiful Success/Error Dialog */}
           <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-            <DialogContent className="bg-white border-gray-200 rounded-2xl max-w-md">
-              <div className="text-center p-6">
+            <DialogContent className="bg-white border border-gray-200 rounded-2xl max-w-md p-0">
+              <div className="text-center p-4">
                 {/* Close button */}
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl"
+                  className="absolute right-3 top-3 h-8 w-8 p-0 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full"
                   onClick={() => setShowSuccessDialog(false)}
                 >
                   <X className="h-4 w-4" />
                 </Button>
 
                 {/* Icon */}
-                <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-emerald-100 to-emerald-50 rounded-2xl flex items-center justify-center">
+                <div className="w-12 h-12 mx-auto mb-3 bg-gradient-to-br from-emerald-100 to-emerald-50 rounded-xl flex items-center justify-center">
                   {successTitle.includes('Erro') ? (
-                    <X className="h-8 w-8 text-red-600" />
+                    <X className="h-6 w-6 text-red-600" />
                   ) : (
-                    <CheckCircle className="h-8 w-8 text-emerald-600" />
+                    <CheckCircle className="h-6 w-6 text-emerald-600" />
                   )}
                 </div>
 
                 {/* Title */}
-                <h3 className="text-xl font-bold text-gray-900 mb-2">
+                <h3 className="text-sm font-semibold text-gray-900 mb-1">
                   {successTitle}
                 </h3>
 
                 {/* Message */}
-                <p className="text-gray-600 font-medium mb-6 leading-relaxed">
+                <p className="text-xs text-gray-600 mb-4 leading-relaxed">
                   {successMessage}
                 </p>
 
                 {/* Action Button */}
                 <Button 
                   onClick={() => setShowSuccessDialog(false)}
-                  className={`w-full h-12 rounded-xl font-semibold ${
+                  className={`w-full h-8 rounded-full text-xs font-medium ${
                     successTitle.includes('Erro') 
                       ? 'bg-red-600 hover:bg-red-700 text-white' 
                       : 'bg-emerald-600 hover:bg-emerald-700 text-white'

@@ -6,6 +6,8 @@ export interface PatientWelcomeProps {
   hasProtocol: boolean;
   protocolUrl?: string;
   baseUrl: string;
+  clinicName?: string;
+  clinicLogo?: string;
 }
 
 export const createPatientWelcomeEmail = ({
@@ -13,11 +15,13 @@ export const createPatientWelcomeEmail = ({
   doctorName,
   hasProtocol,
   protocolUrl,
-  baseUrl
+  baseUrl,
+  clinicName,
+  clinicLogo,
 }: PatientWelcomeProps) => {
   const content = `
     <div>
-      <p>Welcome to Zuzz</p>
+      <p>Welcome${clinicName ? ` to ${clinicName}` : ''}</p>
       
       <p>
         Dr. ${doctorName} will help you with your treatment
@@ -42,6 +46,8 @@ export const createPatientWelcomeEmail = ({
 
   return baseTemplate({
     content,
-    clinicName: 'Zuzz'
+    clinicName: clinicName || 'Zuzz',
+    clinicLogo,
+    doctorName,
   });
 }; 

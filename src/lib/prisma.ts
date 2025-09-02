@@ -7,7 +7,7 @@ declare global {
 /* eslint-enable no-var */
 
 // Configurar a URL do banco com parâmetros de connection pool
-const databaseUrl = process.env.DATABASE_URL || 'postgres://postgres:5fc578abcbdf1f226aab@dpbdp1.easypanel.host:3245/servidor?sslmode=disable&connection_limit=20&pool_timeout=20';
+const databaseUrl = process.env.DATABASE_URL; // não usar fallback para evitar conectar no DB errado
 
 // Prevenir múltiplas instâncias do Prisma Client em desenvolvimento
 // e garantir uma única instância em produção
@@ -16,9 +16,9 @@ const prismaClientSingleton = () => {
     log: ['error', 'warn'],
     datasources: {
       db: {
-        url: databaseUrl
-      }
-    }
+        url: databaseUrl,
+      },
+    },
   });
 };
 

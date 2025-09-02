@@ -68,33 +68,27 @@ export default function DoctorLoginPage() {
       if (result?.error) {
         setError('Email ou senha incorretos');
       } else if (result?.ok) {
-        // Depois do login, checar se o paciente é membro deste médico (slug)
+        // Depois do login, checar se o usuário (independente do role) é membro deste médico (slug)
         try {
-          const res = await fetch(`/api/v2/patient/is-member/${slug}`);
+          const res = await fetch(`/api/v2/patient/is-member/${slug}`, { headers: { 'Cache-Control': 'no-cache' } });
           const json = await res.json().catch(() => ({}));
           if (res.ok && json?.success) {
             if (json.isMember) {
-              // Membro: segue fluxo normal
+              // Membro: ir direto para a área do paciente no contexto do slug
               setTimeout(() => {
-                router.push('/');
+                router.replace(`/${slug}/referrals`);
                 router.refresh();
-              }, 300);
+              }, 200);
             } else {
-              // Não é membro: mostrar modal sugerindo ver produtos
+              // Não é membro: mostrar modal sugerindo ver produtos e NÃO redirecionar automaticamente
               setShowNotMemberModal(true);
             }
           } else {
-            // Se a checagem falhar, manter comportamento anterior
-            setTimeout(() => {
-              router.push('/');
-              router.refresh();
-            }, 300);
+            // Se a checagem falhar, manter o usuário na página e exibir erro genérico
+            setError('Não foi possível verificar seu vínculo com este médico. Tente novamente.');
           }
         } catch {
-          setTimeout(() => {
-            router.push('/');
-            router.refresh();
-          }, 300);
+          setError('Erro ao verificar vínculo com o médico.');
         }
       }
     } catch (err) {
@@ -185,12 +179,6 @@ export default function DoctorLoginPage() {
             >
               Forgot your password?
             </Link>
-            <div className="pt-4 border-t border-gray-200">
-              <div className="flex items-center justify-center gap-2 text-gray-500">
-                <span className="text-xs">Powered by</span>
-                <Image src="/logo.png" alt="Sistema" width={32} height={10} className="object-contain opacity-80" />
-              </div>
-            </div>
           </div>
         </div>
         {/* Modal: Não é membro */}
@@ -220,6 +208,13 @@ export default function DoctorLoginPage() {
             </div>
           </div>
         )}
+        {/* Page Footer: Powered by (small, at bottom) */}
+        <footer className="absolute bottom-4 left-0 right-0">
+          <div className="flex items-center justify-center gap-2 text-gray-400">
+            <span className="text-[10px]">Powered by</span>
+            <Image src="/logo.png" alt="Sistema" width={28} height={8} className="object-contain opacity-60" />
+          </div>
+        </footer>
       </div>
     </div>
   );

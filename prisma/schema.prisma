@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = "postgres://postgres:d6d0d5fc7c0c4d8a3615@dpbdp1.easypanel.host:67/zzz?sslmode=disable"
 }
 
 model Account {
@@ -278,17 +278,17 @@ model UserLesson {
 }
 
 model ProductCategory {
-  id        String     @id @default(cuid())
+  id        String   @id @default(cuid())
   name      String
-  slug      String?    @unique
+  slug      String?  @unique
   doctorId  String?
-  isActive  Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @default(now()) @updatedAt
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
-  doctor    User?      @relation("DoctorCategories", fields: [doctorId], references: [id])
+  doctor     User?                  @relation("DoctorCategories", fields: [doctorId], references: [id])
   // Legacy 1:N relation (via products.categoryId)
-  products  products[]
+  products   products[]
   // New N:N relation through pivot table
   categories CategoriesOnProducts[]
 
@@ -297,27 +297,29 @@ model ProductCategory {
 }
 
 model products {
-  id                String              @id
+  id                String                 @id
   name              String
   subtitle          String?
   description       String?
-  price             Decimal             @db.Decimal(10, 2)
-  creditsPerUnit    Decimal             @default(0) @db.Decimal(10, 2)
+  price             Decimal                @db.Decimal(10, 2)
+  creditsPerUnit    Decimal                @default(0) @db.Decimal(10, 2)
   category          String
-  isActive          Boolean             @default(true)
-  priority          Int                 @default(0)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @default(now())
+  isActive          Boolean                @default(true)
+  priority          Int                    @default(0)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @default(now())
   doctorId          String?
   imageUrl          String?
   confirmationUrl   String?
   categoryId        String?
-  doctor            User?               @relation("DoctorProducts", fields: [doctorId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  productCategory   ProductCategory?    @relation(fields: [categoryId], references: [id])
+  doctor            User?                  @relation("DoctorProducts", fields: [doctorId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  productCategory   ProductCategory?       @relation(fields: [categoryId], references: [id])
   protocol_products protocol_products[]
   purchases         Purchase[]
   // New N:N relation through pivot table
   categories        CategoriesOnProducts[]
+  // Back-relation for coupons
+  coupons           Coupon[]               @relation("ProductCoupons")
 
   @@index([doctorId])
   @@index([categoryId])
@@ -469,21 +471,21 @@ model ReferralCredit {
 }
 
 model ReferralReward {
-  id                 String             @id(map: "ReferralReward_pkey") @default(cuid())
+  id                 String               @id(map: "ReferralReward_pkey") @default(cuid())
   title              String
   description        String?
-  type               String             @default("DISCOUNT")
-  value              Decimal            @db.Decimal(10, 2)
-  costInCredits      Decimal            @db.Decimal(10, 2)
-  isActive           Boolean            @default(true)
+  type               String               @default("DISCOUNT")
+  value              Decimal              @db.Decimal(10, 2)
+  costInCredits      Decimal              @db.Decimal(10, 2)
+  isActive           Boolean              @default(true)
   validUntil         DateTime?
   maxRedemptions     Int?
-  currentRedemptions Int                @default(0)
+  currentRedemptions Int                  @default(0)
   doctorId           String
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @default(now()) @updatedAt
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @default(now()) @updatedAt
   imageUrl           String?
-  doctor             User               @relation("DoctorRewards", fields: [doctorId], references: [id], onDelete: Cascade, map: "ReferralReward_doctorId_fkey")
+  doctor             User                 @relation("DoctorRewards", fields: [doctorId], references: [id], onDelete: Cascade, map: "ReferralReward_doctorId_fkey")
   redemptions        RewardRedemption[]
   codes              ReferralRewardCode[]
 
@@ -491,18 +493,18 @@ model ReferralReward {
 }
 
 model RewardRedemption {
-  id          String         @id(map: "RewardRedemption_pkey") @default(cuid())
+  id          String               @id(map: "RewardRedemption_pkey") @default(cuid())
   userId      String
   rewardId    String
-  creditsUsed Decimal        @db.Decimal(10, 2)
-  status      String         @default("PENDING")
-  redeemedAt  DateTime       @default(now())
+  creditsUsed Decimal              @db.Decimal(10, 2)
+  status      String               @default("PENDING")
+  redeemedAt  DateTime             @default(now())
   fulfilledAt DateTime?
   notes       String?
   // Código único atribuído quando aprovado
   uniqueCode  String?
-  reward      ReferralReward @relation(fields: [rewardId], references: [id], onDelete: Cascade, map: "RewardRedemption_rewardId_fkey")
-  user        User           @relation("UserRedemptions", fields: [userId], references: [id], onDelete: Cascade, map: "RewardRedemption_userId_fkey")
+  reward      ReferralReward       @relation(fields: [rewardId], references: [id], onDelete: Cascade, map: "RewardRedemption_rewardId_fkey")
+  user        User                 @relation("UserRedemptions", fields: [userId], references: [id], onDelete: Cascade, map: "RewardRedemption_userId_fkey")
   codes       ReferralRewardCode[]
 
   @@index([userId], map: "RewardRedemption_userId_idx")
@@ -511,16 +513,16 @@ model RewardRedemption {
 
 /// Pool de códigos únicos por recompensa
 model ReferralRewardCode {
-  id           String           @id @default(cuid())
+  id           String   @id @default(cuid())
   rewardId     String
-  code         String           @unique
-  status       String           @default("UNUSED") // UNUSED | USED
+  code         String   @unique
+  status       String   @default("UNUSED") // UNUSED | USED
   redemptionId String?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @default(now()) @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
 
-  reward       ReferralReward    @relation(fields: [rewardId], references: [id], onDelete: Cascade)
-  redemption   RewardRedemption? @relation(fields: [redemptionId], references: [id])
+  reward     ReferralReward    @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  redemption RewardRedemption? @relation(fields: [redemptionId], references: [id])
 
   @@index([rewardId, status])
   @@map("referral_reward_codes")
@@ -1033,91 +1035,138 @@ model HabitProgress {
 }
 
 model User {
-  id                        String                      @id
-  email                     String                      @unique
-  name                      String?
-  image                     String?
-  doctor_slug               String?                     @unique
-  role                      String                      @default("PATIENT")
-  is_active                 Boolean                     @default(true)
-  created_at                DateTime                    @default(now())
-  updated_at                DateTime                    @default(now()) @updatedAt
-  email_verified            DateTime?
-  password                  String?
-  reset_token               String?
-  reset_token_expiry        DateTime?
-  verification_code         String?
-  verification_code_expiry  DateTime?
-  doctor_id                 String?
-  referral_code             String?                     @unique
-  phone                     String?
-  birth_date                DateTime?                   @db.Date
-  gender                    String?
-  address                   String?
-  emergency_contact         String?
-  emergency_phone           String?
-  medical_history           String?
-  allergies                 String?
-  medications               String?
-  notes                     String?
-  google_review_link        String?
-  stripe_connect_id         String?
-  ai_assistant_settings     AIAssistantSettings?        @relation("DoctorAISettings")
-  accounts                  Account[]
-  doctor_appointments       Appointment[]               @relation("DoctorAppointments")
-  patient_appointments      Appointment[]               @relation("PatientAppointments")
-  checkin_responses         DailyCheckinResponse[]
-  doctor_faqs               DoctorFAQ[]                 @relation("DoctorFAQs")
-  google_calendar           GoogleCalendarCredentials?  @relation("DoctorGoogleCalendar")
-  onboarding_responses      OnboardingResponse[]
-  doctor_templates          OnboardingTemplate[]        @relation("DoctorTemplates")
-  doctor_conversations      PatientAIConversation[]     @relation("DoctorConversations")
-  patient_conversations     PatientAIConversation[]     @relation("PatientConversations")
-  reviewed_messages         PatientAIMessage[]          @relation("MessageReviewer")
-  sessions                  Session[]
-  reviewed_symptom_reports  SymptomReport[]             @relation("SymptomReportReviewer")
-  symptom_reports           SymptomReport[]
-  User                      User?                       @relation("UserToUser", fields: [doctor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  other_users               User[]                      @relation("UserToUser")
-  clinic_memberships        ClinicMember[]
-  clinic_referrals          ClinicReferral[]
-  owned_clinics             Clinic[]                    @relation("ClinicOwner")
-  consultation_form         ConsultationForm?           @relation("DoctorConsultationForms")
-  consultation_submissions  ConsultationSubmission[]    @relation("consultation_submissions_doctorIdToUser")
-  converted_consultations   ConsultationSubmission[]    @relation("ConvertedConsultations")
-  created_courses           Course[]                    @relation("DoctorCourses")
-  default_protocols         DoctorDefaultProtocol[]
-  doctor_relationships      DoctorPatientRelationship[] @relation("DoctorPatients")
-  patient_relationships     DoctorPatientRelationship[] @relation("PatientDoctors")
-  services                  DoctorService[]             @relation("DoctorServices")
-  habits                    Habit[]                     @relation("UserHabits")
-  leads                     leads[]
-  patient_documents_doctor  patient_documents[]         @relation("patient_documents_doctor_idToUser")
-  patient_documents_patient patient_documents[]         @relation("patient_documents_patient_idToUser")
-  created_products          products[]                  @relation("DoctorProducts")
-  created_categories        ProductCategory[]           @relation("DoctorCategories")
-  prescribed_protocols      ProtocolPrescription[]      @relation("DoctorPrescriptions")
-  patient_prescriptions     ProtocolPrescription[]      @relation("PatientPrescriptions")
-  created_protocols         Protocol[]                  @relation("DoctorProtocols")
-  credits                   ReferralCredit[]            @relation("UserCredits")
-  form_settings             ReferralFormSettings?       @relation("DoctorFormSettings")
-  converted_from_lead       ReferralLead[]              @relation("ConvertedFromLead")
-  leads_received            ReferralLead[]              @relation("DoctorLeads")
-  referral_leads            ReferralLead[]              @relation("referral_leads_referrerIdToUser")
-  offered_rewards           ReferralReward[]            @relation("DoctorRewards")
-  referrals_doctor          referrals[]                 @relation("referrals_doctorIdToUser")
-  referrals_patient         referrals[]                 @relation("referrals_patientIdToUser")
-  redemptions               RewardRedemption[]          @relation("UserRedemptions")
-  unified_subscriptions     unified_subscriptions[]     @relation("ClinicSubscriptions")
-  assigned_courses          UserCourse[]
-  lesson_progress           UserLesson[]
-  doctor_voice_notes        VoiceNote[]                 @relation("DoctorVoiceNotes")
-  patient_voice_notes       VoiceNote[]                 @relation("PatientVoiceNotes")
-  user_verification_codes   VerificationCode[]          @relation("UserVerificationCodes")
-  doctor_verification_codes VerificationCode[]          @relation("DoctorVerificationCodes")
-  purchases      Purchase[]     @relation("UserPurchases")
-  doctorPurchases Purchase[]     @relation("DoctorPurchases")
-  pointsLedger   PointsLedger[] @relation("UserPointsLedger")
+  id                           String                      @id
+  email                        String                      @unique
+  name                         String?
+  image                        String?
+  public_cover_image_url       String?
+  public_page_template         PublicPageTemplate          @default(DEFAULT)
+  doctor_slug                  String?                     @unique
+  role                         String                      @default("PATIENT")
+  is_active                    Boolean                     @default(true)
+  created_at                   DateTime                    @default(now())
+  updated_at                   DateTime                    @default(now()) @updatedAt
+  email_verified               DateTime?
+  password                     String?
+  reset_token                  String?
+  reset_token_expiry           DateTime?
+  verification_code            String?
+  verification_code_expiry     DateTime?
+  doctor_id                    String?
+  referral_code                String?                     @unique
+  phone                        String?
+  birth_date                   DateTime?                   @db.Date
+  gender                       String?
+  address                      String?
+  emergency_contact            String?
+  emergency_phone              String?
+  medical_history              String?
+  allergies                    String?
+  medications                  String?
+  notes                        String?
+  google_review_link           String?
+  stripe_connect_id            String?
+  ai_assistant_settings        AIAssistantSettings?        @relation("DoctorAISettings")
+  accounts                     Account[]
+  doctor_appointments          Appointment[]               @relation("DoctorAppointments")
+  patient_appointments         Appointment[]               @relation("PatientAppointments")
+  checkin_responses            DailyCheckinResponse[]
+  doctor_faqs                  DoctorFAQ[]                 @relation("DoctorFAQs")
+  google_calendar              GoogleCalendarCredentials?  @relation("DoctorGoogleCalendar")
+  onboarding_responses         OnboardingResponse[]
+  doctor_templates             OnboardingTemplate[]        @relation("DoctorTemplates")
+  doctor_conversations         PatientAIConversation[]     @relation("DoctorConversations")
+  patient_conversations        PatientAIConversation[]     @relation("PatientConversations")
+  reviewed_messages            PatientAIMessage[]          @relation("MessageReviewer")
+  sessions                     Session[]
+  reviewed_symptom_reports     SymptomReport[]             @relation("SymptomReportReviewer")
+  symptom_reports              SymptomReport[]
+  User                         User?                       @relation("UserToUser", fields: [doctor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  other_users                  User[]                      @relation("UserToUser")
+  clinic_memberships           ClinicMember[]
+  clinic_referrals             ClinicReferral[]
+  owned_clinics                Clinic[]                    @relation("ClinicOwner")
+  consultation_form            ConsultationForm?           @relation("DoctorConsultationForms")
+  consultation_submissions     ConsultationSubmission[]    @relation("consultation_submissions_doctorIdToUser")
+  converted_consultations      ConsultationSubmission[]    @relation("ConvertedConsultations")
+  created_courses              Course[]                    @relation("DoctorCourses")
+  default_protocols            DoctorDefaultProtocol[]
+  doctor_relationships         DoctorPatientRelationship[] @relation("DoctorPatients")
+  patient_relationships        DoctorPatientRelationship[] @relation("PatientDoctors")
+  services                     DoctorService[]             @relation("DoctorServices")
+  habits                       Habit[]                     @relation("UserHabits")
+  leads                        leads[]
+  patient_documents_doctor     patient_documents[]         @relation("patient_documents_doctor_idToUser")
+  patient_documents_patient    patient_documents[]         @relation("patient_documents_patient_idToUser")
+  created_products             products[]                  @relation("DoctorProducts")
+  created_categories           ProductCategory[]           @relation("DoctorCategories")
+  prescribed_protocols         ProtocolPrescription[]      @relation("DoctorPrescriptions")
+  patient_prescriptions        ProtocolPrescription[]      @relation("PatientPrescriptions")
+  created_protocols            Protocol[]                  @relation("DoctorProtocols")
+  credits                      ReferralCredit[]            @relation("UserCredits")
+  form_settings                ReferralFormSettings?       @relation("DoctorFormSettings")
+  converted_from_lead          ReferralLead[]              @relation("ConvertedFromLead")
+  leads_received               ReferralLead[]              @relation("DoctorLeads")
+  referral_leads               ReferralLead[]              @relation("referral_leads_referrerIdToUser")
+  offered_rewards              ReferralReward[]            @relation("DoctorRewards")
+  referrals_doctor             referrals[]                 @relation("referrals_doctorIdToUser")
+  referrals_patient            referrals[]                 @relation("referrals_patientIdToUser")
+  redemptions                  RewardRedemption[]          @relation("UserRedemptions")
+  unified_subscriptions        unified_subscriptions[]     @relation("ClinicSubscriptions")
+  assigned_courses             UserCourse[]
+  lesson_progress              UserLesson[]
+  doctor_voice_notes           VoiceNote[]                 @relation("DoctorVoiceNotes")
+  patient_voice_notes          VoiceNote[]                 @relation("PatientVoiceNotes")
+  user_verification_codes      VerificationCode[]          @relation("UserVerificationCodes")
+  doctor_verification_codes    VerificationCode[]          @relation("DoctorVerificationCodes")
+  purchases                    Purchase[]                  @relation("UserPurchases")
+  doctorPurchases              Purchase[]                  @relation("DoctorPurchases")
+  pointsLedger                 PointsLedger[]              @relation("UserPointsLedger")
+  coupon_templates             CouponTemplate[]            @relation("DoctorCouponTemplates")
+  coupons_as_doctor            Coupon[]                    @relation("CouponDoctor")
+  coupons_as_patient           Coupon[]                    @relation("CouponPatient")
+  coupons_as_referrer          Coupon[]                    @relation("CouponReferrer")
+  coupon_redemptions_as_doctor CouponRedemption[]          @relation("CouponRedemptionDoctor")
+  coupon_redemptions_redeemed  CouponRedemption[]          @relation("CouponRedeemer")
+  // Back-relations for tenant-specific patient profiles
+  doctor_profiles              PatientProfile[]            @relation("ProfileDoctor")
+  patient_profiles             PatientProfile[]            @relation("ProfilePatient")
+}
+
+// Template options for the public doctor page (slug page)
+enum PublicPageTemplate {
+  DEFAULT
+  MINIMAL
+  HERO_CENTER
+  HERO_LEFT
+}
+
+model PatientProfile {
+  id                String   @id @default(cuid())
+  doctorId          String   @map("doctor_id")
+  userId            String   @map("user_id")
+  // Tenant-scoped profile fields (copied from User for per-doctor variance)
+  name              String?
+  phone             String?
+  address           String?
+  emergency_contact String?
+  emergency_phone   String?
+  medical_history   String?
+  allergies         String?
+  medications       String?
+  notes             String?
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  doctor  User @relation("ProfileDoctor", fields: [doctorId], references: [id], onDelete: Cascade)
+  patient User @relation("ProfilePatient", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, userId])
+  @@index([doctorId])
+  @@index([userId])
+  @@map("patient_profiles")
 }
 
 model patient_document_metadata {
@@ -1154,27 +1203,27 @@ model patient_documents {
 }
 
 model SubscriptionPlan {
-  id                    String                  @id @default(cuid())
-  name                  String
-  description           String?
-  price                 Float
-  billingCycle          String                  @default("MONTHLY")
-  maxDoctors            Int                     @default(1)
-  features              String?
-  isActive              Boolean                 @default(true)
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @default(now()) @updatedAt
-  maxPatients           Int?                    @default(10)
-  maxProtocols          Int?                    @default(5)
-  maxCourses            Int?                    @default(3)
-  maxProducts           Int?                    @default(20)
-  isDefault             Boolean?                @default(false)
-  trialDays             Int?                    @default(7)
-  referralsMonthlyLimit Int?
-  maxRewards            Int?
-  allowCreditPerPurchase Boolean?               @default(false)
-  allowCampaigns        Boolean?                @default(false)
-  unified_subscriptions unified_subscriptions[]
+  id                     String                  @id @default(cuid())
+  name                   String
+  description            String?
+  price                  Float
+  billingCycle           String                  @default("MONTHLY")
+  maxDoctors             Int                     @default(1)
+  features               String?
+  isActive               Boolean                 @default(true)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @default(now()) @updatedAt
+  maxPatients            Int?                    @default(10)
+  maxProtocols           Int?                    @default(5)
+  maxCourses             Int?                    @default(3)
+  maxProducts            Int?                    @default(20)
+  isDefault              Boolean?                @default(false)
+  trialDays              Int?                    @default(7)
+  referralsMonthlyLimit  Int?
+  maxRewards             Int?
+  allowCreditPerPurchase Boolean?                @default(false)
+  allowCampaigns         Boolean?                @default(false)
+  unified_subscriptions  unified_subscriptions[]
 
   @@map("subscription_plans")
 }
@@ -1341,30 +1390,30 @@ model VerificationCode {
   created_at DateTime  @default(now())
   expires_at DateTime
   used_at    DateTime?
-  
-  user       User      @relation("UserVerificationCodes", fields: [user_id], references: [id], onDelete: Cascade)
-  doctor     User      @relation("DoctorVerificationCodes", fields: [doctor_id], references: [id], onDelete: Cascade)
+
+  user   User @relation("UserVerificationCodes", fields: [user_id], references: [id], onDelete: Cascade)
+  doctor User @relation("DoctorVerificationCodes", fields: [doctor_id], references: [id], onDelete: Cascade)
 }
 
 model Purchase {
-  id                    String   @id @default(cuid())
-  userId                String
-  doctorId              String
-  productId             String
-  quantity              Int      @default(1)
-  unitPrice             Decimal  @db.Decimal(10, 2)
-  totalPrice            Decimal  @db.Decimal(10, 2)
-  pointsAwarded         Decimal  @default(0) @db.Decimal(10, 2)
-  status                String   @default("COMPLETED")
+  id                     String   @id @default(cuid())
+  userId                 String
+  doctorId               String
+  productId              String
+  quantity               Int      @default(1)
+  unitPrice              Decimal  @db.Decimal(10, 2)
+  totalPrice             Decimal  @db.Decimal(10, 2)
+  pointsAwarded          Decimal  @default(0) @db.Decimal(10, 2)
+  status                 String   @default("COMPLETED")
   externalIdempotencyKey String?
-  notes                 String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @default(now()) @updatedAt
-  
-  user                  User     @relation("UserPurchases", fields: [userId], references: [id], onDelete: Cascade)
-  doctor                User     @relation("DoctorPurchases", fields: [doctorId], references: [id], onDelete: Cascade)
-  product               products @relation(fields: [productId], references: [id], onDelete: Cascade)
-  
+  notes                  String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @default(now()) @updatedAt
+
+  user    User     @relation("UserPurchases", fields: [userId], references: [id], onDelete: Cascade)
+  doctor  User     @relation("DoctorPurchases", fields: [doctorId], references: [id], onDelete: Cascade)
+  product products @relation(fields: [productId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@index([doctorId])
   @@index([productId])
@@ -1381,12 +1430,91 @@ model PointsLedger {
   amount      Decimal  @db.Decimal(10, 2)
   description String?
   createdAt   DateTime @default(now())
-  
-  user        User     @relation("UserPointsLedger", fields: [userId], references: [id], onDelete: Cascade)
-  
+
+  user User @relation("UserPointsLedger", fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@index([sourceType])
   @@index([sourceId])
   @@index([createdAt])
   @@map("points_ledger")
+}
+
+model Coupon {
+  id             String    @id @default(cuid())
+  code           String
+  doctorId       String    @map("doctor_id")
+  campaignId     String?   @map("campaign_id")
+  patientId      String?   @map("patient_id")
+  referrerId     String?   @map("referrer_id")
+  productId      String?   @map("product_id")
+  templateId     String?   @map("template_id")
+  objective      String?
+  objectiveMeta  Json?     @map("objective_meta")
+  displayTitle   String?   @map("display_title")
+  displayMessage String?   @map("display_message")
+  status         String    @default("ISSUED")
+  expiresAt      DateTime? @map("expires_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  doctor      User               @relation("CouponDoctor", fields: [doctorId], references: [id], onDelete: Cascade)
+  patient     User?              @relation("CouponPatient", fields: [patientId], references: [id], onDelete: SetNull)
+  referrer    User?              @relation("CouponReferrer", fields: [referrerId], references: [id], onDelete: SetNull)
+  product     products?          @relation("ProductCoupons", fields: [productId], references: [id], onDelete: SetNull)
+  template    CouponTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  redemptions CouponRedemption[]
+
+  @@unique([doctorId, patientId, objective])
+  @@index([doctorId])
+  @@index([campaignId])
+  @@index([patientId])
+  @@index([referrerId])
+  @@index([productId])
+  @@index([templateId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("coupons")
+}
+
+model CouponTemplate {
+  id             String   @id @default(cuid())
+  doctorId       String   @map("doctor_id")
+  name           String
+  slug           String
+  displayTitle   String?  @map("display_title")
+  displayMessage String?  @map("display_message")
+  config         Json?    @default("{}")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  doctor User    @relation("DoctorCouponTemplates", fields: [doctorId], references: [id], onDelete: Cascade)
+  coupons Coupon[]
+
+  @@unique([doctorId, slug])
+  @@index([doctorId])
+  @@index([slug])
+  @@map("coupon_templates")
+}
+
+model CouponRedemption {
+  id           String   @id @default(cuid())
+  couponId     String   @map("coupon_id")
+  doctorId     String   @map("doctor_id")
+  redeemedById String?  @map("redeemed_by_id")
+  redeemedAt   DateTime @default(now()) @map("redeemed_at")
+  notes        String?
+
+  // Relations
+  coupon     Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  doctor     User   @relation("CouponRedemptionDoctor", fields: [doctorId], references: [id], onDelete: Cascade)
+  redeemedBy User?  @relation("CouponRedeemer", fields: [redeemedById], references: [id], onDelete: SetNull)
+
+  @@index([couponId])
+  @@index([doctorId])
+  @@index([redeemedAt])
+  @@map("coupon_redemptions")
 }

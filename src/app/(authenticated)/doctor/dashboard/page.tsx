@@ -350,7 +350,7 @@ export default function DoctorDashboard() {
   };
 
   const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount || 0);
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(amount || 0);
 
   // Simple sparkline data (replace with real API data when available)
   const referralsTrend = [5, 9, 7, 14, 10, 12, 15];
@@ -382,7 +382,7 @@ export default function DoctorDashboard() {
   });
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white overflow-x-hidden">
       <div className="lg:ml-64">
         <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 bg-gray-50">
         
@@ -392,7 +392,7 @@ export default function DoctorDashboard() {
               <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Overview</h1>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => router.push('/doctor/patients/smart-add')}
+                  onClick={() => router.push('/doctor/patients?add=1')}
                   className="inline-flex h-8 items-center rounded-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] px-3 text-xs font-medium text-white hover:opacity-90 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5893ec]"
                 >
                   New client
@@ -489,9 +489,9 @@ export default function DoctorDashboard() {
             )}
           </div>
  
-          <div className="grid lg:grid-cols-2 gap-3">
+          <div className="grid md:grid-cols-2 gap-3">
             {/* Rewards (top, spans 2 cols) */}
-            <Card className="bg-white border border-gray-200 rounded-2xl col-span-2 shadow-sm">
+            <Card className="bg-white border border-gray-200 rounded-2xl md:col-span-2 shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between px-4 py-3">
                 <CardTitle className="text-sm font-semibold text-gray-900">Rewards</CardTitle>
                 <div className="flex gap-2">
@@ -530,18 +530,25 @@ export default function DoctorDashboard() {
           
 
             {/* Referral projections (above Active Clients and Track Progress) */}
-            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl col-span-2">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl md:col-span-2 overflow-hidden">
+              <CardHeader className="px-4 py-3 border-b border-gray-100">
+                <CardTitle className="text-sm font-semibold text-gray-900">Referral projections</CardTitle>
+              </CardHeader>
               <CardContent className="p-0">
                 {isLoading ? (
                   <div className="p-4">
                     <SkeletonBox className="h-80 w-full" />
                   </div>
                 ) : (
-                  <ProjectionLineChart 
-                    title="Referral projections"
-                    past={pastSeries}
-                    height={320}
-                  />
+                  <div className="overflow-x-hidden md:overflow-x-auto">
+                    <div className="w-full md:min-w-[600px]">
+                      <ProjectionLineChart 
+                        title=""
+                        past={pastSeries}
+                        height={280}
+                      />
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -550,7 +557,7 @@ export default function DoctorDashboard() {
 
             {/* Active Clients (minimal) */}
             <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
-              <CardHeader className="flex flex-row items-center justify-between px-4 py-3">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
                 <CardTitle className="text-sm font-semibold text-gray-900">Active Clients</CardTitle>
                 <Button variant="ghost" size="sm" asChild className="h-8 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-full font-medium">
                   <Link href="/doctor/patients">View all</Link>
@@ -582,18 +589,18 @@ export default function DoctorDashboard() {
                 ) : (
                   <div className="divide-y divide-gray-200">
                     {patients.slice(0, 5).map((patient) => (
-                      <div key={patient.id} className="flex items-center justify-between py-3 px-2">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center text-[11px] font-semibold text-gray-600">
+                      <div key={patient.id} className="flex flex-row items-center justify-between gap-2 py-3 px-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center text-[11px] font-semibold text-gray-600 flex-shrink-0">
                             {getPatientInitials(patient.name)}
                           </div>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1 overflow-hidden">
                             <p className="text-sm font-medium text-gray-900 truncate">{patient.name || 'No name'}</p>
                             <p className="text-xs text-gray-500 truncate">{patient.email}</p>
                           </div>
                         </div>
-                        <div className="shrink-0">
-                          <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-full text-xs">
+                        <div className="flex-shrink-0">
+                          <Button asChild variant="ghost" size="sm" className="h-8 px-3 text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-full text-xs">
                             <Link href={`/doctor/patients/${patient.id}`}>View</Link>
                           </Button>
                         </div>
@@ -605,17 +612,17 @@ export default function DoctorDashboard() {
             </Card>
 
             {/* Track Progress */}
-            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
-              <CardHeader className="flex flex-row items-center justify-between px-4 py-3">
+            <Card className="hidden md:block bg-white border border-gray-200 shadow-sm rounded-2xl">
+              <CardHeader className="flex flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
                 <CardTitle className="text-sm font-semibold text-gray-900">Track Progress</CardTitle>
               </CardHeader>
-              <CardContent className="px-4 pb-4 pt-0">
-                <p className="text-xs text-gray-600 mb-3">Monitor KPIs and review clients.</p>
-                <div className="flex gap-3">
-                  <Button asChild variant="outline" className="h-8 border-gray-300 text-gray-800 rounded-full text-xs font-medium px-3">
+              <CardContent className="px-4 pb-4 pt-3">
+                <p className="text-xs text-gray-600 mb-4 text-center">Monitor KPIs and review clients.</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button asChild variant="outline" className="h-9 border-gray-300 text-gray-800 rounded-full text-xs font-medium px-3">
                     <Link href="/doctor/referrals/kpis">View KPIs</Link>
                   </Button>
-                  <Button asChild variant="outline" className="h-8 border-gray-300 text-gray-800 rounded-full text-xs font-medium px-3">
+                  <Button asChild variant="outline" className="h-9 border-gray-300 text-gray-800 rounded-full text-xs font-medium px-3">
                     <Link href="/doctor/patients">View Clients</Link>
                   </Button>
                 </div>

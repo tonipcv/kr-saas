@@ -13,6 +13,8 @@ declare module "next-auth" {
       email?: string | null;
       image?: string | null;
       role?: string | null;
+      activeDoctorSlug?: string | null;
+      activeDoctorId?: string | null;
     }
   }
 
@@ -22,12 +24,15 @@ declare module "next-auth" {
     email?: string | null;
     image?: string | null;
     role?: string | null;
+    doctor_slug?: string | null;
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
     role?: string | null;
+    activeDoctorSlug?: string | null;
+    activeDoctorId?: string | null;
   }
 }
 
@@ -122,8 +127,26 @@ export const authOptions: AuthOptions = {
   },
   callbacks: {
     async jwt({ token, user }) {
+      // Persist existing values across calls
+      token.role = token.role ?? null;
+      token.activeDoctorSlug = token.activeDoctorSlug ?? null;
+      token.activeDoctorId = token.activeDoctorId ?? null;
+
       if (user) {
         token.role = user.role;
+        // On initial sign-in, if the user is a doctor, set active doctor context by their own slug
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { id: true, role: true, doctor_slug: true },
+          });
+          if (dbUser?.role === 'DOCTOR' && dbUser.doctor_slug) {
+            token.activeDoctorSlug = dbUser.doctor_slug;
+            token.activeDoctorId = dbUser.id;
+          }
+        } catch (e) {
+          // noop: avoid breaking auth on lookup errors
+        }
       }
       return token;
     },
@@ -131,6 +154,31 @@ export const authOptions: AuthOptions = {
       if (session?.user) {
         session.user.id = token.sub!;
         session.user.role = token.role;
+        session.user.activeDoctorSlug = token.activeDoctorSlug ?? null;
+        session.user.activeDoctorId = token.activeDoctorId ?? null;
+
+        // Always refresh basic user fields from DB to reflect latest profile updates
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: token.sub! },
+            select: { name: true, email: true, image: true, role: true, doctor_slug: true, id: true },
+          });
+          if (dbUser) {
+            session.user.name = dbUser.name ?? session.user.name;
+            session.user.email = dbUser.email ?? session.user.email;
+            session.user.image = dbUser.image ?? session.user.image;
+            // Keep role and active doctor context in sync if they changed
+            if (dbUser.role && dbUser.role !== session.user.role) {
+              session.user.role = dbUser.role;
+            }
+            if (dbUser.role === 'DOCTOR' && dbUser.doctor_slug) {
+              session.user.activeDoctorSlug = dbUser.doctor_slug;
+              session.user.activeDoctorId = dbUser.id;
+            }
+          }
+        } catch (e) {
+          // Avoid breaking session on lookup errors
+        }
       }
       return session;
     },

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireMobileAuth, unauthorizedResponse } from '@/lib/mobile-auth';
+import { unauthorizedResponse, verifyMobileAuth } from '@/lib/mobile-auth';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { z } from 'zod';
 
 const updateProfileSchema = z.object({
@@ -20,13 +22,36 @@ const updateProfileSchema = z.object({
 // GET /api/v2/patients/profile - Buscar perfil do paciente
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireMobileAuth(request);
-    if (!user) {
+    // Prefer web session; fallback to mobile token
+    const session = await getServerSession(authOptions);
+    let userId: string | null = session?.user?.id || null;
+
+    if (!userId) {
+      const mobileUser = await verifyMobileAuth(request).catch(() => null);
+      if (mobileUser) userId = mobileUser.id;
+    }
+
+    if (!userId) {
       return unauthorizedResponse();
     }
 
+    // Allow if the user is a PATIENT, or if they have any doctor-patient relationship as patient
+    const dbUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true }
+    });
+
+    let asPatient = dbUser?.role === 'PATIENT';
+    if (!asPatient) {
+      const rel = await prisma.doctorPatientRelationship.findFirst({ where: { patientId: userId } });
+      if (rel) asPatient = true;
+    }
+    if (!asPatient) {
+      return NextResponse.json({ error: 'Access denied. Patients only.' }, { status: 403 });
+    }
+
     const profile = await prisma.user.findUnique({
-      where: { id: user.id },
+      where: { id: userId },
       select: {
         id: true,
         name: true,
@@ -62,8 +87,16 @@ export async function GET(request: NextRequest) {
 // PATCH /api/v2/patients/profile - Atualizar perfil do paciente
 export async function PATCH(request: NextRequest) {
   try {
-    const user = await requireMobileAuth(request);
-    if (!user) {
+    // Prefer web session; fallback to mobile token
+    const session = await getServerSession(authOptions);
+    let userId: string | null = session?.user?.id || null;
+
+    if (!userId) {
+      const mobileUser = await verifyMobileAuth(request).catch(() => null);
+      if (mobileUser) userId = mobileUser.id;
+    }
+
+    if (!userId) {
       return unauthorizedResponse();
     }
 
@@ -71,7 +104,7 @@ export async function PATCH(request: NextRequest) {
     const validatedData = updateProfileSchema.parse(body);
 
     const updatedProfile = await prisma.user.update({
-      where: { id: user.id },
+      where: { id: userId },
       data: validatedData,
       select: {
         id: true,

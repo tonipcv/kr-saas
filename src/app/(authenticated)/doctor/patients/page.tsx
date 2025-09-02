@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,6 +94,7 @@ interface ImportResults {
 
 export default function PatientsPage() {
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -144,6 +146,23 @@ export default function PatientsPage() {
   useEffect(() => {
     loadPatients();
   }, []);
+
+  // Auto-open Add Client modal when coming from dashboard with ?add=1 (or ?new=1)
+  useEffect(() => {
+    const openParam = searchParams?.get('add') || searchParams?.get('new');
+    if (!openParam) return;
+    (async () => {
+      const res = await checkLimit('patients');
+      if (!res.allowed) {
+        toast.error(res.message || 'Upgrade required to add more clients');
+        return;
+      }
+      resetForm();
+      setShowAddPatient(true);
+    })();
+    // Only run on initial mount or when URL param changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams?.toString()]);
 
   const loadPatients = async () => {
     try {
@@ -362,14 +381,14 @@ export default function PatientsPage() {
       if (response.ok) {
         // Reload clients list
         await loadPatients();
-        alert(`Cliente ${patientName} foi removido com sucesso`);
+        toast.success(`Cliente ${patientName} foi removido com sucesso`);
       } else {
         const error = await response.json();
-        alert(`Erro ao remover: ${error.error || 'Erro ao deletar cliente'}`);
+        toast.error(error.error ? `Erro ao remover: ${error.error}` : 'Erro ao deletar cliente');
       }
     } catch (error) {
       console.error('Error deleting client:', error);
-      alert('Erro ao deletar cliente');
+      toast.error('Erro ao deletar cliente');
     } finally {
       setDeletingPatientId(null);
       setShowDeleteConfirm(false);
@@ -401,15 +420,15 @@ export default function PatientsPage() {
 
       if (response.ok) {
         const result = await response.json();
-        alert(`Email de redefinição de senha enviado para ${patientEmail} com sucesso!`);
+        toast.success(`Email de redefinição de senha enviado para ${patientEmail} com sucesso!`);
         console.log('Reset URL (for testing):', result.resetUrl);
       } else {
         const error = await response.json();
-        alert(`Erro ao enviar email de redefinição de senha: ${error.error || 'Erro ao enviar email de redefinição de senha'}`);
+        toast.error(error.error ? `Erro ao enviar email de redefinição de senha: ${error.error}` : 'Erro ao enviar email de redefinição de senha');
       }
     } catch (error) {
       console.error('Error sending password reset email:', error);
-      alert('Erro ao enviar email de redefinição de senha');
+      toast.error('Erro ao enviar email de redefinição de senha');
     } finally {
       setSendingEmailId(null);
     }
@@ -471,7 +490,7 @@ export default function PatientsPage() {
 
   const improveNotesWithAI = async () => {
     if (!newPatient.notes.trim()) {
-      alert('Please write something in the notes before using AI to improve it.');
+      toast.error('Please write something in the notes before using AI to improve it.');
       return;
     }
 
@@ -492,14 +511,14 @@ export default function PatientsPage() {
       if (response.ok) {
         const data = await response.json();
         setNewPatient({...newPatient, notes: data.improvedText});
-        alert('Text improved successfully with AI!');
+        toast.success('Text improved successfully with AI!');
       } else {
         const errorData = await response.json();
-        alert(`Error improving text: ${errorData.error || 'Unknown error'}`);
+        toast.error(`Error improving text: ${errorData.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error improving notes:', error);
-      alert('Connection error while trying to improve text with AI.');
+      toast.error('Connection error while trying to improve text with AI.');
     } finally {
       setIsImprovingNotes(false);
     }

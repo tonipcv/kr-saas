@@ -6,10 +6,10 @@ import { prisma } from '@/lib/prisma';
 // Returns { success: boolean, isMember: boolean }
 export async function POST(
   req: NextRequest,
-  { params }: { params: { slug: string } }
+  { params }: { params: { slug: string } | Promise<{ slug: string }> }
 ) {
   try {
-    const { slug } = params;
+    const { slug } = await Promise.resolve(params as any);
     if (!slug) {
       return NextResponse.json({ success: false, message: 'Missing slug' }, { status: 400 });
     }
@@ -22,7 +22,7 @@ export async function POST(
 
     // Resolve doctor by slug
     const doctor = await prisma.user.findFirst({
-      where: { doctor_slug: slug, role: 'DOCTOR', is_active: true },
+      where: { doctor_slug: slug, role: 'DOCTOR' },
       select: { id: true },
     });
     if (!doctor) {

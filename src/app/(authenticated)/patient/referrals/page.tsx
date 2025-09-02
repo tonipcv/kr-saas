@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -31,7 +31,10 @@ import {
   User,
   MoreVertical,
   LogOut,
-  CalendarDays
+  CalendarDays,
+  ShoppingBag,
+  XCircle,
+  CircleSlash
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
@@ -216,6 +219,8 @@ interface Credit {
   id: string;
   amount: number;
   type: string;
+  description?: string;
+  displayDescription?: string | null;
   status: string;
   createdAt: string;
   lead?: {
@@ -293,10 +298,17 @@ export default function PatientReferralsPage() {
   const [isCardFlipped, setIsCardFlipped] = useState(false);
   // Tabs for lower content
   const [activeTab, setActiveTab] = useState<'earn' | 'use' | 'history' | null>(null);
+  // Sub-tab for referrals status
+  const [referralsTab, setReferralsTab] = useState<'ALL' | 'CONVERTED' | 'PENDING' | 'REJECTED'>('CONVERTED');
+  // Extrato filters
+  const [periodFilter, setPeriodFilter] = useState<'7d' | '30d' | 'all'>('30d');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'in' | 'out'>('all');
+  const [visibleTxCount, setVisibleTxCount] = useState<number>(10);
   const [referralCode, setReferralCode] = useState('');
   const [doctorId, setDoctorId] = useState('');
   const [doctorSlug, setDoctorSlug] = useState<string>('');
   const [doctorName, setDoctorName] = useState<string>('');
+  const [patientName, setPatientName] = useState<string>('');
   const [doctorImage, setDoctorImage] = useState<string>('');
   // State for hamburger menu (must be before any early returns)
   const [menuOpen, setMenuOpen] = useState(false);
@@ -312,7 +324,8 @@ export default function PatientReferralsPage() {
   // Modals for Earn actions
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
-  // Friendly fallback name for design preview and empty states
+  // Friendly fallback names for design preview and empty states
+  const displayPatientName = patientName || session?.user?.name || 'Paciente';
   const displayDoctorName = doctorName || 'Dr. Especialista';
   // Points card display: use real balance if available, otherwise a pleasant placeholder
   const displayPoints = creditsBalance;
@@ -363,12 +376,12 @@ export default function PatientReferralsPage() {
 
   // Status configuration with translations
   const statusConfig = {
-    PENDING:   { label: t.status.PENDING,   color: 'bg-gray-100 text-gray-700 border-gray-300', icon: Clock },
-    CONTACTED: { label: t.status.CONTACTED, color: 'bg-gray-100 text-gray-700 border-gray-300', icon: Users },
-    CONVERTED: { label: t.status.CONVERTED, color: 'bg-gray-100 text-gray-700 border-gray-300', icon: CheckCircle },
-    REJECTED:  { label: t.status.REJECTED,  color: 'bg-gray-100 text-gray-700 border-gray-300', icon: Clock },
-    APPROVED:  { label: t.status.APPROVED,  color: 'bg-gray-100 text-gray-700 border-gray-300', icon: CheckCircle },
-    FULFILLED: { label: t.status.FULFILLED, color: 'bg-gray-100 text-gray-700 border-gray-300', icon: CheckCircle }
+    PENDING:   { label: t.status.PENDING,   color: 'bg-amber-50 text-amber-800 border-amber-200', icon: Clock },
+    CONTACTED: { label: t.status.CONTACTED, color: 'bg-amber-50 text-amber-800 border-amber-200', icon: Users },
+    CONVERTED: { label: t.status.CONVERTED, color: 'bg-green-50 text-green-700 border-green-200', icon: CheckCircle },
+    REJECTED:  { label: t.status.REJECTED,  color: 'bg-red-50 text-red-700 border-red-200', icon: XCircle },
+    APPROVED:  { label: t.status.APPROVED,  color: 'bg-green-50 text-green-700 border-green-200', icon: CheckCircle },
+    FULFILLED: { label: t.status.FULFILLED, color: 'bg-green-50 text-green-700 border-green-200', icon: CheckCircle }
   };
 
   // Carregar dados do dashboard quando o componente montar
@@ -427,6 +440,28 @@ export default function PatientReferralsPage() {
     return () => { canceled = true; };
   }, [doctorName, doctorId, doctorSlug, referralCode, referralsMade]);
 
+  // Resolve patient profile name from session (preferred) or fallback API
+  useEffect(() => {
+    // Seed with session value to avoid blank, but we'll still fetch profile
+    if (session?.user?.name && !patientName) {
+      setPatientName(session.user.name);
+    }
+    let canceled = false;
+    const run = async () => {
+      try {
+        const res = await fetch('/api/v2/patients/profile');
+        if (!res.ok) return;
+        const payload = await res.json().catch(() => ({}));
+        if (canceled) return;
+        const name = payload?.profile?.name;
+        // Prefer API profile name over session (covers dual-role users with doctor name in session)
+        if (name && name !== patientName) setPatientName(name);
+      } catch {}
+    };
+    run();
+    return () => { canceled = true; };
+  }, [session?.user?.name, patientName]);
+
   // Final fallback: try to infer doctor name from referrals list once loaded
   useEffect(() => {
     if (!doctorName && referralsMade && referralsMade.length > 0) {
@@ -449,24 +484,35 @@ export default function PatientReferralsPage() {
         setAvailableRewards(data.availableRewards);
         setRedemptionsHistory(data.redemptionsHistory);
         setCreditsBalance(data.creditsBalance);
-        setReferralCode(data.referralCode || '');
-        setDoctorId(data.doctorId || '');
-        if (data.doctorName || (data.doctor && data.doctor.name)) {
+        // Do not override identifiers already resolved via /api/v2/patients/referral
+        if (!referralCode && data.referralCode) {
+          setReferralCode(data.referralCode);
+        }
+        if (!doctorId && data.doctorId) {
+          setDoctorId(data.doctorId);
+        }
+        if (!doctorName && (data.doctorName || (data.doctor && data.doctor.name))) {
           setDoctorName(data.doctorName || data.doctor.name);
         }
         // Capture doctor image if available
-        if (data.doctorImage) {
-          setDoctorImage(data.doctorImage);
-        } else if (data.doctor?.image) {
-          setDoctorImage(data.doctor.image);
+        if (!doctorImage) {
+          if (data.doctorImage) {
+            setDoctorImage(data.doctorImage);
+          } else if (data.doctor?.image) {
+            setDoctorImage(data.doctor.image);
+          }
         }
         // Try to capture slug from API response if available
-        if (data.doctorSlug) {
-          console.debug('[PatientReferrals] setting doctorSlug from /api/referrals/patient (flat)', data.doctorSlug);
-          setDoctorSlug(data.doctorSlug);
-        } else if (data.doctor?.doctor_slug) {
-          console.debug('[PatientReferrals] setting doctorSlug from /api/referrals/patient (nested doctor.doctor_slug)', data.doctor?.doctor_slug);
-          setDoctorSlug(data.doctor.doctor_slug);
+        if (!doctorSlug) {
+          if (data.doctorSlug) {
+            console.debug('[PatientReferrals] setting doctorSlug from /api/referrals/patient (flat)', data.doctorSlug);
+            setDoctorSlug(data.doctorSlug);
+          } else if (data.doctor?.doctor_slug) {
+            console.debug('[PatientReferrals] setting doctorSlug from /api/referrals/patient (nested doctor.doctor_slug)', data.doctor?.doctor_slug);
+            setDoctorSlug(data.doctor.doctor_slug);
+          } else {
+            console.warn('[PatientReferrals] /api/referrals/patient did not provide doctorSlug');
+          }
         } else {
           console.warn('[PatientReferrals] /api/referrals/patient did not provide doctorSlug');
         }
@@ -652,7 +698,7 @@ export default function PatientReferralsPage() {
   };
 
   const generateReferralLink = (style = 'default') => {
-    const rawBase = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+    const rawBase = window.location.origin;
     const baseUrl = (rawBase || '').replace(/\/+$/, '');
     const slug = (doctorSlug || '').trim().replace(/^\/+/, '');
     const did = doctorId || 'demo-doctor';
@@ -949,6 +995,116 @@ const formatDate = (dateString: string) => {
   return date.toLocaleDateString('pt-BR');
 };
 
+// Label for credit type
+const formatCreditType = (type?: string) => {
+  const t = (type || '').toUpperCase();
+  if (t.includes('PURCHASE')) return 'Compra';
+  if (t.includes('REFERRAL')) return 'Indicação';
+  if (t.includes('GOOGLE')) return 'Avaliação Google';
+  return type || 'Outro';
+};
+
+// Icon for credit type
+const creditTypeIcon = (type?: string) => {
+  const t = (type || '').toUpperCase();
+  if (t.includes('PURCHASE')) return ShoppingBag;
+  if (t.includes('REFERRAL')) return Users;
+  return Star;
+};
+
+// Helpers for extrato
+const isWithinDays = (iso: string, days: number) => {
+  if (days <= 0) return true;
+  const d = new Date(iso).getTime();
+  const now = Date.now();
+  const diff = now - d;
+  return diff <= days * 24 * 60 * 60 * 1000;
+};
+
+
+// Extract minimal text for purchase descriptions: "<qty>x <product name>"
+const minimalPurchaseText = (description?: string): string | null => {
+  if (!description) return null;
+  // Expected: "Créditos por compra: <qty>x <name>"
+  const idx = description.indexOf(':');
+  const tail = idx >= 0 ? description.slice(idx + 1).trim() : description.trim();
+  // Now try to match "<qty>x <rest>" and clean possible parentheses like "(qtd 1)"
+  const m = tail.match(/^(\d+)x\s+(.+)$/i);
+  if (m) {
+    const qty = m[1];
+    let name = m[2];
+    // Remove common trailing decorations like "(qtd 1)"
+    name = name.replace(/\(\s*qtd\s*\d+\s*\)$/i, '').trim();
+    return `${qty}x ${name}`;
+  }
+  // Fallback: remove leading label words and parentheses if present
+  return tail.replace(/^compra:?\s*/i, '').replace(/\(\s*qtd\s*\d+\s*\)$/i, '').trim() || null;
+};
+
+// Derived data for UI
+const referralStatusPriority: Record<string, number> = { CONVERTED: 1, CONTACTED: 2, PENDING: 3, APPROVED: 4, FULFILLED: 5, REJECTED: 6 };
+
+const filteredSortedReferrals = useMemo(() => {
+  const list = Array.isArray(referralsMade) ? [...referralsMade] : [];
+  const filtered = referralsTab === 'ALL' ? list : list.filter(r => {
+    if (referralsTab === 'PENDING') return r.status === 'PENDING' || r.status === 'CONTACTED';
+    return r.status === referralsTab;
+  });
+  return filtered.sort((a, b) => {
+    const pa = referralStatusPriority[a.status] ?? 99;
+    const pb = referralStatusPriority[b.status] ?? 99;
+    if (pa !== pb) return pa - pb;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+}, [referralsMade, referralsTab]);
+
+type TxItem = { id: string; amount: number; description: string; date: string; kind: 'in' | 'out'; icon?: any };
+
+const mergedExtrato = useMemo(() => {
+  const gains: TxItem[] = (creditsHistory || []).map((c) => ({
+    id: `in_${c.id}`,
+    amount: c.amount,
+    description: c.displayDescription
+      ? c.displayDescription
+      : c.type?.toUpperCase().includes('PURCHASE') && minimalPurchaseText(c.description)
+        ? (minimalPurchaseText(c.description) as string)
+        : `${formatCreditType(c.type)}${c.lead?.name ? ` • ${c.lead.name}` : ''}`,
+    date: c.createdAt,
+    kind: 'in',
+    icon: creditTypeIcon(c.type)
+  }));
+  const spends: TxItem[] = (redemptionsHistory || []).map((r) => ({
+    id: `out_${r.id}`,
+    amount: -Math.abs(r.creditsUsed || 0),
+    description: r.reward?.title ? `Resgate: ${r.reward.title}` : 'Resgate de recompensa',
+    date: r.redeemedAt,
+    kind: 'out',
+    icon: Gift
+  }));
+
+  let all = [...gains, ...spends];
+
+  // Period filter
+  const days = periodFilter === '7d' ? 7 : periodFilter === '30d' ? 30 : 0;
+  if (days > 0) all = all.filter(tx => isWithinDays(tx.date, days));
+
+  // Type filter
+  if (typeFilter !== 'all') all = all.filter(tx => tx.kind === typeFilter);
+
+  // Sort desc by date
+  all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  return all;
+}, [creditsHistory, redemptionsHistory, periodFilter, typeFilter]);
+
+const extratoSummary = useMemo(() => {
+  const days = periodFilter === '7d' ? 7 : periodFilter === '30d' ? 30 : 0;
+  const within = (d: string) => (days > 0 ? isWithinDays(d, days) : true);
+  const earned = (creditsHistory || []).filter(c => within(c.createdAt)).reduce((s, c) => s + (c.amount || 0), 0);
+  const spent = (redemptionsHistory || []).filter(r => within(r.redeemedAt)).reduce((s, r) => s + (r.creditsUsed || 0), 0);
+  return { earned, spent };
+}, [creditsHistory, redemptionsHistory, periodFilter]);
+
 // While loading, show a neutral skeleton without real data
 if (loading) {
   return (
@@ -998,7 +1154,7 @@ return (
             <Badge className="mb-2 uppercase tracking-wide text-[10px] lg:text-xs bg-gray-100 text-gray-700 border border-gray-200" variant="outline">
               Recompensas
             </Badge>
-            <h2 className="text-xl lg:text-2xl font-medium text-gray-900 mb-3 lg:mb-4 text-center">
+            <h2 className="text-xl lg:text-2xl font-semibold text-gray-900 text-center mb-3 lg:mb-5">
               {displayDoctorName}
             </h2>
             {/* Membership-style Points Card with Flip to reveal Code */}
@@ -1027,7 +1183,7 @@ return (
 
                     <div className="relative h-full p-6 lg:p-8 flex flex-col">
                       <div className="flex items-center justify-between">
-                        <div className="text-[10px] lg:text-sm uppercase tracking-[0.2em] text-white/80">Assinatura</div>
+                        <div className="text-[10px] lg:text-sm uppercase tracking-[0.2em] text-white/80">Membership</div>
                         <div className="flex items-center gap-2 text-white/80">
                           <div className="h-6 w-9 rounded bg-white/20 backdrop-blur-sm" />
                           <div className="h-6 w-6 rounded-full bg-white/20 backdrop-blur-sm" />
@@ -1035,22 +1191,22 @@ return (
                       </div>
 
                       <div className="mt-3 lg:mt-4">
-                        <div className="text-white/80 text-[12px] lg:text-base">Seu Saldo</div>
+                        <div className="text-white/80 text-[12px] lg:text-base">Your Balance</div>
                         <div className="mt-1 text-4xl lg:text-6xl font-light text-white">
                           {displayPoints}
-                          <span className="ml-2 text-lg lg:text-2xl text-white/85 align-[10%]">Créditos</span>
+                          <span className="ml-2 text-lg lg:text-2xl text-white/85 align-[10%]">points</span>
                         </div>
                       </div>
 
                       <div className="mt-auto flex items-center justify-between text-white">
                         <div className="min-w-0">
-                          <div className="text-[12px] lg:text-base text-white/70">Membro</div>
+                          <div className="text-[12px] lg:text-base text-white/70">Member</div>
                           <div className="text-base lg:text-xl font-medium truncate max-w-[320px]">
                             {session?.user?.name || 'Paciente'}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-[12px] lg:text-base text-white/70">Número de Membro</div>
+                          <div className="text-[12px] lg:text-base text-white/70">Membership Number</div>
                           {/* Hidden on front: masked */}
                           <div className="text-base lg:text-xl tracking-widest">
                             • • • •
@@ -1070,11 +1226,11 @@ return (
                     </div>
                     <div className="relative h-full p-6 lg:p-8 flex flex-col text-white">
                       <div className="flex items-center justify-end">
-                        <div className="text-[11px] lg:text-xs text-white/70">Toque para ocultar</div>
+                        <div className="text-[11px] lg:text-xs text-white/70">Tap to hide</div>
                       </div>
 
                       <div className="mt-4 lg:mt-8 text-center">
-                        <div className="text-xs lg:text-base text-white/70">Número de Membro</div>
+                        <div className="text-xs lg:text-base text-white/70">Membership Number</div>
                         <div className="mt-2 text-3xl lg:text-4xl font-mono tracking-[0.35em]">
                           {referralCode || '— — — —'}
                         </div>
@@ -1092,7 +1248,7 @@ return (
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
                             <path d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
                           </svg>
-                          Copiar número
+                          Copy number
                         </button>
                       </div>
                     </div>
@@ -1219,47 +1375,161 @@ return (
                     </div>
                   </div>
                 </div>
+                <div className="px-4 pt-3 lg:px-6 lg:pt-4">
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {[
+                      {k:'CONVERTED', label:'Convertidas'},
+                      {k:'PENDING', label:'Pendentes'},
+                      {k:'REJECTED', label:'Recusadas'},
+                      {k:'ALL', label:'Todas'},
+                    ].map(tab => (
+                      <button
+                        key={tab.k}
+                        onClick={() => setReferralsTab(tab.k as any)}
+                        className={`px-3 py-1.5 rounded-full text-xs border shadow-sm ${referralsTab===tab.k ? 'text-white border-transparent' : 'text-gray-700 border-gray-200 bg-white hover:bg-gray-50'}`}
+                        style={referralsTab===tab.k ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : undefined}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="p-4 lg:p-6 space-y-3 lg:space-y-4">
-                  {referralsMade.map((referral) => {
+                  {filteredSortedReferrals.map((referral) => {
                     const StatusIcon = statusConfig[referral.status as keyof typeof statusConfig]?.icon || Clock;
                     return (
                       <div key={referral.id} className="bg-white rounded-lg p-3.5 lg:p-4 border border-gray-200 hover:border-gray-300 transition-colors">
-                        <div className="flex justify-between items-start">
-                          <h3 className="font-medium text-gray-900 text-sm lg:text-base truncate">{referral.name}</h3>
-                          <div className="shrink-0">
-                            {referral.status === 'CONVERTED' ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] lg:text-xs font-medium bg-green-50 text-green-700 border border-green-200">
-                                <Star className="h-3 w-3" />
-                                Convertido
-                              </span>
+                        <div className="grid grid-cols-12 gap-3 items-center">
+                          <div className="col-span-7 min-w-0">
+                            <div className="font-medium text-gray-900 text-sm lg:text-base truncate">{referral.name}</div>
+                            <div className="mt-0.5 flex items-center gap-2 text-[11px] lg:text-xs text-gray-500 truncate">
+                              <span className="truncate">{referral.doctor.name}</span>
+                              <span className="text-gray-400">•</span>
+                              <span>{formatDate(referral.createdAt)}</span>
+                            </div>
+                          </div>
+                          <div className="col-span-3 flex justify-start lg:justify-center">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] lg:text-xs font-medium border ${statusConfig[referral.status as keyof typeof statusConfig]?.color}`}>
+                              <StatusIcon className="h-3 w-3" />
+                              {statusConfig[referral.status as keyof typeof statusConfig]?.label || referral.status}
+                            </span>
+                          </div>
+                          <div className="col-span-2 text-right">
+                            {referral.credits.length > 0 ? (
+                              <div className="inline-flex items-center gap-1 text-xs lg:text-sm font-semibold text-green-700">
+                                +{referral.credits.reduce((sum, credit) => sum + credit.amount, 0)}
+                              </div>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] lg:text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">
-                                <StatusIcon className="h-3 w-3" />
-                                {statusConfig[referral.status as keyof typeof statusConfig]?.label || referral.status}
-                              </span>
+                              <div className="text-[11px] lg:text-xs text-gray-400">—</div>
                             )}
                           </div>
                         </div>
-                        <div className="mt-1.5 flex items-center justify-between text-[11px] lg:text-xs text-gray-500">
-                          <span className="truncate">{referral.doctor.name}</span>
-                          <span>{formatDate(referral.createdAt)}</span>
-                        </div>
-                        {referral.credits.length > 0 && (
-                          <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] lg:text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">
-                            <Star className="h-3 w-3" />
-                            +{referral.credits.reduce((sum, credit) => sum + credit.amount, 0)} créditos ganhos
-                          </div>
-                        )}
                       </div>
                     );
                   })}
-                  {referralsMade.length === 0 && (
+                  {filteredSortedReferrals.length === 0 && (
                     <div className="text-center py-8 lg:py-12">
                       <div className="w-12 h-12 lg:w-16 lg:h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 lg:mb-4">
                         <UserPlus className="h-5 w-5 lg:h-6 lg:w-6 text-gray-500" />
                       </div>
                       <div className="text-gray-500 text-sm lg:text-base mb-1 lg:mb-2">Nenhuma indicação ainda</div>
-                      <div className="text-gray-600 text-xs lg:text-sm mb-3 lg:mb-4">Comece a indicar pessoas para ganhar créditos</div>
+                      <div className="text-gray-600 text-xs lg:text-sm">Comece a indicar pessoas para ganhar créditos</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Credits Earned History (all sources) */}
+              <div
+                className="group rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
+                style={{ background: 'linear-gradient(180deg, #e5eaf5 0%, #f7f7fc 100%)' }}
+              >
+                <div className="p-4 lg:p-6 border-b border-gray-200">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div>
+                      <h2 className="text-gray-900 text-base lg:text-lg font-semibold">Histórico de Créditos</h2>
+                      <p className="text-gray-600 text-xs lg:text-sm">Extrato com ganhos e resgates</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-full p-1">
+                        {['7d','30d','all'].map((p) => (
+                          <button
+                            key={p}
+                            onClick={() => { setVisibleTxCount(10); setPeriodFilter(p as any); }}
+                            className={`px-3 py-1.5 text-xs rounded-full ${periodFilter===p ? 'text-white' : 'text-gray-700'} `}
+                            style={periodFilter===p ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : {}}
+                          >
+                            {p === '7d' ? '7d' : p === '30d' ? '30d' : 'Tudo'}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-full p-1">
+                        {[
+                          {k:'all', label:'Todos'},
+                          {k:'in', label:'Ganhos'},
+                          {k:'out', label:'Resgates'}
+                        ].map((t) => (
+                          <button
+                            key={t.k}
+                            onClick={() => { setVisibleTxCount(10); setTypeFilter(t.k as any); }}
+                            className={`px-3 py-1.5 text-xs rounded-full ${typeFilter===t.k ? 'text-white' : 'text-gray-700'}`}
+                            style={typeFilter===t.k ? { background: 'linear-gradient(135deg, #5998ed 0%, #9bcaf7 100%)' } : {}}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 bg-white border border-gray-200 rounded-xl p-3 flex items-center justify-between">
+                    <div className="text-xs lg:text-sm text-gray-700">
+                      Você ganhou <span className="font-semibold text-green-700">{extratoSummary.earned}</span> e resgatou <span className="font-semibold text-red-700">{extratoSummary.spent}</span> {periodFilter==='all' ? 'no período selecionado' : 'no período'}
+                    </div>
+                    <div className="text-xs text-gray-500">Saldo atual: <span className="font-medium text-gray-700">{creditsBalance}</span></div>
+                  </div>
+                </div>
+                <div className="p-4 lg:p-6 space-y-2 lg:space-y-3">
+                  {mergedExtrato.length > 0 ? (
+                    mergedExtrato.slice(0, visibleTxCount).map((tx) => {
+                      const Icon = tx.icon || Star;
+                      const isOut = tx.amount < 0;
+                      return (
+                        <div key={tx.id} className="bg-white rounded-lg p-3.5 border border-gray-200 hover:border-gray-300 transition-colors">
+                          <div className="grid grid-cols-12 gap-3 items-start">
+                            <div className="col-span-1 flex justify-center pt-0.5">
+                              <span className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-gray-50 border border-gray-200 text-gray-700">
+                                <Icon className="h-4 w-4" />
+                              </span>
+                            </div>
+                            <div className="col-span-7 min-w-0">
+                              <div className="text-xs lg:text-sm text-gray-500">{formatDate(tx.date)}</div>
+                              <div className="text-sm lg:text-base text-gray-900 truncate">{tx.description}</div>
+                            </div>
+                            <div className="col-span-4 text-right">
+                              <div className={`text-sm lg:text-base font-semibold ${isOut ? 'text-red-700' : 'text-green-700'}`}>{isOut ? '-' : '+'}{Math.abs(tx.amount)}</div>
+                              <div className="text-[11px] lg:text-xs text-gray-500">Crédito</div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-8 lg:py-12">
+                      <div className="w-12 h-12 lg:w-16 lg:h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 lg:mb-4">
+                        <Star className="h-5 w-5 lg:h-6 lg:w-6 text-gray-500" />
+                      </div>
+                      <div className="text-gray-500 text-sm lg:text-base mb-1 lg:mb-2">Sem movimentações</div>
+                      <div className="text-gray-600 text-xs lg:text-sm">Ganhe pontos indicando amigos ou realizando compras</div>
+                    </div>
+                  )}
+                  {mergedExtrato.length > visibleTxCount && (
+                    <div className="pt-1">
+                      <button
+                        onClick={() => setVisibleTxCount(c => c + 10)}
+                        className="w-full text-sm py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+                      >
+                        Carregar mais
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1562,12 +1832,12 @@ return (
             </button>
             {menuOpen && (
               <div className="absolute bottom-14 right-0 bg-white border border-gray-200 rounded-xl shadow-xl w-56 p-2">
-                <Link href="/patient/profile" className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
+                <Link href={doctorSlug ? `/${doctorSlug}/profile` : '/patient/profile'} className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
                   <User className="mr-2 h-4 w-4 text-gray-600" />
                   Profile
                 </Link>
                 <button
-                  onClick={() => signOut({ callbackUrl: '/' })}
+                  onClick={() => signOut({ callbackUrl: doctorSlug ? `/${doctorSlug}/login` : '/login' })}
                   className="w-full flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50"
                 >
                   <LogOut className="mr-2 h-4 w-4 text-gray-600" />

@@ -3,6 +3,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import nodemailer from 'nodemailer';
+import crypto from 'crypto';
+import { getDoctorSlugByDoctorId, getClinicBrandingByDoctorId } from '@/lib/tenant-slug';
+import { createResetPasswordEmail } from '@/email-templates/auth/reset-password';
+import { createSetPasswordEmail } from '@/email-templates/auth/set-password';
 
 // SMTP transporter configuration (Pulse)
 const transporter = nodemailer.createTransport({
@@ -18,37 +22,53 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// Helper to send password reset email
-async function sendPasswordResetEmail(email: string, token: string) {
-  try {
-    const resetUrl = `${process.env.NEXTAUTH_URL}/auth/set-password?token=${token}`;
-    
-    const mailOptions = {
-      from: `"Zuzz" <${process.env.SMTP_FROM}>`,
-      to: email,
-      subject: 'Password Reset',
-      html: `
-        <p>You requested a password reset for your Zuzz account.</p>
-        <p>Click the link below to set a new password:</p>
-        <p><a href="${resetUrl}">${resetUrl}</a></p>
-        <p>If you did not request this reset, please ignore this email.</p>
-      `
-    };
-    
-    const info = await transporter.sendMail(mailOptions);
-    console.log('Email sent via SMTP Pulse:', info.messageId);
-    return true;
-    
-  } catch (error) {
-    console.error('Error sending email:', error);
-    return false;
-  }
+// Helper to send email depending on whether it's first invite or reset
+async function sendPatientAccessEmail({
+  email,
+  resetUrl,
+  clinicName,
+  clinicLogo,
+  doctorName,
+  isFirstInvite,
+}: { email: string; resetUrl: string; clinicName: string; clinicLogo?: string | null; doctorName?: string | null; isFirstInvite: boolean; }) {
+  const html = isFirstInvite
+    ? createSetPasswordEmail({
+        name: '',
+        email,
+        resetUrl,
+        doctorName: doctorName || undefined,
+        clinicName,
+        clinicLogo: clinicLogo || undefined,
+        isExistingClient: false,
+        expiryHours: 24,
+      })
+    : createResetPasswordEmail({
+        name: '',
+        resetUrl,
+        expiryHours: 1,
+        clinicName,
+        clinicLogo: clinicLogo || undefined,
+        doctorName: doctorName || undefined,
+      });
+
+  const subject = isFirstInvite
+    ? `[${clinicName}] Welcome — set your password`
+    : `[${clinicName}] Password reset instructions`;
+
+  const info = await transporter.sendMail({
+    from: { name: clinicName, address: process.env.SMTP_FROM as string },
+    to: email,
+    subject,
+    html,
+  });
+  console.log('Email sent via SMTP Pulse:', info.messageId);
+  return true;
 }
 
 // Usando a nova sintaxe do Next.js para rotas dinâmicas
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -67,8 +87,8 @@ export async function POST(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Safely obtain the patient ID
-    const patientId = params.id;
+    // Safely obtain the patient ID (await params per Next.js requirement)
+    const { id: patientId } = await params;
 
     // Check if doctor has access to this patient
     const relationship = await prisma.doctorPatientRelationship.findFirst({
@@ -94,26 +114,44 @@ export async function POST(
 
     const patient = relationship.patient;
 
-    // For now, just return a success message
-    // TODO: Implement actual email sending functionality
-    // Generate a simple token for password reset
-    const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    
-    // In a real implementation, you would persist this token with an expiration
-    
-    const resetUrl = `${process.env.NEXTAUTH_URL}/auth/set-password?token=${token}`;
-    
-    console.log(`Sending password reset email to ${patient.email}`);
-    
-    const emailSent = await sendPasswordResetEmail(
-      patient.email,
-      token
-    );
+    // Generate secure token and persist (hash + expiry)
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    await prisma.user.update({
+      where: { id: patient.id },
+      data: {
+        reset_token: hashedToken,
+        reset_token_expiry: new Date(Date.now() + 3600000), // 1 hour
+      },
+    });
+
+    // Resolve base URL, doctor slug and branding
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
+    const doctorSlug = await getDoctorSlugByDoctorId(doctor.id);
+    const branding = await getClinicBrandingByDoctorId(doctor.id);
+    const resetUrl = doctorSlug
+      ? `${baseUrl}/${doctorSlug}/set-password?token=${resetToken}`
+      : `${baseUrl}/auth/set-password?token=${resetToken}`; // fallback
+
+    // Determine if this is the first invite: treat users without password as first-time
+    const patientAccount = await prisma.user.findUnique({ where: { id: patient.id }, select: { password: true, email_verified: true } });
+    const isFirstInvite = !patientAccount?.password;
+
+    console.log(`Sending ${isFirstInvite ? 'welcome invite' : 'password reset'} email to ${patient.email}`);
+
+    const emailSent = await sendPatientAccessEmail({
+      email: patient.email,
+      resetUrl,
+      clinicName: branding.clinicName,
+      clinicLogo: branding.clinicLogo || undefined,
+      doctorName: branding.doctorName || undefined,
+      isFirstInvite,
+    });
     
     console.log(`Email sent: ${emailSent}`);
     
     return NextResponse.json({
-      message: 'Password reset email sent successfully',
+      message: isFirstInvite ? 'Invitation email sent successfully' : 'Password reset email sent successfully',
       resetUrl: resetUrl // For testing purposes
     });
 

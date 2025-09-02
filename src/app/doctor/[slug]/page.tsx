@@ -74,6 +74,36 @@ export default function DoctorPage() {
   const [isNewUser, setIsNewUser] = useState(false);
   const [accountCreated, setAccountCreated] = useState(false);
 
+  // Cookie helpers for coupon template
+  const readTemplateCookie = () => {
+    try {
+      const name = `coupon_template_${slug}=`;
+      const parts = (typeof document !== 'undefined' ? document.cookie : '').split(';');
+      for (let c of parts) {
+        c = c.trim();
+        if (c.startsWith(name)) return decodeURIComponent(c.substring(name.length));
+      }
+    } catch {}
+    return null;
+  };
+  const clearTemplateCookie = () => {
+    try {
+      document.cookie = `coupon_template_${slug}=; path=/; max-age=0; samesite=lax`;
+    } catch {}
+  };
+  const tryClaimCoupon = async () => {
+    const tpl = readTemplateCookie();
+    if (!tpl) return;
+    try {
+      await fetch('/api/coupons/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doctor_slug: slug, template_slug: tpl }),
+      });
+    } catch {}
+    clearTemplateCookie();
+  };
+
   // Detectar idioma do navegador
   useEffect(() => {
     const browserLanguage = navigator.language || navigator.languages?.[0] || 'pt';
@@ -198,7 +228,8 @@ export default function DoctorPage() {
               
               if (authResponse.ok && authData.success) {
                 console.log('Autenticação bem-sucedida, redirecionando para área logada');
-                // Agora podemos redirecionar para a área logada
+                // Claim coupon if cookie exists, then redirect
+                await tryClaimCoupon();
                 router.push(`/patient/doctor-protocols/${doctor?.id}`);
                 return;
               }
@@ -208,10 +239,13 @@ export default function DoctorPage() {
             
             // Fallback para página de login com token
             console.log('Fallback: Redirecionando para página de login com token');
+            // Attempt claim even on fallback; user will be logged in on next page
+            await tryClaimCoupon();
             router.push(`/auth/signin?token=${encodeURIComponent(data.token)}&email=${encodeURIComponent(email)}`);
           } else {
             console.log('Token não recebido, redirecionando para login');
             // Fallback para página de login
+            await tryClaimCoupon();
             router.push('/auth/signin');
           }
         }
@@ -303,7 +337,8 @@ export default function DoctorPage() {
           
           if (authResponse.ok && authData.success) {
             console.log('Autenticação após registro bem-sucedida, redirecionando para área logada');
-            // Redirecionar para a área logada
+            // Claim coupon then redirect
+            await tryClaimCoupon();
             router.push(`/patient/doctor-protocols/${doctor?.id}`);
             return;
           }
@@ -312,9 +347,11 @@ export default function DoctorPage() {
         }
         
         // Fallback para página de login com token
+        await tryClaimCoupon();
         router.push(`/auth/signin?token=${encodeURIComponent(data.token)}&email=${encodeURIComponent(email)}`);
       } else {
         // Se não tiver token, redirecionar para login normal
+        await tryClaimCoupon();
         router.push(`/auth/signin?email=${encodeURIComponent(email)}`);
       }
     } catch (error: any) {

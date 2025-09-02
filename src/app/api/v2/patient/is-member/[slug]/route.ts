@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma';
 // Returns { success: boolean, isMember: boolean } for the currently logged-in user against the doctor for the slug
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { slug: string } }
+  { params }: { params: { slug: string } | Promise<{ slug: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -15,7 +15,7 @@ export async function GET(
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    const { slug } = params;
+    const { slug } = await Promise.resolve(params as any);
     if (!slug) {
       return NextResponse.json({ success: false, message: 'Missing slug' }, { status: 400 });
     }
@@ -25,7 +25,6 @@ export async function GET(
       where: {
         doctor_slug: slug,
         role: 'DOCTOR',
-        is_active: true,
       },
       select: { id: true },
     });
@@ -46,12 +45,8 @@ export async function GET(
       return NextResponse.json({ success: false, message: 'User not found' }, { status: 404 });
     }
 
-    if (patient.role !== 'PATIENT') {
-      // Non-patients are not considered members; return false but success true
-      return NextResponse.json({ success: true, isMember: false });
-    }
-
-    if (patient.doctor_id === doctor.id) {
+    // If the user is a PATIENT and directly assigned to this doctor, it's a member
+    if (patient.role === 'PATIENT' && patient.doctor_id === doctor.id) {
       return NextResponse.json({ success: true, isMember: true });
     }
 

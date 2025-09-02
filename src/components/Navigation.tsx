@@ -23,7 +23,8 @@ import {
   ChatBubbleLeftRightIcon,
   SparklesIcon,
   ExclamationTriangleIcon,
-  BellIcon
+  BellIcon,
+  TagIcon
 } from '@heroicons/react/24/outline';
 import { ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
 import { Bot } from 'lucide-react';
@@ -184,6 +185,15 @@ function useDoctorInfo(effectiveRole?: 'DOCTOR' | 'PATIENT' | 'SUPER_ADMIN' | nu
 
 export default function Navigation() {
   const pathname = usePathname();
+  // Detect current slug from path (exclude known roots)
+  const currentSlug = (() => {
+    if (!pathname) return null;
+    const parts = pathname.split('/').filter(Boolean);
+    if (parts.length === 0) return null;
+    const first = parts[0];
+    const excluded = new Set(['auth', 'api', 'assets', 'public', '_next', 'doctor', 'admin', 'clinic', 'patient']);
+    return excluded.has(first) ? null : first;
+  })();
   const { data: session } = useSession();
   const { userRole, isLoadingRole } = useUserRole();
   
@@ -228,42 +238,45 @@ export default function Navigation() {
   };
 
   // Navegação para pacientes - memoizada para evitar re-renderizações
-  const patientNavSections: NavSection[] = useMemo(() => [
-    {
-      title: "Planning",
-      items: [
-        {
-          href: '/patient/protocols',
-          label: 'Protocols',
-          icon: CheckCircleIcon,
-          description: 'My medical protocols'
-        },
-        {
-          href: '/patient/appointments',
-          label: 'Appointments',
-          icon: CalendarDaysIcon,
-          description: 'Schedule appointments'
-        },
-        {
-          href: '/patient/ai-chat',
-          label: 'AI Assistant',
-          icon: Bot,
-          description: 'Chat with AI assistant'
-        }
-      ]
-    },
-    {
-      title: "Referrals",
-      items: [
-        {
-          href: '/patient/referrals',
-          label: 'My Referrals',
-          icon: UserPlusIcon,
-          description: 'My credits and rewards'
-        }
-      ]
-    }
-  ], []);
+  const patientNavSections: NavSection[] = useMemo(() => {
+    const slugPrefix = currentSlug ? `/${currentSlug}` : '';
+    return [
+      {
+        title: "Planning",
+        items: [
+          {
+            href: slugPrefix ? `${slugPrefix}/protocols` : '/patient/protocols',
+            label: 'Protocols',
+            icon: CheckCircleIcon,
+            description: 'My medical protocols'
+          },
+          {
+            href: slugPrefix ? `${slugPrefix}/appointments` : '/patient/appointments',
+            label: 'Appointments',
+            icon: CalendarDaysIcon,
+            description: 'Schedule appointments'
+          },
+          {
+            href: slugPrefix ? `${slugPrefix}/ai-chat` : '/patient/ai-chat',
+            label: 'AI Assistant',
+            icon: Bot,
+            description: 'Chat with AI assistant'
+          }
+        ]
+      },
+      {
+        title: "Referrals",
+        items: [
+          {
+            href: slugPrefix ? `${slugPrefix}/referrals` : '/patient/referrals',
+            label: 'My Referrals',
+            icon: UserPlusIcon,
+            description: 'My credits and rewards'
+          }
+        ]
+      }
+    ];
+  }, [currentSlug]);
 
   // Navegação para médicos - memoizada para evitar re-renderizações
   const doctorNavSections: NavSection[] = useMemo(() => [
@@ -283,6 +296,12 @@ export default function Navigation() {
           description: 'Manage clients'
         },
         {
+          href: '/clinic',
+          label: 'Team',
+          icon: BuildingOfficeIcon,
+          description: 'Manage clinics and team'
+        },
+        {
           href: '/doctor/products',
           label: 'Products',
           icon: DocumentTextIcon,
@@ -295,22 +314,16 @@ export default function Navigation() {
           description: 'Record patient purchases'
         },
         {
-          href: '/doctor/referrals/kpis',
-          label: 'Highlights',
-          icon: SparklesIcon,
-          description: 'Referral KPIs'
-        },
-        {
           href: '/doctor/referrals',
           label: 'Referrals',
           icon: UserPlusIcon,
           description: 'Manage received referrals'
         },
         {
-          href: '/doctor/campaigns',
-          label: 'Campaigns',
-          icon: PresentationChartBarIcon,
-          description: 'Manage marketing campaigns'
+          href: '/doctor/coupon-templates',
+          label: 'Cupons',
+          icon: TagIcon,
+          description: 'Gerenciar modelos de cupons'
         },
         {
           href: '/doctor/rewards',
@@ -371,21 +384,27 @@ export default function Navigation() {
   const isAIChatPage = pathname === '/patient/ai-chat';
   const isPatientReferralsPage = pathname === '/patient/referrals';
   const isPatientProfilePage = pathname?.startsWith('/patient/profile');
+  // Slugged patient pages
+  const isSlugPatientReferralsPage = currentSlug ? pathname === `/${currentSlug}/referrals` : false;
+  const isSlugPatientProfilePage = currentSlug ? pathname?.startsWith(`/${currentSlug}/profile`) : false;
   
   // ESTRATÉGIA MELHORADA: Usar a URL como hint inicial para evitar flash
   // Se estamos em página de médico/admin, assumir esse role até a API confirmar
   // Se estamos em página de paciente ou não sabemos, assumir paciente
   const getEffectiveRole = () => {
+    // Sempre tratar páginas /patient/* como contexto de paciente (evita menu de médico nessa área)
+    if (pathname?.startsWith('/patient') || isDoctorInfoPage) return 'PATIENT';
+
     // Se já temos o role da API, usar ele
     if (userRole) return userRole;
-    
+
     // Se ainda está carregando, usar hint da URL
     if (isLoadingRole) {
       if (isAdminPage) return 'SUPER_ADMIN';
       if (isDoctorPage) return 'DOCTOR';
       return 'PATIENT';
     }
-    
+
     // Fallback para paciente se não conseguiu detectar
     return 'PATIENT';
   };
@@ -396,7 +415,7 @@ export default function Navigation() {
   
   // Determinar tema baseado no role do usuário e na URL
   // /doctor-info sempre usa tema escuro (paciente), mesmo que o usuário seja médico
-  const shouldUseLightTheme = !isDoctorInfoPage && ((isDoctorPage || isAdminPage) || (effectiveRole === 'DOCTOR' || effectiveRole === 'SUPER_ADMIN'));
+  const shouldUseLightTheme = !isDoctorInfoPage && ((isDoctorPage || isAdminPage) || (effectiveRole === 'DOCTOR' || effectiveRole === 'SUPER_ADMIN')) && !pathname?.startsWith('/patient');
 
   // Selecionar navegação baseada no role - memoizada
   const navSections = useMemo(() => {
@@ -408,8 +427,10 @@ export default function Navigation() {
 
   // Profile URL - memoizada
   const profileUrl = useMemo(() => {
-    return effectiveRole === 'DOCTOR' || effectiveRole === 'SUPER_ADMIN' ? '/doctor/profile' : '/patient/profile';
-  }, [effectiveRole]);
+    if (effectiveRole === 'DOCTOR' || effectiveRole === 'SUPER_ADMIN') return '/doctor/profile';
+    // Patient
+    return currentSlug ? `/${currentSlug}/profile` : '/patient/profile';
+  }, [effectiveRole, currentSlug]);
   
   // Não renderizar até que esteja hidratado
   if (!isHydrated) {
@@ -611,7 +632,7 @@ export default function Navigation() {
       {/* Mobile Navigation */}
       <div className="lg:hidden">
         {/* Mobile Header */}
-        {!(isPatientReferralsPage || isPatientProfilePage) && (
+        {!(isPatientReferralsPage || isPatientProfilePage || isSlugPatientReferralsPage || isSlugPatientProfilePage) && (
           <div className={cn(
             "fixed top-0 left-0 right-0 border-b backdrop-blur z-40",
             shouldUseLightTheme
@@ -689,15 +710,6 @@ export default function Navigation() {
                         <UserAvatar />
                       </div>
                     </Link>
-                    <button
-                      type="button"
-                      aria-label="Sign out"
-                      onClick={handleSignOut}
-                      className="p-2 rounded-md hover:bg-gray-100 text-red-600 hover:text-red-700"
-                      title="Sign out"
-                    >
-                      <ArrowRightOnRectangleIcon className="h-5 w-5" />
-                    </button>
                   </div>
                 </>
               )}
@@ -706,7 +718,7 @@ export default function Navigation() {
         )}
 
         {/* Mobile Navigation Bar - Different styles for patients vs doctors/admins */}
-        {(effectiveRole === 'PATIENT' || isDoctorInfoPage) && !isChecklistPage && !isSpecificCoursePage && !isAIChatPage && !isProtocolsPage && !isPatientReferralsPage && !isPatientProfilePage ? (
+        {(effectiveRole === 'PATIENT' || isDoctorInfoPage) && !isChecklistPage && !isSpecificCoursePage && !isAIChatPage && !isProtocolsPage && !isPatientReferralsPage && !isPatientProfilePage && !isSlugPatientReferralsPage && !isSlugPatientProfilePage ? (
           // Patient Bottom Navigation - App Style (Mobile Only)
           <nav className="fixed bottom-0 left-0 right-0 z-40">
             <div className="bg-[#111111]/95 backdrop-blur-xl border-t border-gray-800 shadow-2xl">
@@ -802,7 +814,7 @@ export default function Navigation() {
       {(effectiveRole === 'PATIENT' || isDoctorInfoPage) && (
         <>
           {/* Desktop Top Header for Patients */}
-          {!(isPatientReferralsPage || isPatientProfilePage) && (
+          {!(isPatientReferralsPage || isPatientProfilePage || isSlugPatientReferralsPage || isSlugPatientProfilePage) && (
             <div className="fixed top-0 left-0 right-0 border-b backdrop-blur z-40 border-gray-800 bg-[#111111]/95 hidden lg:block">
               <div className="py-4 px-6 flex justify-between items-center">
                 <div className="flex items-center gap-3">
@@ -854,7 +866,7 @@ export default function Navigation() {
           )}
 
           {/* Desktop Bottom Navigation for Patients - Hidden on checklist pages */}
-          {!isChecklistPage && !isProtocolsPage && !isPatientReferralsPage && !isPatientProfilePage && (
+          {!isChecklistPage && !isProtocolsPage && !isPatientReferralsPage && !isPatientProfilePage && !isSlugPatientReferralsPage && !isSlugPatientProfilePage && (
             <nav className="fixed bottom-0 left-0 right-0 z-40 hidden lg:block">
               <div className="bg-[#111111]/95 backdrop-blur-xl border-t border-gray-800 shadow-2xl">
                 <div className="px-8 py-4">

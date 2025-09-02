@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch product for price and credits per unit
-    const product = await prisma.products.findUnique({ where: { id: productId }, select: { id: true, price: true, creditsPerUnit: true } });
+    const product = await prisma.products.findUnique({ where: { id: productId }, select: { id: true, name: true, price: true, creditsPerUnit: true } });
     if (!product) return badRequest('Produto não encontrado');
 
     // Monetary and points as Decimal
@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
           sourceType: 'PURCHASE',
           sourceId: purchase.id,
           amount: pointsAwarded,
-          description: `Pontos por compra do produto ${product.id} (qtd ${quantity})`,
+          description: `Pontos por compra: ${quantity}x ${product.name ?? product.id}`,
         },
       });
 
@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
           userId: patientId,
           amount: pointsAwarded,
           type: 'PURCHASE',
-          description: `Créditos por compra do produto ${product.id} (qtd ${quantity})`,
+          description: `Créditos por compra: ${quantity}x ${product.name ?? product.id}`,
         },
       });
 

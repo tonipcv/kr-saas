@@ -217,6 +217,10 @@ export default function DoctorReferralsPage() {
     ? leads.filter(lead => ['PENDING', 'CONTACTED', 'CONVERTED'].includes(lead.status))
     : leads.filter(lead => lead.status === 'REJECTED');
 
+  // Currency formatter (BRL)
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(amount || 0);
+
   // Calculate stats for each tab
   const activeStats = {
     pending: stats?.pending || 0,
@@ -323,46 +327,8 @@ export default function DoctorReferralsPage() {
                 </Button>
               </div>
             </div>
-
-            {/* Page tabs */}
-            <div className="mt-3 flex items-center gap-2">
-              {['Overview', 'Stats'].map((tab, i) => (
-                <button key={tab} type="button" className={`h-8 px-3 text-xs rounded-full border shadow-sm ${i === 0 ? 'bg-white border-gray-200 text-gray-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                  {tab}
-                </button>
-              ))}
-            </div>
           </div>
 
-          {/* Toolbar */}
-          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
-                All leads
-              </Button>
-              <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
-                Show filters
-              </Button>
-              <div className="w-full sm:w-72">
-                <input
-                  type="text"
-                  placeholder="Search deals"
-                  className="block w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-[14px] text-gray-900 shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5154e7]"
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
-                Save view
-              </Button>
-              <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
-                Sort
-              </Button>
-              <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
-                View options
-              </Button>
-            </div>
-          </div>
 
           {/* Tabs */}
           <div className="flex space-x-1 mb-8">
@@ -429,7 +395,7 @@ export default function DoctorReferralsPage() {
                     <CardContent className="p-5">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-gray-600">Pending Value</p>
-                        <span className="text-xl font-bold text-gray-900">{(stats.pendingValue ?? 0).toFixed(2)}</span>
+                        <span className="text-xl font-bold text-gray-900">{formatCurrency(stats.pendingValue ?? 0)}</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -437,7 +403,7 @@ export default function DoctorReferralsPage() {
                     <CardContent className="p-5">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-gray-600">Obtained Value</p>
-                        <span className="text-xl font-bold text-gray-900">{(stats.obtainedValue ?? 0).toFixed(2)}</span>
+                        <span className="text-xl font-bold text-gray-900">{formatCurrency(stats.obtainedValue ?? 0)}</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -503,9 +469,9 @@ export default function DoctorReferralsPage() {
                         <TableCell className="text-sm text-gray-700">{lead.campaign?.title || '—'}</TableCell>
                         <TableCell className="text-sm text-gray-700">
                           {typeof lead.customFields?.productPrice === 'number'
-                            ? (lead.customFields!.productPrice as number).toFixed(2)
+                            ? formatCurrency(lead.customFields!.productPrice as number)
                             : (typeof lead.customFields?.offer?.amount === 'number'
-                                ? (lead.customFields!.offer!.amount as number).toFixed(2)
+                                ? formatCurrency(lead.customFields!.offer!.amount as number)
                                 : '—')}
                         </TableCell>
                         <TableCell className="text-sm text-gray-700">
@@ -566,9 +532,9 @@ export default function DoctorReferralsPage() {
                                     <p className="text-sm text-gray-900"><strong>Product:</strong> {selectedLead?.customFields?.productName ?? '—'}{selectedLead?.customFields?.productCategory ? ` (${selectedLead?.customFields?.productCategory})` : ''}</p>
                                     <p className="text-sm text-gray-900"><strong>Campaign:</strong> {selectedLead?.campaign?.title || '—'}</p>
                                     <p className="text-sm text-gray-900"><strong>Valor:</strong> {typeof selectedLead?.customFields?.productPrice === 'number'
-                                      ? (selectedLead!.customFields!.productPrice as number).toFixed(2)
+                                      ? formatCurrency(selectedLead!.customFields!.productPrice as number)
                                       : (typeof selectedLead?.customFields?.offer?.amount === 'number'
-                                          ? (selectedLead!.customFields!.offer!.amount as number).toFixed(2)
+                                          ? formatCurrency(selectedLead!.customFields!.offer!.amount as number)
                                           : '—')}
                                     </p>
                                     <p className="text-sm text-gray-900"><strong>Cupom:</strong> {selectedLead?.customFields?.coupon?.code ?? '—'}</p>

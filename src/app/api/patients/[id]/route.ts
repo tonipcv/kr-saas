@@ -24,12 +24,12 @@ export async function GET(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Check if doctor has access to this patient
+    // Check if doctor has access to this patient and include per-doctor PatientProfile
     const relationship = await prisma.doctorPatientRelationship.findFirst({
       where: {
         doctorId: doctor.id,
         patientId: params.id,
-        isActive: true
+        isActive: true,
       },
       include: {
         patient: {
@@ -47,31 +47,49 @@ export async function GET(
             allergies: true,
             medications: true,
             notes: true,
-            is_active: true
-          }
-        }
-      }
+            is_active: true,
+            patient_profiles: {
+              where: { doctorId: doctor.id },
+              take: 1,
+              select: {
+                name: true,
+                phone: true,
+                address: true,
+                emergency_contact: true,
+                emergency_phone: true,
+                medical_history: true,
+                allergies: true,
+                medications: true,
+                notes: true,
+                isActive: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!relationship || !relationship.patient) {
       return NextResponse.json({ error: 'Patient not found' }, { status: 404 });
     }
 
-    // Transform to legacy format
+    // Transform to legacy format with PatientProfile fallback
+    const profile = relationship.patient.patient_profiles?.[0];
     const patient = {
       id: relationship.patient.id,
-      name: relationship.patient.name,
+      name: profile?.name ?? relationship.patient.name,
       email: relationship.patient.email,
-      phone: relationship.patient.phone,
+      phone: profile?.phone ?? relationship.patient.phone,
       birthDate: relationship.patient.birth_date,
       gender: relationship.patient.gender,
-      address: relationship.patient.address,
-      emergencyContact: relationship.patient.emergency_contact,
-      emergencyPhone: relationship.patient.emergency_phone,
-      medicalHistory: relationship.patient.medical_history,
-      allergies: relationship.patient.allergies,
-      medications: relationship.patient.medications,
-      notes: relationship.patient.notes
+      address: profile?.address ?? relationship.patient.address,
+      emergencyContact: profile?.emergency_contact ?? relationship.patient.emergency_contact,
+      emergencyPhone: profile?.emergency_phone ?? relationship.patient.emergency_phone,
+      medicalHistory: profile?.medical_history ?? relationship.patient.medical_history,
+      allergies: profile?.allergies ?? relationship.patient.allergies,
+      medications: profile?.medications ?? relationship.patient.medications,
+      notes: profile?.notes ?? relationship.patient.notes,
+      isActive: profile?.isActive ?? relationship.patient.is_active,
     };
 
     return NextResponse.json(patient);
@@ -135,30 +153,57 @@ export async function PUT(
       notes
     } = body;
 
-    // Update patient
-    const updatedPatient = await prisma.user.update({
-      where: { id: params.id },
-      data: {
-        ...(name && { name }),
-        ...(email && { email }),
-        ...(phone && { phone }),
-        ...(birthDate && { birth_date: new Date(birthDate) }),
-        ...(gender && { gender }),
-        ...(address && { address }),
-        ...(emergencyContact && { emergency_contact: emergencyContact }),
-        ...(emergencyPhone && { emergency_phone: emergencyPhone }),
-        ...(medicalHistory && { medical_history: medicalHistory }),
-        ...(allergies && { allergies }),
-        ...(medications && { medications }),
-        ...(notes && { notes })
-      }
+    // Update per-doctor fields in PatientProfile, and update limited global fields in User
+    const result = await prisma.$transaction(async (tx) => {
+      // Upsert tenant-scoped PatientProfile
+      const profile = await tx.patientProfile.upsert({
+        where: { doctorId_userId: { doctorId: doctor.id, userId: params.id } },
+        create: {
+          doctorId: doctor.id,
+          userId: params.id,
+          ...(name !== undefined ? { name } : {}),
+          ...(phone !== undefined ? { phone } : {}),
+          ...(address !== undefined ? { address } : {}),
+          ...(emergencyContact !== undefined ? { emergency_contact: emergencyContact } : {}),
+          ...(emergencyPhone !== undefined ? { emergency_phone: emergencyPhone } : {}),
+          ...(medicalHistory !== undefined ? { medical_history: medicalHistory } : {}),
+          ...(allergies !== undefined ? { allergies } : {}),
+          ...(medications !== undefined ? { medications } : {}),
+          ...(notes !== undefined ? { notes } : {}),
+          isActive: true,
+        },
+        update: {
+          ...(name !== undefined ? { name } : {}),
+          ...(phone !== undefined ? { phone } : {}),
+          ...(address !== undefined ? { address } : {}),
+          ...(emergencyContact !== undefined ? { emergency_contact: emergencyContact } : {}),
+          ...(emergencyPhone !== undefined ? { emergency_phone: emergencyPhone } : {}),
+          ...(medicalHistory !== undefined ? { medical_history: medicalHistory } : {}),
+          ...(allergies !== undefined ? { allergies } : {}),
+          ...(medications !== undefined ? { medications } : {}),
+          ...(notes !== undefined ? { notes } : {}),
+        },
+      });
+
+      // Update selected global fields on User
+      const user = await tx.user.update({
+        where: { id: params.id },
+        data: {
+          ...(email ? { email } : {}),
+          ...(birthDate ? { birth_date: new Date(birthDate) } : {}),
+          ...(gender ? { gender } : {}),
+        },
+        select: { id: true, email: true },
+      });
+
+      return { profile, user };
     });
 
     return NextResponse.json({
-      id: updatedPatient.id,
-      name: updatedPatient.name,
-      email: updatedPatient.email,
-      phone: updatedPatient.phone
+      id: params.id,
+      name: name,
+      email: result.user.email,
+      phone: phone,
     });
 
   } catch (error) {
@@ -206,7 +251,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Patient not found or access denied' }, { status: 403 });
     }
 
-    // Update both the user and the relationship in a transaction
+    // Update the user, relationship and PatientProfile in a transaction
     await prisma.$transaction(async (tx) => {
       // Soft delete user by setting is_active to false
       await tx.user.update({
@@ -221,6 +266,12 @@ export async function DELETE(
           patientId: patientId,
         },
         data: { isActive: false }
+      });
+
+      // Mark the PatientProfile as inactive for this doctor
+      await tx.patientProfile.updateMany({
+        where: { doctorId: doctor.id, userId: patientId },
+        data: { isActive: false },
       });
     });
 
