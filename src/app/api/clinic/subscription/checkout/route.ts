@@ -4,9 +4,14 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2023-10-16',
-});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
+
+// Hardcoded Stripe Price IDs (requested): prefer these over envs
+const HARD_CODED_PRICE_BY_KEY: Record<string, string | undefined> = {
+  // tiers/names normalized to lowercase
+  starter: 'price_1RtWO8AuTHuXpGLf9GCItW8I',
+  growth: 'price_1S46a0AuTHuXpGLf3d1vnQmR',
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -54,18 +59,40 @@ export async function POST(req: NextRequest) {
     }
 
     // Figure out Stripe price ID
-    const priceEnvByName: Record<string, string | undefined> = {
-      Starter: process.env.STRIPE_PRICE_STARTER,
-      Growth: process.env.STRIPE_PRICE_GROWTH,
-      Creator: process.env.STRIPE_PRICE_CREATOR,
-      Enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
+    // Resolve by plan.tier first (authoritative), then by name (case-insensitive) and aliases
+    const normalizedName = (plan.name || '').trim().toLowerCase();
+    const normalizedTier = (plan as any).tier ? String((plan as any).tier).trim().toLowerCase() : undefined;
+
+    const priceEnvByKey: Record<string, string | undefined> = {
+      // by tier
+      starter: HARD_CODED_PRICE_BY_KEY.starter || process.env.STRIPE_PRICE_STARTER,
+      growth: HARD_CODED_PRICE_BY_KEY.growth || process.env.STRIPE_PRICE_GROWTH,
+      enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
+      // by common names/aliases
+      creator: process.env.STRIPE_PRICE_CREATOR,
+      basic: HARD_CODED_PRICE_BY_KEY.starter || process.env.STRIPE_PRICE_STARTER,
+      pro: HARD_CODED_PRICE_BY_KEY.growth || process.env.STRIPE_PRICE_GROWTH,
     };
 
-    const fallbackPriceId = priceEnvByName[plan.name];
+    const fallbackPriceId =
+      (normalizedTier && priceEnvByKey[normalizedTier]) ||
+      priceEnvByKey[normalizedName];
     const priceId = (priceIdFromClient as string | undefined) || fallbackPriceId;
 
     if (!priceId) {
-      return NextResponse.json({ error: 'Stripe price not configured for this plan' }, { status: 400 });
+      const diag = {
+        plan: { id: plan.id, name: plan.name, tier: (plan as any).tier },
+        normalizedTier,
+        normalizedName,
+        envPresent: {
+          STRIPE_PRICE_STARTER: Boolean(process.env.STRIPE_PRICE_STARTER),
+          STRIPE_PRICE_GROWTH: Boolean(process.env.STRIPE_PRICE_GROWTH),
+          STRIPE_PRICE_CREATOR: Boolean(process.env.STRIPE_PRICE_CREATOR),
+          STRIPE_PRICE_ENTERPRISE: Boolean(process.env.STRIPE_PRICE_ENTERPRISE),
+        },
+      };
+      console.warn('Stripe price mapping failed:', diag);
+      return NextResponse.json({ error: 'Stripe price not configured for this plan', details: diag }, { status: 400 });
     }
 
     // Get or create Stripe customer tied to clinic

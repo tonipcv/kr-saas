@@ -119,15 +119,12 @@ export default function SubscriptionManagement() {
   const handlePlanChange = async (plan: SubscriptionPlan) => {
     try {
       if (!plan || plan.contactOnly) return;
-      if (!plan.priceId) {
-        alert('Este plano não está configurado com um preço da Stripe.');
-        return;
-      }
 
       const res = await fetch('/api/clinic/subscription/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId: plan.id, priceId: plan.priceId })
+        // priceId é opcional no backend; ele mapeia pelo nome do plano
+        body: JSON.stringify({ planId: plan.id })
       });
 
       if (!res.ok) {
@@ -337,13 +334,13 @@ export default function SubscriptionManagement() {
                     </div>
 
                     <Button
-                      onClick={isEnterprise ? () => window.open('https://calendly.com/cxlus/demo', '_blank') : () => handlePlanChange(plan)}
+                      onClick={isEnterprise ? () => window.open('https://calendly.com/getcxlus/free-consultation-to-implement-zuzz', '_blank') : () => handlePlanChange(plan)}
                       className={`mt-6 w-full h-10 rounded-lg ${
                         isCurrentPlan 
                           ? 'bg-[#333333] text-gray-400 cursor-not-allowed' 
                           : 'bg-white text-black hover:bg-gray-100'
                       }`}
-                      disabled={isCurrentPlan || (!isEnterprise && !plan.priceId)}
+                      disabled={isCurrentPlan}
                     >
                       {isCurrentPlan ? 'Plano atual' : isEnterprise ? 'Agendar demo' : 'Assinar'}
                     </Button>
