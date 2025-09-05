@@ -25,11 +25,24 @@ export async function GET(_req: NextRequest) {
       }
     });
 
-    const plans = rawPlans.map(p => {
-      if (p.name === 'Enterprise') {
-        return { ...p, monthlyPrice: null as any, contactOnly: true };
-      }
-      return { ...p, contactOnly: false };
+    // Map plan name -> Stripe Price env var (configure these in your .env)
+    const priceEnvByName: Record<string, string | undefined> = {
+      Starter: process.env.STRIPE_PRICE_STARTER,
+      Growth: process.env.STRIPE_PRICE_GROWTH,
+      Creator: process.env.STRIPE_PRICE_CREATOR,
+      Enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
+    };
+
+    const plans = rawPlans.map((p) => {
+      const isEnterprise = p.name === 'Enterprise';
+      const priceId = priceEnvByName[p.name];
+      return {
+        ...p,
+        contactOnly: isEnterprise || p.monthlyPrice === null,
+        monthlyPrice: isEnterprise ? (null as any) : p.monthlyPrice,
+        // Expose Stripe price so the frontend can start a real checkout
+        priceId: isEnterprise ? undefined : priceId,
+      } as any;
     });
 
     return NextResponse.json({ plans });
@@ -38,3 +51,4 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+

@@ -28,6 +28,8 @@ interface SubscriptionPlan {
   basePatients: number;
   // Some API responses use maxPatients; keep it optional to satisfy both
   maxPatients?: number;
+  // Stripe price id for real checkout (non-enterprise)
+  priceId?: string;
   features: {
     customBranding: boolean;
     advancedReports: boolean;
@@ -114,9 +116,35 @@ export default function SubscriptionManagement() {
     }
   };
 
-  const handlePlanChange = (planId: string) => {
-    // TODO: implement change plan action
-    alert(`Plan change to ${planId} will be implemented soon!`);
+  const handlePlanChange = async (plan: SubscriptionPlan) => {
+    try {
+      if (!plan || plan.contactOnly) return;
+      if (!plan.priceId) {
+        alert('Este plano não está configurado com um preço da Stripe.');
+        return;
+      }
+
+      const res = await fetch('/api/clinic/subscription/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId: plan.id, priceId: plan.priceId })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Falha ao iniciar checkout');
+      }
+
+      const data = await res.json();
+      if (data?.url) {
+        window.location.href = data.url as string;
+      } else {
+        throw new Error('URL de checkout não recebida');
+      }
+    } catch (e: any) {
+      console.error('Checkout error:', e);
+      alert(e?.message || 'Erro ao redirecionar para o checkout');
+    }
   };
 
   // Filter and sort plans (Free excluded, Enterprise last)
@@ -309,15 +337,15 @@ export default function SubscriptionManagement() {
                     </div>
 
                     <Button
-                      onClick={isEnterprise ? () => window.open('https://calendly.com/cxlus/demo', '_blank') : () => handlePlanChange(plan.id)}
+                      onClick={isEnterprise ? () => window.open('https://calendly.com/cxlus/demo', '_blank') : () => handlePlanChange(plan)}
                       className={`mt-6 w-full h-10 rounded-lg ${
                         isCurrentPlan 
                           ? 'bg-[#333333] text-gray-400 cursor-not-allowed' 
                           : 'bg-white text-black hover:bg-gray-100'
                       }`}
-                      disabled={isCurrentPlan}
+                      disabled={isCurrentPlan || (!isEnterprise && !plan.priceId)}
                     >
-                      {isCurrentPlan ? 'Plano atual' : isEnterprise ? 'Agendar demo' : 'Upgrade'}
+                      {isCurrentPlan ? 'Plano atual' : isEnterprise ? 'Agendar demo' : 'Assinar'}
                     </Button>
                   </div>
 
