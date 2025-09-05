@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import { useClinic } from '@/contexts/clinic-context';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -69,6 +70,7 @@ interface DashboardStats {
 export default function DoctorDashboard() {
   const { data: session } = useSession();
   const router = useRouter();
+  const { currentClinic } = useClinic();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [protocols, setProtocols] = useState<Protocol[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
@@ -97,12 +99,14 @@ export default function DoctorDashboard() {
 
   useEffect(() => {
     const loadDashboardData = async () => {
+      if (!currentClinic) return;
+      
       try {
         setIsLoading(true);
         // Kick off all core requests in parallel to avoid waterfall
-        const dashboardPromise = fetch('/api/v2/doctor/dashboard-summary');
-        const patientsPromise = fetch('/api/patients');
-        const protocolsPromise = fetch('/api/protocols');
+        const dashboardPromise = fetch(`/api/v2/doctor/dashboard-summary?clinicId=${currentClinic.id}`);
+        const patientsPromise = fetch(`/api/patients?clinicId=${currentClinic.id}`);
+        const protocolsPromise = fetch(`/api/protocols?clinicId=${currentClinic.id}`);
 
         // Non-critical (deferred) requests in parallel, will be processed after first paint
         const kpisPromise = fetch('/api/v2/doctor/referrals/kpis', { cache: 'no-store' }).catch(() => null);
@@ -278,7 +282,7 @@ export default function DoctorDashboard() {
     if (session) {
       loadDashboardData();
     }
-  }, [session]);
+  }, [session, currentClinic]);
 
   // Load doctor slug for public link
   useEffect(() => {
@@ -393,7 +397,7 @@ export default function DoctorDashboard() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => router.push('/doctor/patients?add=1')}
-                  className="inline-flex h-8 items-center rounded-full bg-gradient-to-r from-[#2a075e] via-[#7131b8] to-[#caa8f5] px-3 text-xs font-medium text-white hover:opacity-90 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2a075e]"
+                  className="inline-flex h-8 items-center rounded-full bg-gray-900 px-3 text-xs font-medium text-white hover:bg-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 transition-colors"
                 >
                   New client
                 </button>

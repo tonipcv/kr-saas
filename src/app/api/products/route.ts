@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 
 // GET /api/products - Listar produtos
 export async function GET(request: Request) {
+  console.log('🔍 Products API called');
   try {
     console.log('🔍 Products API called');
     const { searchParams } = new URL(request.url);
@@ -51,10 +52,40 @@ export async function GET(request: Request) {
     console.log('✅ User is a doctor, proceeding to fetch products');
 
     try {
+      // Buscar produtos do médico e clínica
+      const clinicId = searchParams.get('clinicId');
+      console.log('🏥 Filtering by clinicId:', clinicId);
+
+      // Verificar acesso à clínica
+      if (clinicId) {
+        const hasAccess = await prisma.clinic.findFirst({
+          where: {
+            id: clinicId,
+            OR: [
+              { ownerId: session.user.id },
+              {
+                members: {
+                  some: {
+                    userId: session.user.id,
+                    isActive: true
+                  }
+                }
+              }
+            ]
+          }
+        });
+
+        if (!hasAccess) {
+          console.log('❌ User does not have access to clinic:', clinicId);
+          return NextResponse.json({ error: 'Access denied to this clinic' }, { status: 403 });
+        }
+      }
+
       // Buscar produtos do médico atual
       const products = await prisma.products.findMany({
         where: {
-          doctorId: session.user.id
+          doctorId: session.user.id,
+          ...(clinicId && { clinicId: clinicId })
         },
         include: {
           _count: {
@@ -155,8 +186,33 @@ export async function POST(request: Request) {
       confirmationUrl,
       imageUrl,
       categoryIds,
-      priority
+      priority,
+      clinicId
     } = body;
+
+    // Verificar acesso à clínica
+    if (clinicId) {
+      const hasAccess = await prisma.clinic.findFirst({
+        where: {
+          id: clinicId,
+          OR: [
+            { ownerId: session.user.id },
+            {
+              members: {
+                some: {
+                  userId: session.user.id,
+                  isActive: true
+                }
+              }
+            }
+          ]
+        }
+      });
+
+      if (!hasAccess) {
+        return NextResponse.json({ error: 'Access denied to this clinic' }, { status: 403 });
+      }
+    }
 
     // Validar campos obrigatórios
     if (!name) {
@@ -173,6 +229,7 @@ export async function POST(request: Request) {
       id: createId(),
       name,
       description,
+      clinicId,
       price: normalizedPrice,
       category,
       isActive: true,

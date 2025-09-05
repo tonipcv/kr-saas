@@ -65,7 +65,7 @@ export default function ForgotPassword() {
             {/* Back to login */}
             <Link 
               href="/auth/signin"
-              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#1b0b3d] via-[#5a23a7] to-[#9b7ae3] hover:opacity-90 rounded-lg transition-all duration-300 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5a23a7]"
+              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-black hover:bg-gray-900 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
             >
               <ArrowLeft className="h-4 w-4" />
               Back to login
@@ -119,7 +119,7 @@ export default function ForgotPassword() {
 
             <button 
               type="submit" 
-              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#1b0b3d] via-[#5a23a7] to-[#9b7ae3] hover:opacity-90 rounded-lg transition-all duration-300 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5a23a7]"
+              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-black hover:bg-gray-900 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
               disabled={isLoading}
             >
               {isLoading ? 'Sending link...' : 'Reset password'}

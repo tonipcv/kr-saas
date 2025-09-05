@@ -2,6 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useClinic } from '@/contexts/clinic-context';
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,6 +26,7 @@ interface Product {
 }
 
 export default function PurchasesPage() {
+  const { currentClinic } = useClinic();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [patientId, setPatientId] = useState<string>('');
@@ -90,10 +93,16 @@ export default function PurchasesPage() {
         setIsLoading(true);
         setError(null);
 
+        if (!currentClinic) {
+          setPatients([]);
+          setProducts([]);
+          return;
+        }
+
         // Load clients (same GET used by /doctor/patients) and products
         const [patientsRes, productsRes] = await Promise.all([
-          fetch('/api/patients', { cache: 'no-store' }),
-          fetch('/api/products', { cache: 'no-store' })
+          fetch(`/api/patients?clinicId=${currentClinic.id}`, { cache: 'no-store' }),
+          fetch(`/api/products?clinicId=${currentClinic.id}`, { cache: 'no-store' })
         ]);
 
         if (patientsRes.ok) {
@@ -125,7 +134,7 @@ export default function PurchasesPage() {
     };
 
     load();
-  }, []);
+  }, [currentClinic]);
 
   // Check plan (same approach as products page)
   useEffect(() => {
@@ -151,7 +160,11 @@ export default function PurchasesPage() {
     try {
       setIsLoadingPurchases(true);
       setPurchasesError(null);
-      const res = await fetch(`/api/purchases?page=${targetPage}&page_size=10`, { cache: 'no-store' });
+      if (!currentClinic) {
+        setPurchases([]);
+        return;
+      }
+      const res = await fetch(`/api/purchases?page=${targetPage}&page_size=10&clinicId=${currentClinic.id}`, { cache: 'no-store' });
       if (!res.ok) {
         const msg = await res.text();
         throw new Error(`Failed to load purchases (${res.status}): ${msg}`);
@@ -173,7 +186,7 @@ export default function PurchasesPage() {
 
   useEffect(() => {
     loadPurchases(1);
-  }, []);
+  }, [currentClinic]);
 
   const selectedProduct = useMemo(() => products.find(p => p.id === productId), [products, productId]);
 
@@ -228,6 +241,28 @@ export default function PurchasesPage() {
       setIsSubmitting(false);
     }
   };
+
+  // Show loading when no clinic is selected
+  if (!currentClinic) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="lg:ml-64">
+          <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 flex items-center justify-center min-h-[calc(100vh-88px)]">
+            <Card className="w-full max-w-md bg-white border-gray-200 shadow-lg rounded-2xl">
+              <CardHeader className="text-center p-6">
+                <CardTitle className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                  Select a Clinic
+                </CardTitle>
+                <p className="text-gray-600 font-medium mt-2">
+                  Please select a clinic from the sidebar to view purchases.
+                </p>
+              </CardHeader>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

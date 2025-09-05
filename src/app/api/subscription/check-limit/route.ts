@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { canAddPatient, canCreateProtocol, canCreateCourse, canCreateProduct, canCreateReferral, canCreateReward, hasAccessPurchaseCredits, hasAccessCampaigns } from '@/lib/subscription';
+import { canAddPatient, canCreateReferral, canCreateReward, hasAccessPurchaseCredits, hasAccessCampaigns } from '@/lib/subscription';
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,15 +30,6 @@ export async function GET(request: NextRequest) {
       case 'patients':
         result = await canAddPatient(session.user.id);
         break;
-      case 'protocols':
-        result = await canCreateProtocol(session.user.id);
-        break;
-      case 'courses':
-        result = await canCreateCourse(session.user.id);
-        break;
-      case 'products':
-        result = await canCreateProduct(session.user.id);
-        break;
       case 'referrals':
         result = await canCreateReferral(session.user.id);
         break;
@@ -66,4 +57,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-} 
+}

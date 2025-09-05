@@ -1,0 +1,1535 @@
+{
+  "planos": {
+    "antigos": 90,
+    "novos": 5,
+    "status": "success",
+    "detalhes": [
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "old_name": "Starter",
+        "new_id": "cmeifw7u30001t9e0b8z1fmhq",
+        "new_name": "Starter",
+        "tier": "STARTER"
+      },
+      {
+        "old_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "old_name": "Creator",
+        "new_id": "cmeifw7yl0002t9e0stkuq6sd",
+        "new_name": "Creator",
+        "tier": "GROWTH"
+      },
+      {
+        "old_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "old_name": "Free",
+        "new_id": "cmeifw7nm0000t9e06l3t8i8o",
+        "new_name": "Free",
+        "tier": "STARTER"
+      }
+    ]
+  },
+  "subscriptions": {
+    "antigas": 162,
+    "novas": 9,
+    "status": "warning",
+    "detalhes": [
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "cmeig09r90001t9yw8goen80q-trial",
+        "clinic_id": "cmeig09r90001t9yw8goen80q",
+        "new_id": "cs_cmeig09r90001t9yw8goen80q-trial",
+        "status": "TRIAL",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "clinic_id": "c6f35b2e-2063-4229-8883-ff255155abc9",
+        "new_id": "cs_7e9bc932-4465-4077-ab05-22a2bcc9ab73",
+        "status": "ACTIVE",
+        "clinic_name": "Bella Vitta"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "clinic_id": "edfb22b6-f84b-4cde-8958-31c0e1429c2b",
+        "new_id": "cs_5d0f0600-53cc-470f-88ac-d9c5baa7505d",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Beauty Lounge"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "clinic_id": "2f24c572-723a-41c9-bee0-1791f5f61cfb",
+        "new_id": "cs_6da699c3-b2d0-4cb4-b1ae-278d590efc45",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Gold Coast Clinic"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "cmeiedmwt0001t9lmq24lwcpc-trial",
+        "clinic_id": "cmeiedmwt0001t9lmq24lwcpc",
+        "new_id": "cs_cmeiedmwt0001t9lmq24lwcpc-trial",
+        "status": "TRIAL",
+        "clinic_name": "Clínica Haoma"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "clinic_id": "929482e5-23b1-4ad3-90ef-9f498106bdb4",
+        "new_id": "cs_4f2ca162-a1d1-4b68-8261-e9460bea4fe6",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica India"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "clinic_id": "5b7e72f1-8655-4a7c-ad48-76e641e74d6a",
+        "new_id": "cs_60ee4868-ea43-42a3-af23-0f269cfaca54",
+        "status": "ACTIVE",
+        "clinic_name": "Clínica Katsu"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "clinic_id": "d8d38fc0-4674-4078-8440-49538575b0ab",
+        "new_id": "cs_8b1e29de-4416-4b21-805e-b806cf8377dd",
+        "status": "ACTIVE",
+        "clinic_name": "Haoma - krxlabs@gmail.com"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      },
+      {
+        "old_id": "2da1d110-6998-49df-8ec4-c675a7559010",
+        "clinic_id": "temp_1754666280259_qnbzsxohwrd",
+        "new_id": "cs_2da1d110-6998-49df-8ec4-c675a7559010",
+        "status": "ACTIVE",
+        "clinic_name": "Personal Clinic - Toni"
+      }
+    ]
+  },
+  "integridade": {
+    "planosOrfaos": 4,
+    "subscriptionsSemPlano": 0,
+    "clinicasSemSubscription": 0,
+    "status": "success",
+    "detalhes": []
+  }
+}

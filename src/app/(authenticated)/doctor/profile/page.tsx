@@ -1,11 +1,12 @@
 'use client';
 
 import { useSession, signOut } from "next-auth/react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useClinic } from "@/contexts/clinic-context";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { 
   ArrowRightOnRectangleIcon, 
@@ -53,11 +54,8 @@ export default function DoctorProfilePage() {
   const [doctorSlug, setDoctorSlug] = useState('');
   const [publicCoverImageUrl, setPublicCoverImageUrl] = useState('');
   const [publicPageTemplate, setPublicPageTemplate] = useState<'DEFAULT' | 'MINIMAL' | 'HERO_CENTER' | 'HERO_LEFT'>('DEFAULT');
-  const [planName, setPlanName] = useState<string | null>(null);
-  const [planStatus, setPlanStatus] = useState<string | null>(null);
-  const [isPlansOpen, setIsPlansOpen] = useState(false);
-  const [plansLoading, setPlansLoading] = useState(false);
-  const [availablePlans, setAvailablePlans] = useState<any[]>([]);
+  const [clinics, setClinics] = useState<any[]>([]);
+  const [clinicsLoading, setClinicsLoading] = useState(false);
 
   const slugify = (value: string) => {
     return (value || '')
@@ -69,31 +67,21 @@ export default function DoctorProfilePage() {
       .replace(/-+/g, '-');
   };
 
-  // Open modal and fetch available plans (exclude Free)
-  const openPlansModal = async () => {
+  // Load clinics
+  const loadClinics = useCallback(async () => {
     try {
-      setIsPlansOpen(true);
-      setPlansLoading(true);
-      const res = await fetch('/api/plans', { cache: 'no-store' });
+      setClinicsLoading(true);
+      const res = await fetch('/api/clinics');
       if (res.ok) {
         const data = await res.json();
-        const plans = Array.isArray(data?.plans) ? data.plans : [];
-        const filtered = plans.filter((p: any) => p?.name?.toLowerCase() !== 'free');
-        setAvailablePlans(filtered);
-      } else {
-        setAvailablePlans([]);
+        setClinics(data.clinics || []);
       }
-    } catch (e) {
-      console.error('Failed to load plans', e);
-      setAvailablePlans([]);
+    } catch (error) {
+      console.error('Error loading clinics:', error);
     } finally {
-      setPlansLoading(false);
+      setClinicsLoading(false);
     }
-  };
-
-  const handlePlanChange = (planId: string) => {
-    alert(`Plan change to ${planId} will be implemented soon!`);
-  };
+  }, []);
 
   // Load user data and stats
   useEffect(() => {
@@ -144,39 +132,8 @@ export default function DoctorProfilePage() {
                 setUserStats(stats);
               }
 
-              // Load subscription plan for badge (clinic-based)
-              try {
-                const subResp = await fetch('/api/subscription/current', { cache: 'no-store' });
-                if (subResp.ok) {
-                  const subData = await subResp.json();
-                  console.log('subscription/current:', subData);
-                  if (subData?.planName) setPlanName(subData.planName);
-                  if (subData?.status) setPlanStatus(subData.status);
-                } else {
-                  // Fallback to legacy clinic endpoint
-                  const clinicResponse = await fetch('/api/clinic', { cache: 'no-store' });
-                  if (clinicResponse.ok) {
-                    const clinicData = await clinicResponse.json();
-                    console.log('/api/clinic:', clinicData);
-                    const sub = clinicData?.clinic?.subscription;
-                    if (sub?.plan?.name) setPlanName(sub.plan.name);
-                    if (sub?.status) setPlanStatus(sub.status);
-                  } else {
-                    console.error('Falha ao carregar plano: ', subResp.status, await subResp.text());
-                    // Last resort: default Free badge for doctors
-                    if (userRole === 'DOCTOR' || userRole === 'SUPER_ADMIN') {
-                      setPlanName((prev) => prev ?? 'Free');
-                      setPlanStatus((prev) => prev ?? 'ACTIVE');
-                    }
-                  }
-                }
-              } catch (err) {
-                console.error('Erro ao buscar plano atual:', err);
-                if (userRole === 'DOCTOR' || userRole === 'SUPER_ADMIN') {
-                  setPlanName((prev) => prev ?? 'Free');
-                  setPlanStatus((prev) => prev ?? 'ACTIVE');
-                }
-              }
+              // Load clinics
+              await loadClinics();
             } else {
               router.push('/profile');
               return;
@@ -199,7 +156,7 @@ export default function DoctorProfilePage() {
     };
 
     loadUserData();
-  }, [session, router]);
+  }, [session, router, loadClinics]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -475,21 +432,10 @@ export default function DoctorProfilePage() {
                           disabled={isUploading}
                         />
                       </div>
-                      {planName && (
-                        <>
-                          <Badge className={cn("text-sm font-medium border bg-blue-50 text-blue-700 border-blue-200")}> 
-                            {planName}
-                          </Badge>
-                          <div className="flex items-center gap-3 mt-2">
-                            <Button size="sm" className="h-8 px-3 bg-blue-600 hover:bg-blue-700 text-white" onClick={openPlansModal}>
-                              Upgrade
-                            </Button>
-                            <Link href="/clinic/subscription" className="text-sm text-blue-700 hover:underline">
-                              Ver todos os planos
-                            </Link>
-                          </div>
-                        </>
-                      )}
+                      {/* Role badge */}
+                      <Badge className={cn("text-sm font-medium border", roleInfo.color)}> 
+                        {roleInfo.label}
+                      </Badge>
                     </div>
 
                     {/* Form Fields */}
@@ -592,19 +538,39 @@ export default function DoctorProfilePage() {
                   </CardContent>
                 </Card>
 
-                {/* CRM connection */}
+                {/* Clinics */}
                 <Card className="mt-6 bg-white border border-gray-100 shadow-none rounded-lg">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-base font-semibold text-gray-900">CRM connection</CardTitle>
+                    <CardTitle className="text-base font-semibold text-gray-900">Clinics</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-sm text-gray-600 mb-2">Your team has not connected a CRM</div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-md bg-gray-100 flex items-center justify-center text-gray-500 text-base">+</div>
-                      <div className="w-7 h-7 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-600 text-[10px] font-medium">HS</div>
-                      <div className="w-7 h-7 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-600 text-[10px] font-medium">PD</div>
-                      <div className="w-7 h-7 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-600 text-[10px] font-medium">SF</div>
-                    </div>
+                    {clinicsLoading ? (
+                      <div className="space-y-3">
+                        {[1, 2].map((i) => (
+                          <div key={i} className="animate-pulse">
+                            <div className="h-12 bg-gray-100 rounded-lg"></div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : clinics.length === 0 ? (
+                      <div className="text-sm text-gray-600">You are not a member of any clinic yet.</div>
+                    ) : (
+                      <div className="space-y-3">
+                        {clinics.map((clinic) => (
+                          <div key={clinic.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-200">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{clinic.name}</div>
+                              <div className="text-xs text-gray-500">{clinic.role}</div>
+                            </div>
+                            {clinic.role === 'OWNER' && (
+                              <Link href="/clinic/subscription" className="text-sm text-blue-600 hover:text-blue-700 hover:underline">
+                                Manage Subscription
+                              </Link>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -634,97 +600,6 @@ export default function DoctorProfilePage() {
         </div>
       </div>
 
-      {/* Upgrade Plans Modal */}
-      <Dialog open={isPlansOpen} onOpenChange={setIsPlansOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Choose a plan</DialogTitle>
-            <DialogDescription>
-              {planName ? (
-                <span>
-                  You're currently on plan: <span className="font-medium">{planName}</span>
-                </span>
-              ) : (
-                <span>Select a plan that fits your clinic.</span>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* Plans Grid */}
-          {plansLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {[1,2].map(i => (
-                <div key={i} className="rounded-2xl border border-gray-200 bg-white p-4">
-                  <div className="h-4 w-24 bg-gray-100 rounded animate-pulse mb-2" />
-                  <div className="h-3 w-40 bg-gray-100 rounded animate-pulse mb-4" />
-                  <div className="h-8 w-full bg-gray-100 rounded animate-pulse" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {availablePlans.map((plan: any) => {
-                const isCurrent = planName && planName.toLowerCase() === plan.name?.toLowerCase();
-                return (
-                  <div key={plan.id} className={`rounded-2xl border border-gray-200 bg-white shadow-sm ${isCurrent ? 'ring-2 ring-blue-500' : ''}`}>
-                    <div className="px-4 py-4 border-b border-gray-100 rounded-t-2xl">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="text-sm font-semibold text-gray-900">{plan.name}</div>
-                          <p className="text-xs text-gray-600">{plan.description}</p>
-                        </div>
-                        {isCurrent && (
-                          <Badge className="bg-blue-100 text-blue-700 border-blue-200">Current</Badge>
-                        )}
-                      </div>
-                      <div className="mt-3">
-                        {plan.contactOnly || plan.price === null ? (
-                          <div>
-                            <div className="text-xl font-bold text-gray-900">Flexible billing</div>
-                            <div className="text-xs text-gray-600">Custom plans</div>
-                          </div>
-                        ) : (
-                          <div className="flex items-end gap-2">
-                            <div className="text-2xl font-bold text-gray-900">$ {plan.price}</div>
-                            <div className="text-xs text-gray-600 mb-1">per month</div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="p-4">
-                      <Button onClick={() => handlePlanChange(plan.id)} className="w-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white hover:opacity-90">
-                        {isCurrent ? 'Current plan' : 'Upgrade'}
-                      </Button>
-                      <div className="mt-3 space-y-2">
-                        <div className="flex items-center gap-2 text-sm text-gray-700">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span>{plan.maxPatients ?? '—'} clients</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-700">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span>{(plan.name?.toLowerCase?.() === 'starter') ? '500 referrals / month' : (plan.name?.toLowerCase?.() === 'creator') ? '2000 referrals / month' : 'Referrals / month as per plan'}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-700">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span>Credit by purchase access</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-700">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span>Up to 50 rewards</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-500">
-                          <XCircle className="h-4 w-4 text-gray-400" />
-                          <span>No access to Campaigns</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

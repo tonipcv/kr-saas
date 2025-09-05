@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import { useClinic } from '@/contexts/clinic-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +18,6 @@ import {
   Settings, 
   BarChart3,
   FileText,
-  Crown,
   Trash2,
   Plus,
   CheckCircle,
@@ -82,7 +82,7 @@ interface ClinicStats {
 export default function ClinicDashboard() {
   const { data: session } = useSession();
   const router = useRouter();
-  const [clinic, setClinic] = useState<ClinicData | null>(null);
+  const { currentClinic } = useClinic();
   const [stats, setStats] = useState<ClinicStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -112,7 +112,7 @@ export default function ClinicDashboard() {
     }
 
     fetchClinicData();
-  }, [session, router]);
+  }, [session, router, currentClinic]);
 
   useEffect(() => {
     // Set base URL from current location
@@ -122,33 +122,27 @@ export default function ClinicDashboard() {
   }, []);
 
   const fetchClinicData = async () => {
+    if (!currentClinic) return;
+    
     try {
       setLoading(true);
       
-      const response = await fetch('/api/clinic');
-      if (response.ok) {
-        const data = await response.json();
-        setClinic(data.clinic);
-        
-        // Check if user is admin
-        const userIsAdmin = data.clinic.ownerId === session?.user?.id || 
-          data.clinic.members.some((m: any) => m.user.id === session?.user?.id && m.role === 'ADMIN');
-        setIsAdmin(userIsAdmin);
+      // Check if user is admin
+      const userIsAdmin = currentClinic.ownerId === session?.user?.id || 
+        currentClinic.members.some((m: any) => m.user.id === session?.user?.id && m.role === 'ADMIN');
+      setIsAdmin(userIsAdmin);
 
-        // Initialize editing values
-        setEditingClinicName(data.clinic.name);
-        setEditingClinicDescription(data.clinic.description || '');
-        setEditingClinicLogo(data.clinic.logo);
-        setLogoPreview(data.clinic.logo);
+      // Initialize editing values
+      setEditingClinicName(currentClinic.name);
+      setEditingClinicDescription(currentClinic.description || '');
+      setLogoPreview(currentClinic.logo || null);
+      setEditingClinicLogo(false);
 
-        // Fetch statistics
-        const statsResponse = await fetch(`/api/clinic/stats`);
-        if (statsResponse.ok) {
-          const statsData = await statsResponse.json();
-          setStats(statsData.stats);
-        }
-      } else {
-        console.error('Error loading clinic data');
+      // Fetch statistics for current clinic
+      const statsResponse = await fetch(`/api/clinic/stats?clinicId=${currentClinic.id}`);
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json();
+        setStats(statsData.stats);
       }
     } catch (error) {
       console.error('Error:', error);
@@ -256,7 +250,7 @@ export default function ClinicDashboard() {
     try {
       setSavingSettings(true);
       
-      let logoUrl = clinic?.logo;
+      let logoUrl = currentClinic?.logo;
       
       // Upload logo if a new file was selected
       if (logoFile) {
@@ -282,8 +276,8 @@ export default function ClinicDashboard() {
       const result = await response.json();
 
       // Update local state with the response data
-      if (clinic && result.clinic) {
-        setClinic(result.clinic);
+      if (currentClinic && result.clinic) {
+        // Note: The clinic context will handle updating the clinic data
         setEditingClinicName(result.clinic.name);
         setEditingClinicDescription(result.clinic.description || '');
       }
@@ -309,8 +303,8 @@ export default function ClinicDashboard() {
   };
 
   const copyClinicUrl = async () => {
-    if (clinic?.slug) {
-      const url = `${baseUrl}/login/${clinic.slug}`;
+    if (currentClinic?.slug) {
+      const url = `${baseUrl}/login/${currentClinic.slug}`;
       try {
         await navigator.clipboard.writeText(url);
         setSuccessTitle('URL Copied!');
@@ -425,7 +419,7 @@ export default function ClinicDashboard() {
     );
   }
 
-  if (!clinic) {
+  if (!currentClinic) {
     return (
       <div className="min-h-screen bg-white">
         <div className="lg:ml-64">
@@ -457,15 +451,16 @@ export default function ClinicDashboard() {
           {/* Header */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
             <div className="space-y-1">
-              <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">{clinic.name}</h1>
-              <p className="text-sm text-gray-600">{clinic.description || 'No description available'}</p>
+              <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">{currentClinic.name}</h1>
+              <p className="text-sm text-gray-600">{currentClinic.description || 'No description available'}</p>
             </div>
+            
             <div className="flex items-center gap-2">
               <Badge 
-                variant={clinic.subscription?.status === 'ACTIVE' ? 'default' : 'secondary'}
-                className={clinic.subscription?.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700 border-emerald-200 font-semibold px-2 py-0.5 rounded-full text-[11px]' : 'font-semibold px-2 py-0.5 rounded-full text-[11px]'}
+                variant={currentClinic.subscription?.status === 'ACTIVE' ? 'default' : 'secondary'}
+                className={currentClinic.subscription?.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700 border-emerald-200 font-semibold px-2 py-0.5 rounded-full text-[11px]' : 'font-semibold px-2 py-0.5 rounded-full text-[11px]'}
               >
-                {clinic.subscription?.status || 'No Plan'}
+                {currentClinic.subscription?.status || 'No Plan'}
               </Badge>
               {isAdmin && (
                 <Button 
@@ -481,23 +476,7 @@ export default function ClinicDashboard() {
             </div>
           </div>
 
-          {/* Stats (match dashboard KPI style: simple, no colored icon blocks) */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-2">
-            {[
-              { title: 'Doctors', value: stats?.totalDoctors || 0, note: `of ${clinic.subscription?.maxDoctors ?? 1} allowed` },
-              { title: 'Clients', value: stats?.totalPatients || 0, note: `of ${clinic.subscription?.plan.maxPatients ?? 0} allowed` },
-              { title: 'Protocols', value: stats?.totalProtocols || 0, note: `of ${clinic.subscription?.plan.maxProtocols ?? 0} allowed` },
-              { title: 'Courses', value: stats?.totalCourses || 0, note: `of ${clinic.subscription?.plan.maxCourses ?? 0} allowed` },
-            ].map((kpi) => (
-              <div key={kpi.title} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-gray-500">{kpi.title}</span>
-                  <span className="text-[10px] text-gray-400">{kpi.note}</span>
-                </div>
-                <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{kpi.value as any}</div>
-              </div>
-            ))}
-          </div>
+          {/* Stats removed per request */}
 
           {/* Main Content Grid */}
           <div className="grid lg:grid-cols-3 gap-4">
@@ -510,8 +489,8 @@ export default function ClinicDashboard() {
                 <div>
                   <h2 className="text-sm font-semibold text-gray-900">Team</h2>
                   <p className="text-xs text-gray-600 mt-1 font-medium">
-                    {clinic.members.length} {clinic.members.length === 1 ? 'member' : 'members'} •
-                    {clinic.subscription?.maxDoctors ? ` ${clinic.subscription.maxDoctors - clinic.members.length} spots available` : ' No limit'}
+                    {currentClinic.members.length} {currentClinic.members.length === 1 ? 'member' : 'members'} •
+                    {currentClinic.subscription?.maxDoctors ? ` ${currentClinic.subscription.maxDoctors - currentClinic.members.length} spots available` : ' No limit'}
                   </p>
                 </div>
                 {isAdmin && (
@@ -580,7 +559,7 @@ export default function ClinicDashboard() {
               <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
                 <CardContent className="p-0">
                   <div className="divide-y divide-gray-200">
-                    {clinic.members.map((member) => (
+                    {currentClinic.members.map((member) => (
                       <div key={member.id} className="py-3 px-2 hover:bg-gray-50 transition-colors">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3 min-w-0">
@@ -590,11 +569,8 @@ export default function ClinicDashboard() {
                             </div>
                             {/* User Info */}
                             <div className="min-w-0">
-                              <p className="text-sm font-medium text-gray-900 truncate flex items-center gap-1">
+                              <p className="text-sm font-medium text-gray-900 truncate">
                                 {member.user.name || member.user.email?.split('@')[0]}
-                                {member.user.id === clinic.ownerId && (
-                                  <Crown className="h-4 w-4 text-yellow-600 shrink-0" />
-                                )}
                               </p>
                               <p className="text-xs text-gray-500 truncate">{member.user.email}</p>
                             </div>
@@ -613,7 +589,7 @@ export default function ClinicDashboard() {
                             >
                               {member.role === 'ADMIN' ? 'Admin' : member.role === 'DOCTOR' ? 'Doctor' : 'Viewer'}
                             </Badge>
-                            {isAdmin && member.user.id !== clinic.ownerId && (
+                            {isAdmin && member.user.id !== currentClinic.ownerId && (
                               <Button variant="ghost" size="sm" className="h-8 px-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full">
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -635,21 +611,21 @@ export default function ClinicDashboard() {
                 <CardHeader className="flex flex-row items-center justify-between px-4 py-3">
                   <CardTitle className="text-sm font-semibold text-gray-900">Current Plan</CardTitle>
                   <Badge 
-                    variant={clinic.subscription?.status === 'ACTIVE' ? 'default' : 'secondary'}
-                    className={clinic.subscription?.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700 border-emerald-200 font-medium rounded-full px-2 py-0.5 text-[11px]' : 'font-medium rounded-full px-2 py-0.5 text-[11px]'}
+                    variant={currentClinic.subscription?.status === 'ACTIVE' ? 'default' : 'secondary'}
+                    className={currentClinic.subscription?.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700 border-emerald-200 font-medium rounded-full px-2 py-0.5 text-[11px]' : 'font-medium rounded-full px-2 py-0.5 text-[11px]'}
                   >
-                    {clinic.subscription?.status || 'Inactive'}
+                    {currentClinic.subscription?.status || 'Inactive'}
                   </Badge>
                 </CardHeader>
                 <CardContent className="space-y-4 px-4 pb-4 pt-0">
-                  {clinic.subscription ? (
+                  {currentClinic.subscription ? (
                     <>
                       {/* Plan Name and Price */}
                       <div className="text-center py-4 bg-gray-50 rounded-xl border border-gray-200">
-                        <h3 className="text-sm font-semibold text-gray-900">{clinic.subscription.plan.name}</h3>
+                        <h3 className="text-sm font-semibold text-gray-900">{currentClinic.subscription.plan.name}</h3>
                         <p className="text-xs text-gray-600 mt-1 font-medium">
-                          Renews on {clinic.subscription.endDate 
-                            ? new Date(clinic.subscription.endDate).toLocaleDateString('en-US', { 
+                          Renews on {currentClinic.subscription.endDate 
+                            ? new Date(currentClinic.subscription.endDate).toLocaleDateString('en-US', { 
                               day: '2-digit', 
                               month: 'long' 
                             })
@@ -658,15 +634,7 @@ export default function ClinicDashboard() {
                         </p>
                       </div>
 
-                      {/* Quick Stats */}
-                      <div className="grid grid-cols-2 gap-3">
-                        {[{label:'Doctors',value:clinic.subscription.maxDoctors},{label:'Clients',value:clinic.subscription.plan.maxPatients},{label:'Protocols',value:clinic.subscription.plan.maxProtocols},{label:'Courses',value:clinic.subscription.plan.maxCourses}].map((m) => (
-                          <div key={m.label} className="px-4 py-3 border border-gray-200 rounded-xl bg-white shadow-sm text-center">
-                            <p className="text-[11px] text-gray-600 font-medium">{m.label}</p>
-                            <p className="text-[22px] leading-7 font-semibold text-gray-900">{m.value}</p>
-                          </div>
-                        ))}
-                      </div>
+                      {/* Quick stats removed per request */}
 
                       {isAdmin && (
                         <Button className="w-full h-8 rounded-full text-xs font-medium bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm" asChild>
@@ -764,16 +732,16 @@ export default function ClinicDashboard() {
                   <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-xl">
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-gray-600 font-medium flex-1">
-                        {clinic?.slug ? (
+                        {currentClinic?.slug ? (
                           <>
                             <span className="text-gray-500">{baseUrl}/login/</span>
-                            <span className="font-semibold text-gray-900">{clinic.slug}</span>
+                            <span className="font-semibold text-gray-900">{currentClinic.slug}</span>
                           </>
                         ) : (
                           <span className="text-gray-400">No URL configured</span>
                         )}
                       </p>
-                      {clinic?.slug && (
+                      {currentClinic?.slug && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -800,9 +768,9 @@ export default function ClinicDashboard() {
                           alt="Logo preview"
                           className="w-full h-full object-cover rounded-lg"
                         />
-                      ) : clinic?.logo ? (
+                      ) : currentClinic?.logo ? (
                         <img
-                          src={clinic.logo}
+                          src={currentClinic.logo}
                           alt="Current logo"
                           className="w-full h-full object-cover rounded-lg"
                         />
@@ -825,11 +793,11 @@ export default function ClinicDashboard() {
                 </div>
                 <div>
                   <Label className="text-gray-700 font-medium">Owner</Label>
-                  <p className="text-sm font-semibold text-gray-900 mt-1">{clinic.owner.name} ({clinic.owner.email})</p>
+                  <p className="text-sm font-semibold text-gray-900 mt-1">{currentClinic.owner.name} ({currentClinic.owner.email})</p>
                 </div>
                 <div>
                   <Label className="text-gray-700 font-medium">Created on</Label>
-                  <p className="text-sm font-semibold text-gray-900 mt-1">{new Date(clinic.createdAt).toLocaleDateString('en-US')}</p>
+                  <p className="text-sm font-semibold text-gray-900 mt-1">{new Date(currentClinic.createdAt).toLocaleDateString('en-US')}</p>
                 </div>
                 {isAdmin && (
                   <div className="flex gap-2 pt-3">

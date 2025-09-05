@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useClinic } from '@/contexts/clinic-context';
+import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 type Template = {
   id: string;
@@ -21,6 +23,7 @@ type Product = {
 };
 
 export default function DoctorCouponTemplatesPage() {
+  const { currentClinic } = useClinic();
   const [items, setItems] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,9 +85,18 @@ export default function DoctorCouponTemplatesPage() {
   };
 
   const refresh = async () => {
+    if (!currentClinic) {
+      setItems([]);
+      return;
+    }
+
     try {
       setLoading(true);
-      const params = new URLSearchParams({ limit: '50', offset: '0' });
+      const params = new URLSearchParams({ 
+        limit: '50', 
+        offset: '0',
+        clinicId: currentClinic.id
+      });
       const res = await fetch(`/api/v2/doctor/coupon-templates?${params.toString()}`, { cache: 'no-store' });
       let json: any = null;
       try { json = await res.json(); } catch (_) {}
@@ -101,14 +113,19 @@ export default function DoctorCouponTemplatesPage() {
     }
   };
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { refresh(); }, [currentClinic]);
 
   // Load products for the doctor (used by Create/Edit drawers)
   const loadProducts = async () => {
+    if (!currentClinic) {
+      setProducts([]);
+      return;
+    }
+
     try {
       setProductsError(null);
       setProductsLoading(true);
-      const res = await fetch('/api/products', { cache: 'no-store' });
+      const res = await fetch(`/api/products?clinicId=${currentClinic.id}`, { cache: 'no-store' });
       const json = await res.json().catch(() => []);
       if (!res.ok) throw new Error(json?.error || 'Erro ao carregar produtos');
       const opts = Array.isArray(json) ? json.map((p: any) => ({ id: p.id, name: p.name })) : [];
@@ -182,6 +199,27 @@ export default function DoctorCouponTemplatesPage() {
       setCreateLoading(false);
     }
   };
+
+  if (!currentClinic) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="lg:ml-64">
+          <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 flex items-center justify-center min-h-[calc(100vh-88px)]">
+            <Card className="w-full max-w-md bg-white border-gray-200 shadow-lg rounded-2xl">
+              <CardHeader className="text-center p-6">
+                <CardTitle className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                  Select a Clinic
+                </CardTitle>
+                <CardDescription className="text-gray-600 font-medium mt-2">
+                  Please select a clinic from the sidebar to view coupon templates.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="lg:ml-64">

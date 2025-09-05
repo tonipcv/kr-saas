@@ -3,23 +3,23 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(_req: NextRequest) {
   try {
-    const rawPlans = await prisma.subscriptionPlan.findMany({
+    const rawPlans = await prisma.clinicPlan.findMany({
       where: {
         isActive: true,
         NOT: { name: 'Basic' }
       },
-      orderBy: { price: 'asc' },
+      orderBy: { monthlyPrice: 'asc' },
       select: {
         id: true,
         name: true,
         description: true,
-        price: true,
-        maxPatients: true,
-        maxProtocols: true,
-        maxCourses: true,
-        maxProducts: true,
+        monthlyPrice: true,
+        baseDoctors: true,
+        basePatients: true,
+        features: true,
         trialDays: true,
-        isDefault: true,
+        isActive: true,
+        isPublic: true,
         createdAt: true,
         updatedAt: true,
       }
@@ -27,7 +27,7 @@ export async function GET(_req: NextRequest) {
 
     const plans = rawPlans.map(p => {
       if (p.name === 'Enterprise') {
-        return { ...p, price: null as any, contactOnly: true };
+        return { ...p, monthlyPrice: null as any, contactOnly: true };
       }
       return { ...p, contactOnly: false };
     });

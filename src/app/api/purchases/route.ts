@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
+import { recalculateMembershipLevel } from '@/lib/membership';
 
 // Unified JSON response helpers
 function ok(data: any) {
@@ -37,15 +38,43 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const patientId = searchParams.get('patient_id') || undefined;
+    const clinicId = searchParams.get('clinicId') || undefined;
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('page_size') || '20', 10)));
     const skip = (page - 1) * pageSize;
     const take = pageSize;
 
+    // If clinicId is provided, verify access
+    if (clinicId) {
+      const hasAccess = await prisma.clinic.findFirst({
+        where: {
+          id: clinicId,
+          OR: [
+            { ownerId: userId },
+            {
+              members: {
+                some: {
+                  userId: userId,
+                  isActive: true
+                }
+              }
+            }
+          ]
+        }
+      });
+
+      if (!hasAccess) {
+        return forbidden('Access denied to this clinic');
+      }
+    }
+
     let where: any = {};
 
     if (me.role === 'DOCTOR') {
-      where = { doctorId: userId };
+      where = { 
+        doctorId: userId,
+        ...(clinicId && { product: { clinicId } })
+      };
       if (patientId) where.userId = patientId;
     } else {
       // patient can only see their own purchases
@@ -130,6 +159,18 @@ export async function POST(req: NextRequest) {
     const pointsAwarded = creditsPerUnit.mul(qty);
 
     const result = await prisma.$transaction(async (tx) => {
+      // Ensure PatientProfile for this (doctorId, patientId)
+      let patientProfile = await tx.patientProfile.findFirst({
+        where: { doctorId, userId: patientId },
+        select: { id: true, totalPoints: true, currentPoints: true },
+      });
+      if (!patientProfile) {
+        patientProfile = await tx.patientProfile.create({
+          data: { doctorId, userId: patientId },
+          select: { id: true, totalPoints: true, currentPoints: true },
+        });
+      }
+
       const purchase = await tx.purchase.create({
         data: {
           userId: patientId,
@@ -145,9 +186,11 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      // Create ledger entry scoped to patient profile
       await tx.pointsLedger.create({
         data: {
           userId: patientId,
+          patientProfileId: patientProfile.id,
           sourceType: 'PURCHASE',
           sourceId: purchase.id,
           amount: pointsAwarded,
@@ -155,15 +198,19 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Create a referral credit so the balance is visible and redeemable in the referrals dashboard
-      await tx.referralCredit.create({
+      // Update PatientProfile snapshots (convert Decimal to integer points)
+      const delta = Number(pointsAwarded);
+      const deltaInt = Math.round(delta);
+      await tx.patientProfile.update({
+        where: { id: patientProfile.id },
         data: {
-          userId: patientId,
-          amount: pointsAwarded,
-          type: 'PURCHASE',
-          description: `Créditos por compra: ${quantity}x ${product.name ?? product.id}`,
+          totalPoints: { increment: Math.max(0, deltaInt) },
+          currentPoints: { increment: deltaInt },
         },
       });
+
+      // Recalculate level based on updated totalPoints
+      await recalculateMembershipLevel(tx, patientProfile.id);
 
       return purchase;
     });

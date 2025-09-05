@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useClinic } from '@/contexts/clinic-context';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { 
   PlusIcon,
@@ -48,6 +50,7 @@ interface Product {
 }
 
 export default function ProductsPage() {
+  const { currentClinic } = useClinic();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -65,6 +68,8 @@ export default function ProductsPage() {
 
   useEffect(() => {
     const checkPlanAndLoad = async () => {
+      if (!currentClinic) return;
+      
       try {
         const res = await fetch('/api/subscription/current', { cache: 'no-store' });
         if (res.ok) {
@@ -81,12 +86,14 @@ export default function ProductsPage() {
       }
     };
     checkPlanAndLoad();
-  }, []);
+  }, [currentClinic]);
 
   const loadProducts = async () => {
+    if (!currentClinic) return;
+    
     try {
       setIsLoading(true);
-      const response = await fetch('/api/products');
+      const response = await fetch(`/api/products?clinicId=${currentClinic.id}`);
       if (response.ok) {
         const data = await response.json();
         setProducts(data);
@@ -207,6 +214,28 @@ export default function ProductsPage() {
 
   // Unlock products for all plans
   const isFree = false;
+
+  // Show loading when no clinic is selected
+  if (!currentClinic) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="lg:ml-64">
+          <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 flex items-center justify-center min-h-[calc(100vh-88px)]">
+            <Card className="w-full max-w-md bg-white border-gray-200 shadow-lg rounded-2xl">
+              <CardHeader className="text-center p-6">
+                <CardTitle className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                  Select a Clinic
+                </CardTitle>
+                <p className="text-gray-600 font-medium mt-2">
+                  Please select a clinic from the sidebar to view products.
+                </p>
+              </CardHeader>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

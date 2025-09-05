@@ -31,8 +31,6 @@ export async function GET(request: NextRequest) {
       totalClinics,
       activeSubscriptions,
       trialSubscriptions,
-      activeClinicSubscriptions,
-      trialClinicSubscriptions,
       expiringSoon
     ] = await Promise.all([
       prisma.user.count({ where: { role: 'DOCTOR' } }),
@@ -41,55 +39,61 @@ export async function GET(request: NextRequest) {
       prisma.course.count(),
       prisma.products.count(),
       prisma.clinic.count(),
-      prisma.unified_subscriptions.count({ where: { type: 'DOCTOR', status: 'ACTIVE' } }),
-      prisma.unified_subscriptions.count({ where: { type: 'DOCTOR', status: 'TRIAL' } }),
-      prisma.unified_subscriptions.count({ where: { type: 'CLINIC', status: 'ACTIVE' } }),
-      prisma.unified_subscriptions.count({ where: { type: 'CLINIC', status: 'TRIAL' } }),
-      prisma.unified_subscriptions.count({
+      prisma.clinicSubscription.count({ where: { status: 'ACTIVE' } }),
+      prisma.clinicSubscription.count({ where: { status: 'TRIAL' } }),
+      prisma.clinicSubscription.count({
         where: {
-          type: 'DOCTOR',
           status: 'TRIAL',
-          trial_end_date: {
+          trialEndsAt: {
             lte: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) // 3 days
           }
         }
       })
     ]);
 
-    // Fetch recent doctors
-    const recentDoctors = await prisma.user.findMany({
-      where: { role: 'DOCTOR' },
+    // Fetch recent clinics with their subscriptions
+    const recentClinics = await prisma.clinic.findMany({
+      where: { isActive: true },
       select: {
         id: true,
         name: true,
-        email: true
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        subscriptions: {
+          where: {
+            status: { in: ['ACTIVE', 'TRIAL'] }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: {
+            plan: {
+              select: {
+                name: true,
+                tier: true
+              }
+            }
+          }
+        }
       },
-      orderBy: { created_at: 'desc' },
+      orderBy: { createdAt: 'desc' },
       take: 5
     });
 
-    // Fetch subscriptions for recent doctors from unified_subscriptions
-    const doctorSubscriptions = await prisma.unified_subscriptions.findMany({
-      where: {
-        type: 'DOCTOR',
-        subscriber_id: { in: recentDoctors.map(d => d.id) }
-      },
-      include: {
-        subscription_plans: { select: { name: true } }
-      }
-    });
-
-    // Combine doctor data with their subscriptions
-    const recentDoctorsWithSubscriptions = recentDoctors.map(doctor => {
-      const subscription = doctorSubscriptions.find(s => s.subscriber_id === doctor.id);
-      return {
-        ...doctor,
-        subscription: subscription ? {
-          status: subscription.status,
-          plan: subscription.subscription_plans
-        } : undefined
-      };
-    });
+    // Format recent clinics data
+    const recentClinicsFormatted = recentClinics.map(clinic => ({
+      id: clinic.id,
+      name: clinic.name,
+      owner: clinic.owner,
+      subscription: clinic.subscriptions[0] ? {
+        status: clinic.subscriptions[0].status,
+        plan: clinic.subscriptions[0].plan
+      } : undefined
+    }));
 
     const metrics = {
       totalDoctors,
@@ -100,18 +104,16 @@ export async function GET(request: NextRequest) {
       totalClinics,
       activeSubscriptions,
       trialSubscriptions,
-      activeClinicSubscriptions,
-      trialClinicSubscriptions,
       expiringSoon
     };
 
     return NextResponse.json({
       metrics,
-      recentDoctors: recentDoctorsWithSubscriptions
+      recentClinics: recentClinicsFormatted
     });
 
   } catch (error) {
     console.error('Error fetching dashboard metrics:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-} 
+}

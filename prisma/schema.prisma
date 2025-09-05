@@ -309,10 +309,12 @@ model products {
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @default(now())
   doctorId          String?
+  clinicId          String?                @map("clinic_id")
   imageUrl          String?
   confirmationUrl   String?
   categoryId        String?
   doctor            User?                  @relation("DoctorProducts", fields: [doctorId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  clinic            Clinic?                @relation(fields: [clinicId], references: [id])
   productCategory   ProductCategory?       @relation(fields: [categoryId], references: [id])
   protocol_products protocol_products[]
   purchases         Purchase[]
@@ -323,6 +325,7 @@ model products {
 
   @@index([doctorId])
   @@index([categoryId])
+  @@index([clinicId])
 }
 
 // Pivot table for many-to-many between products and ProductCategory
@@ -388,28 +391,45 @@ model Clinic {
   website                    String?
   logo                       String?
   slug                       String?                     @unique @db.VarChar(255)
+  
+  // Relações
   onboardingTemplates        OnboardingTemplate[]
   members                    ClinicMember[]
   owner                      User                        @relation("ClinicOwner", fields: [ownerId], references: [id])
   doctorPatientRelationships DoctorPatientRelationship[]
-  unified_subscriptions      unified_subscriptions[]     @relation("ClinicSubscriptions")
+  membershipLevels           MembershipLevel[]
+  
+  // Nova estrutura de subscrição
+  subscriptions             ClinicSubscription[]
+  products                  products[]
+  referralLeads            ReferralLead[]
+  couponTemplates          CouponTemplate[]
+  referralRewards          ReferralReward[]
 
   @@index([ownerId])
   @@index([slug])
   @@map("clinics")
 }
 
+enum ClinicRole {
+  OWNER       // Dono do negócio
+  MANAGER     // Gerente com acesso administrativo
+  PROVIDER    // Profissional que presta serviço (médico, dentista, cabeleireiro, etc)
+  STAFF       // Equipe de apoio (recepcionista, assistente, etc)
+}
+
 model ClinicMember {
-  id       String   @id @default(cuid())
+  id       String     @id @default(cuid())
   clinicId String
   userId   String
-  role     String   @default("DOCTOR")
-  isActive Boolean  @default(true)
-  joinedAt DateTime @default(now())
-  clinic   Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     ClinicRole @default(STAFF)
+  isActive Boolean    @default(true)
+  joinedAt DateTime   @default(now())
+  clinic   Clinic     @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([clinicId, userId])
+  @@index([role])
   @@map("clinic_members")
 }
 
@@ -423,6 +443,7 @@ model ReferralLead {
   source                               String?
   referrerId                           String?
   doctorId                             String?
+  clinicId                             String?          @map("clinic_id")
   convertedUserId                      String?
   convertedAt                          DateTime?
   creditValue                          Decimal          @default(0) @db.Decimal(10, 2)
@@ -440,7 +461,13 @@ model ReferralLead {
   referral_credits                     ReferralCredit[]
   convertedUser                        User?            @relation("ConvertedFromLead", fields: [convertedUserId], references: [id], map: "ReferralLead_convertedUserId_fkey")
   doctor                               User?            @relation("DoctorLeads", fields: [doctorId], references: [id], map: "ReferralLead_doctorId_fkey")
+  clinic                               Clinic?          @relation(fields: [clinicId], references: [id])
   User_referral_leads_referrerIdToUser User?            @relation("referral_leads_referrerIdToUser", fields: [referrerId], references: [id], map: "ReferralLead_referrerId_fkey")
+
+  @@index([clinicId])
+  @@index([doctorId])
+  @@index([referrerId])
+  @@index([status])
 
   @@unique([email, doctorId], map: "ReferralLead_email_doctorId_key")
   @@index([doctorId], map: "ReferralLead_doctorId_idx")
@@ -482,13 +509,17 @@ model ReferralReward {
   maxRedemptions     Int?
   currentRedemptions Int                  @default(0)
   doctorId           String
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @default(now()) @updatedAt
-  imageUrl           String?
+  clinicId           String?              @map("clinic_id")
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @default(now()) @updatedAt @map("updated_at")
+  imageUrl           String?              @map("image_url")
   doctor             User                 @relation("DoctorRewards", fields: [doctorId], references: [id], onDelete: Cascade, map: "ReferralReward_doctorId_fkey")
+  clinic             Clinic?              @relation(fields: [clinicId], references: [id])
   redemptions        RewardRedemption[]
   codes              ReferralRewardCode[]
 
+  @@index([doctorId])
+  @@index([clinicId])
   @@map("referral_rewards")
 }
 
@@ -839,7 +870,6 @@ model OnboardingTemplate {
   @@index([doctorId])
   @@index([clinicId])
 }
-
 model OnboardingStep {
   id           String             @id @default(cuid())
   templateId   String
@@ -1112,7 +1142,6 @@ model User {
   referrals_doctor             referrals[]                 @relation("referrals_doctorIdToUser")
   referrals_patient            referrals[]                 @relation("referrals_patientIdToUser")
   redemptions                  RewardRedemption[]          @relation("UserRedemptions")
-  unified_subscriptions        unified_subscriptions[]     @relation("ClinicSubscriptions")
   assigned_courses             UserCourse[]
   lesson_progress              UserLesson[]
   doctor_voice_notes           VoiceNote[]                 @relation("DoctorVoiceNotes")
@@ -1159,14 +1188,58 @@ model PatientProfile {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
+  // Membership snapshots per clinic (doctor)
+  totalPoints       Int      @default(0) @map("total_points")
+  currentPoints     Int      @default(0) @map("current_points")
+  membershipLevelId String?  @map("membership_level_id")
+
+  // Relations to user/doctor and membership
+  membershipLevel   MembershipLevel? @relation(fields: [membershipLevelId], references: [id])
+
   // Relations
   doctor  User @relation("ProfileDoctor", fields: [doctorId], references: [id], onDelete: Cascade)
   patient User @relation("ProfilePatient", fields: [userId], references: [id], onDelete: Cascade)
+  // Back-relation for points ledger entries scoped to this profile
+  pointsLedger     PointsLedger[]
 
   @@unique([doctorId, userId])
   @@index([doctorId])
   @@index([userId])
+  @@index([membershipLevelId])
   @@map("patient_profiles")
+}
+
+// Default membership level templates
+model MembershipLevelTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String?  @unique
+  minPoints Int      @default(0) @map("min_points")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("membership_level_templates")
+}
+
+// Clinic-specific membership levels
+model MembershipLevel {
+  id        String   @id @default(cuid())
+  clinic_id String
+  name      String
+  slug      String?
+  minPoints Int      @default(0) @map("min_points")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+  // Back-relation to patient profiles
+  patientProfiles PatientProfile[]
+  // Relation to clinic
+  clinic     Clinic   @relation(fields: [clinic_id], references: [id], onDelete: Cascade)
+
+  @@unique([clinic_id, slug])
+  @@index([clinic_id])
+  @@map("membership_levels")
 }
 
 model patient_document_metadata {
@@ -1202,55 +1275,134 @@ model patient_documents {
   @@index([patient_id], map: "idx_patient_documents_patient_id")
 }
 
-model SubscriptionPlan {
-  id                     String                  @id @default(cuid())
-  name                   String
-  description            String?
-  price                  Float
-  billingCycle           String                  @default("MONTHLY")
-  maxDoctors             Int                     @default(1)
-  features               String?
-  isActive               Boolean                 @default(true)
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @default(now()) @updatedAt
-  maxPatients            Int?                    @default(10)
-  maxProtocols           Int?                    @default(5)
-  maxCourses             Int?                    @default(3)
-  maxProducts            Int?                    @default(20)
-  isDefault              Boolean?                @default(false)
-  trialDays              Int?                    @default(7)
-  referralsMonthlyLimit  Int?
-  maxRewards             Int?
-  allowCreditPerPurchase Boolean?                @default(false)
-  allowCampaigns         Boolean?                @default(false)
-  unified_subscriptions  unified_subscriptions[]
+model ClinicPlan {
+  id            String    @id @default(cuid())
+  name          String
+  tier          PlanTier
+  description   String?
+  monthlyPrice  Decimal   @map("monthly_price") @db.Decimal(10, 2)
+  
+  // Limites base incluídos
+  baseDoctors   Int       @map("base_doctors")
+  basePatients  Int       @map("base_patients")
+  
+  // Features incluídas no plano
+  features      Json      @default("{}")
+  
+  // Trial
+  trialDays     Int       @default(30) @map("trial_days")
+  requireCard   Boolean   @default(false) @map("require_card")
+  
+  // Controle
+  isActive      Boolean   @default(true) @map("is_active")
+  isPublic      Boolean   @default(true) @map("is_public")
+  
+  // Relações
+  subscriptions ClinicSubscription[]
+  
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  @@map("subscription_plans")
+  @@index([tier])
+  @@index([isActive])
+  @@map("clinic_plans")
 }
 
-model unified_subscriptions {
-  id                 String            @id
-  type               subscription_type
-  subscriber_id      String
-  plan_id            String
-  status             String            @default("TRIAL")
-  start_date         DateTime          @default(now()) @db.Timestamptz(6)
-  end_date           DateTime?         @db.Timestamptz(6)
-  trial_end_date     DateTime?         @db.Timestamptz(6)
-  auto_renew         Boolean           @default(true)
-  max_doctors        Int?
-  last_payment_date  DateTime?         @db.Timestamptz(6)
-  next_payment_date  DateTime?         @db.Timestamptz(6)
-  created_at         DateTime          @default(now()) @db.Timestamptz(6)
-  updated_at         DateTime          @default(now()) @db.Timestamptz(6)
-  clinic_relation    Clinic            @relation("ClinicSubscriptions", fields: [subscriber_id], references: [id], onDelete: Cascade, map: "fk_unified_subscriptions_clinic")
-  subscription_plans SubscriptionPlan  @relation(fields: [plan_id], references: [id], map: "fk_unified_subscriptions_plan")
-  user_relation      User              @relation("ClinicSubscriptions", fields: [subscriber_id], references: [id], onDelete: Cascade)
+model ClinicAddOn {
+  id            String    @id @default(cuid())
+  type          AddOnType
+  name          String
+  description   String?
+  monthlyPrice  Decimal   @map("monthly_price") @db.Decimal(10, 2)
+  
+  // Quantidade que o add-on oferece
+  quantity      Int      
+  
+  isActive      Boolean   @default(true)
+  
+  // Relações
+  subscriptions ClinicAddOnSubscription[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  @@unique([subscriber_id, type], map: "idx_unified_subscriptions_subscriber_type")
-  @@index([status])
-  @@index([subscriber_id])
   @@index([type])
+  @@index([isActive])
+  @@map("clinic_add_ons")
+}
+
+model ClinicSubscription {
+  id                    String            @id @default(cuid()) @map("id")
+  clinicId              String    @map("clinic_id")
+  planId                String    @map("plan_id")
+  status                SubscriptionStatus @default(TRIAL) @map("status")
+  
+  // Datas importantes
+  startDate             DateTime          @default(now()) @map("start_date")
+  trialEndsAt           DateTime          @map("trial_ends_at")
+  currentPeriodStart    DateTime          @default(now()) @map("current_period_start")
+  currentPeriodEnd      DateTime          @map("current_period_end")
+  
+  // Controle de pagamento
+  stripeCustomerId      String?           @map("stripe_customer_id")
+  stripeSubscriptionId  String?           @map("stripe_subscription_id")
+  
+  // Cancelamento
+  canceledAt            DateTime?         @map("canceled_at")
+  cancelReason          String?           @map("cancel_reason")
+  
+  // Uso atual
+  currentDoctorsCount   Int               @default(0) @map("current_doctors_count")
+  currentPatientsCount  Int               @default(0) @map("current_patients_count")
+  
+  // Relações
+  clinic                Clinic            @relation(fields: [clinicId], references: [id])
+  plan                  ClinicPlan        @relation(fields: [planId], references: [id])
+  addOns                ClinicAddOnSubscription[]
+  
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+
+  @@index([clinicId])
+  @@index([status])
+  @@map("clinic_subscriptions")
+}
+
+model ClinicAddOnSubscription {
+  id              String    @id @default(cuid())
+  subscriptionId  String
+  addOnId         String
+  quantity        Int
+  startDate       DateTime  @default(now())
+  endDate         DateTime?
+  
+  // Relações
+  subscription    ClinicSubscription @relation(fields: [subscriptionId], references: [id])
+  addOn          ClinicAddOn        @relation(fields: [addOnId], references: [id])
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([subscriptionId])
+  @@index([addOnId])
+  @@map("clinic_add_on_subscriptions")
+}
+
+
+model SubscriptionMigrationLog {
+  id                String    @id @default(cuid())
+  oldSubscriptionId String?
+  clinicId          String
+  migrationCase     String    // DIRECT_MATCH, UPGRADE_NEEDED, MANUAL_REVIEW
+  details           Json
+  needsReview       Boolean   @default(false)
+  reviewedAt        DateTime?
+  createdAt         DateTime  @default(now())
+
+  @@index([clinicId])
+  @@index([needsReview])
+  @@index([migrationCase])
+  @@map("subscription_migration_logs")
 }
 
 model GoogleCalendarCredentials {
@@ -1351,9 +1503,28 @@ enum VoiceNoteStatus {
   ERROR
 }
 
-enum subscription_type {
-  DOCTOR
-  CLINIC
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+  @@map("subscription_status")
+}
+
+enum PlanTier {
+  STARTER
+  GROWTH
+  ENTERPRISE
+}
+
+enum AddOnType {
+  EXTRA_DOCTOR
+  EXTRA_PATIENTS
+  ADVANCED_REPORTS
+  CUSTOM_BRANDING
+  WHITE_LABEL
+  API_ACCESS
 }
 
 enum AppointmentStatus {
@@ -1425,6 +1596,7 @@ model Purchase {
 model PointsLedger {
   id          String   @id @default(cuid())
   userId      String
+  patientProfileId String? @map("patient_profile_id")
   sourceType  String
   sourceId    String
   amount      Decimal  @db.Decimal(10, 2)
@@ -1432,8 +1604,10 @@ model PointsLedger {
   createdAt   DateTime @default(now())
 
   user User @relation("UserPointsLedger", fields: [userId], references: [id], onDelete: Cascade)
+  patientProfile PatientProfile? @relation(fields: [patientProfileId], references: [id])
 
   @@index([userId])
+  @@index([patientProfileId])
   @@index([sourceType])
   @@index([sourceId])
   @@index([createdAt])
@@ -1481,6 +1655,7 @@ model Coupon {
 model CouponTemplate {
   id             String   @id @default(cuid())
   doctorId       String   @map("doctor_id")
+  clinicId       String?  @map("clinic_id")
   name           String
   slug           String
   displayTitle   String?  @map("display_title")
@@ -1492,10 +1667,12 @@ model CouponTemplate {
 
   // Relations
   doctor User    @relation("DoctorCouponTemplates", fields: [doctorId], references: [id], onDelete: Cascade)
+  clinic Clinic? @relation(fields: [clinicId], references: [id])
   coupons Coupon[]
 
   @@unique([doctorId, slug])
   @@index([doctorId])
+  @@index([clinicId])
   @@index([slug])
   @@map("coupon_templates")
 }
@@ -1518,3 +1695,4 @@ model CouponRedemption {
   @@index([redeemedAt])
   @@map("coupon_redemptions")
 }
+

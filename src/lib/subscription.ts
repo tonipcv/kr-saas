@@ -1,10 +1,9 @@
 import { prisma } from '@/lib/prisma';
+import { SubscriptionStatus as PrismaSubscriptionStatus } from '@prisma/client';
 
 export interface SubscriptionLimits {
+  maxDoctors: number;
   maxPatients: number;
-  maxProtocols: number;
-  maxCourses: number;
-  maxProducts: number;
   features: string[];
 }
 
@@ -45,49 +44,48 @@ async function findClinicsForUser(userId: string): Promise<string[]> {
 }
 
 // Get current active or trial subscription and plan.
-// Consider BOTH CLINIC (across all associated clinics) and DOCTOR level.
+// Consider all associated clinics.
 // Pick the best by: highest price, then status (ACTIVE > TRIAL), then newest created.
 async function getClinicSubscription(userId: string) {
   const clinicIds = await findClinicsForUser(userId);
+  if (clinicIds.length === 0) return null;
 
-  const [clinicSubs, doctorSubs] = await Promise.all([
-    clinicIds.length
-      ? prisma.unified_subscriptions.findMany({
-          where: {
-            type: 'CLINIC',
-            subscriber_id: { in: clinicIds },
-            status: { in: ['ACTIVE', 'TRIAL'] },
-          },
-          include: { subscription_plans: true },
-        })
-      : Promise.resolve([]),
-    prisma.unified_subscriptions.findMany({
-      where: {
-        type: 'DOCTOR',
-        subscriber_id: userId,
-        status: { in: ['ACTIVE', 'TRIAL'] },
-      },
-      include: { subscription_plans: true },
-    }),
-  ]);
-
-  const all = [...clinicSubs, ...doctorSubs];
-  if (all.length === 0) return null;
-
-  const statusRank = (s: string) => (s === 'ACTIVE' ? 2 : s === 'TRIAL' ? 1 : 0);
-  all.sort((a, b) => {
-    const pa = (a.subscription_plans?.price ?? 0) as number;
-    const pb = (b.subscription_plans?.price ?? 0) as number;
-    if (pb !== pa) return pb - pa; // higher price first
-    const sr = statusRank(b.status) - statusRank(a.status);
-    if (sr !== 0) return sr; // ACTIVE before TRIAL
-    const da = a.created_at ? new Date(a.created_at).getTime() : 0;
-    const db = b.created_at ? new Date(b.created_at).getTime() : 0;
-    return db - da; // newest first
+  const subscriptions = await prisma.clinicSubscription.findMany({
+    where: {
+      clinicId: { in: clinicIds },
+      status: { in: ['ACTIVE', 'TRIAL'] }
+    },
+    include: {
+      plan: true,
+      clinic: {
+        select: {
+          id: true,
+          name: true,
+          isActive: true
+        }
+      }
+    },
+    orderBy: [
+      { status: 'desc' }, // TRIAL < ACTIVE
+      { createdAt: 'desc' }
+    ]
   });
 
-  const best = all[0];
-  return { clinicId: best.type === 'CLINIC' ? best.subscriber_id : '', sub: best } as const;
+  if (subscriptions.length === 0) return null;
+
+  // Sort by plan price (highest first), then status, then creation date
+  subscriptions.sort((a, b) => {
+    const pa = a.plan.price ?? 0;
+    const pb = b.plan.price ?? 0;
+    if (pb !== pa) return pb - pa; // higher price first
+    const sa = a.status === 'ACTIVE' ? 2 : a.status === 'TRIAL' ? 1 : 0;
+    const sb = b.status === 'ACTIVE' ? 2 : b.status === 'TRIAL' ? 1 : 0;
+    if (sb !== sa) return sb - sa; // ACTIVE before TRIAL
+    return b.createdAt.getTime() - a.createdAt.getTime(); // newest first
+  });
+
+  const best = subscriptions[0];
+  return { clinicId: best.clinicId, sub: best };
 }
 
 export async function getClinicSubscriptionStatus(userId: string): Promise<SubscriptionStatus | null> {
@@ -97,13 +95,13 @@ export async function getClinicSubscriptionStatus(userId: string): Promise<Subsc
     const { sub } = data;
 
     const now = new Date();
-    const plan = sub.subscription_plans;
+    const plan = sub.plan;
     const isTrial = sub.status === 'TRIAL';
-    const isExpired = isTrial && sub.trial_end_date ? now > sub.trial_end_date : false;
+    const isExpired = isTrial && sub.trialEndsAt ? now > sub.trialEndsAt : false;
     const isActive = sub.status === 'ACTIVE' || (isTrial && !isExpired);
 
     let daysRemaining = 0;
-    const endRef = isTrial ? sub.trial_end_date : sub.end_date;
+    const endRef = isTrial ? sub.trialEndsAt : sub.currentPeriodEnd;
     if (endRef) {
       daysRemaining = Math.max(0, Math.ceil((endRef.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
     }
@@ -117,11 +115,11 @@ export async function getClinicSubscriptionStatus(userId: string): Promise<Subsc
 
     // Merge plan columns with any legacy JSON features
     const mergedFeatures: PlanFeatures = {
-      maxReferralsPerMonth: plan.referralsMonthlyLimit ?? parsedFeatures.maxReferralsPerMonth,
-      allowPurchaseCredits: plan.allowCreditPerPurchase ?? parsedFeatures.allowPurchaseCredits,
-      maxRewards: plan.maxRewards ?? parsedFeatures.maxRewards,
-      allowCampaigns: plan.allowCampaigns ?? parsedFeatures.allowCampaigns,
-      price: plan.price ?? parsedFeatures.price,
+      maxReferralsPerMonth: parsedFeatures.maxReferralsPerMonth,
+      allowPurchaseCredits: parsedFeatures.allowPurchaseCredits,
+      maxRewards: parsedFeatures.maxRewards,
+      allowCampaigns: parsedFeatures.allowCampaigns,
+      price: plan.price
     };
 
     return {
@@ -134,10 +132,8 @@ export async function getClinicSubscriptionStatus(userId: string): Promise<Subsc
       planId: plan.id,
       trialDays: plan.trialDays ?? null,
       limits: {
+        maxDoctors: plan.maxDoctors ?? 0,
         maxPatients: plan.maxPatients ?? 0,
-        maxProtocols: plan.maxProtocols ?? 0,
-        maxCourses: plan.maxCourses ?? 0,
-        maxProducts: plan.maxProducts ?? 0,
         features: Array.isArray(parsedFeatures) ? parsedFeatures : []
       },
       planFeatures: Array.isArray(parsedFeatures) ? mergedFeatures : (mergedFeatures as PlanFeatures)
@@ -158,36 +154,6 @@ async function countClinicPatients(userId: string): Promise<number> {
   if (ids.length === 0) return 0;
   // User model uses snake_case field `doctor_id`
   return prisma.user.count({ where: { role: 'PATIENT', doctor_id: { in: ids } } });
-}
-
-async function countClinicProtocols(userId: string): Promise<number> {
-  const clinicIds = await findClinicsForUser(userId);
-  if (clinicIds.length === 0) return 0;
-  const clinicId = clinicIds[0];
-  const members = await prisma.clinicMember.findMany({ where: { clinicId, isActive: true }, select: { userId: true } });
-  const ids = members.map(m => m.userId);
-  if (ids.length === 0) return 0;
-  return prisma.protocol.count({ where: { doctor_id: { in: ids } } });
-}
-
-async function countClinicCourses(userId: string): Promise<number> {
-  const clinicIds = await findClinicsForUser(userId);
-  if (clinicIds.length === 0) return 0;
-  const clinicId = clinicIds[0];
-  const members = await prisma.clinicMember.findMany({ where: { clinicId, isActive: true }, select: { userId: true } });
-  const ids = members.map(m => m.userId);
-  if (ids.length === 0) return 0;
-  return prisma.course.count({ where: { doctorId: { in: ids } } });
-}
-
-async function countClinicProducts(userId: string): Promise<number> {
-  const clinicIds = await findClinicsForUser(userId);
-  if (clinicIds.length === 0) return 0;
-  const clinicId = clinicIds[0];
-  const members = await prisma.clinicMember.findMany({ where: { clinicId, isActive: true }, select: { userId: true } });
-  const ids = members.map(m => m.userId);
-  if (ids.length === 0) return 0;
-  return prisma.products.count({ where: { doctorId: { in: ids } } });
 }
 
 // Public checks used by API
@@ -262,42 +228,6 @@ export async function hasAccessCampaigns(userId: string): Promise<{ allowed: boo
   return allowed ? { allowed } : { allowed, message: 'Seu plano não possui acesso à página de campanhas' };
 }
 
-export async function canCreateProtocol(userId: string): Promise<{ allowed: boolean; message?: string }> {
-  const status = await getClinicSubscriptionStatus(userId);
-  if (!status) return { allowed: false, message: 'Subscription não encontrada' };
-  if (!status.isActive) return { allowed: false, message: 'Subscription inativa ou expirada' };
-
-  const current = await countClinicProtocols(userId);
-  if (current >= status.limits.maxProtocols) {
-    return { allowed: false, message: `Limite de ${status.limits.maxProtocols} protocolos atingido. Faça upgrade do seu plano.` };
-  }
-  return { allowed: true };
-}
-
-export async function canCreateCourse(userId: string): Promise<{ allowed: boolean; message?: string }> {
-  const status = await getClinicSubscriptionStatus(userId);
-  if (!status) return { allowed: false, message: 'Subscription não encontrada' };
-  if (!status.isActive) return { allowed: false, message: 'Subscription inativa ou expirada' };
-
-  const current = await countClinicCourses(userId);
-  if (current >= status.limits.maxCourses) {
-    return { allowed: false, message: `Limite de ${status.limits.maxCourses} cursos atingido. Faça upgrade do seu plano.` };
-  }
-  return { allowed: true };
-}
-
-export async function canCreateProduct(userId: string): Promise<{ allowed: boolean; message?: string }> {
-  const status = await getClinicSubscriptionStatus(userId);
-  if (!status) return { allowed: false, message: 'Subscription não encontrada' };
-  if (!status.isActive) return { allowed: false, message: 'Subscription inativa ou expirada' };
-
-  const current = await countClinicProducts(userId);
-  if (current >= status.limits.maxProducts) {
-    return { allowed: false, message: `Limite de ${status.limits.maxProducts} produtos atingido. Faça upgrade do seu plano.` };
-  }
-  return { allowed: true };
-}
-
 // Keep metrics function (optional update to unified subscriptions later)
 export async function updateSystemMetrics(): Promise<void> {
   try {
@@ -308,8 +238,8 @@ export async function updateSystemMetrics(): Promise<void> {
     const totalProtocols = await prisma.protocol.count();
     const totalCourses = await prisma.course.count();
 
-    const activeSubscriptions = await prisma.unified_subscriptions.count({ where: { status: 'ACTIVE', type: 'CLINIC' } });
-    const trialSubscriptions = await prisma.unified_subscriptions.count({ where: { status: 'TRIAL', type: 'CLINIC' } });
+    const activeSubscriptions = await prisma.clinicSubscription.count({ where: { status: 'ACTIVE' } });
+    const trialSubscriptions = await prisma.clinicSubscription.count({ where: { status: 'TRIAL' } });
 
     await prisma.systemMetrics.upsert({
       where: { date: new Date(today) },
@@ -338,4 +268,3 @@ export async function updateSystemMetrics(): Promise<void> {
     console.error('Erro ao atualizar métricas:', error);
   }
 }
- 

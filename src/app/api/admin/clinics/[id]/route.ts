@@ -30,7 +30,26 @@ export async function GET(
       where: { id: clinicId },
       include: {
         owner: { select: { id: true, name: true, email: true } },
-        members: { include: { user: { select: { id: true, name: true, email: true } } } }
+        members: { include: { user: { select: { id: true, name: true, email: true } } } },
+        subscriptions: {
+          where: {
+            status: { in: ['ACTIVE', 'TRIAL'] }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: {
+            plan: {
+              select: {
+                id: true,
+                name: true,
+                price: true,
+                maxDoctors: true,
+                maxPatients: true,
+                tier: true
+              }
+            }
+          }
+        }
       }
     });
 
@@ -92,7 +111,18 @@ export async function PUT(
     }
 
     // Check if clinic exists
-    const existingClinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
+    const existingClinic = await prisma.clinic.findUnique({
+      where: { id: clinicId },
+      include: {
+        subscriptions: {
+          where: {
+            status: { in: ['ACTIVE', 'TRIAL'] }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        }
+      }
+    });
 
     if (!existingClinic) {
       return NextResponse.json({ error: 'Clinic not found' }, { status: 404 });
@@ -133,13 +163,21 @@ export async function PUT(
             }
           }
         },
-        subscription: {
+        subscriptions: {
+          where: {
+            status: { in: ['ACTIVE', 'TRIAL'] }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
           include: {
             plan: {
               select: {
                 id: true,
                 name: true,
-                price: true
+                price: true,
+                maxDoctors: true,
+                maxPatients: true,
+                tier: true
               }
             }
           }
@@ -147,36 +185,38 @@ export async function PUT(
       }
     });
 
-    // Update or create subscription using unified_subscriptions if provided
+    // Update or create subscription if provided
     if (subscription && subscription.planId) {
-      const plan = await prisma.subscriptionPlan.findUnique({ where: { id: subscription.planId } });
+      const plan = await prisma.clinicPlan.findUnique({ where: { id: subscription.planId } });
       if (!plan) return NextResponse.json({ error: 'Invalid subscription plan' }, { status: 400 });
 
-      const currentUnified = await prisma.unified_subscriptions.findFirst({
-        where: { type: 'CLINIC', subscriber_id: clinicId },
-        orderBy: { created_at: 'desc' }
-      });
+      const currentSubscription = existingClinic.subscriptions[0];
+      const now = new Date();
 
-      if (currentUnified) {
-        await prisma.unified_subscriptions.update({
-          where: { id: currentUnified.id },
+      if (currentSubscription) {
+        await prisma.clinicSubscription.update({
+          where: { id: currentSubscription.id },
           data: {
-            plan_id: subscription.planId,
-            status: subscription.status || currentUnified.status,
-            max_doctors: subscription.maxDoctors ?? currentUnified.max_doctors,
-            updated_at: new Date()
+            planId: subscription.planId,
+            status: subscription.status || currentSubscription.status,
+            currentPeriodEnd: subscription.endDate || currentSubscription.currentPeriodEnd,
+            trialEndsAt: subscription.trialEndDate || currentSubscription.trialEndsAt,
+            updatedAt: now
           }
         });
       } else {
-        await prisma.unified_subscriptions.create({
+        await prisma.clinicSubscription.create({
           data: {
-            id: `${clinicId}-${Date.now()}`,
-            type: 'CLINIC',
-            subscriber_id: clinicId,
-            plan_id: subscription.planId,
+            id: `cs_${clinicId}-${Date.now()}`,
+            clinicId,
+            planId: subscription.planId,
             status: subscription.status || 'ACTIVE',
-            max_doctors: subscription.maxDoctors ?? plan.maxDoctors,
-            start_date: new Date()
+            startDate: now,
+            currentPeriodStart: now,
+            currentPeriodEnd: subscription.endDate || new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+            trialEndsAt: subscription.trialEndDate,
+            currentDoctorsCount: 0,
+            currentPatientsCount: 0
           }
         });
       }
@@ -227,8 +267,8 @@ export async function DELETE(
 
     // Delete clinic and all related data
     await prisma.$transaction([
+      prisma.clinicSubscription.deleteMany({ where: { clinicId } }),
       prisma.clinicMember.deleteMany({ where: { clinicId } }),
-      prisma.unified_subscriptions.deleteMany({ where: { type: 'CLINIC', subscriber_id: clinicId } }),
       prisma.clinic.delete({ where: { id: clinicId } })
     ]);
 
@@ -240,4 +280,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-} 
+}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { SubscriptionStatus } from '@/types/subscription';
 
 export async function GET(
   request: NextRequest,
@@ -27,21 +28,33 @@ export async function GET(
     const resolvedParams = await params;
     const subscriptionId = resolvedParams.id;
 
-    // Find the subscription from unified_subscriptions (doctor type)
-    const u = await prisma.unified_subscriptions.findUnique({
+    // Find the subscription
+    const subscription = await prisma.clinicSubscription.findUnique({
       where: { id: subscriptionId },
       include: {
-        user_relation: { select: { id: true, name: true, email: true } },
-        subscription_plans: {
+        clinic: {
+          select: {
+            id: true,
+            name: true,
+            isActive: true,
+            owner: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          }
+        },
+        plan: {
           select: {
             id: true,
             name: true,
             description: true,
             price: true,
+            maxDoctors: true,
             maxPatients: true,
-            maxProtocols: true,
-            maxCourses: true,
-            maxProducts: true,
+            tier: true,
             trialDays: true,
             isDefault: true
           }
@@ -49,40 +62,38 @@ export async function GET(
       }
     });
 
-    if (!u || u.type !== 'DOCTOR') {
+    if (!subscription) {
       return NextResponse.json({ error: 'Subscription not found' }, { status: 404 });
     }
 
-    const subscription = {
-      id: u.id,
-      status: u.status,
-      startDate: u.start_date?.toISOString?.() ?? null,
-      endDate: u.end_date?.toISOString?.() ?? null,
-      trialEndDate: u.trial_end_date?.toISOString?.() ?? null,
-      autoRenew: u.auto_renew,
-      doctor: u.user_relation ? {
-        id: u.user_relation.id,
-        name: (u.user_relation as any).name ?? '',
-        email: (u.user_relation as any).email ?? ''
-      } : undefined,
-      plan: u.subscription_plans ? {
-        id: u.subscription_plans.id,
-        name: u.subscription_plans.name,
-        description: u.subscription_plans.description ?? '',
-        price: u.subscription_plans.price as unknown as number,
-        maxPatients: (u.subscription_plans as any).maxPatients ?? 0,
-        maxProtocols: (u.subscription_plans as any).maxProtocols ?? 0,
-        maxCourses: (u.subscription_plans as any).maxCourses ?? 0,
-        maxProducts: (u.subscription_plans as any).maxProducts ?? 0,
-        trialDays: (u.subscription_plans as any).trialDays ?? null,
-        isDefault: (u.subscription_plans as any).isDefault ?? false,
-      } : undefined,
-    };
+    return NextResponse.json({
+      id: subscription.id,
+      status: subscription.status,
+      clinic: {
+        id: subscription.clinic.id,
+        name: subscription.clinic.name,
+        isActive: subscription.clinic.isActive,
+        owner: subscription.clinic.owner
+      },
+      plan: subscription.plan,
+      startDate: subscription.startDate,
+      endDate: subscription.currentPeriodEnd,
+      trialEndDate: subscription.trialEndsAt,
+      autoRenew: true, // Por enquanto, todas as subscrições são auto-renováveis
+      stripeCustomerId: subscription.stripeCustomerId,
+      stripeSubscriptionId: subscription.stripeSubscriptionId,
+      currentDoctorsCount: subscription.currentDoctorsCount,
+      currentPatientsCount: subscription.currentPatientsCount,
+      createdAt: subscription.createdAt,
+      updatedAt: subscription.updatedAt
+    });
 
-    return NextResponse.json({ subscription });
   } catch (error) {
     console.error('Error fetching subscription:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
 
@@ -110,7 +121,7 @@ export async function PUT(
     const resolvedParams = await params;
     const subscriptionId = resolvedParams.id;
     const body = await request.json();
-    const { planId, status, endDate, trialEndDate, autoRenew } = body;
+    const { planId, status, endDate, trialEndDate } = body;
 
     // Validations
     if (!planId || !status) {
@@ -118,81 +129,102 @@ export async function PUT(
     }
 
     // Check if plan exists
-    const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+    const plan = await prisma.clinicPlan.findUnique({ where: { id: planId } });
 
     if (!plan) {
       return NextResponse.json({ error: 'Plan not found' }, { status: 400 });
     }
 
-    // Check if subscription exists in unified_subscriptions
-    const existing = await prisma.unified_subscriptions.findUnique({ where: { id: subscriptionId } });
+    // Check if subscription exists
+    const existing = await prisma.clinicSubscription.findUnique({ 
+      where: { id: subscriptionId },
+      include: { clinic: true }
+    });
 
-    if (!existing || existing.type !== 'DOCTOR') {
+    if (!existing) {
       return NextResponse.json({ error: 'Subscription not found' }, { status: 404 });
     }
 
     // Prepare update data
     const updateData: any = {
-      plan_id: planId,
-      status,
-      auto_renew: autoRenew ?? true,
-      updated_at: new Date()
+      planId,
+      status: status as SubscriptionStatus,
+      updatedAt: new Date()
     };
 
     // Configure dates based on status
     if (status === 'TRIAL') {
-      if (trialEndDate) {
-        updateData.trial_end_date = new Date(trialEndDate);
-      }
-      updateData.end_date = null;
+      updateData.trialEndsAt = trialEndDate ? new Date(trialEndDate) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
+      updateData.currentPeriodEnd = endDate ? new Date(endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 dias
     } else if (status === 'ACTIVE') {
-      if (endDate) {
-        updateData.end_date = new Date(endDate);
-      }
-      updateData.trial_end_date = null;
-    } else {
-      // For other statuses (SUSPENDED, CANCELLED, EXPIRED)
-      updateData.end_date = null;
-      updateData.trial_end_date = null;
+      updateData.currentPeriodEnd = endDate ? new Date(endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 dias
+    } else if (status === 'CANCELED') {
+      updateData.canceledAt = new Date();
+      updateData.currentPeriodEnd = endDate ? new Date(endDate) : existing.currentPeriodEnd;
     }
 
-    // Update the subscription
-    const updated = await prisma.unified_subscriptions.update({
+    // Update subscription
+    const updated = await prisma.clinicSubscription.update({
       where: { id: subscriptionId },
       data: updateData,
       include: {
-        user_relation: { select: { id: true, name: true, email: true } },
-        subscription_plans: { select: { id: true, name: true, price: true } }
+        clinic: {
+          select: {
+            id: true,
+            name: true,
+            isActive: true,
+            owner: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          }
+        },
+        plan: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            price: true,
+            maxDoctors: true,
+            maxPatients: true,
+            tier: true,
+            trialDays: true,
+            isDefault: true
+          }
+        }
       }
     });
 
-    const updatedSubscription = {
+    return NextResponse.json({
       id: updated.id,
       status: updated.status,
-      startDate: updated.start_date?.toISOString?.() ?? null,
-      endDate: updated.end_date?.toISOString?.() ?? null,
-      trialEndDate: updated.trial_end_date?.toISOString?.() ?? null,
-      autoRenew: updated.auto_renew,
-      doctor: updated.user_relation ? {
-        id: updated.user_relation.id,
-        name: (updated.user_relation as any).name ?? '',
-        email: (updated.user_relation as any).email ?? ''
-      } : undefined,
-      plan: updated.subscription_plans ? {
-        id: updated.subscription_plans.id,
-        name: updated.subscription_plans.name,
-        price: updated.subscription_plans.price as unknown as number,
-      } : undefined,
-    };
-
-    return NextResponse.json({ 
-      success: true, 
-      subscription: updatedSubscription,
-      message: 'Subscription updated successfully'
+      clinic: {
+        id: updated.clinic.id,
+        name: updated.clinic.name,
+        isActive: updated.clinic.isActive,
+        owner: updated.clinic.owner
+      },
+      plan: updated.plan,
+      startDate: updated.startDate,
+      endDate: updated.currentPeriodEnd,
+      trialEndDate: updated.trialEndsAt,
+      autoRenew: true,
+      stripeCustomerId: updated.stripeCustomerId,
+      stripeSubscriptionId: updated.stripeSubscriptionId,
+      currentDoctorsCount: updated.currentDoctorsCount,
+      currentPatientsCount: updated.currentPatientsCount,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt
     });
 
   } catch (error) {
     console.error('Error updating subscription:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
-} 
+}

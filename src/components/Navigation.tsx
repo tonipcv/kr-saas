@@ -34,6 +34,8 @@ import { useSession } from "next-auth/react";
 import Image from "next/image";
 import { useEffect, useState, createContext, useContext, useMemo, useRef } from 'react';
 import { signOut } from 'next-auth/react';
+import { SidebarClinicSelector } from '@/components/ui/sidebar-clinic-selector';
+import { useClinic } from '@/contexts/clinic-context';
 
 interface NavItem {
   href: string;
@@ -196,6 +198,8 @@ export default function Navigation() {
   })();
   const { data: session } = useSession();
   const { userRole, isLoadingRole } = useUserRole();
+  const { currentClinic } = useClinic();
+  const isFreePlan = currentClinic?.subscription?.plan?.name?.toLowerCase() === 'free';
   
   // Estado para controlar hidratação e evitar erros de SSR
   const [isHydrated, setIsHydrated] = useState(false);
@@ -578,6 +582,9 @@ export default function Navigation() {
               </Link>
             </div>
 
+            {/* Clinic Selector */}
+            <SidebarClinicSelector />
+
             {/* Navigation Sections */}
             <div className="flex-1 py-5 px-3 overflow-y-auto">
               <nav className="space-y-6">
@@ -624,6 +631,14 @@ export default function Navigation() {
                   <ArrowRightOnRectangleIcon className="h-4 w-4" />
                 </button>
               </div>
+              {isFreePlan && (
+                <Link
+                  href="/clinic/subscription#plans"
+                  className="mt-2 w-full inline-flex items-center justify-center text-xs font-medium text-white bg-gray-900 hover:bg-black rounded-md h-8"
+                >
+                  Upgrade
+                </Link>
+              )}
             </div>
           </div>
         </nav>
@@ -702,6 +717,14 @@ export default function Navigation() {
                     </div>
                   </Link>
                   <div className="relative flex items-center gap-2">
+                    {isFreePlan && (
+                      <Link
+                        href="/clinic/subscription#plans"
+                        className="px-2 h-7 inline-flex items-center justify-center text-[11px] font-medium text-white bg-gray-900 hover:bg-black rounded-md"
+                      >
+                        Upgrade
+                      </Link>
+                    )}
                     <Link href={getProfileUrl()}>
                       <div className={cn(
                         "h-8 w-8 flex items-center justify-center cursor-pointer rounded-full",

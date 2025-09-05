@@ -204,12 +204,59 @@ export default function ClientReferrals() {
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [couponsOpen, setCouponsOpen] = useState(false);
+  const [loadingCoupons, setLoadingCoupons] = useState(false);
+  const [couponTemplates, setCouponTemplates] = useState<Array<{
+    id: string;
+    slug: string;
+    name: string;
+    display_title?: string | null;
+    display_message?: string | null;
+  }>>([]);
   const displayPatientName = patientName || session?.user?.name || 'Paciente';
   const displayDoctorName = doctorName || 'Dr. Especialista';
   const displayPoints = creditsBalance;
   const hasGoogleReview = creditsHistory.some((c) => (c.type || '').toUpperCase().includes('GOOGLE'));
 
   const toggleMenu = () => setMenuOpen(!menuOpen);
+
+  const fetchCouponTemplates = async () => {
+    const slugVal = (doctorSlug || slug || '').toString().trim();
+    if (!slugVal) {
+      setCouponTemplates([]);
+      return [] as any[];
+    }
+    setLoadingCoupons(true);
+    try {
+      const res = await fetch(`/api/coupon-templates/doctor/${encodeURIComponent(slugVal)}`);
+      const json = await res.json().catch(() => ({ success: false }));
+      if (res.ok && json?.success && Array.isArray(json.data)) {
+        setCouponTemplates(json.data);
+        return json.data as any[];
+      }
+      setCouponTemplates([]);
+      return [] as any[];
+    } catch {
+      setCouponTemplates([]);
+      return [] as any[];
+    } finally {
+      setLoadingCoupons(false);
+    }
+  };
+
+  const openCoupons = async () => {
+    if (!couponsOpen) {
+      await fetchCouponTemplates();
+    }
+    setCouponsOpen(true);
+  };
+
+  // When opening the Share modal, also load coupon templates to show below
+  useEffect(() => {
+    if (shareModalOpen) {
+      fetchCouponTemplates();
+    }
+  }, [shareModalOpen, doctorSlug, slug]);
 
   // Redirect unauthenticated users to slug login
   useEffect(() => {
@@ -594,6 +641,190 @@ export default function ClientReferrals() {
   return (
     <div className="min-h-screen bg-white">
       {/* The whole original JSX UI goes here. If needed, I can inline it entirely. */}
+      {/* Share Modal with coupon links below */}
+      <Dialog open={shareModalOpen} onOpenChange={setShareModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Compartilhe sua indicação</DialogTitle>
+            <DialogDescription>
+              Envie seu link via WhatsApp, SMS ou Email, ou copie-o.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  const url = generateReferralLink();
+                  if (!url) return;
+                  const wa = `https://wa.me/?text=${encodeURIComponent(url)}`;
+                  window.open(wa, '_blank');
+                }}
+              >
+                <MessageCircle className="h-4 w-4 mr-2" /> WhatsApp
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  const url = generateReferralLink();
+                  if (!url) return;
+                  const sms = `sms:?&body=${encodeURIComponent(url)}`;
+                  window.open(sms, '_blank');
+                }}
+              >
+                <Phone className="h-4 w-4 mr-2" /> SMS
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  const url = generateReferralLink();
+                  if (!url) return;
+                  const subject = encodeURIComponent(t.shareSubject);
+                  const body = encodeURIComponent(`${t.shareMessage}\n\n${url}`);
+                  const mailto = `mailto:?subject=${subject}&body=${body}`;
+                  window.location.href = mailto;
+                }}
+              >
+                <Mail className="h-4 w-4 mr-2" /> Email
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                className="w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-2 text-sm"
+                value={generateReferralLink()}
+                readOnly
+              />
+              <Button onClick={copyReferralLink} variant="secondary">
+                <Copy className="h-4 w-4 mr-2" /> Copiar
+              </Button>
+            </div>
+
+            <div className="pt-2 border-t" />
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-medium text-gray-900">Condições especiais</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-600">{couponTemplates.length} encontradas</span>
+                  <Button size="sm" variant="ghost" onClick={fetchCouponTemplates} disabled={loadingCoupons}>
+                    {loadingCoupons ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Recarregar'}
+                  </Button>
+                </div>
+              </div>
+              {loadingCoupons && (
+                <div className="flex items-center text-gray-600 text-sm">
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Carregando...
+                </div>
+              )}
+              {!loadingCoupons && couponTemplates.length === 0 && (
+                <div className="text-sm text-gray-600">Nenhuma condição especial ativa no momento.</div>
+              )}
+              {!loadingCoupons && couponTemplates.length > 0 && (
+                <ul className="divide-y divide-gray-100 border rounded-md">
+                  {couponTemplates.map((c) => {
+                    const base = (process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '') || '').replace(/\/+$/, '');
+                    const dslug = (doctorSlug || slug || '').toString().replace(/^\/+/, '');
+                    const url = `${base}/${dslug}?cupom=${encodeURIComponent(c.slug)}`;
+                    return (
+                      <li key={c.id} className="p-3 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-gray-900 break-words">{c.display_title || c.name}</div>
+                          {c.display_message && (
+                            <div className="text-xs text-gray-600 mt-0.5 break-words">{c.display_message}</div>
+                          )}
+                          <div className="mt-1">
+                            <code className="text-xs break-all text-gray-700 bg-gray-50 px-1 py-0.5 rounded">{url}</code>
+                          </div>
+                        </div>
+                        <div className="shrink-0">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(url);
+                                toast.success('Link copiado');
+                              } catch {
+                                toast.error('Não foi possível copiar');
+                              }
+                            }}
+                          >
+                            <Copy className="h-4 w-4 mr-1" /> Copiar
+                          </Button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShareModalOpen(false)} variant="secondary">Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Special Conditions (Coupons) Modal */}
+      <Dialog open={couponsOpen} onOpenChange={setCouponsOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Condições especiais</DialogTitle>
+            <DialogDescription>
+              Links públicos de ofertas e condições especiais criadas pelo médico.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 max-h-[50vh] overflow-auto">
+            {loadingCoupons && (
+              <div className="flex items-center text-gray-600 text-sm">
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Carregando...
+              </div>
+            )}
+            {!loadingCoupons && couponTemplates.length === 0 && (
+              <div className="text-sm text-gray-600">Nenhuma condição especial ativa no momento.</div>
+            )}
+            {!loadingCoupons && couponTemplates.length > 0 && (
+              <ul className="divide-y divide-gray-100 border rounded-md">
+                {couponTemplates.map((c) => {
+                  const base = (process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '') || '').replace(/\/+$/, '');
+                  const dslug = (doctorSlug || slug || '').toString().replace(/^\/+/, '');
+                  const url = `${base}/${dslug}?cupom=${encodeURIComponent(c.slug)}`;
+                  return (
+                    <li key={c.id} className="p-3 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-gray-900 break-words">{c.display_title || c.name}</div>
+                        {c.display_message && (
+                          <div className="text-xs text-gray-600 mt-0.5 break-words">{c.display_message}</div>
+                        )}
+                        <div className="mt-1">
+                          <code className="text-xs break-all text-gray-700 bg-gray-50 px-1 py-0.5 rounded">{url}</code>
+                        </div>
+                      </div>
+                      <div className="shrink-0">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(url);
+                              toast.success('Link copiado');
+                            } catch {
+                              toast.error('Não foi possível copiar');
+                            }
+                          }}
+                        >
+                          <Copy className="h-4 w-4 mr-1" /> Copiar
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setCouponsOpen(false)} variant="secondary">Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Floating Action Menu (slug-aware) */}
       <div className="fixed bottom-6 right-6 z-50">
         <div className="relative">
@@ -606,6 +837,13 @@ export default function ClientReferrals() {
           </button>
           {menuOpen && (
             <div className="absolute bottom-14 right-0 bg-white border border-gray-200 rounded-xl shadow-xl w-56 p-2">
+              <button
+                onClick={() => setShareModalOpen(true)}
+                className="w-full flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                <Share2 className="mr-2 h-4 w-4 text-gray-600" />
+                Compartilhar
+              </button>
               <Link href={`/${slug}/profile`} className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
                 <User className="mr-2 h-4 w-4 text-gray-600" />
                 Profile
@@ -614,6 +852,13 @@ export default function ClientReferrals() {
                 <Share2 className="mr-2 h-4 w-4 text-gray-600" />
                 Referrals
               </Link>
+              <button
+                onClick={openCoupons}
+                className="w-full flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                <Gift className="mr-2 h-4 w-4 text-gray-600" />
+                Condições especiais
+              </button>
               <button
                 onClick={() => signOut({ callbackUrl: '/' })}
                 className="w-full flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50"

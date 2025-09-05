@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
+import { useClinic } from '@/contexts/clinic-context';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,6 +94,7 @@ interface ImportResults {
 
 export default function PatientsPage() {
   const { data: session } = useSession();
+  const { currentClinic } = useClinic();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -142,8 +144,10 @@ export default function PatientsPage() {
   const [isValidatingCsv, setIsValidatingCsv] = useState(false);
 
   useEffect(() => {
-    loadPatients();
-  }, []);
+    if (currentClinic) {
+      loadPatients();
+    }
+  }, [currentClinic]);
 
   // Auto-open Add Client modal when coming from dashboard with ?add=1 (or ?new=1)
   useEffect(() => {
@@ -166,11 +170,14 @@ export default function PatientsPage() {
   }, []);
 
   const loadPatients = async () => {
+    if (!currentClinic) return;
+    
     try {
       setIsLoading(true);
-      console.log('🔄 Loading patients...');
+      console.log('🔄 Loading patients for clinic:', currentClinic.name);
       
-      const response = await fetch('/api/patients', {
+      const url = `/api/patients?clinicId=${currentClinic.id}`;
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json'
@@ -702,6 +709,28 @@ export default function PatientsPage() {
     );
   }
 
+  // Show loading when no clinic is selected
+  if (!currentClinic) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="lg:ml-64">
+          <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 flex items-center justify-center min-h-[calc(100vh-88px)]">
+            <Card className="w-full max-w-md bg-white border-gray-200 shadow-lg rounded-2xl">
+              <CardHeader className="text-center p-6">
+                <CardTitle className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                  Select a Clinic
+                </CardTitle>
+                <p className="text-gray-600 font-medium mt-2">
+                  Please select a clinic from the sidebar to view patients.
+                </p>
+              </CardHeader>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="lg:ml-64">
@@ -714,6 +743,16 @@ export default function PatientsPage() {
                 <p className="text-sm text-gray-500 mt-1">Manage your clients and their protocols</p>
               </div>
               <div className="flex items-center gap-2">
+                <Link href="/doctor/membership">
+                  <Button
+                    variant="outline"
+                    className="rounded-xl h-9 px-3 border-gray-200 text-gray-700 hover:bg-gray-50"
+                    title="Configure membership levels"
+                  >
+                    <span className="hidden sm:inline">Membership Levels</span>
+                    <SparklesIcon className="h-4 w-4 sm:ml-2" />
+                  </Button>
+                </Link>
                 <Button
                   variant="outline"
                   className="rounded-xl h-9 px-3 border-gray-200 text-gray-700 hover:bg-gray-50"
@@ -749,6 +788,7 @@ export default function PatientsPage() {
                 </Button>
               </div>
             </div>
+
 
             {/* Free plan banner – match Products page style (English copy) */}
             {!subLoading && (!subscriptionStatus || (subscriptionStatus.planName || '').toLowerCase().includes('free')) && (
@@ -792,8 +832,15 @@ export default function PatientsPage() {
               <div className="mb-4">
                 <UserGroupIcon className="mx-auto h-12 w-12 text-gray-400" />
               </div>
-              <h3 className="mt-2 text-sm font-semibold text-gray-900">No clients registered</h3>
-              <p className="mt-1 text-sm text-gray-500">Start by adding your first client</p>
+              <h3 className="mt-2 text-sm font-semibold text-gray-900">
+                {currentClinic ? `No clients in ${currentClinic.name}` : 'No clients registered'}
+              </h3>
+              <p className="mt-1 text-sm text-gray-500">
+                {currentClinic 
+                  ? `Start by adding your first client to ${currentClinic.name}`
+                  : 'Start by adding your first client'
+                }
+              </p>
               <div className="mt-6">
                 <Button
                   className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl font-medium"

@@ -39,38 +39,48 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Fetch doctors
+    // Fetch doctors with their clinics and subscriptions
     const doctors = await prisma.user.findMany({
       where: { role: 'DOCTOR' },
       select: {
         id: true,
         name: true,
         email: true,
-        created_at: true
-      },
-      orderBy: { created_at: 'desc' }
-    });
-
-    // Fetch subscriptions separately from unified_subscriptions
-    const subscriptions = await prisma.unified_subscriptions.findMany({
-      where: {
-        type: 'DOCTOR',
-        subscriber_id: { in: doctors.map(d => d.id) }
-      },
-      include: {
-        subscription_plans: {
+        createdAt: true,
+        clinicMembers: {
+          where: { isActive: true },
           select: {
-            id: true,
-            name: true,
-            price: true,
-            maxPatients: true,
-            maxProtocols: true,
-            maxCourses: true,
-            maxProducts: true,
-            trialDays: true,
+            role: true,
+            clinic: {
+              select: {
+                id: true,
+                name: true,
+                subscriptions: {
+                  where: {
+                    status: { in: ['ACTIVE', 'TRIAL'] }
+                  },
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                  include: {
+                    plan: {
+                      select: {
+                        id: true,
+                        name: true,
+                        price: true,
+                        maxDoctors: true,
+                        maxPatients: true,
+                        tier: true,
+                        trialDays: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
-      }
+      },
+      orderBy: { createdAt: 'desc' }
     });
 
     // Fetch patient counts per doctor (using doctor_id field)
@@ -86,47 +96,56 @@ export async function GET(request: NextRequest) {
       }))
     );
 
-    // Combine data (normalize subscription shape for client rendering)
+    // Combine data
     const doctorsWithData = doctors.map(doctor => {
-      const subscription = subscriptions.find(s => s.subscriber_id === doctor.id);
       const patientCount = patientCounts.find(p => p.doctorId === doctor.id)?.count || 0;
+      const activeClinic = doctor.clinicMembers[0]?.clinic; // Pegar a primeira clínica ativa
+      const subscription = activeClinic?.subscriptions[0]; // Pegar a subscrição mais recente
 
       const normalizedSubscription = subscription
         ? {
             id: subscription.id,
             status: subscription.status,
-            startDate: subscription.start_date?.toISOString?.() ?? null,
-            endDate: subscription.end_date?.toISOString?.() ?? null,
-            trialEndDate: subscription.trial_end_date?.toISOString?.() ?? null,
-            plan: subscription.subscription_plans
+            startDate: subscription.startDate.toISOString(),
+            endDate: subscription.currentPeriodEnd.toISOString(),
+            trialEndDate: subscription.trialEndsAt?.toISOString() ?? null,
+            plan: subscription.plan
               ? {
-                  id: subscription.subscription_plans.id,
-                  name: subscription.subscription_plans.name,
-                  price: (subscription.subscription_plans.price as unknown as number) ?? 0,
-                  maxPatients: subscription.subscription_plans.maxPatients ?? 0,
-                  maxProtocols: subscription.subscription_plans.maxProtocols ?? 0,
-                  maxCourses: subscription.subscription_plans.maxCourses ?? 0,
-                  maxProducts: subscription.subscription_plans.maxProducts ?? 0,
-                  trialDays: subscription.subscription_plans.trialDays ?? 0,
+                  id: subscription.plan.id,
+                  name: subscription.plan.name,
+                  price: subscription.plan.price ?? 0,
+                  maxDoctors: subscription.plan.maxDoctors ?? 0,
+                  maxPatients: subscription.plan.maxPatients ?? 0,
+                  tier: subscription.plan.tier,
+                  trialDays: subscription.plan.trialDays ?? 0,
                 }
               : null,
           }
         : {
             status: 'ACTIVE',
-            startDate: doctor.created_at ? new Date(doctor.created_at as any).toISOString() : null,
+            startDate: doctor.createdAt.toISOString(),
             endDate: null,
             trialEndDate: null,
             plan: {
               name: 'Free',
-              maxPatients: 50,
-              maxProtocols: 10,
-              maxCourses: 5,
-              maxProducts: 100,
+              maxDoctors: 1,
+              maxPatients: 200,
+              tier: 'STARTER'
             },
           };
 
       return {
-        ...doctor,
+        id: doctor.id,
+        name: doctor.name,
+        email: doctor.email,
+        createdAt: doctor.createdAt,
+        clinic: activeClinic
+          ? {
+              id: activeClinic.id,
+              name: activeClinic.name,
+              role: doctor.clinicMembers[0]?.role
+            }
+          : null,
         subscription: normalizedSubscription,
         patientCount,
       };
@@ -183,24 +202,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Buscar (ou criar) plano Free como padrão
-    let defaultPlan = await prisma.subscriptionPlan.findFirst({
+    let defaultPlan = await prisma.clinicPlan.findFirst({
       where: { name: { equals: 'Free', mode: 'insensitive' } }
     });
 
     if (!defaultPlan) {
-      defaultPlan = await prisma.subscriptionPlan.create({
+      defaultPlan = await prisma.clinicPlan.create({
         data: {
           name: 'Free',
-          description: 'Plano gratuito padrão para novos médicos (criado automaticamente)',
+          description: 'Plano gratuito padrão para novas clínicas (criado automaticamente)',
           price: 0,
-          billingCycle: 'MONTHLY',
+          tier: 'STARTER',
           maxDoctors: 1,
+          maxPatients: 200,
           features: 'Auto-created by POST /api/admin/doctors',
           isActive: true,
-          maxPatients: 50,
-          maxProtocols: 10,
-          maxCourses: 5,
-          maxProducts: 100,
           isDefault: true,
           trialDays: 0,
         },
@@ -221,33 +237,52 @@ export async function POST(request: NextRequest) {
         name,
         email,
         role: 'DOCTOR',
-        email_verified: null, // Será verificado quando definir a senha
-        reset_token: hashedToken, // Usar o campo resetToken para o convite
-        reset_token_expiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 dias para aceitar o convite
+        emailVerified: null, // Será verificado quando definir a senha
+        resetToken: hashedToken, // Usar o campo resetToken para o convite
+        resetTokenExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 dias para aceitar o convite
+      }
+    });
+
+    // Criar clínica pessoal para o médico
+    const clinic = await prisma.clinic.create({
+      data: {
+        id: crypto.randomUUID(),
+        name: `${name} - Personal Clinic`,
+        ownerId: doctor.id,
+        isActive: true
+      }
+    });
+
+    // Criar membro da clínica
+    await prisma.clinicMember.create({
+      data: {
+        clinicId: clinic.id,
+        userId: doctor.id,
+        role: 'OWNER',
+        isActive: true
       }
     });
 
     // Criar subscription baseada na seleção (padrão TRIAL)
     const now = new Date();
     const subscriptionData: any = {
-      id: crypto.randomUUID(),
-      subscriber_id: doctor.id,
-      type: 'DOCTOR',
-      plan_id: defaultPlan.id,
+      id: `cs_${crypto.randomUUID()}`,
+      clinicId: clinic.id,
+      planId: defaultPlan.id,
       status: subscriptionType,
-      start_date: now,
-      auto_renew: true,
+      startDate: now,
+      currentPeriodStart: now,
+      currentPeriodEnd: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000), // 30 dias
+      currentDoctorsCount: 1,
+      currentPatientsCount: 0
     };
 
     if (subscriptionType === 'TRIAL') {
       const trialDays = defaultPlan.trialDays || 7; // Default to 7 days if null
-      subscriptionData.trial_end_date = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
-    } else {
-      // ACTIVE Free plan should be non-expiring
-      subscriptionData.end_date = null;
+      subscriptionData.trialEndsAt = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
     }
     
-    await prisma.unified_subscriptions.create({
+    await prisma.clinicSubscription.create({
       data: subscriptionData
     });
 
@@ -283,9 +318,15 @@ export async function POST(request: NextRequest) {
       console.log('Invite email sent successfully to:', email);
     } catch (emailError) {
       console.error('Email sending error:', emailError);
-      // Se o email falhar, deletar o médico criado
-      await prisma.unified_subscriptions.deleteMany({
-        where: { subscriber_id: doctor.id, type: 'DOCTOR' }
+      // Se o email falhar, deletar tudo que foi criado
+      await prisma.clinicSubscription.deleteMany({
+        where: { clinicId: clinic.id }
+      });
+      await prisma.clinicMember.deleteMany({
+        where: { clinicId: clinic.id }
+      });
+      await prisma.clinic.delete({
+        where: { id: clinic.id }
       });
       await prisma.user.delete({
         where: { id: doctor.id }
@@ -298,7 +339,11 @@ export async function POST(request: NextRequest) {
       doctor: {
         id: doctor.id,
         name: doctor.name,
-        email: doctor.email
+        email: doctor.email,
+        clinic: {
+          id: clinic.id,
+          name: clinic.name
+        }
       },
       message: 'Doctor created successfully and invite sent by email'
     });
@@ -309,4 +354,4 @@ export async function POST(request: NextRequest) {
       error: error instanceof Error ? error.message : 'Internal server error' 
     }, { status: 500 });
   }
-} 
+}

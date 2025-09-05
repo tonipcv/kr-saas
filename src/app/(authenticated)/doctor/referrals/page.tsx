@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { useClinic } from '@/contexts/clinic-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -91,6 +92,7 @@ const statusConfig = {
 
 export default function DoctorReferralsPage() {
   const { data: session } = useSession();
+  const { currentClinic } = useClinic();
   const [leads, setLeads] = useState<ReferralLead[]>([]);
   const [stats, setStats] = useState<ReferralStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -109,10 +111,17 @@ export default function DoctorReferralsPage() {
 
   // Load data
   const loadData = async () => {
+    if (!currentClinic) {
+      setLeads([]);
+      setStats(null);
+      return;
+    }
+
     try {
       const params = new URLSearchParams({
         page: page.toString(),
-        limit: '10'
+        limit: '10',
+        clinicId: currentClinic.id
       });
 
       const response = await fetch(`/api/referrals/manage?${params}`);
@@ -134,7 +143,7 @@ export default function DoctorReferralsPage() {
     if (session?.user?.id) {
       loadData();
     }
-  }, [session, page]);
+  }, [session, page, currentClinic]);
 
   // Load doctor's slug for referral link generation (new standard)
   useEffect(() => {
@@ -298,6 +307,27 @@ export default function DoctorReferralsPage() {
                   </div>
                 ))}
               </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentClinic) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="lg:ml-64">
+          <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 flex items-center justify-center min-h-[calc(100vh-88px)]">
+            <Card className="w-full max-w-md bg-white border-gray-200 shadow-lg rounded-2xl">
+              <CardHeader className="text-center p-6">
+                <CardTitle className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                  Select a Clinic
+                </CardTitle>
+                <CardDescription className="text-gray-600 font-medium mt-2">
+                  Please select a clinic from the sidebar to view referrals.
+                </CardDescription>
+              </CardHeader>
             </Card>
           </div>
         </div>

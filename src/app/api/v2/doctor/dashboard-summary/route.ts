@@ -35,11 +35,40 @@ export async function GET(request: NextRequest) {
       return unauthorizedResponse();
     }
 
+    // Get clinicId from query params
+    const { searchParams } = new URL(request.url);
+    const clinicId = searchParams.get('clinicId');
+
+    // Verify doctor has access to the clinic if clinicId is provided
+    if (clinicId) {
+      const hasAccess = await prisma.clinic.findFirst({
+        where: {
+          id: clinicId,
+          OR: [
+            { ownerId: userId },
+            {
+              members: {
+                some: {
+                  userId: userId,
+                  isActive: true
+                }
+              }
+            }
+          ]
+        }
+      });
+
+      if (!hasAccess) {
+        return NextResponse.json({ error: 'Access denied to this clinic' }, { status: 403 });
+      }
+    }
+
     // Get total patients count
     const totalPatients = await prisma.doctorPatientRelationship.count({
       where: {
         doctorId: userId,
-        isActive: true
+        isActive: true,
+        ...(clinicId && { clinicId: clinicId })
       }
     });
 

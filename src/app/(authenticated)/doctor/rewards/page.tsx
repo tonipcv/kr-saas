@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
+import { useClinic } from '@/contexts/clinic-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,6 +49,7 @@ interface Reward {
 
 export default function DoctorRewardsPage() {
   const { data: session } = useSession();
+  const { currentClinic } = useClinic();
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -171,8 +173,14 @@ export default function DoctorRewardsPage() {
 
   // Load rewards
   const loadRewards = async () => {
+    if (!currentClinic) {
+      setRewards([]);
+      setLoading(false);
+      return;
+    }
+
     try {
-      const response = await fetch('/api/referrals/rewards');
+      const response = await fetch(`/api/referrals/rewards?clinicId=${currentClinic.id}`);
       const data = await response.json();
 
       if (response.ok) {
@@ -189,7 +197,7 @@ export default function DoctorRewardsPage() {
     if (session?.user?.id) {
       loadRewards();
     }
-  }, [session]);
+  }, [session, currentClinic]);
 
   // Fetch current plan name
   useEffect(() => {
@@ -245,6 +253,11 @@ export default function DoctorRewardsPage() {
   };
 
   const handleCreate = async () => {
+    if (!currentClinic) {
+      toast.error('Please select a clinic first');
+      return;
+    }
+
     if (!formData.title || !formData.description || !formData.creditsRequired) {
       return;
     }
@@ -259,7 +272,8 @@ export default function DoctorRewardsPage() {
           description: formData.description,
           imageUrl: formData.imageUrl || null,
           creditsRequired: parseInt(formData.creditsRequired),
-          maxRedemptions: formData.maxRedemptions ? parseInt(formData.maxRedemptions) : null
+          maxRedemptions: formData.maxRedemptions ? parseInt(formData.maxRedemptions) : null,
+          clinicId: currentClinic.id
         })
       });
 
@@ -276,6 +290,11 @@ export default function DoctorRewardsPage() {
   };
 
   const handleEdit = async () => {
+    if (!currentClinic) {
+      toast.error('Please select a clinic first');
+      return;
+    }
+
     if (!selectedReward || !formData.title || !formData.description || !formData.creditsRequired) {
       return;
     }
@@ -291,7 +310,8 @@ export default function DoctorRewardsPage() {
           description: formData.description,
           imageUrl: formData.imageUrl || null,
           creditsRequired: parseInt(formData.creditsRequired),
-          maxRedemptions: formData.maxRedemptions ? parseInt(formData.maxRedemptions) : null
+          maxRedemptions: formData.maxRedemptions ? parseInt(formData.maxRedemptions) : null,
+          clinicId: currentClinic.id
         })
       });
 
@@ -328,12 +348,17 @@ export default function DoctorRewardsPage() {
   };
 
   const handleDelete = async (reward: Reward) => {
+    if (!currentClinic) {
+      toast.error('Please select a clinic first');
+      return;
+    }
+
     if (!confirm('Are you sure you want to delete this reward?')) {
       return;
     }
 
     try {
-      const response = await fetch(`/api/referrals/rewards?rewardId=${reward.id}`, {
+      const response = await fetch(`/api/referrals/rewards?rewardId=${reward.id}&clinicId=${currentClinic.id}`, {
         method: 'DELETE'
       });
 
@@ -479,6 +504,27 @@ export default function DoctorRewardsPage() {
                 </Card>
               ))}
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentClinic) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="lg:ml-64">
+          <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 flex items-center justify-center min-h-[calc(100vh-88px)]">
+            <Card className="w-full max-w-md bg-white border-gray-200 shadow-lg rounded-2xl">
+              <CardHeader className="text-center p-6">
+                <CardTitle className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                  Select a Clinic
+                </CardTitle>
+                <CardDescription className="text-gray-600 font-medium mt-2">
+                  Please select a clinic from the sidebar to view rewards.
+                </CardDescription>
+              </CardHeader>
+            </Card>
           </div>
         </div>
       </div>

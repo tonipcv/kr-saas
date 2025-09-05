@@ -13,9 +13,30 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    const { searchParams } = new URL(req.url);
+    const clinicId = searchParams.get('clinicId');
+
+    if (!clinicId) {
+      return NextResponse.json({ rewards: [] });
+    }
+
+    // Verify user has access to this clinic
+    const clinicMember = await prisma.clinicMember.findFirst({
+      where: {
+        clinicId: clinicId,
+        userId: session.user.id,
+        isActive: true,
+      },
+    });
+
+    if (!clinicMember) {
+      return NextResponse.json({ error: 'Não autorizado para esta clínica' }, { status: 403 });
+    }
+
     const rewards = await prisma.referralReward.findMany({
       where: {
-        doctorId: session.user.id
+        doctorId: session.user.id,
+        clinicId: clinicId,
       },
       include: {
         redemptions: {
@@ -94,20 +115,34 @@ export async function POST(req: Request) {
       url: req.url,
     });
 
-    const { title, description, creditsRequired, maxRedemptions, imageUrl } = await req.json();
+    const { title, description, creditsRequired, maxRedemptions, imageUrl, clinicId } = await req.json();
     console.debug('[rewards][POST] body', {
       title,
       hasDescription: !!description,
       creditsRequired,
       maxRedemptions,
       hasImageUrl: !!imageUrl,
+      clinicId,
     });
 
-    if (!title || !description || !creditsRequired) {
+    if (!title || !description || !creditsRequired || !clinicId) {
       return NextResponse.json(
-        { error: 'Título, descrição e créditos necessários são obrigatórios' },
+        { error: 'Título, descrição, créditos necessários e clínica são obrigatórios' },
         { status: 400 }
       );
+    }
+
+    // Verify user has access to this clinic
+    const clinicMember = await prisma.clinicMember.findFirst({
+      where: {
+        clinicId: clinicId,
+        userId: session.user.id,
+        isActive: true,
+      },
+    });
+
+    if (!clinicMember) {
+      return NextResponse.json({ error: 'Não autorizado para esta clínica' }, { status: 403 });
     }
 
     if (creditsRequired < 1) {
@@ -136,26 +171,25 @@ export async function POST(req: Request) {
 
     const reward = await prisma.referralReward.create({
       data: {
-        doctorId: session.user.id,
         title,
         description,
+        costInCredits: creditsRequired,
+        maxRedemptions: maxRedemptions || null,
         imageUrl: imageUrl || null,
-        value: parseInt(creditsRequired),
-        costInCredits: parseInt(creditsRequired),
-        maxRedemptions: maxRedemptions ? parseInt(maxRedemptions) : null,
-        isActive: true
+        doctorId: session.user.id,
+        clinicId: clinicId,
       }
     });
 
-    const durationMs = Date.now() - startTs;
-    console.debug('[rewards][POST] success', { rewardId: reward.id, durationMs });
-    return NextResponse.json({ 
-      success: true, 
-      reward 
+    console.debug('[rewards][POST] created', {
+      rewardId: reward.id,
+      durationMs: Date.now() - startTs,
     });
 
-  } catch (error: any) {
-    console.error('[rewards][POST] error', error?.message || error, { stack: error?.stack });
+    return NextResponse.json({ reward });
+
+  } catch (error) {
+    console.error('Erro ao criar recompensa:', error);
     return NextResponse.json(
       { error: 'Erro interno do servidor' },
       { status: 500 }
@@ -172,7 +206,8 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const { rewardId, title, description, creditsRequired, maxRedemptions, isActive, imageUrl } = await req.json();
+    const { searchParams } = new URL(req.url);
+    const rewardId = searchParams.get('rewardId');
 
     if (!rewardId) {
       return NextResponse.json(
@@ -181,11 +216,34 @@ export async function PUT(req: Request) {
       );
     }
 
+    const { title, description, creditsRequired, maxRedemptions, imageUrl, isActive, clinicId } = await req.json();
+
+    if (!title || !description || !creditsRequired || !clinicId) {
+      return NextResponse.json(
+        { error: 'Título, descrição, créditos necessários e clínica são obrigatórios' },
+        { status: 400 }
+      );
+    }
+
+    // Verify user has access to this clinic
+    const clinicMember = await prisma.clinicMember.findFirst({
+      where: {
+        clinicId: clinicId,
+        userId: session.user.id,
+        isActive: true,
+      },
+    });
+
+    if (!clinicMember) {
+      return NextResponse.json({ error: 'Não autorizado para esta clínica' }, { status: 403 });
+    }
+
     // Verificar se a recompensa pertence ao médico
     const existingReward = await prisma.referralReward.findFirst({
       where: {
         id: rewardId,
-        doctorId: session.user.id
+        doctorId: session.user.id,
+        clinicId: clinicId,
       }
     });
 
@@ -196,26 +254,20 @@ export async function PUT(req: Request) {
       );
     }
 
-    const updateData: any = {};
-    if (title !== undefined) updateData.title = title;
-    if (description !== undefined) updateData.description = description;
-    if (imageUrl !== undefined) updateData.imageUrl = imageUrl || null;
-    if (creditsRequired !== undefined) {
-      updateData.value = parseInt(creditsRequired);
-      updateData.costInCredits = parseInt(creditsRequired);
-    }
-    if (maxRedemptions !== undefined) updateData.maxRedemptions = maxRedemptions ? parseInt(maxRedemptions) : null;
-    if (isActive !== undefined) updateData.isActive = isActive;
-
     const reward = await prisma.referralReward.update({
       where: { id: rewardId },
-      data: updateData
+      data: {
+        title,
+        description,
+        costInCredits: creditsRequired,
+        maxRedemptions: maxRedemptions || null,
+        imageUrl: imageUrl || null,
+        isActive: isActive ?? true,
+        clinicId: clinicId,
+      }
     });
 
-    return NextResponse.json({ 
-      success: true, 
-      reward 
-    });
+    return NextResponse.json({ reward });
 
   } catch (error) {
     console.error('Erro ao atualizar recompensa:', error);
@@ -237,19 +289,34 @@ export async function DELETE(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const rewardId = searchParams.get('rewardId');
+    const clinicId = searchParams.get('clinicId');
 
-    if (!rewardId) {
+    if (!rewardId || !clinicId) {
       return NextResponse.json(
-        { error: 'ID da recompensa é obrigatório' },
+        { error: 'ID da recompensa e clínica são obrigatórios' },
         { status: 400 }
       );
     }
 
-    // Verificar se a recompensa pertence ao médico
+    // Verify user has access to this clinic
+    const clinicMember = await prisma.clinicMember.findFirst({
+      where: {
+        clinicId: clinicId,
+        userId: session.user.id,
+        isActive: true,
+      },
+    });
+
+    if (!clinicMember) {
+      return NextResponse.json({ error: 'Não autorizado para esta clínica' }, { status: 403 });
+    }
+
+    // Verificar se a recompensa pertence ao médico e clínica
     const existingReward = await prisma.referralReward.findFirst({
       where: {
         id: rewardId,
-        doctorId: session.user.id
+        doctorId: session.user.id,
+        clinicId: clinicId,
       },
       include: {
         _count: {
@@ -295,4 +362,4 @@ export async function DELETE(req: Request) {
       { status: 500 }
     );
   }
-} 
+}

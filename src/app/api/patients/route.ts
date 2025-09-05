@@ -11,6 +11,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Get clinicId from query params
+    const { searchParams } = new URL(request.url);
+    const clinicId = searchParams.get('clinicId');
+
     // Get the doctor's ID from the session user's email
     const doctor = await prisma.user.findUnique({
       where: { email: session.user.email },
@@ -21,11 +25,36 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
+    // Verify doctor has access to the clinic if clinicId is provided
+    if (clinicId) {
+      const hasAccess = await prisma.clinic.findFirst({
+        where: {
+          id: clinicId,
+          OR: [
+            { ownerId: doctor.id },
+            {
+              members: {
+                some: {
+                  userId: doctor.id,
+                  isActive: true
+                }
+              }
+            }
+          ]
+        }
+      });
+
+      if (!hasAccess) {
+        return NextResponse.json({ error: 'Access denied to this clinic' }, { status: 403 });
+      }
+    }
+
     // Get doctor's patients through relationships with PatientProfile scoped to this doctor
     const relationships = await prisma.doctorPatientRelationship.findMany({
       where: {
         doctorId: doctor.id,
         isActive: true,
+        ...(clinicId && { clinicId: clinicId })
       },
       include: {
         patient: {

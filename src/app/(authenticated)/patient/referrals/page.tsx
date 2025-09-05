@@ -229,6 +229,7 @@ interface Credit {
     status: string;
   };
 }
+
 interface Referral {
   id: string;
   name: string;
@@ -318,11 +319,21 @@ export default function PatientReferralsPage() {
   const [copiedCampaign, setCopiedCampaign] = useState<string | null>(null);
   // Local toggle for top content: Earn Points vs Products
   const [viewSection, setViewSection] = useState<'earn' | 'products'>('earn');
+  // Share referral modal and coupons state
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [couponsLoading, setCouponsLoading] = useState(false);
+  const [couponsError, setCouponsError] = useState<string | null>(null);
+  const [coupons, setCoupons] = useState<Array<{
+    id: string;
+    slug: string;
+    name: string;
+    display_title?: string | null;
+    display_message?: string | null;
+  }>>([]);
   // Products derived from doctor's prescriptions as patient-safe source
   const [doctorProducts, setDoctorProducts] = useState<Array<{ id: string; name: string; description: string; category?: string; originalPrice?: number | null; creditsPerUnit?: number }>>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   // Modals for Earn actions
-  const [shareModalOpen, setShareModalOpen] = useState(false);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   // Friendly fallback names for design preview and empty states
   const displayPatientName = patientName || session?.user?.name || 'Paciente';
@@ -335,6 +346,32 @@ export default function PatientReferralsPage() {
   const toggleMenu = () => {
     setMenuOpen(!menuOpen);
   };
+
+  // Coupons fetching for Share modal
+  const loadCoupons = async () => {
+    const slug = (doctorSlug || '').trim();
+    if (!slug) return;
+    setCouponsLoading(true);
+    setCouponsError(null);
+    try {
+      const res = await fetch(`/api/coupon-templates/doctor/${encodeURIComponent(slug)}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || 'Erro ao carregar cupons');
+      const items = Array.isArray(json?.data) ? json.data : [];
+      setCoupons(items);
+    } catch (e: any) {
+      console.error('[PatientReferrals] coupons load error', e);
+      setCouponsError(e?.message || 'Erro ao carregar cupons');
+    } finally {
+      setCouponsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (shareModalOpen) {
+      loadCoupons();
+    }
+  }, [shareModalOpen, doctorSlug]);
 
   // Handle confirmation of reward usage via email link
   useEffect(() => {
@@ -1772,6 +1809,70 @@ return (
                 <Button variant="secondary" className="h-10" onClick={copyReferralLink}>
                   <Copy className="h-4 w-4 mr-1" /> Copiar
                 </Button>
+              </div>
+
+              {/* Condições especiais (Coupons) */}
+              <div className="mt-2 border-t pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">Condições especiais</span>
+                    <Badge variant="secondary" className="text-[10px]">{coupons?.length || 0} encontradas</Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" className="h-8 px-2 text-xs" onClick={loadCoupons} disabled={couponsLoading || !doctorSlug}>
+                      {couponsLoading ? (<><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Recarregando…</>) : 'Recarregar'}
+                    </Button>
+                  </div>
+                </div>
+
+                {couponsLoading && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Carregando cupons…
+                  </div>
+                )}
+
+                {!couponsLoading && couponsError && (
+                  <div className="text-sm text-red-600">{couponsError}</div>
+                )}
+
+                {!couponsLoading && !couponsError && (coupons?.length ?? 0) === 0 && (
+                  <div className="text-sm text-gray-600">Nenhum cupom ativo encontrado.</div>
+                )}
+
+                {!couponsLoading && !couponsError && (coupons?.length ?? 0) > 0 && (
+                  <div className="space-y-2 max-h-48 overflow-auto pr-1">
+                    {coupons.map((c) => {
+                      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                      const slug = (doctorSlug || '').trim();
+                      const url = slug ? `${origin}/${slug}?cupom=${encodeURIComponent(c.slug)}` : '';
+                      return (
+                        <div key={c.id} className="flex items-start gap-2 p-2 rounded border border-gray-200 bg-gray-50">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-gray-900 truncate">{c.display_title || c.name}</div>
+                            {c.display_message && (
+                              <div className="text-xs text-gray-600 line-clamp-2">{c.display_message}</div>
+                            )}
+                            <div className="mt-1">
+                              <code className="text-[11px] font-mono bg-white border border-gray-200 rounded px-1.5 py-1 break-all inline-block max-w-full">
+                                {url}
+                              </code>
+                            </div>
+                          </div>
+                          <div className="shrink-0">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 px-2 text-xs border-gray-300"
+                              onClick={() => navigator.clipboard?.writeText(url).then(() => toast.success('Link copiado!')).catch(() => toast.error('Erro ao copiar'))}
+                            >
+                              <Copy className="h-3.5 w-3.5 mr-1" /> Copiar
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter>

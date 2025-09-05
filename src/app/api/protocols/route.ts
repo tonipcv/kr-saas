@@ -1,15 +1,19 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 // GET /api/protocols - Listar protocolos do médico
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
+
+    // Get clinicId from query params
+    const { searchParams } = new URL(request.url);
+    const clinicId = searchParams.get('clinicId');
 
     // Buscar o usuário para verificar o role
     const user = await prisma.user.findUnique({
@@ -20,10 +24,63 @@ export async function GET() {
       return NextResponse.json({ error: 'Acesso negado. Apenas médicos podem acessar protocolos.' }, { status: 403 });
     }
 
+    // Verify doctor has access to the clinic if clinicId is provided
+    if (clinicId) {
+      const hasAccess = await prisma.clinic.findFirst({
+        where: {
+          id: clinicId,
+          OR: [
+            { ownerId: user.id },
+            {
+              members: {
+                some: {
+                  userId: user.id,
+                  isActive: true
+                }
+              }
+            }
+          ]
+        }
+      });
+
+      if (!hasAccess) {
+        return NextResponse.json({ error: 'Access denied to this clinic' }, { status: 403 });
+      }
+    }
+
+    // Build where condition for protocols
+    let protocolWhere: any = {
+      doctor_id: session.user.id
+    };
+
+    // If clinicId is provided, ensure the doctor is a member of that clinic
+    if (clinicId) {
+      // Verify the user is a member of the specified clinic
+      const isMember = await prisma.clinicMember.findFirst({
+        where: {
+          clinicId: clinicId,
+          userId: session.user.id,
+          isActive: true
+        }
+      });
+
+      if (!isMember) {
+        // If not a member but is the owner, still allow access
+        const isOwner = await prisma.clinic.findFirst({
+          where: {
+            id: clinicId,
+            ownerId: session.user.id
+          }
+        });
+
+        if (!isOwner) {
+          return NextResponse.json({ error: 'Access denied to this clinic' }, { status: 403 });
+        }
+      }
+    }
+
     const protocols = await prisma.protocol.findMany({
-      where: {
-        doctor_id: session.user.id
-      },
+      where: protocolWhere,
       include: {
         days: {
           include: {
