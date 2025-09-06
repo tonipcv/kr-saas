@@ -26,7 +26,7 @@ export async function GET(
 
     const { id: clinicId } = await params;
 
-    const clinic = await prisma.clinic.findUnique({
+    const clinicRaw = await prisma.clinic.findUnique({
       where: { id: clinicId },
       include: {
         owner: { select: { id: true, name: true, email: true } },
@@ -42,10 +42,11 @@ export async function GET(
               select: {
                 id: true,
                 name: true,
-                price: true,
-                maxDoctors: true,
-                maxPatients: true,
-                tier: true
+                monthlyPrice: true,
+                baseDoctors: true,
+                basePatients: true,
+                tier: true,
+                features: true,
               }
             }
           }
@@ -53,9 +54,35 @@ export async function GET(
       }
     });
 
-    if (!clinic) {
+    if (!clinicRaw) {
       return NextResponse.json({ error: 'Clinic not found' }, { status: 404 });
     }
+
+    // Map plan fields for compatibility
+    const latestSub = Array.isArray(clinicRaw.subscriptions) && clinicRaw.subscriptions.length > 0 ? clinicRaw.subscriptions[0] : null;
+    const clinic = {
+      ...clinicRaw,
+      subscription: latestSub
+        ? {
+            id: latestSub.id,
+            status: latestSub.status,
+            startDate: latestSub.startDate,
+            endDate: latestSub.currentPeriodEnd,
+            trialEndDate: latestSub.trialEndsAt,
+            maxDoctors: latestSub.plan?.baseDoctors ?? null,
+            plan: latestSub.plan
+              ? {
+                  id: latestSub.plan.id,
+                  name: latestSub.plan.name,
+                  price: latestSub.plan.monthlyPrice != null ? Number(latestSub.plan.monthlyPrice) : null,
+                  maxDoctors: latestSub.plan.baseDoctors,
+                  maxPatients: latestSub.plan.basePatients,
+                  tier: (latestSub.plan as any).tier ?? null,
+                }
+              : null,
+          }
+        : null,
+    } as any;
 
     return NextResponse.json({ clinic });
 
@@ -129,7 +156,7 @@ export async function PUT(
     }
 
     // Update clinic data
-    const updatedClinic = await prisma.clinic.update({
+    const updatedClinicRaw = await prisma.clinic.update({
       where: { id: clinicId },
       data: {
         name,
@@ -221,6 +248,31 @@ export async function PUT(
         });
       }
     }
+
+    const latestUpdatedSub = Array.isArray(updatedClinicRaw.subscriptions) && updatedClinicRaw.subscriptions.length > 0 ? updatedClinicRaw.subscriptions[0] : null;
+    const updatedClinic = {
+      ...updatedClinicRaw,
+      subscription: latestUpdatedSub
+        ? {
+            id: latestUpdatedSub.id,
+            status: latestUpdatedSub.status,
+            startDate: latestUpdatedSub.startDate,
+            endDate: latestUpdatedSub.currentPeriodEnd,
+            trialEndDate: latestUpdatedSub.trialEndsAt,
+            maxDoctors: latestUpdatedSub.plan?.baseDoctors ?? null,
+            plan: latestUpdatedSub.plan
+              ? {
+                  id: latestUpdatedSub.plan.id,
+                  name: latestUpdatedSub.plan.name,
+                  price: latestUpdatedSub.plan.monthlyPrice != null ? Number(latestUpdatedSub.plan.monthlyPrice) : null,
+                  maxDoctors: latestUpdatedSub.plan.baseDoctors,
+                  maxPatients: latestUpdatedSub.plan.basePatients,
+                  tier: (latestUpdatedSub.plan as any).tier ?? null,
+                }
+              : null,
+          }
+        : null,
+    } as any;
 
     return NextResponse.json({ clinic: updatedClinic });
 

@@ -45,9 +45,10 @@ interface ClinicSubscription {
 interface SubscriptionPlan {
   id: string;
   name: string;
-  price: number;
+  price: number | null;
   maxDoctors: number;
   features: string | null;
+  tier?: string | null;
 }
 
 interface Clinic {
@@ -125,7 +126,7 @@ export default function EditClinicPage() {
         // Load clinic data and plans in parallel
         const [clinicResponse, plansResponse] = await Promise.all([
           fetch(`/api/admin/clinics/${clinicId}`),
-          fetch('/api/admin/plans')
+          fetch(`/api/admin/plans?clinicId=${encodeURIComponent(clinicId)}`)
         ]);
 
         if (clinicResponse.ok) {
@@ -634,7 +635,9 @@ export default function EditClinicPage() {
                       <SelectContent>
                         {plans.map((plan) => (
                           <SelectItem key={plan.id} value={plan.id}>
-                            {plan.name} - ${plan.price}/month
+                            {plan.name}
+                            {plan.tier ? ` (${String(plan.tier).toUpperCase()})` : ''}
+                            {plan.price != null ? ` - $${plan.price}/month` : ''}
                           </SelectItem>
                         ))}
                       </SelectContent>

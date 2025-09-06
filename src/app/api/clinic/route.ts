@@ -22,9 +22,10 @@ export async function GET(request: NextRequest) {
       select: { role: true }
     });
 
-    if (!user || user.role !== 'DOCTOR') {
+    // Permitir DOCTOR, ADMIN e SUPER_ADMIN
+    if (!user || (user.role !== 'DOCTOR' && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN')) {
       return NextResponse.json(
-        { error: 'Acesso negado. Apenas médicos podem acessar clínicas.' },
+        { error: 'Acesso negado. Apenas médicos ou administradores podem acessar clínicas.' },
         { status: 403 }
       );
     }
@@ -34,35 +35,42 @@ export async function GET(request: NextRequest) {
 
     if (clinicId) {
       // Buscar clínica específica
+      // Admins têm acesso a qualquer clínica ativa pelo ID; médicos precisam ser owner ou membro
+      const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
       const clinic = await prisma.clinic.findFirst({
-        where: {
-          id: clinicId,
-          isActive: true,
-          OR: [
-            { ownerId: session.user.id },
-            {
-              members: {
-                some: {
-                  userId: session.user.id,
-                  isActive: true
-                }
-              }
+        where: isAdmin
+          ? {
+              id: clinicId,
+              isActive: true,
             }
-          ]
-        },
+          : {
+              id: clinicId,
+              isActive: true,
+              OR: [
+                { ownerId: session.user.id },
+                {
+                  members: {
+                    some: {
+                      userId: session.user.id,
+                      isActive: true,
+                    },
+                  },
+                },
+              ],
+            },
         include: {
           owner: {
-            select: { id: true, name: true, email: true }
+            select: { id: true, name: true, email: true },
           },
           members: {
             where: { isActive: true },
             include: {
               user: {
-                select: { id: true, name: true, email: true, role: true }
-              }
-            }
-          }
-        }
+                select: { id: true, name: true, email: true, role: true },
+              },
+            },
+          },
+        },
       });
 
       if (!clinic) {
@@ -104,16 +112,32 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({ clinic: clinicWithSubscription });
     } else {
-      // Garantir que o médico tenha clínica (criar automaticamente se necessário)
+      // Sem clinicId fornecido
+      if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+        // Admin: retornar a primeira clínica ativa para destravar a UI
+        const clinic = await prisma.clinic.findFirst({
+          where: { isActive: true },
+          orderBy: { createdAt: 'desc' },
+          include: {
+            owner: { select: { id: true, name: true, email: true } },
+            members: {
+              where: { isActive: true },
+              include: { user: { select: { id: true, name: true, email: true, role: true } } },
+            },
+          },
+        });
+
+        return NextResponse.json({ clinic: clinic || null });
+      }
+
+      // Médico: garantir que tenha clínica (criar automaticamente se necessário)
       const result = await ensureDoctorHasClinic(session.user.id);
-      
       if (!result.success) {
         return NextResponse.json(
           { error: result.message },
           { status: 500 }
         );
       }
-
       return NextResponse.json({ clinic: result.clinic });
     }
 

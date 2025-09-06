@@ -12,7 +12,7 @@ export async function GET() {
     console.log('[ROLE API] Sessão obtida:', session ? 'Sim' : 'Não');
     console.log('[ROLE API] Detalhes da sessão:', JSON.stringify(session, null, 2));
     
-    if (!session?.user?.email) {
+    if (!session?.user?.id && !session?.user?.email) {
       console.log('[ROLE API] Erro: Sessão inválida ou email não encontrado');
       return NextResponse.json(
         { error: 'Não autorizado' },
@@ -20,12 +20,22 @@ export async function GET() {
       );
     }
 
-    console.log('[ROLE API] Buscando usuário para email:', session.user.email);
-
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      select: { role: true, id: true, email: true }
-    });
+    // Preferir buscar por ID; se não houver, usar email
+    let user = null as null | { role: string; id: string; email: string | null };
+    if (session.user.id) {
+      console.log('[ROLE API] Buscando usuário por ID:', session.user.id);
+      user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { role: true, id: true, email: true },
+      });
+    }
+    if (!user && session.user.email) {
+      console.log('[ROLE API] Buscando usuário por email:', session.user.email);
+      user = await prisma.user.findUnique({
+        where: { email: session.user.email },
+        select: { role: true, id: true, email: true },
+      });
+    }
 
     console.log('[ROLE API] Usuário encontrado:', user ? 'Sim' : 'Não');
 

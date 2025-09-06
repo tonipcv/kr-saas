@@ -20,10 +20,66 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Fetch only active plans
-    const plans = await prisma.subscriptionPlan.findMany({
+    const { searchParams } = new URL(request.url);
+    const clinicId = searchParams.get('clinicId');
+
+    // Fetch clinic plans (new schema)
+    const rawActive = await prisma.clinicPlan.findMany({
       where: { isActive: true },
-      orderBy: { price: 'asc' }
+      orderBy: { monthlyPrice: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        monthlyPrice: true,
+        baseDoctors: true,
+        features: true,
+        tier: true,
+      },
+    });
+
+    let extra: any[] = [];
+    if (clinicId) {
+      // Ensure the current clinic plan is present even if inactive
+      const currentSub = await prisma.clinicSubscription.findFirst({
+        where: { clinicId },
+        orderBy: { createdAt: 'desc' },
+        include: { plan: true },
+      });
+      if (currentSub?.plan) {
+        extra = [currentSub.plan];
+      }
+    }
+
+    // Merge active + extra unique by id
+    const byId = new Map<string, any>();
+    for (const p of rawActive) byId.set(p.id, p);
+    for (const p of extra) byId.set(p.id, p);
+    const raw = Array.from(byId.values());
+
+    // Map to the shape expected by the admin edit UI
+    const plans = raw.map((p) => {
+      // Convert features JSON to a simple comma-separated string for preview
+      let featuresSummary: string | null = null;
+      try {
+        const f = (p as any).features || {};
+        const keys: string[] = [];
+        for (const [k, v] of Object.entries(f)) {
+          if (typeof v === 'boolean' && v) keys.push(k);
+        }
+        featuresSummary = keys.length ? keys.join(', ') : null;
+      } catch {
+        featuresSummary = null;
+      }
+      return {
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        price: p.monthlyPrice != null ? Number(p.monthlyPrice) : null,
+        maxDoctors: p.baseDoctors,
+        features: featuresSummary,
+        tier: p.tier,
+      } as any;
     });
 
     return NextResponse.json({ plans });

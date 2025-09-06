@@ -1,21 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import {
-  ArrowLeft,
-  CreditCard,
-  Calendar,
-  Users,
-  CheckCircle,
-  Crown,
-  XCircle,
-  Plus
-} from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -28,6 +19,8 @@ interface SubscriptionPlan {
   basePatients: number;
   // Some API responses use maxPatients; keep it optional to satisfy both
   maxPatients?: number;
+  // Plan tier (e.g., STARTER, GROWTH, CREATOR, ENTERPRISE)
+  tier?: string;
   // Stripe price id for real checkout (non-enterprise)
   priceId?: string;
   features: {
@@ -35,6 +28,8 @@ interface SubscriptionPlan {
     advancedReports: boolean;
     allowPurchaseCredits: boolean;
     maxReferralsPerMonth: number;
+    // expose product limit if present on features
+    maxProducts?: number;
     addOns?: {
       extraDoctor?: { price: number; description: string };
       extraPatients?: { price: number; amount: number; description: string };
@@ -124,7 +119,7 @@ export default function SubscriptionManagement() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // priceId é opcional no backend; ele mapeia pelo nome do plano
-        body: JSON.stringify({ planId: plan.id })
+        body: JSON.stringify({ planId: plan.id, clinicId: clinic?.id })
       });
 
       if (!res.ok) {
@@ -227,20 +222,21 @@ export default function SubscriptionManagement() {
               />
             </div>
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" asChild className="h-9 items-center text-sm font-medium text-gray-300 hover:bg-[#2F2F2F]">
-                <Link href="/clinic">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Voltar
-                </Link>
-              </Button>
-              {clinic?.subscription?.plan?.name?.toLowerCase() === 'free' && (
-                <Button
-                  asChild
-                  className="h-9 rounded-lg bg-white text-black hover:bg-gray-100 font-medium"
-                >
-                  <a href="#plans">Upgrade agora</a>
+              {clinic?.subscription?.plan?.name?.toLowerCase() !== 'free' && (
+                <Button variant="ghost" size="sm" asChild className="h-9 items-center text-sm font-medium text-gray-300 hover:bg-[#2F2F2F]">
+                  <Link href="/clinic">
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Voltar
+                  </Link>
                 </Button>
               )}
+              <button
+                type="button"
+                onClick={() => signOut({ callbackUrl: '/auth/signin' })}
+                className="px-2 py-1 text-sm font-medium text-gray-300 hover:text-white rounded-lg focus:outline-none"
+              >
+                Sair
+              </button>
             </div>
           </div>
 
@@ -251,6 +247,12 @@ export default function SubscriptionManagement() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="text-lg text-white">{clinic.subscription.plan.name}</div>
+                  {/* Tier chip (if available) */}
+                  {typeof (clinic.subscription.plan as any)?.tier !== 'undefined' && (
+                    <span className="inline-flex items-center rounded-md border border-[#3a3a3a] bg-[#232323] px-2 py-1 text-[11px] text-gray-300">
+                      Tier: {String((clinic.subscription.plan as any).tier).toUpperCase()}
+                    </span>
+                  )}
                   <Badge className="bg-[#333333] text-gray-300 border-[#444444] font-normal">
                     {clinic.subscription.status === 'ACTIVE' ? 'Ativo' : clinic.subscription.status}
                   </Badge>
@@ -333,12 +335,42 @@ export default function SubscriptionManagement() {
                       )}
                     </div>
 
+                    {/* Tier badge */}
+                    {plan.tier && (
+                      <div className="mt-2 inline-flex items-center rounded-md border border-[#3a3a3a] bg-[#232323] px-2 py-1">
+                        <span className="text-[11px] tracking-wide text-gray-300">Tier: {String(plan.tier).toUpperCase()}</span>
+                      </div>
+                    )}
+
+                    {/* Quantidades principais (Clientes e Produtos) */}
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <div className="rounded-lg border border-[#3a3a3a] bg-[#232323] px-3 py-2">
+                        <div className="text-[11px] text-gray-400">Clientes</div>
+                        <div className="text-sm text-white font-medium">
+                          {plan.basePatients === -1 ? 'Ilimitado' : plan.basePatients}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-[#3a3a3a] bg-[#232323] px-3 py-2">
+                        <div className="text-[11px] text-gray-400">Produtos</div>
+                        <div className="text-sm text-white font-medium">
+                          {(() => {
+                            const maxP = typeof plan.features?.maxProducts === 'number'
+                              ? plan.features.maxProducts
+                              : (plan as any)?.maxProducts; // fallback if backend places it at root
+                            if (maxP === -1) return 'Ilimitado';
+                            if (typeof maxP === 'number') return maxP;
+                            return '-';
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+
                     <Button
                       onClick={isEnterprise ? () => window.open('https://calendly.com/getcxlus/free-consultation-to-implement-zuzz', '_blank') : () => handlePlanChange(plan)}
                       className={`mt-6 w-full h-10 rounded-lg ${
                         isCurrentPlan 
                           ? 'bg-[#333333] text-gray-400 cursor-not-allowed' 
-                          : 'bg-white text-black hover:bg-gray-100'
+                          : 'bg-gradient-to-r from-[#1b0b3d] via-[#5a23a7] to-[#9b7ae3] text-white hover:opacity-95'
                       }`}
                       disabled={isCurrentPlan}
                     >
@@ -351,62 +383,53 @@ export default function SubscriptionManagement() {
                     <div className="space-y-4">
                       <div>
                         <h4 className="text-sm font-medium text-white mb-4">O que está incluído</h4>
-                        <ul className="space-y-3">
-                          <li className="flex items-start">
-                            <CheckCircle className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-                            <span className="ml-3 text-sm text-gray-400">
-                              {plan.baseDoctors === -1 ? 'Médicos ilimitados' : `Até ${plan.baseDoctors} médicos`}
-                            </span>
+                        <ul className="space-y-2">
+                          <li className="text-sm text-gray-300">
+                            {plan.baseDoctors === -1 ? 'Médicos ilimitados' : `Até ${plan.baseDoctors} médicos`}
                           </li>
-                          <li className="flex items-start">
-                            <CheckCircle className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-                            <span className="ml-3 text-sm text-gray-400">
-                              {plan.basePatients === -1 ? 'Pacientes ilimitados' : `Até ${plan.basePatients} pacientes`}
-                            </span>
+                          <li className="text-sm text-gray-300">
+                            {plan.basePatients === -1 ? 'Pacientes (clientes) ilimitados' : `Até ${plan.basePatients} clientes`}
                           </li>
-                          <li className="flex items-start">
-                            <CheckCircle className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-                            <span className="ml-3 text-sm text-gray-400">
-                              {plan.features.maxReferralsPerMonth === -1 
-                                ? 'Indicações ilimitadas' 
-                                : `${plan.features.maxReferralsPerMonth} indicações/mês`}
-                            </span>
+                          <li className="text-sm text-gray-300">
+                            {plan.features?.maxReferralsPerMonth === -1 
+                              ? 'Indicações ilimitadas' 
+                              : `${plan.features?.maxReferralsPerMonth ?? 0} indicações/mês`}
                           </li>
-                          {plan.features.customBranding && (
-                            <li className="flex items-start">
-                              <CheckCircle className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-                              <span className="ml-3 text-sm text-gray-400">Custom branding</span>
-                            </li>
+                          <li className="text-sm text-gray-300">
+                            {(() => {
+                              const f: any = plan.features || {};
+                              const maxProducts = typeof f.maxProducts === 'number' ? f.maxProducts : undefined;
+                              if (maxProducts === -1) return 'Produtos ilimitados';
+                              if (typeof maxProducts === 'number') return `Até ${maxProducts} produtos`;
+                              return 'Quantidade de produtos conforme plano';
+                            })()}
+                          </li>
+                          {plan.features?.customBranding && (
+                            <li className="text-sm text-gray-300">Custom branding</li>
                           )}
-                          {plan.features.advancedReports && (
-                            <li className="flex items-start">
-                              <CheckCircle className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-                              <span className="ml-3 text-sm text-gray-400">Relatórios avançados</span>
-                            </li>
+                          {plan.features?.advancedReports && (
+                            <li className="text-sm text-gray-300">Relatórios avançados</li>
                           )}
                         </ul>
                       </div>
 
-                      {plan.features.addOns && (
+                      {plan.features?.addOns && (
                         <div>
-                          <h4 className="text-sm font-medium text-white mb-4">Add-ons disponíveis</h4>
-                          <ul className="space-y-3">
+                          <h4 className="text-sm font-medium text-white mb-3">Add-ons disponíveis</h4>
+                          <ul className="space-y-2">
                             {plan.features.addOns.extraDoctor && (
-                              <li className="flex items-start">
-                                <Plus className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-                                <span className="ml-3 text-sm text-gray-400">
-                                  Médico extra: $20/mês
-                                </span>
-                              </li>
+                              <li className="text-sm text-gray-300">Médico extra: $20/mês</li>
                             )}
                             {plan.features.addOns.extraPatients && (
-                              <li className="flex items-start">
-                                <Plus className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-                                <span className="ml-3 text-sm text-gray-400">
-                                  +500 pacientes: $40/mês
-                                </span>
-                              </li>
+                              <li className="text-sm text-gray-300">+500 pacientes: $40/mês</li>
                             )}
+                            {(() => {
+                              const f: any = plan.features || {};
+                              if (f.addOns?.advancedReports?.price) {
+                                return <li className="text-sm text-gray-300">Relatórios avançados (add-on)</li>;
+                              }
+                              return null;
+                            })()}
                           </ul>
                         </div>
                       )}

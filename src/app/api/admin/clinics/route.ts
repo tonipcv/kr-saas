@@ -22,31 +22,18 @@ export async function GET() {
     }
 
     // Fetch all clinics with their subscriptions
-    const clinics = await prisma.clinic.findMany({
+    const clinicsRaw = await prisma.clinic.findMany({
       include: {
         owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
+          select: { id: true, name: true, email: true }
         },
         members: {
           include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true
-              }
-            }
+            user: { select: { id: true, name: true, email: true, role: true } }
           }
         },
         subscriptions: {
-          where: {
-            status: { in: ['ACTIVE', 'TRIAL'] }
-          },
+          where: { status: { in: ['ACTIVE', 'TRIAL'] } },
           orderBy: { createdAt: 'desc' },
           take: 1,
           include: {
@@ -54,9 +41,9 @@ export async function GET() {
               select: {
                 id: true,
                 name: true,
-                price: true,
-                maxDoctors: true,
-                maxPatients: true,
+                monthlyPrice: true,
+                baseDoctors: true,
+                basePatients: true,
                 tier: true
               }
             }
@@ -64,6 +51,31 @@ export async function GET() {
         }
       },
       orderBy: { createdAt: 'desc' }
+    });
+
+    // Map plan.monthlyPrice -> plan.price for UI compatibility
+    const clinics = clinicsRaw.map((c) => {
+      const sub = Array.isArray(c.subscriptions) && c.subscriptions.length > 0 ? c.subscriptions[0] : null;
+      const mappedSub = sub
+        ? {
+            ...sub,
+            endDate: (sub as any).currentPeriodEnd ?? null,
+            plan: sub.plan
+              ? {
+                  id: sub.plan.id,
+                  name: sub.plan.name,
+                  price: sub.plan.monthlyPrice != null ? Number(sub.plan.monthlyPrice) : null,
+                  maxDoctors: sub.plan.baseDoctors,
+                  maxPatients: sub.plan.basePatients,
+                  tier: (sub.plan as any).tier ?? null,
+                }
+              : null,
+          }
+        : null;
+      return {
+        ...c,
+        subscription: mappedSub,
+      } as any;
     });
 
     return NextResponse.json({ clinics });
@@ -195,21 +207,13 @@ export async function POST(request: NextRequest) {
     });
 
     // Fetch the created clinic with all related data
-    const createdClinic = await prisma.clinic.findUnique({
+    const createdClinicRaw = await prisma.clinic.findUnique({
       where: { id: clinic.id },
       include: {
-        owner: {
-          select: { id: true, name: true, email: true }
-        },
-        members: {
-          include: {
-            user: { select: { id: true, name: true, email: true } }
-          }
-        },
+        owner: { select: { id: true, name: true, email: true } },
+        members: { include: { user: { select: { id: true, name: true, email: true } } } },
         subscriptions: {
-          where: {
-            status: { in: ['ACTIVE', 'TRIAL'] }
-          },
+          where: { status: { in: ['ACTIVE', 'TRIAL'] } },
           orderBy: { createdAt: 'desc' },
           take: 1,
           include: {
@@ -217,10 +221,10 @@ export async function POST(request: NextRequest) {
               select: {
                 id: true,
                 name: true,
-                price: true,
-                maxDoctors: true,
-                maxPatients: true,
-                tier: true
+                monthlyPrice: true,
+                baseDoctors: true,
+                basePatients: true,
+                tier: true,
               }
             }
           }
@@ -228,8 +232,31 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({ 
-      success: true, 
+    const createdClinic = createdClinicRaw
+      ? {
+          ...createdClinicRaw,
+          subscription: (createdClinicRaw as any).subscriptions?.[0]
+            ? {
+                ...(createdClinicRaw as any).subscriptions[0],
+                plan: (createdClinicRaw as any).subscriptions[0].plan
+                  ? {
+                      id: (createdClinicRaw as any).subscriptions[0].plan.id,
+                      name: (createdClinicRaw as any).subscriptions[0].plan.name,
+                      price: (createdClinicRaw as any).subscriptions[0].plan.monthlyPrice != null
+                        ? Number((createdClinicRaw as any).subscriptions[0].plan.monthlyPrice)
+                        : null,
+                      maxDoctors: (createdClinicRaw as any).subscriptions[0].plan.baseDoctors,
+                      maxPatients: (createdClinicRaw as any).subscriptions[0].plan.basePatients,
+                      tier: (createdClinicRaw as any).subscriptions[0].plan.tier ?? null,
+                    }
+                  : null,
+              }
+            : null,
+        }
+      : null;
+
+    return NextResponse.json({
+      success: true,
       clinic: createdClinic,
       message: 'Clinic created successfully'
     });

@@ -9,6 +9,7 @@ export default function Home() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [isChecking, setIsChecking] = useState(true);
+  const [navigated, setNavigated] = useState(false);
 
   useEffect(() => {
     // Aguardar até que o status da sessão seja definido
@@ -22,7 +23,22 @@ export default function Home() {
 
     if (status === 'unauthenticated') {
       console.log('Home page - User not authenticated, redirecting to public home');
-      router.push('/home');
+      if (!navigated) { router.replace('/home'); setNavigated(true); }
+      return;
+    }
+
+    const navigateOnce = (path: string) => {
+      if (navigated) return;
+      router.replace(path);
+      setNavigated(true);
+    };
+
+    // If we already have role in session, navigate immediately to avoid flicker/timing
+    const roleInSession = session?.user?.role;
+    if (roleInSession && !navigated) {
+      if (roleInSession === 'SUPER_ADMIN') navigateOnce('/admin');
+      else if (roleInSession === 'DOCTOR') navigateOnce('/doctor/dashboard');
+      else navigateOnce('/patient/referrals');
       return;
     }
 
@@ -47,22 +63,22 @@ export default function Home() {
           
           if (data.role === 'SUPER_ADMIN') {
             console.log('Redirecting to admin dashboard');
-            router.push('/admin');
+            navigateOnce('/admin');
           } else if (data.role === 'DOCTOR') {
             console.log('Redirecting to doctor dashboard');
-            router.push('/doctor/dashboard');
+            navigateOnce('/doctor/dashboard');
           } else {
             console.log('Redirecting to patient referrals');
             // Use replace instead of push to avoid browser history issues
             // Try both path formats to handle different environments
             try {
               console.log('Attempting to redirect to authenticated patient referrals');
-              router.replace('/patient/referrals');
+              navigateOnce('/patient/referrals');
             } catch (e) {
               console.error('Error redirecting:', e);
               // Fallback to alternative path format
               console.log('Falling back to alternative path format for referrals');
-              router.push('/patient/referrals');
+              navigateOnce('/patient/referrals');
             }
           }
         } else if (response.status === 401) {
@@ -70,25 +86,28 @@ export default function Home() {
           // Sessão inválida ou usuário não existe no banco
           // Limpar sessão e redirecionar para login
           await signOut({ redirect: false });
-          router.push('/home');
+          navigateOnce('/home');
         } else {
           console.error('Error checking role:', response.status, await response.text());
           // Para outros erros, assumir paciente como fallback
-          router.push('/patient/protocols');
+          navigateOnce('/patient/protocols');
         }
       } catch (error) {
         console.error('Error during role detection:', error);
-        // Em caso de erro de rede, tentar redirecionar para referrals como fallback
-        router.push('/patient/referrals');
+        // Fallback using session in memory when available
+        const role = session?.user?.role;
+        if (role === 'SUPER_ADMIN') navigateOnce('/admin');
+        else if (role === 'DOCTOR') navigateOnce('/doctor/dashboard');
+        else navigateOnce('/patient/referrals');
       } finally {
         setIsChecking(false);
       }
     };
 
-    if (session) {
-    checkUserRole();
+    if (session && !navigated) {
+      checkUserRole();
     }
-  }, [session, status, router]);
+  }, [session, status, router, navigated]);
 
   if (status === 'loading' || isChecking) {
     return (

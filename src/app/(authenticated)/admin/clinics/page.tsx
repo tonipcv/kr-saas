@@ -46,7 +46,8 @@ interface ClinicSubscription {
   plan: {
     id: string;
     name: string;
-    price: number;
+    price: number | null;
+    tier?: string | null;
   };
 }
 
@@ -251,75 +252,36 @@ export default function ClinicsPage() {
             </div>
           </div>
 
-          {/* Quick Statistics */}
+          {/* Quick Statistics (icon-less) */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
               <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-blue-100 rounded-xl">
-                    <BuildingOfficeIcon className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Total</p>
-                    <p className="text-2xl font-light text-gray-900">{clinics.length}</p>
-                  </div>
-                </div>
+                <p className="text-sm text-gray-600 font-medium">Total</p>
+                <p className="mt-1 text-2xl font-light text-gray-900">{clinics.length}</p>
               </CardContent>
             </Card>
-
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
               <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-green-100 rounded-xl">
-                    <CheckCircleIcon className="h-6 w-6 text-green-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Active</p>
-                    <p className="text-2xl font-light text-green-600">{activeCount}</p>
-                  </div>
-                </div>
+                <p className="text-sm text-gray-600 font-medium">Active</p>
+                <p className="mt-1 text-2xl font-light text-gray-900">{activeCount}</p>
               </CardContent>
             </Card>
-
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
               <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-purple-100 rounded-xl">
-                    <CheckCircleIcon className="h-6 w-6 text-purple-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">With Subscription</p>
-                    <p className="text-2xl font-light text-purple-600">{withSubscriptionCount}</p>
-                  </div>
-                </div>
+                <p className="text-sm text-gray-600 font-medium">With Subscription</p>
+                <p className="mt-1 text-2xl font-light text-gray-900">{withSubscriptionCount}</p>
               </CardContent>
             </Card>
-
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
               <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-yellow-100 rounded-xl">
-                    <ClockIcon className="h-6 w-6 text-yellow-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Trial</p>
-                    <p className="text-2xl font-light text-yellow-600">{trialCount}</p>
-                  </div>
-                </div>
+                <p className="text-sm text-gray-600 font-medium">Trial</p>
+                <p className="mt-1 text-2xl font-light text-gray-900">{trialCount}</p>
               </CardContent>
             </Card>
-
-            <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
               <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-turquoise rounded-xl">
-                    <UsersIcon className="h-6 w-6 text-black" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600 font-medium">Total Members</p>
-                    <p className="text-2xl font-light text-gray-900">{totalMembers}</p>
-                  </div>
-                </div>
+                <p className="text-sm text-gray-600 font-medium">Total Members</p>
+                <p className="mt-1 text-2xl font-light text-gray-900">{totalMembers}</p>
               </CardContent>
             </Card>
           </div>
@@ -351,6 +313,9 @@ export default function ClinicsPage() {
                         <th className="px-3 py-3.5 font-medium">Owner</th>
                         <th className="px-3 py-3.5 font-medium">Members</th>
                         <th className="px-3 py-3.5 font-medium">Subscription</th>
+                        <th className="px-3 py-3.5 font-medium">Plan</th>
+                        <th className="px-3 py-3.5 font-medium">Tier</th>
+                        <th className="px-3 py-3.5 font-medium">Trial Ends</th>
                         <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
                       </tr>
                     </thead>
@@ -373,6 +338,25 @@ export default function ClinicsPage() {
                             <span className={`${getSubscriptionStatusColor(clinic.subscription?.status)} inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium`}> 
                               {getSubscriptionStatusText(clinic.subscription?.status)}
                             </span>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
+                            {clinic.subscription?.plan
+                              ? `${clinic.subscription.plan.name}${typeof clinic.subscription.plan.price === 'number' ? ` ($${clinic.subscription.plan.price}/mo)` : ''}`
+                              : '-'}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
+                            {clinic.subscription?.plan?.tier ? String(clinic.subscription.plan.tier).toUpperCase() : '-'}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
+                            {(() => {
+                              const end = (clinic as any)?.subscription?.endDate;
+                              if (!end) return '-';
+                              try {
+                                return new Date(end).toLocaleDateString();
+                              } catch {
+                                return '-';
+                              }
+                            })()}
                           </td>
                           <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                             <div className="flex items-center justify-end gap-1.5">

@@ -15,21 +15,37 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Verificar se é médico
+    // Verificar role
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { role: true }
     });
 
-    if (!user || user.role !== 'DOCTOR') {
+    if (!user || (user.role !== 'DOCTOR' && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN')) {
       return NextResponse.json(
-        { error: 'Acesso negado. Apenas médicos podem acessar clínicas.' },
+        { error: 'Acesso negado. Apenas médicos ou administradores podem acessar clínicas.' },
         { status: 403 }
       );
     }
 
-    // Buscar todas as clínicas do usuário
-    const clinics = await getUserClinics(session.user.id);
+    let clinics;
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+      // Admin: listar todas clínicas ativas
+      clinics = await prisma.clinic.findMany({
+        where: { isActive: true },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          owner: { select: { id: true, name: true, email: true } },
+          members: {
+            where: { isActive: true },
+            include: { user: { select: { id: true, name: true, email: true, role: true } } },
+          },
+        },
+      });
+    } else {
+      // Médico: apenas suas clínicas
+      clinics = await getUserClinics(session.user.id);
+    }
 
     return NextResponse.json({ 
       clinics,

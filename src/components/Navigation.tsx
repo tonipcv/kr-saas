@@ -357,6 +357,12 @@ export default function Navigation() {
           description: 'Administrative panel'
         },
         {
+          href: '/admin/clinics',
+          label: 'Clinics',
+          icon: BuildingOfficeIcon,
+          description: 'Manage all clinics'
+        },
+        {
           href: '/admin/doctors',
           label: 'Doctors',
           icon: UsersIcon,
@@ -373,7 +379,13 @@ export default function Navigation() {
           label: 'Plans',
           icon: CreditCardIcon,
           description: 'Manage subscription plans'
-        }
+        },
+        {
+          href: '/clinic/subscription',
+          label: 'Clinic Subscription',
+          icon: ShieldCheckIcon,
+          description: 'Manage active clinic plan'
+        },
       ]
     }
   ], []);

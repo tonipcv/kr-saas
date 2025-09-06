@@ -6,13 +6,14 @@ export async function GET(_req: NextRequest) {
     const rawPlans = await prisma.clinicPlan.findMany({
       where: {
         isActive: true,
-        NOT: { name: 'Basic' }
+        NOT: [{ name: 'Basic' }, { name: 'Free' }]
       },
       orderBy: { monthlyPrice: 'asc' },
       select: {
         id: true,
         name: true,
         description: true,
+        tier: true,
         monthlyPrice: true,
         baseDoctors: true,
         basePatients: true,
