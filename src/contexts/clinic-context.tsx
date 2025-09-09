@@ -58,7 +58,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
 
     try {
       setIsLoading(true);
-      const response = await fetch('/api/clinics');
+      const response = await fetch('/api/clinics', { cache: 'no-store' });
       if (response.ok) {
         const data = await response.json();
         const list: ClinicData[] = data.clinics || [];

@@ -40,10 +40,14 @@ export async function GET(
 
     // 2) Se não achou, tentar como slug de clínica: pegar owner ou algum membro médico ativo
     if (!doctor) {
-      const clinic = await prisma.clinic.findFirst({
-        where: { slug, isActive: true },
-        select: { id: true, ownerId: true }
-      });
+      // Resolve clinic by slug OR subdomain via raw SQL (schema may not have subdomain typed)
+      let clinic: { id: string; ownerId: string | null } | null = null;
+      try {
+        const rows = await prisma.$queryRaw<{ id: string; ownerId: string | null }[]>`
+          SELECT id, "ownerId" FROM clinics WHERE slug = ${slug} OR "subdomain" = ${slug} LIMIT 1
+        `;
+        clinic = rows && rows[0] ? rows[0] : null;
+      } catch {}
 
       debug.triedClinicSlug = true;
       debug.clinicFound = Boolean(clinic);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -32,6 +32,19 @@ export default function ClientForgotPassword({ slug, initialBranding }: { slug: 
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showNotMemberModal, setShowNotMemberModal] = useState(false);
 
+  // Prime clinic from initialBranding (ensures logo shows immediately on subdomain)
+  useEffect(() => {
+    if (initialBranding) {
+      setClinic({
+        name: initialBranding.name ?? null,
+        logo: initialBranding.logo ?? null,
+        theme: initialBranding.theme,
+        buttonColor: initialBranding.buttonColor ?? null,
+        buttonTextColor: initialBranding.buttonTextColor ?? null,
+      });
+    }
+  }, [initialBranding?.name, initialBranding?.logo, initialBranding?.theme, initialBranding?.buttonColor, initialBranding?.buttonTextColor]);
+
   useEffect(() => {
     const fetchBranding = async () => {
       try {
@@ -49,8 +62,6 @@ export default function ClientForgotPassword({ slug, initialBranding }: { slug: 
                 buttonColor: cj.clinic.buttonColor,
                 buttonTextColor: cj.clinic.buttonTextColor,
               });
-            } else {
-              setClinic(null);
             }
           }
         } catch {}
@@ -115,6 +126,20 @@ export default function ClientForgotPassword({ slug, initialBranding }: { slug: 
   const btnBg = clinic?.buttonColor ?? initialBranding.buttonColor ?? '#111827';
   const btnFg = clinic?.buttonTextColor ?? initialBranding.buttonTextColor ?? '#ffffff';
 
+  // Back to login href: if on subdomain, prefer '/login' instead of '/{slug}/login'
+  const backToLoginHref = useMemo(() => {
+    try {
+      const base = (process.env.NEXT_PUBLIC_APP_BASE_DOMAIN || '').toLowerCase();
+      if (typeof window === 'undefined' || !base) return `/${slug}/login`;
+      const host = window.location.host.toLowerCase().split(':')[0];
+      if (!host.endsWith(base)) return `/${slug}/login`;
+      const sub = host.slice(0, -base.length).replace(/\.$/, '');
+      return sub ? '/login' : `/${slug}/login`;
+    } catch {
+      return `/${slug}/login`;
+    }
+  }, [slug]);
+
   if (isSubmitted) {
     return (
       <div className={`${displayTheme === 'DARK' ? 'min-h-screen bg-[#0b0b0b] text-gray-100' : 'min-h-screen bg-gradient-to-b from-gray-50 to-white text-gray-900'} font-normal tracking-[-0.03em] relative z-10`} style={{ ['--btn-bg' as any]: btnBg, ['--btn-fg' as any]: btnFg } as any}>
@@ -137,10 +162,10 @@ export default function ClientForgotPassword({ slug, initialBranding }: { slug: 
               <>
                 <div className="text-center mb-6">
                   <div className="flex justify-center items-center mb-4 min-h-16">
-                    {clinic?.logo ? (
+                    {(clinic?.logo ?? initialBranding.logo) ? (
                       <div className="w-28 h-28 sm:w-32 sm:h-32 relative rounded-xl overflow-hidden">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={`${clinic.logo}${clinic.logo.includes('?') ? '&' : '?'}v=${typeof window !== 'undefined' ? Date.now() : '1'}`} alt={clinic.name || 'Clinic'} className="w-full h-full object-contain" />
+                        <img src={`${(clinic?.logo ?? initialBranding.logo)!}${(clinic?.logo ?? initialBranding.logo)!.includes('?') ? '&' : '?'}v=${typeof window !== 'undefined' ? Date.now() : '1'}`} alt={(clinic?.name ?? initialBranding.name) || 'Clinic'} className="w-full h-full object-contain" />
                       </div>
                     ) : doctor?.image ? (
                       <div className="w-16 h-16 relative rounded-full overflow-hidden">
@@ -164,7 +189,7 @@ export default function ClientForgotPassword({ slug, initialBranding }: { slug: 
                   <h2 className="text-xl font-medium">Email sent!</h2>
                   <p className="text-gray-500 text-sm">We've sent a password recovery link to your email.</p>
                 </div>
-                <Link href={`/${slug}/login`} className="w-full py-2.5 px-4 text-sm font-medium rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300" style={{ backgroundColor: 'var(--btn-bg)', color: 'var(--btn-fg)' }}>
+                <Link href={backToLoginHref} className="w-full py-2.5 px-4 text-sm font-medium rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300" style={{ backgroundColor: 'var(--btn-bg)', color: 'var(--btn-fg)' }}>
                   <ArrowLeft className="h-4 w-4" />
                   Back to login
                 </Link>
@@ -204,10 +229,10 @@ export default function ClientForgotPassword({ slug, initialBranding }: { slug: 
             <>
               <div className="text-center mb-6">
                 <div className="flex justify-center items-center mb-4 min-h-16">
-                  {clinic?.logo ? (
+                  {(clinic?.logo ?? initialBranding.logo) ? (
                     <div className="w-28 h-28 sm:w-32 sm:h-32 relative rounded-xl overflow-hidden">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={`${clinic.logo}${clinic.logo.includes('?') ? '&' : '?'}v=${typeof window !== 'undefined' ? Date.now() : '1'}`} alt={clinic.name || 'Clinic'} className="w-full h-full object-contain" />
+                      <img src={`${(clinic?.logo ?? initialBranding.logo)!}${(clinic?.logo ?? initialBranding.logo)!.includes('?') ? '&' : '?'}v=${typeof window !== 'undefined' ? Date.now() : '1'}`} alt={(clinic?.name ?? initialBranding.name) || 'Clinic'} className="w-full h-full object-contain" />
                     </div>
                   ) : doctor?.image ? (
                     <div className="w-16 h-16 relative rounded-full overflow-hidden">
@@ -249,7 +274,7 @@ export default function ClientForgotPassword({ slug, initialBranding }: { slug: 
               </form>
 
               <div className="mt-6 text-center space-y-3">
-                <Link href={`/${slug}/login`} className="text-sm hover:opacity-90 transition-colors duration-200 flex items-center justify-center gap-2">
+                <Link href={backToLoginHref} className="text-sm hover:opacity-90 transition-colors duration-200 flex items-center justify-center gap-2">
                   <ArrowLeft className="h-3 w-3" />
                   Back to login
                 </Link>

@@ -97,6 +97,7 @@ export default function ClinicDashboard() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [editingSubdomain, setEditingSubdomain] = useState('');
   const [baseUrl, setBaseUrl] = useState('https://yourapp.com');
   // Branding settings
   const [editingTheme, setEditingTheme] = useState<'LIGHT' | 'DARK'>('LIGHT');
@@ -125,15 +126,46 @@ export default function ClinicDashboard() {
     }
   }, []);
 
+  // Initialize subdomain field ONLY when modal first opens, not on context changes
+  useEffect(() => {
+    if (!showSettingsModal || !currentClinic) return;
+    // Only set if we don't already have a value (prevents overwriting during editing)
+    if (!editingSubdomain) {
+      const ctxSub = (currentClinic as any)?.subdomain as string | undefined;
+      const next = (ctxSub && ctxSub.length > 0) ? ctxSub : (currentClinic.slug || '');
+      console.log('[MODAL] Modal opened, initializing subdomain:', next);
+      setEditingSubdomain(next);
+    }
+  }, [showSettingsModal]);
+
+  const baseDomain = useMemo(() => {
+    const envBase = process.env.NEXT_PUBLIC_APP_BASE_DOMAIN?.toLowerCase().trim();
+    if (envBase) return envBase;
+    if (typeof window === 'undefined') return '';
+    const host = window.location.host.toLowerCase();
+    const noPort = host.split(':')[0];
+    const parts = noPort.split('.');
+    if (parts.length <= 2) return noPort; // localhost or domain.tld
+    if (noPort.endsWith('nip.io') && parts.length >= 3) {
+      return parts.slice(-3).join('.');
+    }
+    return parts.slice(-2).join('.');
+  }, []);
+
   const fetchClinicData = async () => {
     if (!currentClinic) return;
     
     try {
       setLoading(true);
       
-      // Check if user is admin
-      const userIsAdmin = currentClinic.ownerId === session?.user?.id || 
-        currentClinic.members.some((m: any) => m.user.id === session?.user?.id && m.role === 'ADMIN');
+      // Check if user can manage clinic settings
+      // Owner OR roles MANAGER/ADMIN (ADMIN kept for legacy compatibility)
+      const userIsAdmin = currentClinic.ownerId === session?.user?.id ||
+        currentClinic.members.some((m: any) => m.user.id === session?.user?.id && (
+          String(m.role).toUpperCase() === 'OWNER' ||
+          String(m.role).toUpperCase() === 'MANAGER' ||
+          String(m.role).toUpperCase() === 'ADMIN'
+        ));
       setIsAdmin(userIsAdmin);
 
       // Initialize editing values
@@ -141,6 +173,8 @@ export default function ClinicDashboard() {
       setEditingClinicDescription(currentClinic.description || '');
       setLogoPreview(currentClinic.logo || null);
       setEditingClinicLogo(false);
+      // Subdomain initial value (prefer explicit subdomain, fallback to slug)
+      setEditingSubdomain(((currentClinic as any)?.subdomain as string) || currentClinic.slug || '');
       // Branding initial values
       // @ts-expect-error theme fields may not exist yet in type
       setEditingTheme((currentClinic.theme as any) === 'DARK' ? 'DARK' : 'LIGHT');
@@ -280,6 +314,7 @@ export default function ClinicDashboard() {
           theme: editingTheme,
           buttonColor: editingButtonColor || undefined,
           buttonTextColor: editingButtonTextColor || undefined,
+          subdomain: (editingSubdomain || '').trim() || undefined,
         }),
       });
 
@@ -288,6 +323,7 @@ export default function ClinicDashboard() {
       }
 
       const result = await response.json();
+      console.log('[MODAL] PUT response clinic.subdomain:', result.clinic?.subdomain);
 
       // Update local state with the response data
       if (currentClinic && result.clinic) {
@@ -295,17 +331,20 @@ export default function ClinicDashboard() {
         setEditingClinicName(result.clinic.name);
         setEditingClinicDescription(result.clinic.description || '');
         setLogoPreview(result.clinic.logo || null);
+        // Sync subdomain from server to avoid perceived revert
+        const serverSubdomain = ((result.clinic as any)?.subdomain as string) || result.clinic.slug || editingSubdomain;
+        console.log('[MODAL] Setting editingSubdomain to:', serverSubdomain);
+        setEditingSubdomain(serverSubdomain);
       }
-      // Ensure context reflects latest data (including logo)
-      try { await refreshClinics(); } catch {}
+      // DON'T refresh context immediately - it can overwrite our freshly saved value
+      // The context will refresh naturally on next navigation or manual refresh
+      console.log('[MODAL] Skipping immediate refresh to preserve saved subdomain value');
       
       // Reset logo editing state
       setEditingClinicLogo(false);
       setLogoFile(null);
       setLogoPreview(null);
-      
-      setShowSettingsModal(false);
-      
+
       // Show success message
       setSuccessTitle('Settings Updated');
       setSuccessMessage('Clinic settings have been updated successfully.');
@@ -330,6 +369,25 @@ export default function ClinicDashboard() {
       } catch (error) {
         console.error('Failed to copy URL:', error);
       }
+    }
+  };
+
+  const subdomainUrl = useMemo(() => {
+    const sub = editingSubdomain || currentClinic?.slug;
+    if (!sub || !baseDomain) return '';
+    return `https://${sub}.${baseDomain}`;
+  }, [editingSubdomain, currentClinic?.slug, baseDomain]);
+
+  const copySubdomainUrl = async (path: string = '') => {
+    if (!subdomainUrl) return;
+    const full = `${subdomainUrl}${path}`;
+    try {
+      await navigator.clipboard.writeText(full);
+      setSuccessTitle('URL Copied!');
+      setSuccessMessage('The subdomain URL has been copied to your clipboard.');
+      setShowSuccessDialog(true);
+    } catch (e) {
+      console.error('Failed to copy subdomain URL:', e);
     }
   };
 
@@ -520,6 +578,38 @@ export default function ClinicDashboard() {
                       >
                         /{currentClinic.slug}
                       </Link>
+                    </div>
+                  )}
+                  {baseDomain && (currentClinic.slug || (currentClinic as any)?.subdomain) && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-gray-500">Subdomain:</span>
+                      <a
+                        href={`https://${((currentClinic as any)?.subdomain || currentClinic.slug)}.${baseDomain}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-medium text-[#5154e7] hover:underline"
+                      >
+                        {((currentClinic as any)?.subdomain || currentClinic.slug)}.{baseDomain}
+                      </a>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const sub = ((currentClinic as any)?.subdomain || currentClinic.slug);
+                          if (!sub || !baseDomain) return;
+                          const url = `https://${sub}.${baseDomain}`;
+                          try {
+                            await navigator.clipboard.writeText(url);
+                            setSuccessTitle('URL Copied!');
+                            setSuccessMessage('The subdomain URL has been copied to your clipboard.');
+                            setShowSuccessDialog(true);
+                          } catch (e) {
+                            console.error('Failed to copy subdomain URL:', e);
+                          }
+                        }}
+                        className="text-[11px] px-2 py-1 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-50"
+                      >
+                        Copy
+                      </button>
                     </div>
                   )}
                 </div>
@@ -770,7 +860,7 @@ export default function ClinicDashboard() {
 
           {/* Settings Modal */}
           <Dialog open={showSettingsModal} onOpenChange={setShowSettingsModal}>
-            <DialogContent className="bg-white border border-gray-200 rounded-2xl p-0">
+            <DialogContent className="bg-white border border-gray-200 rounded-2xl p-0 max-h-[85vh] overflow-y-auto max-w-2xl w-full overscroll-contain">
               <DialogHeader className="px-4 py-3">
                 <DialogTitle className="text-sm font-semibold text-gray-900">Clinic Settings</DialogTitle>
                 <DialogDescription className="text-[11px] text-gray-600">
@@ -826,6 +916,30 @@ export default function ClinicDashboard() {
                     <p className="text-[11px] text-gray-500 mt-1">
                       This is your clinic's unique login URL that patients can use to access their accounts.
                     </p>
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="clinic-subdomain-edit" className="text-gray-700 font-medium">Subdomain</Label>
+                  <div className="mt-2">
+                    <Input
+                      id="clinic-subdomain-edit"
+                      value={editingSubdomain}
+                      onChange={(e) => setEditingSubdomain(e.target.value.toLowerCase())}
+                      disabled={!isAdmin}
+                      placeholder="ex: minha-clinica"
+                      className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 placeholder:text-gray-500 rounded-lg h-9"
+                    />
+                    <p className="text-[11px] text-gray-500 mt-1">Somente letras minúsculas, números e hífen (3 a 63 caracteres).</p>
+                    {subdomainUrl && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <a href={subdomainUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-[#5154e7] hover:underline">
+                          {subdomainUrl}
+                        </a>
+                        <Button variant="outline" size="sm" onClick={() => copySubdomainUrl('')} className="h-7 px-2 text-xs rounded-full border-gray-300 text-gray-800 hover:bg-gray-50">
+                          Copy
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div>
@@ -937,22 +1051,24 @@ export default function ClinicDashboard() {
                   <p className="text-sm font-semibold text-gray-900 mt-1">{new Date(currentClinic.createdAt).toLocaleDateString('en-US')}</p>
                 </div>
                 {isAdmin && (
-                  <div className="flex gap-2 pt-3">
-                    <Button 
-                      onClick={saveSettings}
-                      disabled={savingSettings || uploadingLogo}
-                      className="flex-1 rounded-full h-8 text-xs font-medium shadow-sm"
-                      style={{ backgroundColor: 'var(--btn-bg)', color: 'var(--btn-fg)' }}
-                    >
-                      {uploadingLogo ? 'Uploading Logo...' : savingSettings ? 'Saving...' : 'Save Changes'}
-                    </Button>
-                    <Button 
-                      variant="outline"
-                      onClick={() => setShowSettingsModal(false)}
-                      className="border-gray-300 text-gray-800 hover:bg-gray-50 bg-white rounded-full h-8 text-xs font-medium"
-                    >
-                      Cancel
-                    </Button>
+                  <div className="sticky bottom-0 left-0 right-0 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 border-t border-gray-200 -mx-4 px-4 py-3 rounded-b-2xl">
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={saveSettings}
+                        disabled={savingSettings || uploadingLogo}
+                        className="flex-1 rounded-full h-9 text-xs font-medium shadow-sm"
+                        style={{ backgroundColor: 'var(--btn-bg)', color: 'var(--btn-fg)' }}
+                      >
+                        {uploadingLogo ? 'Uploading Logo...' : savingSettings ? 'Saving...' : 'Save Changes'}
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        onClick={() => setShowSettingsModal(false)}
+                        className="border-gray-300 text-gray-800 hover:bg-gray-50 bg-white rounded-full h-9 text-xs font-medium"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>

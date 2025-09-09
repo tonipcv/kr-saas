@@ -8,6 +8,11 @@ export interface ClinicWithDetails {
   description: string | null;
   logo: string | null;
   slug: string | null;
+  // New: expose subdomain and branding fields so UI can render saved values
+  subdomain?: string | null;
+  theme?: 'LIGHT' | 'DARK';
+  buttonColor?: string | null;
+  buttonTextColor?: string | null;
   website?: string | null;
   city?: string | null;
   state?: string | null;
@@ -202,6 +207,15 @@ export async function getUserClinics(userId: string): Promise<ClinicWithDetails[
         description: clinic.description,
         logo: clinic.logo,
         slug: clinic.slug,
+        // Pass-through fields selected via c.* from raw queries
+        // @ts-expect-error raw select from clinics may include these columns
+        subdomain: (clinic as any).subdomain ?? null,
+        // @ts-expect-error theme/button fields may exist in DB
+        theme: (clinic as any).theme ?? undefined,
+        // @ts-expect-error theme/button fields may exist in DB
+        buttonColor: (clinic as any).buttonColor ?? null,
+        // @ts-expect-error theme/button fields may exist in DB
+        buttonTextColor: (clinic as any).buttonTextColor ?? null,
         website: (clinic as any).website ?? null,
         city: (clinic as any).city ?? null,
         state: (clinic as any).state ?? null,

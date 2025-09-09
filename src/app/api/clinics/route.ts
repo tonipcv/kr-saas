@@ -48,19 +48,19 @@ export async function GET(request: NextRequest) {
       clinics = await getUserClinics(session.user.id);
     }
 
-    // Merge branding fields via raw SQL (handles clients where new fields aren't typed yet)
+    // Merge subdomain and branding fields via raw SQL (handles clients where new fields aren't typed yet)
     try {
       const ids = clinics.map((c: any) => c.id);
       if (ids.length) {
-        const rows = await prisma.$queryRaw<{ id: string; theme: 'LIGHT'|'DARK'; buttonColor: string | null; buttonTextColor: string | null }[]>`
-          SELECT id, theme::text as theme, "buttonColor", "buttonTextColor"
+        const rows = await prisma.$queryRaw<{ id: string; subdomain: string | null; theme: 'LIGHT'|'DARK'; buttonColor: string | null; buttonTextColor: string | null }[]>`
+          SELECT id, "subdomain", theme::text as theme, "buttonColor", "buttonTextColor"
           FROM clinics
           WHERE id IN (${Prisma.join(ids)})
         `;
         const map = new Map(rows.map(r => [r.id, r]));
         clinics = clinics.map((c: any) => {
           const b = map.get(c.id);
-          return b ? { ...c, theme: b.theme, buttonColor: b.buttonColor, buttonTextColor: b.buttonTextColor } : c;
+          return b ? { ...c, subdomain: b.subdomain ?? (c.subdomain ?? null), theme: b.theme, buttonColor: b.buttonColor, buttonTextColor: b.buttonTextColor } : c;
         });
       }
     } catch {}

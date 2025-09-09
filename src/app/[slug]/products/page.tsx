@@ -16,7 +16,7 @@ export default async function DoctorProductsPage({ params, searchParams }: {
   const { slug } = resolvedParams;
   const cupom = (Array.isArray(resolvedSearch?.cupom) ? resolvedSearch.cupom[0] : resolvedSearch?.cupom) as string | undefined;
 
-  // Resolve doctor by slug or by clinic slug (owner/member fallback)
+  // Resolve doctor by slug or by clinic slug OR subdomain (owner/member fallback)
   let doctor = await prisma.user.findFirst({
     where: { doctor_slug: slug, role: 'DOCTOR' } as any,
     select: { id: true, name: true, doctor_slug: true, image: true, public_cover_image_url: true, public_page_template: true },
@@ -25,10 +25,13 @@ export default async function DoctorProductsPage({ params, searchParams }: {
   // Track clinic branding when resolving via clinic slug
   let clinic: { id: string; ownerId: string | null; name?: string | null; logo?: string | null } | null = null;
   if (!doctor) {
-    clinic = await prisma.clinic.findFirst({
-      where: { slug, isActive: true } as any,
-      select: { id: true, ownerId: true, name: true, logo: true },
-    }) as any;
+    // Resolve clinic by slug OR subdomain via raw SQL (schema may not have subdomain typed)
+    try {
+      const rows = await prisma.$queryRaw<{ id: string; ownerId: string | null; name: string | null; logo: string | null }[]>`
+        SELECT id, "ownerId", name, logo FROM clinics WHERE slug = ${slug} OR "subdomain" = ${slug} LIMIT 1
+      `;
+      clinic = rows && rows[0] ? (rows[0] as any) : null;
+    } catch {}
     if (clinic?.ownerId) {
       const owner = await prisma.user.findFirst({
         where: { id: clinic.ownerId, role: 'DOCTOR' } as any,
@@ -123,7 +126,7 @@ export default async function DoctorProductsPage({ params, searchParams }: {
     const rows = await prisma.$queryRaw<{ theme: 'LIGHT'|'DARK'; buttonColor: string | null; buttonTextColor: string | null }[]>`
       SELECT theme::text as theme, "buttonColor", "buttonTextColor"
       FROM clinics
-      WHERE slug = ${slug}
+      WHERE slug = ${slug} OR "subdomain" = ${slug}
       LIMIT 1
     `;
     if (rows && rows[0]) {

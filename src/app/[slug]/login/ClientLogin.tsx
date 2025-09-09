@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
+import { useMemo } from 'react';
 
 type DoctorPublic = {
   id: string;
@@ -37,12 +38,25 @@ export default function ClientLogin({ slug, initialBranding }: { slug: string; i
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [showNotMemberModal, setShowNotMemberModal] = useState(false);
 
+  // Prime clinic state from initialBranding for immediate logo/theme display
+  useEffect(() => {
+    if (initialBranding) {
+      setClinic({
+        name: initialBranding.name ?? null,
+        logo: initialBranding.logo ?? null,
+        theme: initialBranding.theme,
+        buttonColor: initialBranding.buttonColor ?? null,
+        buttonTextColor: initialBranding.buttonTextColor ?? null,
+      });
+    }
+  }, [initialBranding?.name, initialBranding?.logo, initialBranding?.theme, initialBranding?.buttonColor, initialBranding?.buttonTextColor]);
+
   // Fetch clinic or doctor public info (prefer clinic branding if slug is clinic)
   useEffect(() => {
     const fetchBranding = async () => {
       try {
         setLoading(true);
-        // Clinic by slug
+        // Clinic by slug (server API currently resolves only by slug)
         const clinicRes = await fetch(`/api/clinic/by-slug/${slug}`, { cache: 'no-store' });
         if (clinicRes.ok) {
           const cj = await clinicRes.json().catch(() => ({}));
@@ -54,11 +68,7 @@ export default function ClientLogin({ slug, initialBranding }: { slug: string; i
               buttonColor: cj.clinic.buttonColor,
               buttonTextColor: cj.clinic.buttonTextColor,
             });
-          } else {
-            setClinic(null);
           }
-        } else {
-          setClinic(null);
         }
         // Doctor fallback
         const res = await fetch(`/api/v2/doctor-link/${slug}`, { cache: 'no-store' });
@@ -127,6 +137,20 @@ export default function ClientLogin({ slug, initialBranding }: { slug: string; i
   const btnBg = clinic?.buttonColor ?? initialBranding.buttonColor ?? '#111827';
   const btnFg = clinic?.buttonTextColor ?? initialBranding.buttonTextColor ?? '#ffffff';
 
+  // Compute forgot-password href: if host is subdomain, use '/forgot-password'; otherwise '/{slug}/forgot-password'
+  const forgotHref = useMemo(() => {
+    try {
+      const base = (process.env.NEXT_PUBLIC_APP_BASE_DOMAIN || '').toLowerCase();
+      if (typeof window === 'undefined' || !base) return `/${slug}/forgot-password`;
+      const host = window.location.host.toLowerCase().split(':')[0];
+      if (!host.endsWith(base)) return `/${slug}/forgot-password`;
+      const sub = host.slice(0, -base.length).replace(/\.$/, '');
+      return sub ? '/forgot-password' : `/${slug}/forgot-password`;
+    } catch {
+      return `/${slug}/forgot-password`;
+    }
+  }, [slug]);
+
   return (
     <div
       className={`${displayTheme === 'DARK' ? 'min-h-screen bg-[#0b0b0b] text-gray-100' : 'min-h-screen bg-gradient-to-b from-gray-50 to-white text-gray-900'} font-normal tracking-[-0.03em] relative z-10`}
@@ -152,15 +176,15 @@ export default function ClientLogin({ slug, initialBranding }: { slug: string; i
             </div>
           ) : (
             <>
-              {/* Branding header (clinic preferred). If it's a clinic, don't render name text; only logo. */}
+              {/* Branding header: only logo, no name text */}
               <div className="text-center mb-6">
                 <div className="flex justify-center items-center mb-4 min-h-16">
-                  {clinic?.logo ? (
+                  {(clinic?.logo ?? initialBranding.logo) ? (
                     <div className="w-28 h-28 sm:w-32 sm:h-32 relative rounded-xl overflow-hidden">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={`${clinic.logo}${clinic.logo.includes('?') ? '&' : '?'}v=${typeof window !== 'undefined' ? Date.now() : '1'}`}
-                        alt={clinic.name || 'Clinic'}
+                        src={`${(clinic?.logo ?? initialBranding.logo)!}${(clinic?.logo ?? initialBranding.logo)!.includes('?') ? '&' : '?'}v=${typeof window !== 'undefined' ? Date.now() : '1'}`}
+                        alt={(clinic?.name ?? initialBranding.name) || 'Clinic'}
                         className="w-full h-full object-contain"
                       />
                     </div>
@@ -172,12 +196,6 @@ export default function ClientLogin({ slug, initialBranding }: { slug: string; i
                     <div className="w-16 h-16 rounded-xl bg-gray-200" />
                   )}
                 </div>
-                {/* If it's a clinic context, do not show the name text at all */}
-                {!clinic && (
-                  <h1 className="text-xl font-semibold text-gray-900 mb-2">
-                    {doctor?.name || 'Clínica'}
-                  </h1>
-                )}
               </div>
 
               {/* Error */}
@@ -233,7 +251,7 @@ export default function ClientLogin({ slug, initialBranding }: { slug: string; i
               Ver produtos e serviços
             </Link>
             <Link
-              href={`/${slug}/forgot-password`}
+              href={forgotHref}
               className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 block"
             >
               Forgot your password?

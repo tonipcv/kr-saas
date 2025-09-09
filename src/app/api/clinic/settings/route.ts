@@ -23,8 +23,8 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Acesso negado. Apenas médicos podem atualizar configurações da clínica.' }, { status: 403 });
     }
 
-    const { name, description, logo, email, phone, address, city, state, zipCode, country, website, theme, buttonColor, buttonTextColor } = await request.json();
-    console.log('[CLINIC SETTINGS] Incoming payload', { name, hasLogo: !!logo, email, phone, city, state, website });
+    const { name, description, logo, email, phone, address, city, state, zipCode, country, website, theme, buttonColor, buttonTextColor, subdomain } = await request.json();
+    console.log('[CLINIC SETTINGS] Incoming payload', { name, hasLogo: !!logo, email, phone, city, state, website, subdomain });
 
     if (!name?.trim()) {
       return NextResponse.json({ error: 'Nome da clínica é obrigatório' }, { status: 400 });
@@ -67,6 +67,36 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    // Validar subdomain (optional)
+    let nextSubdomain: string | undefined = undefined;
+    if (typeof subdomain !== 'undefined') {
+      const v = String(subdomain || '').trim().toLowerCase();
+      if (v.length > 0) {
+        if (!/^[a-z0-9-]{3,63}$/.test(v)) {
+          return NextResponse.json({ error: 'Subdomínio inválido. Use apenas letras minúsculas, números e hífen (3-63 caracteres)' }, { status: 400 });
+        }
+        if (v.startsWith('-') || v.endsWith('-')) {
+          return NextResponse.json({ error: 'Subdomínio não pode começar/terminar com hífen' }, { status: 400 });
+        }
+        const reserved = new Set(['www','api','assets','static']);
+        if (reserved.has(v)) {
+          return NextResponse.json({ error: 'Subdomínio reservado' }, { status: 400 });
+        }
+        // Unicidade
+        const exists = await prisma.$queryRawUnsafe<any[]>(
+          'SELECT id FROM clinics WHERE "subdomain" = $1 AND id <> $2 LIMIT 1',
+          v, clinic.id
+        );
+        if (exists && exists[0]) {
+          return NextResponse.json({ error: 'Subdomínio já está em uso' }, { status: 409 });
+        }
+        nextSubdomain = v;
+      } else {
+        // vazio -> ignorar (não limpar)
+        nextSubdomain = undefined;
+      }
+    }
+
     // Validar branding
     let nextTheme: any = undefined;
     if (theme) {
@@ -87,10 +117,11 @@ export async function PUT(request: NextRequest) {
       newSlug = await generateUniqueSlugForClinic(name.trim(), clinic.id);
     }
 
-    // Primeiro, tentar atualizar branding via RAW SQL para compatibilidade com versões antigas do Prisma Client
+    // Primeiro, tentar atualizar branding (e subdomain) via RAW SQL para compatibilidade com versões antigas do Prisma Client
     try {
       const sets: string[] = [];
       const values: any[] = [];
+      if (typeof nextSubdomain !== 'undefined') { sets.push('"subdomain" = $' + (values.length + 1)); values.push(nextSubdomain); }
       if (nextTheme) { sets.push('theme = $' + (values.length + 1) + '::"ClinicTheme"'); values.push(nextTheme); }
       if (btnColor !== undefined) { sets.push('"buttonColor" = $' + (values.length + 1)); values.push(btnColor); }
       if (btnTextColor !== undefined) { sets.push('"buttonTextColor" = $' + (values.length + 1)); values.push(btnTextColor); }
@@ -134,6 +165,11 @@ export async function PUT(request: NextRequest) {
       // Prisma Client antigo pode não conhecer os campos novos. Usa raw UPDATE para branding.
       const updates: string[] = [];
       const params: any[] = [];
+      if (typeof nextSubdomain !== 'undefined') {
+        updates.push('"subdomain" = $' + (params.length + 1));
+        params.push(nextSubdomain);
+        console.log('[CLINIC SETTINGS] Setting subdomain via raw SQL:', nextSubdomain);
+      }
       if (nextTheme) {
         updates.push('theme = $' + (params.length + 1) + '::"ClinicTheme"');
         params.push(nextTheme);
@@ -175,8 +211,33 @@ export async function PUT(request: NextRequest) {
       });
     }
 
-    // Buscar clínica completa (com members, owner e subscription unificada)
-    const fullClinic = await getUserClinic(session.user.id);
+    // Fetch fresh subdomain directly from DB to ensure we return what was actually saved
+    let savedSubdomain: string | null = null;
+    try {
+      const row = await prisma.$queryRawUnsafe<{ subdomain: string | null }[]>(
+        'SELECT "subdomain" FROM clinics WHERE id = $1 LIMIT 1',
+        clinic.id
+      );
+      if (row && row[0]) {
+        savedSubdomain = row[0].subdomain;
+        console.log('[CLINIC SETTINGS] Fresh subdomain from DB:', savedSubdomain);
+      }
+    } catch (e) {
+      console.error('[CLINIC SETTINGS] Error fetching subdomain:', e);
+    }
+
+    // Get updated clinic with fresh subdomain
+    let fullClinic: any = null;
+    try {
+      const { getUserClinic } = await import('@/lib/clinic-utils');
+      fullClinic = await getUserClinic(session.user.id);
+      if (fullClinic && savedSubdomain !== null) {
+        fullClinic = { ...fullClinic, subdomain: savedSubdomain };
+      }
+      console.log('[CLINIC SETTINGS] Returning clinic with subdomain:', fullClinic?.subdomain);
+    } catch (e) {
+      console.error('[CLINIC SETTINGS] Error getting clinic:', e);
+    }
 
     console.log(`✅ Configurações da clínica atualizadas: ${updatedClinic.name}`);
 

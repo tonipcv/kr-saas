@@ -18,7 +18,9 @@ function getHostSlug(host?: string | null): string | null {
   if (!host) return null
   const base = process.env.APP_BASE_DOMAIN // e.g., app.example.com or example.com
   if (!base) return null
-  const lowerHost = host.toLowerCase()
+  // Remove port if present (e.g., ":3000") to allow local dev like 127.0.0.1.nip.io
+  const lowerHostRaw = host.toLowerCase()
+  const lowerHost = lowerHostRaw.split(':')[0]
   const lowerBase = base.toLowerCase()
   if (!lowerHost.endsWith(lowerBase)) return null
   const sub = lowerHost.slice(0, -lowerBase.length).replace(/\.$/, '') // strip trailing dot
@@ -44,6 +46,23 @@ export default async function middleware(request: NextRequestWithAuth) {
       const isStatic = /\.(?:ico|png|jpg|jpeg|svg|gif|webp|mp3|json|txt|xml|css|js|map)$/i.test(pathname)
       if (!isApi && !isNext && !isStatic) {
         const firstSeg = getPathSlug(pathname)
+        const parts = pathname.split('/').filter(Boolean)
+        const secondSeg = parts.length > 1 ? parts[1] : null
+
+        // Canonicalize: if URL is /{slug}/forgot-password, redirect to clean /forgot-password
+        if (firstSeg === slugFromHost && secondSeg === 'forgot-password') {
+          const dest = new URL(`/forgot-password${url.search}`, request.url)
+          return NextResponse.redirect(dest)
+        }
+        // Keep clean URLs visible, but rewrite internally to the slugged routes so pages resolve
+        if (firstSeg === 'forgot-password') {
+          const rewriteUrl = new URL(`/${slugFromHost}/forgot-password${url.search}`, request.url)
+          return NextResponse.rewrite(rewriteUrl)
+        }
+        if (firstSeg === 'login') {
+          const rewriteUrl = new URL(`/${slugFromHost}/login${url.search}`, request.url)
+          return NextResponse.rewrite(rewriteUrl)
+        }
         // Only rewrite if first path segment is absent or different from the host slug
         if (firstSeg !== slugFromHost) {
           const rewriteUrl = new URL(`/${slugFromHost}${pathname}${url.search}`, request.url)
