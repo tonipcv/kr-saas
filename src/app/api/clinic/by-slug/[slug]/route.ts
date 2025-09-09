@@ -26,37 +26,59 @@ export async function GET(
       );
     }
 
-    // Buscar clínica pelo slug
-    const clinic = await prisma.clinic.findUnique({
-      where: {
-        slug: sanitizedSlug,
-        isActive: true // Apenas clínicas ativas
-      },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        logo: true,
-        description: true,
-        website: true,
-        city: true,
-        state: true,
-        // Avoid selecting new fields directly to prevent client-type mismatch
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        }
-      }
-    });
+    // Buscar clínica por slug OU subdomínio (via SQL raw para evitar tipagem do Prisma)
+    let clinic: { id: string; name: string | null; slug: string | null; logo: string | null; description: string | null; website: string | null; city: string | null; state: string | null; ownerId: string | null } | null = null;
+    try {
+      const rows = await prisma.$queryRaw<{ id: string; name: string | null; slug: string | null; logo: string | null; description: string | null; website: string | null; city: string | null; state: string | null; ownerId: string | null }[]>`
+        SELECT id, name, slug, logo, description, website, city, state, "ownerId"
+        FROM clinics
+        WHERE (slug = ${sanitizedSlug} OR "subdomain" = ${sanitizedSlug}) AND "isActive" = true
+        LIMIT 1
+      `;
+      clinic = rows && rows[0] ? rows[0] : null;
+    } catch {}
 
     if (!clinic) {
-      return NextResponse.json(
-        { error: 'Clinic not found' },
-        { status: 404 }
-      );
+      // Fallback: try resolving by doctor slug (owner clinic)
+      try {
+        const doctor = await prisma.user.findFirst({
+          where: { doctor_slug: sanitizedSlug, role: 'DOCTOR' } as any,
+          select: { id: true }
+        });
+        if (doctor) {
+          // 2a) Try clinic owned by the doctor
+          const owned = await prisma.$queryRaw<{ id: string; name: string | null; slug: string | null; logo: string | null; description: string | null; website: string | null; city: string | null; state: string | null; ownerId: string | null }[]>`
+            SELECT id, name, slug, logo, description, website, city, state, "ownerId"
+            FROM clinics
+            WHERE "ownerId" = ${doctor.id} AND "isActive" = true
+            ORDER BY "createdAt" DESC
+            LIMIT 1
+          `;
+          clinic = owned && owned[0] ? owned[0] : null;
+
+          // 2b) If not owner, try as active member of a clinic
+          if (!clinic) {
+            const member = await prisma.$queryRaw<{ id: string; name: string | null; slug: string | null; logo: string | null; description: string | null; website: string | null; city: string | null; state: string | null; ownerId: string | null }[]>`
+              SELECT c.id, c.name, c.slug, c.logo, c.description, c.website, c.city, c.state, c."ownerId"
+              FROM clinics c
+              JOIN clinic_members cm ON cm."clinicId" = c.id
+              WHERE cm."userId" = ${doctor.id}
+                AND cm."isActive" = true
+                AND c."isActive" = true
+              ORDER BY cm."joinedAt" DESC
+              LIMIT 1
+            `;
+            clinic = member && member[0] ? member[0] : null;
+          }
+        }
+      } catch {}
+
+      if (!clinic) {
+        return NextResponse.json(
+          { error: 'Clinic not found', debug: { slug: sanitizedSlug, tried: ['clinic_by_slug_or_subdomain', 'doctor_owner_clinic', 'doctor_member_clinic'] } },
+          { status: 404 }
+        );
+      }
     }
 
     // Fetch branding (theme/colors) using a raw query to avoid client type mismatch
@@ -69,7 +91,7 @@ export async function GET(
       const rows = await prisma.$queryRaw<{ theme: 'LIGHT'|'DARK'; buttonColor: string | null; buttonTextColor: string | null }[]>`
         SELECT theme::text as theme, "buttonColor", "buttonTextColor"
         FROM clinics
-        WHERE slug = ${sanitizedSlug}
+        WHERE slug = ${sanitizedSlug} OR "subdomain" = ${sanitizedSlug}
         LIMIT 1
       `;
       if (rows && rows[0]) {
@@ -84,12 +106,12 @@ export async function GET(
       clinic: {
         id: clinic.id,
         name: clinic.name,
-        slug: clinic.slug,
+        slug: clinic.slug ?? sanitizedSlug,
         logo: clinic.logo,
         description: clinic.description,
         website: clinic.website,
         location: clinic.city && clinic.state ? `${clinic.city}, ${clinic.state}` : null,
-        owner: clinic.owner,
+        owner: clinic.ownerId ? { id: clinic.ownerId, name: '', email: '' } : null,
         theme: branding.theme,
         buttonColor: branding.buttonColor,
         buttonTextColor: branding.buttonTextColor
