@@ -33,6 +33,28 @@ export default async function middleware(request: NextRequestWithAuth) {
   const { pathname } = url
   const host = request.headers.get('host')
 
+  // Subdomain tenancy: if host is <slug>.<APP_BASE_DOMAIN>, rewrite to /<slug><pathname>
+  // This preserves our existing path-based routing (e.g., /[slug]/login) without changing pages.
+  // Safety guards: do not rewrite API or static assets, and avoid loops if path already starts with slug.
+  try {
+    const slugFromHost = getHostSlug(host)
+    if (slugFromHost) {
+      const isApi = pathname.startsWith('/api')
+      const isNext = pathname.startsWith('/_next')
+      const isStatic = /\.(?:ico|png|jpg|jpeg|svg|gif|webp|mp3|json|txt|xml|css|js|map)$/i.test(pathname)
+      if (!isApi && !isNext && !isStatic) {
+        const firstSeg = getPathSlug(pathname)
+        // Only rewrite if first path segment is absent or different from the host slug
+        if (firstSeg !== slugFromHost) {
+          const rewriteUrl = new URL(`/${slugFromHost}${pathname}${url.search}`, request.url)
+          return NextResponse.rewrite(rewriteUrl)
+        }
+      }
+    }
+  } catch {
+    // Fail open: if any error happens, continue normally
+  }
+
   // Public API allowlist: do NOT require auth for doctor-link resolution
   if (pathname.startsWith('/api/v2/doctor-link')) {
     return NextResponse.next()

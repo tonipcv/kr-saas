@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getUserClinics } from '@/lib/clinic-utils';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,6 +47,23 @@ export async function GET(request: NextRequest) {
       // Médico: apenas suas clínicas
       clinics = await getUserClinics(session.user.id);
     }
+
+    // Merge branding fields via raw SQL (handles clients where new fields aren't typed yet)
+    try {
+      const ids = clinics.map((c: any) => c.id);
+      if (ids.length) {
+        const rows = await prisma.$queryRaw<{ id: string; theme: 'LIGHT'|'DARK'; buttonColor: string | null; buttonTextColor: string | null }[]>`
+          SELECT id, theme::text as theme, "buttonColor", "buttonTextColor"
+          FROM clinics
+          WHERE id IN (${Prisma.join(ids)})
+        `;
+        const map = new Map(rows.map(r => [r.id, r]));
+        clinics = clinics.map((c: any) => {
+          const b = map.get(c.id);
+          return b ? { ...c, theme: b.theme, buttonColor: b.buttonColor, buttonTextColor: b.buttonTextColor } : c;
+        });
+      }
+    } catch {}
 
     return NextResponse.json({ 
       clinics,

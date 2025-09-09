@@ -41,6 +41,7 @@ export async function GET(
         website: true,
         city: true,
         state: true,
+        // Avoid selecting new fields directly to prevent client-type mismatch
         owner: {
           select: {
             id: true,
@@ -58,6 +59,25 @@ export async function GET(
       );
     }
 
+    // Fetch branding (theme/colors) using a raw query to avoid client type mismatch
+    let branding: { theme: 'LIGHT'|'DARK'; buttonColor: string | null; buttonTextColor: string | null } = {
+      theme: 'LIGHT',
+      buttonColor: null,
+      buttonTextColor: null
+    };
+    try {
+      const rows = await prisma.$queryRaw<{ theme: 'LIGHT'|'DARK'; buttonColor: string | null; buttonTextColor: string | null }[]>`
+        SELECT theme::text as theme, "buttonColor", "buttonTextColor"
+        FROM clinics
+        WHERE slug = ${sanitizedSlug}
+        LIMIT 1
+      `;
+      if (rows && rows[0]) {
+        // @ts-expect-error runtime cast
+        branding = rows[0] as any;
+      }
+    } catch {}
+
     // Retornar dados da clínica para personalização
     return NextResponse.json({
       success: true,
@@ -69,7 +89,10 @@ export async function GET(
         description: clinic.description,
         website: clinic.website,
         location: clinic.city && clinic.state ? `${clinic.city}, ${clinic.state}` : null,
-        owner: clinic.owner
+        owner: clinic.owner,
+        theme: branding.theme,
+        buttonColor: branding.buttonColor,
+        buttonTextColor: branding.buttonTextColor
       }
     });
 

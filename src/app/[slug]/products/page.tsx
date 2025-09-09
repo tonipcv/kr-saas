@@ -22,11 +22,13 @@ export default async function DoctorProductsPage({ params, searchParams }: {
     select: { id: true, name: true, doctor_slug: true, image: true, public_cover_image_url: true, public_page_template: true },
   });
 
+  // Track clinic branding when resolving via clinic slug
+  let clinic: { id: string; ownerId: string | null; name?: string | null; logo?: string | null } | null = null;
   if (!doctor) {
-    const clinic = await prisma.clinic.findFirst({
+    clinic = await prisma.clinic.findFirst({
       where: { slug, isActive: true } as any,
-      select: { id: true, ownerId: true },
-    });
+      select: { id: true, ownerId: true, name: true, logo: true },
+    }) as any;
     if (clinic?.ownerId) {
       const owner = await prisma.user.findFirst({
         where: { id: clinic.ownerId, role: 'DOCTOR' } as any,
@@ -113,55 +115,96 @@ export default async function DoctorProductsPage({ params, searchParams }: {
   const template = (doctor as any)?.public_page_template || 'DEFAULT';
   // Only use explicit public cover image; no fallback to profile image
   const coverUrl = (doctor as any)?.public_cover_image_url || null;
+  // Branding: load clinic theme/colors by slug (works for doctor or clinic slugs; clinic rows only exist for clinic slugs)
+  let theme: 'LIGHT' | 'DARK' = 'LIGHT';
+  let buttonColor: string | null = null;
+  let buttonTextColor: string | null = null;
+  try {
+    const rows = await prisma.$queryRaw<{ theme: 'LIGHT'|'DARK'; buttonColor: string | null; buttonTextColor: string | null }[]>`
+      SELECT theme::text as theme, "buttonColor", "buttonTextColor"
+      FROM clinics
+      WHERE slug = ${slug}
+      LIMIT 1
+    `;
+    if (rows && rows[0]) {
+      theme = rows[0].theme || 'LIGHT';
+      buttonColor = rows[0].buttonColor;
+      buttonTextColor = rows[0].buttonTextColor;
+    }
+  } catch {}
+
+  const isClinicContext = !!clinic;
+  const displayName = clinic?.name || (doctor as any)?.name || 'Produtos e Serviços';
+  const avatarUrl = (doctor as any)?.image || null;
   const headerHeight = template === 'MINIMAL' ? 'h-24 sm:h-28' : 'h-36 sm:h-44';
   const showAvatar = template !== 'MINIMAL';
   return (
-    <main className="min-h-screen bg-[#f7f8ff] text-gray-900">
+    <main
+      className={theme === 'DARK' ? 'min-h-screen bg-[#0b0b0b] text-gray-100' : 'min-h-screen bg-[#f7f8ff] text-gray-900'}
+      style={{ ['--btn-bg' as any]: buttonColor || '#111827', ['--btn-fg' as any]: buttonTextColor || '#ffffff' } as any}
+    >
       <div className="max-w-5xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-6">
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 overflow-hidden">
-            {/* Cover banner: only if image exists */}
-            {coverUrl && (
+          <div className={`${isClinicContext ? 'bg-transparent border-0 shadow-none' : `${theme === 'DARK' ? 'bg-[#111111] border-gray-800 text-gray-100' : 'bg-white border-gray-200 text-gray-900'} border shadow-sm`} rounded-2xl p-6 overflow-hidden`}>
+            {/* Cover banner: only if image exists and NOT clinic context */}
+            {!isClinicContext && coverUrl && (
               <div className={`-mt-6 -mx-6 mb-8 ${headerHeight} overflow-hidden rounded-t-2xl relative`}>
                 <img
                   src={coverUrl}
                   alt={doctor.name}
                   className="absolute inset-0 w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px]" />
+                <div className={`absolute inset-0 ${theme === 'DARK' ? 'bg-black/30' : 'bg-white/40'} backdrop-blur-[1px]`} />
               </div>
             )}
-            <div className={`flex flex-col ${template === 'HERO_LEFT' ? 'items-start text-left' : 'items-center text-center'} ${coverUrl && showAvatar ? '-mt-10' : 'mt-0'} }`}>
+            <div className={`flex flex-col ${template === 'HERO_LEFT' ? 'items-start text-left' : 'items-center text-center'} ${!isClinicContext && coverUrl && showAvatar ? '-mt-10' : 'mt-0'} }`}>
               {doctor ? (
                 <>
                   {showAvatar && (
                   <div className="relative mb-2">
-                    {doctor.image ? (
-                      <div className="relative w-28 h-28 sm:w-32 sm:h-32 mx-auto">
-                        <div className="absolute inset-0 bg-gradient-to-r from-gray-400 to-gray-500 rounded-full opacity-75 blur-lg" />
+                    {isClinicContext && clinic?.logo ? (
+                      <div className="relative w-36 h-36 sm:w-44 sm:h-44 mx-auto">
+                        {theme !== 'DARK' && (
+                          <div className={`absolute inset-0 rounded-full opacity-75 blur-lg bg-gradient-to-r from-gray-400 to-gray-500`} />
+                        )}
                         <img
-                          src={doctor.image}
-                          alt={doctor.name}
+                          src={clinic.logo}
+                          alt={displayName}
+                          className="relative w-full h-full object-contain rounded-xl"
+                        />
+                      </div>
+                    ) : avatarUrl ? (
+                      <div className="relative w-28 h-28 sm:w-32 sm:h-32 mx-auto">
+                        {theme !== 'DARK' && (
+                          <div className={`absolute inset-0 rounded-full opacity-75 blur-lg bg-gradient-to-r from-gray-400 to-gray-500`} />
+                        )}
+                        <img
+                          src={avatarUrl}
+                          alt={displayName}
                           className="relative w-full h-full rounded-full object-cover border-4 border-white/30 shadow-2xl"
                         />
                       </div>
                     ) : (
                       <div className="relative w-28 h-28 sm:w-32 sm:h-32 mx-auto">
-                        <div className="absolute inset-0 bg-gradient-to-r from-gray-400 to-gray-500 rounded-full opacity-75 blur-lg" />
-                        <div className="relative w-full h-full rounded-full bg-gradient-to-r from-gray-500 to-gray-600 flex items-center justify-center border-4 border-white/30 shadow-2xl">
-                          <span className="text-white text-4xl font-light">{doctor.name?.charAt(0) || 'D'}</span>
+                        {theme !== 'DARK' && (
+                          <div className={`absolute inset-0 rounded-full opacity-75 blur-lg bg-gradient-to-r from-gray-400 to-gray-500`} />
+                        )}
+                        <div className={`relative w-full h-full rounded-full flex items-center justify-center border-4 border-white/30 shadow-2xl ${theme === 'DARK' ? 'bg-gray-700' : 'bg-gradient-to-r from-gray-500 to-gray-600'}`}>
+                          <span className="text-white text-4xl font-light">{displayName?.charAt(0) || 'D'}</span>
                         </div>
                       </div>
                     )}
                   </div>
                   )}
-                  <h1 className="mt-1 text-xl sm:text-2xl font-semibold tracking-tight bg-gradient-to-b from-gray-800 via-gray-600 to-gray-500 bg-clip-text text-transparent">{doctor.name}</h1>
+                  {!isClinicContext && (
+                    <h1 className={`mt-1 text-xl sm:text-2xl font-semibold tracking-tight ${theme === 'DARK' ? 'text-gray-100' : 'bg-gradient-to-b from-gray-800 via-gray-600 to-gray-500 bg-clip-text text-transparent'}`}>{displayName}</h1>
+                  )}
                 </>
               ) : (
                 <>
-                  <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gray-900">Produtos e Serviços</h1>
-                  <p className="mt-1 text-sm text-gray-600">Seleção de serviços e produtos da clínica.</p>
+                  <h1 className={`text-xl sm:text-2xl font-semibold tracking-tight ${theme === 'DARK' ? 'text-gray-100' : 'text-gray-900'}`}>Produtos e Serviços</h1>
+                  <p className={`mt-1 text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'}`}>Seleção de serviços e produtos da clínica.</p>
                 </>
               )}
             </div>
@@ -170,15 +213,15 @@ export default async function DoctorProductsPage({ params, searchParams }: {
         {/* Referrer/Campaign/Coupon banner */}
         <ReferrerBanner slug={slug} />
         {!doctor ? (
-          <div className="rounded-xl border border-dashed border-gray-200 bg-white p-6 text-center text-sm text-gray-600">
+          <div className={`rounded-xl border border-dashed p-6 text-center text-sm ${theme === 'DARK' ? 'border-gray-700 bg-[#0f0f0f] text-gray-300' : 'border-gray-200 bg-white text-gray-600'}`}>
             Não foi possível encontrar a clínica.
           </div>
         ) : products.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-gray-200 bg-white p-6 text-center text-sm text-gray-600">
+          <div className={`rounded-xl border border-dashed p-6 text-center text-sm ${theme === 'DARK' ? 'border-gray-700 bg-[#0f0f0f] text-gray-300' : 'border-gray-200 bg-white text-gray-600'}`}>
             Nenhum produto disponível no momento.
           </div>
         ) : (
-          <ProductsGrid slug={slug} doctorId={doctor.id as any} products={products as any} />
+          <ProductsGrid slug={slug} doctorId={doctor.id as any} products={products as any} branding={{ theme, buttonColor, buttonTextColor }} />
         )}
       </div>
       {/* Footer */}
@@ -187,10 +230,10 @@ export default async function DoctorProductsPage({ params, searchParams }: {
           href="https://zuzuvu.com"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700"
+          className={`inline-flex items-center gap-2 text-xs ${theme === 'DARK' ? 'text-gray-400 hover:text-gray-300' : 'text-gray-500 hover:text-gray-700'}`}
         >
           <span>Powered by</span>
-          <img src="/logo.png" alt="Zuzuvu" className="h-4 w-auto opacity-80" />
+          <img src="/logo.png" alt="Zuzuvu" className={`h-4 w-auto opacity-80 ${theme === 'DARK' ? 'invert' : ''}`} />
         </a>
       </div>
     </main>

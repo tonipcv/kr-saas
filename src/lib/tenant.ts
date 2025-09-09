@@ -30,10 +30,37 @@ export async function getTenantContext(req: NextRequest): Promise<TenantContext>
     throw Object.assign(new Error("Missing doctor slug in path"), { status: 400 });
   }
 
-  const doctor = await prisma.user.findFirst({
-    where: { doctor_slug: slug },
+  // Try to resolve a doctor directly by doctor_slug
+  let doctor = await prisma.user.findFirst({
+    where: { doctor_slug: slug, role: 'DOCTOR' } as any,
     select: { id: true, doctor_slug: true, role: true },
   });
+
+  // Fallback: resolve slug as a clinic, then map to a doctor (owner or active doctor member)
+  if (!doctor) {
+    const clinic = await prisma.clinic.findFirst({
+      where: { slug, isActive: true } as any,
+      select: { id: true, ownerId: true },
+    });
+
+    if (clinic?.ownerId) {
+      const owner = await prisma.user.findFirst({
+        where: { id: clinic.ownerId, role: 'DOCTOR' } as any,
+        select: { id: true, doctor_slug: true, role: true },
+      });
+      if (owner) doctor = owner as any;
+    }
+
+    // If no owner doctor found, try to find an active doctor member of the clinic
+    if (!doctor && clinic) {
+      const member = await prisma.clinicMember.findFirst({
+        where: { clinicId: clinic.id, isActive: true, user: { role: 'DOCTOR' } } as any,
+        include: { user: { select: { id: true, doctor_slug: true, role: true } } },
+      });
+      if (member?.user) doctor = member.user as any;
+    }
+  }
+
   if (!doctor) {
     throw Object.assign(new Error("Doctor not found for slug"), { status: 404 });
   }

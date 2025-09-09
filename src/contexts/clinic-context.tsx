@@ -8,6 +8,10 @@ interface ClinicData {
   name: string;
   description: string | null;
   logo: string | null;
+  slug?: string | null;
+  website?: string | null;
+  city?: string | null;
+  state?: string | null;
   ownerId: string;
   owner: {
     id: string;
@@ -57,14 +61,23 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch('/api/clinics');
       if (response.ok) {
         const data = await response.json();
-        setAvailableClinics(data.clinics || []);
-        
+        const list: ClinicData[] = data.clinics || [];
+        setAvailableClinics(list);
+
+        // Se já há clínica atual, atualizá-la com a versão mais recente pelo id
+        if (currentClinic) {
+          const updated = list.find((c: ClinicData) => c.id === currentClinic.id);
+          if (updated) {
+            setCurrentClinic(updated);
+          }
+        }
+
         // Se não há clínica atual, selecionar a primeira
-        if (!currentClinic && data.clinics.length > 0) {
+        if (!currentClinic && list.length > 0) {
           const savedClinicId = localStorage.getItem('selectedClinicId');
           const clinicToSelect = savedClinicId 
-            ? data.clinics.find((c: ClinicData) => c.id === savedClinicId) || data.clinics[0]
-            : data.clinics[0];
+            ? list.find((c: ClinicData) => c.id === savedClinicId) || list[0]
+            : list[0];
           setCurrentClinic(clinicToSelect);
         }
       }

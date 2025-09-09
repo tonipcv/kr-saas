@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useClinic } from '@/contexts/clinic-context';
@@ -82,7 +82,7 @@ interface ClinicStats {
 export default function ClinicDashboard() {
   const { data: session } = useSession();
   const router = useRouter();
-  const { currentClinic } = useClinic();
+  const { currentClinic, refreshClinics } = useClinic();
   const [stats, setStats] = useState<ClinicStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -98,6 +98,10 @@ export default function ClinicDashboard() {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [baseUrl, setBaseUrl] = useState('https://yourapp.com');
+  // Branding settings
+  const [editingTheme, setEditingTheme] = useState<'LIGHT' | 'DARK'>('LIGHT');
+  const [editingButtonColor, setEditingButtonColor] = useState<string>('');
+  const [editingButtonTextColor, setEditingButtonTextColor] = useState<string>('');
   
   // Notification states
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
@@ -137,6 +141,13 @@ export default function ClinicDashboard() {
       setEditingClinicDescription(currentClinic.description || '');
       setLogoPreview(currentClinic.logo || null);
       setEditingClinicLogo(false);
+      // Branding initial values
+      // @ts-expect-error theme fields may not exist yet in type
+      setEditingTheme((currentClinic.theme as any) === 'DARK' ? 'DARK' : 'LIGHT');
+      // @ts-expect-error branding fields may not exist yet in type
+      setEditingButtonColor((currentClinic.buttonColor as any) || '');
+      // @ts-expect-error branding fields may not exist yet in type
+      setEditingButtonTextColor((currentClinic.buttonTextColor as any) || '');
 
       // Fetch statistics for current clinic
       const statsResponse = await fetch(`/api/clinic/stats?clinicId=${currentClinic.id}`);
@@ -266,6 +277,9 @@ export default function ClinicDashboard() {
           name: editingClinicName,
           description: editingClinicDescription,
           logo: logoUrl,
+          theme: editingTheme,
+          buttonColor: editingButtonColor || undefined,
+          buttonTextColor: editingButtonTextColor || undefined,
         }),
       });
 
@@ -280,7 +294,10 @@ export default function ClinicDashboard() {
         // Note: The clinic context will handle updating the clinic data
         setEditingClinicName(result.clinic.name);
         setEditingClinicDescription(result.clinic.description || '');
+        setLogoPreview(result.clinic.logo || null);
       }
+      // Ensure context reflects latest data (including logo)
+      try { await refreshClinics(); } catch {}
       
       // Reset logo editing state
       setEditingClinicLogo(false);
@@ -444,17 +461,71 @@ export default function ClinicDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div
+      className="min-h-screen bg-white"
+      style={currentClinic ? ({ ['--btn-bg' as any]: (currentClinic as any).buttonColor || '#111827', ['--btn-fg' as any]: (currentClinic as any).buttonTextColor || '#ffffff' } as any) : undefined}
+    >
       <div className="lg:ml-64">
         <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 bg-gray-50">
           
           {/* Header */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
-            <div className="space-y-1">
-              <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">{currentClinic.name}</h1>
-              <p className="text-sm text-gray-600">{currentClinic.description || 'No description available'}</p>
+            <div className="flex items-start gap-3">
+              {/* Logo */}
+              {(() => {
+                const logoUrlWithCache = currentClinic.logo
+                  ? `${currentClinic.logo}${currentClinic.logo.includes('?') ? '&' : '?'}v=${typeof window !== 'undefined' ? Date.now() : '1'}`
+                  : null;
+                return (
+                  <div className="h-12 w-12 rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
+                {logoUrlWithCache ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoUrlWithCache} alt={currentClinic.name} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-xs font-semibold text-gray-600">
+                    {currentClinic.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2)}
+                  </span>
+                )}
+              </div>
+                );
+              })()}
+              <div className="space-y-1">
+                <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">{currentClinic.name}</h1>
+                <p className="text-sm text-gray-600">{currentClinic.description || 'No description available'}</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {/* Location */}
+                  {(currentClinic.city || currentClinic.state) && (
+                    <span className="text-xs text-gray-500 font-medium">
+                      {(currentClinic.city || '') + (currentClinic.city && currentClinic.state ? ', ' : '') + (currentClinic.state || '')}
+                    </span>
+                  )}
+                  {/* Website */}
+                  {currentClinic.website && (
+                    <a
+                      href={currentClinic.website.startsWith('http') ? currentClinic.website : `https://${currentClinic.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-medium text-[#5154e7] hover:underline"
+                    >
+                      {currentClinic.website.replace(/^https?:\/\//, '')}
+                    </a>
+                  )}
+                  {/* Public page quick link */}
+                  {currentClinic.slug && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-gray-500">Slug:</span>
+                      <Link
+                        href={`/${currentClinic.slug}`}
+                        className="text-xs font-medium text-gray-700 hover:text-gray-900 underline decoration-dotted"
+                      >
+                        /{currentClinic.slug}
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-            
+
             <div className="flex items-center gap-2">
               <Badge 
                 variant={currentClinic.subscription?.status === 'ACTIVE' ? 'default' : 'secondary'}
@@ -489,14 +560,13 @@ export default function ClinicDashboard() {
                 <div>
                   <h2 className="text-sm font-semibold text-gray-900">Team</h2>
                   <p className="text-xs text-gray-600 mt-1 font-medium">
-                    {currentClinic.members.length} {currentClinic.members.length === 1 ? 'member' : 'members'} •
-                    {currentClinic.subscription?.maxDoctors ? ` ${currentClinic.subscription.maxDoctors - currentClinic.members.length} spots available` : ' No limit'}
+                    {currentClinic.members.length} {currentClinic.members.length === 1 ? 'member' : 'members'}
                   </p>
                 </div>
                 {isAdmin && (
                   <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
                     <DialogTrigger asChild>
-                      <Button size="sm" className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-full h-8 px-3 text-xs font-medium shadow-sm">
+                      <Button size="sm" className="rounded-full h-8 px-3 text-xs font-medium shadow-sm" style={{ backgroundColor: 'var(--btn-bg)', color: 'var(--btn-fg)' }}>
                         <UserPlus className="h-4 w-4 mr-2" />
                         Invite
                       </Button>
@@ -537,7 +607,8 @@ export default function ClinicDashboard() {
                           <Button 
                             onClick={addMember} 
                             disabled={addingMember || !newMemberEmail.trim()}
-                            className="flex-1 bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-full h-8 text-xs font-medium shadow-sm"
+                            className="flex-1 rounded-full h-8 text-xs font-medium shadow-sm"
+                            style={{ backgroundColor: 'var(--btn-bg)', color: 'var(--btn-fg)' }}
                           >
                             {addingMember ? 'Sending invite...' : 'Send Invite'}
                           </Button>
@@ -637,7 +708,7 @@ export default function ClinicDashboard() {
                       {/* Quick stats removed per request */}
 
                       {isAdmin && (
-                        <Button className="w-full h-8 rounded-full text-xs font-medium bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm" asChild>
+                        <Button className="w-full h-8 rounded-full text-xs font-medium shadow-sm" style={{ backgroundColor: 'var(--btn-bg)', color: 'var(--btn-fg)' }} asChild>
                           <Link href="/clinic/subscription">
                             <CreditCard className="h-4 w-4 mr-2" />
                             Manage Plan
@@ -652,7 +723,7 @@ export default function ClinicDashboard() {
                       </div>
                       <p className="text-sm text-gray-600 mb-4 font-medium">No active plan</p>
                       {isAdmin && (
-                        <Button className="h-8 rounded-full text-xs font-medium bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm" asChild>
+                        <Button className="h-8 rounded-full text-xs font-medium shadow-sm" style={{ backgroundColor: 'var(--btn-bg)', color: 'var(--btn-fg)' }} asChild>
                           <Link href="/clinic/subscription">
                             <Plus className="h-4 w-4 mr-2" />
                             Choose Plan
@@ -790,6 +861,72 @@ export default function ClinicDashboard() {
                       Supported formats: JPG, PNG, GIF. Max size: 5MB.
                     </p>
                   </div>
+                {/* Branding: Theme & Button Colors (minimalist vertical) */}
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label className="text-gray-700 font-medium">Theme</Label>
+                    <select
+                      value={editingTheme}
+                      onChange={(e) => setEditingTheme(e.target.value as 'LIGHT' | 'DARK')}
+                      disabled={!isAdmin}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 h-9"
+                    >
+                      <option value="LIGHT">Light</option>
+                      <option value="DARK">Dark</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-gray-700 font-medium">Button Color</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={editingButtonColor || '#111827'}
+                        onChange={(e) => setEditingButtonColor(e.target.value)}
+                        disabled={!isAdmin}
+                        className="h-8 w-12 border border-gray-300 rounded"
+                        aria-label="Button color"
+                      />
+                      <Input
+                        value={editingButtonColor}
+                        onChange={(e) => setEditingButtonColor(e.target.value)}
+                        placeholder="#111827"
+                        disabled={!isAdmin}
+                        className="h-9 flex-1 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-gray-700 font-medium">Button Text Color</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={editingButtonTextColor || '#ffffff'}
+                        onChange={(e) => setEditingButtonTextColor(e.target.value)}
+                        disabled={!isAdmin}
+                        className="h-8 w-12 border border-gray-300 rounded"
+                        aria-label="Button text color"
+                      />
+                      <Input
+                        value={editingButtonTextColor}
+                        onChange={(e) => setEditingButtonTextColor(e.target.value)}
+                        placeholder="#ffffff"
+                        disabled={!isAdmin}
+                        className="h-9 flex-1 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                      />
+                    </div>
+                  </div>
+                  {/* Small preview */}
+                  <div>
+                    <button
+                      type="button"
+                      className="px-3 py-2 text-xs font-medium rounded-lg border border-gray-300"
+                      style={{ backgroundColor: editingButtonColor || '#111827', color: editingButtonTextColor || '#ffffff' }}
+                      disabled
+                    >
+                      Button preview
+                    </button>
+                  </div>
+                </div>
                 </div>
                 <div>
                   <Label className="text-gray-700 font-medium">Owner</Label>
@@ -804,7 +941,8 @@ export default function ClinicDashboard() {
                     <Button 
                       onClick={saveSettings}
                       disabled={savingSettings || uploadingLogo}
-                      className="flex-1 bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-full h-8 text-xs font-medium shadow-sm"
+                      className="flex-1 rounded-full h-8 text-xs font-medium shadow-sm"
+                      style={{ backgroundColor: 'var(--btn-bg)', color: 'var(--btn-fg)' }}
                     >
                       {uploadingLogo ? 'Uploading Logo...' : savingSettings ? 'Saving...' : 'Save Changes'}
                     </Button>

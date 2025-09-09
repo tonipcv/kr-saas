@@ -392,6 +392,11 @@ model Clinic {
   logo                       String?
   slug                       String?                     @unique @db.VarChar(255)
   
+  // Branding / Theming
+  theme                      ClinicTheme                 @default(LIGHT)
+  buttonColor                String?
+  buttonTextColor            String?
+  
   // Relações
   onboardingTemplates        OnboardingTemplate[]
   members                    ClinicMember[]
@@ -416,6 +421,11 @@ enum ClinicRole {
   MANAGER     // Gerente com acesso administrativo
   PROVIDER    // Profissional que presta serviço (médico, dentista, cabeleireiro, etc)
   STAFF       // Equipe de apoio (recepcionista, assistente, etc)
+}
+
+enum ClinicTheme {
+  LIGHT
+  DARK
 }
 
 model ClinicMember {

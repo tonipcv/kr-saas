@@ -8,6 +8,9 @@ export interface ClinicWithDetails {
   description: string | null;
   logo: string | null;
   slug: string | null;
+  website?: string | null;
+  city?: string | null;
+  state?: string | null;
   ownerId: string;
   isActive: boolean;
   createdAt: Date;
@@ -199,6 +202,9 @@ export async function getUserClinics(userId: string): Promise<ClinicWithDetails[
         description: clinic.description,
         logo: clinic.logo,
         slug: clinic.slug,
+        website: (clinic as any).website ?? null,
+        city: (clinic as any).city ?? null,
+        state: (clinic as any).state ?? null,
         ownerId: clinic.ownerId,
         isActive: clinic.isActive,
         createdAt: clinic.createdAt,

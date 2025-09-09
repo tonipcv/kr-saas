@@ -17,10 +17,12 @@ export default function ProductsGrid({
   slug,
   doctorId,
   products,
+  branding,
 }: {
   slug: string;
   doctorId: string | number;
   products: Product[];
+  branding?: { theme?: 'LIGHT' | 'DARK'; buttonColor?: string | null; buttonTextColor?: string | null };
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Product | null>(null);
@@ -42,6 +44,8 @@ export default function ProductsGrid({
     () => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }),
     []
   );
+
+  const isDark = (branding?.theme ?? 'LIGHT') === 'DARK';
 
   function onOpen(p: Product) {
     setSelected(p);
@@ -274,17 +278,17 @@ export default function ProductsGrid({
               <div className="flex items-center justify-start gap-3 whitespace-nowrap">
                 {categories.map((cat: string) => {
                   const active = cat === selectedCategory;
+                  const base = "px-3 py-1 rounded-full text-sm transition-colors";
+                  const cls = active
+                    ? `border ${isDark ? 'border-transparent' : 'border-[#5154e7]/30'}`
+                    : `${isDark ? 'text-gray-300 hover:text-gray-100 border border-gray-700 hover:border-gray-600' : 'text-gray-600 hover:text-gray-900 border border-transparent'}`;
                   return (
                     <button
                       key={cat}
                       type="button"
                       onClick={() => setSelectedCategory(cat)}
-                      className={
-                        (active
-                          ? "text-[#5154e7] bg-[#5154e7]/10 border border-[#5154e7]/30 "
-                          : "text-gray-600 hover:text-gray-900 border border-transparent ") +
-                        "px-3 py-1 rounded-full text-sm transition-colors"
-                      }
+                      className={`${base} ${cls}`}
+                      style={active ? (isDark ? { backgroundColor: 'var(--btn-bg)', color: 'var(--btn-fg)' } : { color: '#5154e7', backgroundColor: 'rgba(81,84,231,0.10)' }) : undefined}
                     >
                       {cat}
                     </button>
@@ -296,7 +300,7 @@ export default function ProductsGrid({
               type="button"
               aria-label="Pesquisar"
               onClick={() => setShowSearch(true)}
-              className="shrink-0 p-1.5 rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+              className={`shrink-0 p-1.5 rounded-full ${isDark ? 'text-gray-300 hover:text-gray-100 hover:bg-[#0f0f0f]' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                 <path fillRule="evenodd" d="M10.5 3.75a6.75 6.75 0 104.243 12.03l3.739 3.738a.75.75 0 101.06-1.06l-3.738-3.74A6.75 6.75 0 0010.5 3.75zm-5.25 6.75a5.25 5.25 0 1110.5 0 5.25 5.25 0 01-10.5 0z" clipRule="evenodd" />
@@ -308,35 +312,36 @@ export default function ProductsGrid({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {visibleProducts.map((p: Product) => (
-          <div key={p.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition p-4">
-            <div className="aspect-w-16 aspect-h-9 mb-3 bg-gray-100 rounded-xl overflow-hidden">
+          <div key={p.id} className={`${isDark ? 'bg-[#111111] border-gray-800 text-gray-100' : 'bg-white border-gray-200 text-gray-900'} rounded-2xl border shadow-sm hover:shadow-md transition p-4`}>
+            <div className={`aspect-w-16 aspect-h-9 mb-3 ${isDark ? 'bg-[#0f0f0f]' : 'bg-gray-100'} rounded-xl overflow-hidden`}>
               {p.imageUrl ? (
                 <img src={p.imageUrl} alt={p.name} className="w-full h-48 object-cover" />
               ) : (
-                <div className="w-full h-48 flex items-center justify-center bg-gray-100">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className={`w-full h-48 flex items-center justify-center ${isDark ? 'bg-[#0f0f0f]' : 'bg-gray-100'}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-12 w-12 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                   </svg>
                 </div>
               )}
             </div>
             <div className="flex items-start justify-between gap-2">
-              <h3 className="font-semibold text-gray-900 truncate">{p.name}</h3>
+              <h3 className={`font-semibold truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{p.name}</h3>
               {/* Price hidden on public clinic page */}
             </div>
             {p.category ? (
-              <span className="mt-1 inline-block text-[10px] px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 border border-gray-200">{p.category}</span>
+              <span className={`mt-1 inline-block text-[10px] px-2 py-0.5 rounded-full border ${isDark ? 'bg-[#0f0f0f] text-gray-300 border-gray-800' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>{p.category}</span>
             ) : null}
             {p.description ? (
-              <p className="mt-2 text-xs text-gray-600 line-clamp-3">{p.description}</p>
+              <p className={`mt-2 text-xs line-clamp-3 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{p.description}</p>
             ) : null}
             <div className="mt-3">
               <button
                 type="button"
                 onClick={() => onOpen(p)}
-                className="inline-flex items-center justify-center rounded-md px-3 py-1.5 text-xs font-medium text-white shadow-sm bg-gradient-to-r from-[#1b0b3d] via-[#5a23a7] to-[#9b7ae3] hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5a23a7]"
+                className="inline-flex items-center justify-center rounded-full px-3 py-1 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300"
+                style={{ backgroundColor: 'var(--btn-bg)', color: 'var(--btn-fg)' }}
               >
-                Quero agendar
+                Agendar
               </button>
             </div>
           </div>
@@ -346,17 +351,17 @@ export default function ProductsGrid({
       {open && selected ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-          <div className="relative z-10 w-full max-w-md mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-5">
+          <div className={`relative z-10 w-full max-w-md mx-auto rounded-2xl shadow-xl border p-5 ${isDark ? 'bg-[#111111] border-gray-800 text-gray-100' : 'bg-white border-gray-200 text-gray-900'}`}>
             {/* Image on modal top */}
             {selected.imageUrl ? (
-              <div className="mb-3 w-full h-40 rounded-xl overflow-hidden bg-gray-100">
+              <div className={`mb-3 w-full h-40 rounded-xl overflow-hidden ${isDark ? 'bg-[#0f0f0f]' : 'bg-gray-100'}`}>
                 <img src={selected.imageUrl} alt={selected.name} className="w-full h-full object-cover" />
               </div>
             ) : null}
 
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">{selected.name}</h2>
+                <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{selected.name}</h2>
               </div>
               <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Fechar">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
@@ -365,23 +370,23 @@ export default function ProductsGrid({
               </button>
             </div>
             {selected.description ? (
-              <p className="mt-3 text-sm text-gray-700 whitespace-pre-line">{selected.description}</p>
+              <p className={`mt-3 text-sm whitespace-pre-line ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{selected.description}</p>
             ) : (
-              <p className="mt-3 text-sm text-gray-500">Sem descrição disponível.</p>
+              <p className={`mt-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Sem descrição disponível.</p>
             )}
 
             {success ? (
               <div className="mt-4 space-y-3 text-center">
-                <div className="mx-auto w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                <div className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${isDark ? 'bg-green-900/30' : 'bg-green-100'}`}>
                   <span className="text-green-600 text-2xl">✓</span>
                 </div>
-                <p className="text-sm text-gray-700">
+                <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                   {redirectUrl
                     ? 'Parabéns, estamos redirecionando você para um dos nossos atendentes...'
                     : 'Em breve um dos nossos atendentes entrará em contato com você!'}
                 </p>
                 {leadReferralCode && coupon ? (
-                  <div className="text-xs text-gray-600">
+                  <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                     Seu CUPOM é: <span className="font-semibold text-gray-800">{leadReferralCode}</span>
                   </div>
                 ) : null}
@@ -407,35 +412,36 @@ export default function ProductsGrid({
             ) : (
               <form onSubmit={handleSubmit} className="mt-4 space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700">Nome</label>
+                  <label className={`block text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Nome</label>
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Seu nome"
-                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    className={`mt-1 w-full rounded-md px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 ${isDark ? 'bg-[#0f0f0f] border-gray-700 text-gray-100 placeholder:text-gray-400 focus:ring-gray-700 focus:border-gray-600' : 'bg-white border border-gray-300 text-gray-900 placeholder:text-gray-500 focus:ring-blue-400'}`}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700">WhatsApp</label>
+                  <label className={`block text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>WhatsApp</label>
                   <input
                     type="tel"
                     inputMode="tel"
                     value={whatsapp}
                     onChange={(e) => setWhatsapp(e.target.value)}
                     placeholder="(xx) xxxxx-xxxx"
-                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    className={`mt-1 w-full rounded-md px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 ${isDark ? 'bg-[#0f0f0f] border-gray-700 text-gray-100 placeholder:text-gray-400 focus:ring-gray-700 focus:border-gray-600' : 'bg-white border border-gray-300 text-gray-900 placeholder:text-gray-500 focus:ring-blue-400'}`}
                   />
                 </div>
                 {error ? (
-                  <div className="text-sm text-red-600">{error}</div>
+                  <div className="text-sm text-red-500">{error}</div>
                 ) : null}
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium text-white shadow-sm bg-gradient-to-r from-[#1b0b3d] via-[#5a23a7] to-[#9b7ae3] hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5a23a7]"
+                  className="w-full inline-flex items-center justify-center rounded-full px-3 py-2 text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300 transition-colors"
+                  style={{ backgroundColor: 'var(--btn-bg)', color: 'var(--btn-fg)' }}
                 >
-                  {submitting ? 'Enviando…' : 'Quero agendar'}
+                  {submitting ? 'Enviando…' : 'Agendar'}
                 </button>
               </form>
             )}
