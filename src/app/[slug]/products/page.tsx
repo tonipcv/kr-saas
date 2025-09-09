@@ -1,4 +1,5 @@
 import React from 'react';
+import { headers } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import ProductsGrid from '@/components/products/ProductsGrid';
 import ReferrerBanner from '@/components/referrals/ReferrerBanner';
@@ -15,6 +16,14 @@ export default async function DoctorProductsPage({ params, searchParams }: {
   const resolvedSearch = (searchParams as any)?.then ? await (searchParams as Promise<Record<string, string | string[] | undefined>>) : ((searchParams as Record<string, string | string[] | undefined>) || {});
   const { slug } = resolvedParams;
   const cupom = (Array.isArray(resolvedSearch?.cupom) ? resolvedSearch.cupom[0] : resolvedSearch?.cupom) as string | undefined;
+
+  // Compute login href: if host is subdomain of base domain, use '/login'; otherwise '/{slug}/login'
+  const hdrs = headers();
+  const hostHeader = hdrs.get('x-forwarded-host') || hdrs.get('host') || '';
+  const baseDomain = (process.env.NEXT_PUBLIC_APP_BASE_DOMAIN || process.env.APP_BASE_DOMAIN || '').toLowerCase();
+  const hostNoPort = hostHeader.toLowerCase().split(':')[0];
+  const isSubdomain = baseDomain && hostNoPort.endsWith(baseDomain) && hostNoPort.replace(new RegExp(`${baseDomain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`), '').replace(/\.$/, '').length > 0;
+  const loginHref = isSubdomain ? '/login' : `/${slug}/login`;
 
   // Resolve doctor by slug or by clinic slug OR subdomain (owner/member fallback)
   let doctor = await prisma.user.findFirst({
@@ -147,6 +156,10 @@ export default async function DoctorProductsPage({ params, searchParams }: {
       style={{ ['--btn-bg' as any]: buttonColor || '#111827', ['--btn-fg' as any]: buttonTextColor || '#ffffff' } as any}
     >
       <div className="max-w-5xl mx-auto px-4 py-8">
+        {/* Top-right minimal Login button */}
+        <div className="flex items-center justify-end mb-4">
+          <a href={loginHref} className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-full border ${theme === 'DARK' ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-300 text-gray-800 hover:bg-gray-50'}`}>Login</a>
+        </div>
         {/* Header */}
         <div className="mb-6">
           <div className={`${isClinicContext ? 'bg-transparent border-0 shadow-none' : `${theme === 'DARK' ? 'bg-[#111111] border-gray-800 text-gray-100' : 'bg-white border-gray-200 text-gray-900'} border shadow-sm`} rounded-2xl p-6 overflow-hidden`}>
