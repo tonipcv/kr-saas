@@ -97,7 +97,7 @@ interface UserStats {
   lastLogin?: string;
 }
 
-export default function ProfilePage() {
+export default function ProfilePage({ isDarkTheme, brandColors, publicClinic }: { isDarkTheme?: boolean; brandColors?: { bg?: string | null; fg?: string | null }; publicClinic?: { logo?: string | null; name?: string | null } } = {}) {
   const router = useRouter();
   const { data: session, update } = useSession();
   const [isEditing, setIsEditing] = useState(false);
@@ -313,37 +313,37 @@ export default function ProfilePage() {
   // Loading state
   if (!session || loading) {
     return (
-      <div className="min-h-screen" style={{ backgroundColor: '#f7f8ff' }}>
-        <div className="max-w-6xl mx-auto px-3 lg:px-6">
-          <div className="space-y-4 lg:space-y-6 pt-14 lg:pt-10">
+      <div className={`min-h-screen ${isDarkTheme ? 'text-gray-100' : 'text-gray-900'}`}>
+        <div className="max-w-5xl mx-auto px-4 lg:px-6">
+          <div className="space-y-4 lg:space-y-6 pt-8 lg:pt-10">
             {/* Single Personal Information Card - Skeleton */}
             <div className="grid grid-cols-1 gap-4 lg:gap-6">
-              <div className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-100">
+              <div className={`${isDarkTheme ? 'bg-white/5 ring-1 ring-white/10' : 'bg-white ring-1 ring-gray-100'} rounded-2xl shadow-sm`}>
                 <div className="p-4 lg:p-5">
                   {/* Title skeleton */}
                   <div className="text-center mb-4 lg:mb-6">
-                    <div className="h-6 lg:h-7 bg-gray-100 rounded w-48 mx-auto animate-pulse"></div>
+                    <div className={`h-6 lg:h-7 rounded w-48 mx-auto animate-pulse ${isDarkTheme ? 'bg-white/10' : 'bg-gray-100'}`}></div>
                   </div>
                   {/* Avatar skeleton */}
                   <div className="mb-2 flex justify-center">
-                    <div className="relative w-28 h-28 lg:w-32 lg:h-32 rounded-full overflow-hidden border-2 bg-white shadow-sm" style={{ borderColor: '#91c1f4' }}>
-                      <div className="w-full h-full bg-gray-100 animate-pulse"></div>
+                    <div className={`relative w-28 h-28 lg:w-32 lg:h-32 rounded-full overflow-hidden border-2 shadow-sm ${isDarkTheme ? 'bg-white/10 border-white/20' : 'bg-white'}`}>
+                      <div className={`w-full h-full animate-pulse ${isDarkTheme ? 'bg-white/10' : 'bg-gray-100'}`}></div>
                     </div>
                   </div>
                   {/* Fields skeleton */}
                   <div className="p-0 lg:p-0 space-y-5 lg:space-y-7 flex flex-col items-center text-center">
                     <div className="space-y-2 w-full max-w-md mx-auto">
-                      <div className="h-4 bg-gray-200 rounded w-16 mx-auto animate-pulse"></div>
-                      <div className="h-11 lg:h-12 bg-gray-100 rounded-full animate-pulse"></div>
+                      <div className={`h-4 rounded w-16 mx-auto animate-pulse ${isDarkTheme ? 'bg-white/10' : 'bg-gray-200'}`}></div>
+                      <div className={`h-11 lg:h-12 rounded-full animate-pulse ${isDarkTheme ? 'bg-white/10' : 'bg-gray-100'}`}></div>
                     </div>
                     <div className="space-y-2 w-full max-w-md mx-auto">
-                      <div className="h-4 bg-gray-200 rounded w-14 mx-auto animate-pulse"></div>
-                      <div className="h-11 lg:h-12 bg-gray-100 rounded-full animate-pulse"></div>
+                      <div className={`h-4 rounded w-14 mx-auto animate-pulse ${isDarkTheme ? 'bg-white/10' : 'bg-gray-200'}`}></div>
+                      <div className={`h-11 lg:h-12 rounded-full animate-pulse ${isDarkTheme ? 'bg-white/10' : 'bg-gray-100'}`}></div>
                     </div>
                     {/* Actions skeleton */}
                     <div className="pt-2 lg:pt-3 space-y-3 w-full max-w-md mx-auto">
-                      <div className="h-11 lg:h-12 bg-gray-100 rounded-full animate-pulse"></div>
-                      <div className="h-11 lg:h-12 bg-gray-100 rounded-full animate-pulse"></div>
+                      <div className={`h-11 lg:h-12 rounded-full animate-pulse ${isDarkTheme ? 'bg-white/10' : 'bg-gray-100'}`}></div>
+                      <div className={`h-11 lg:h-12 rounded-full animate-pulse ${isDarkTheme ? 'bg-white/10' : 'bg-gray-100'}`}></div>
                     </div>
                   </div>
                 </div>
@@ -356,24 +356,34 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#f7f8ff' }}>
+    <div className={`min-h-screen ${isDarkTheme ? 'text-gray-100' : 'text-gray-900'}`}>
         {/* Main content */}
         <div className="max-w-6xl mx-auto px-3 lg:px-6">
           <div className="space-y-4 lg:space-y-6 pt-14 lg:pt-10">
-            {/* Header removed per request */}
+            {/* Clinic Logo Header (matches referrals) */}
+            {publicClinic?.logo && (
+              <div className="flex items-center justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`${publicClinic.logo}${publicClinic.logo.includes('?') ? '&' : '?'}v=${typeof window !== 'undefined' ? Date.now() : '1'}`}
+                  alt={publicClinic?.name || 'Clinic'}
+                  className="h-16 w-auto object-contain"
+                />
+              </div>
+            )}
 
             {/* Single Personal Information Card */}
             <div className="grid grid-cols-1 gap-4 lg:gap-6">
-              <Card className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-100">
+              <Card className={`${isDarkTheme ? 'bg-transparent border-0 shadow-none text-gray-100' : 'bg-white border border-gray-200 rounded-xl shadow-sm'}`}>
                 <CardHeader className="p-4 lg:p-5">
-                  <CardTitle className="text-lg lg:text-xl font-semibold text-gray-900 text-center">
+                  <CardTitle className={`text-base lg:text-lg font-semibold text-center ${isDarkTheme ? 'text-gray-100' : 'text-gray-900'}`}>
                     {t.personalInfo}
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="p-4 lg:p-6 pt-0 space-y-5 lg:space-y-7 flex flex-col items-center text-center">
+                <CardContent className="p-4 lg:p-6 pt-0 space-y-5 lg:space-y-6 flex flex-col items-center">
                   {/* Avatar */}
-                  <div className="mb-2">
-                    <div className="relative w-28 h-28 lg:w-32 lg:h-32 rounded-full overflow-hidden border-2 bg-white shadow-sm" style={{ borderColor: '#91c1f4' }}>
+                  <div className="mb-1">
+                    <div className={`relative w-24 h-24 lg:w-28 lg:h-28 rounded-full overflow-hidden border ${isDarkTheme ? 'bg-white/10 border-white/15' : 'bg-white border-gray-200'}`}>
                       {image ? (
                         <Image
                           key={`profile-image-${imageKey}`}
@@ -386,7 +396,7 @@ export default function ProfilePage() {
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <UserIcon className="h-7 w-7 lg:h-8 lg:w-8 text-gray-400" />
+                          <UserIcon className={`h-7 w-7 lg:h-8 lg:w-8 ${isDarkTheme ? 'text-gray-400' : 'text-gray-400'}`} />
                         </div>
                       )}
                     </div>
@@ -394,18 +404,18 @@ export default function ProfilePage() {
 
                   {/* Name */}
                   <div className="space-y-2 w-full max-w-md mx-auto">
-                    <label className="text-sm lg:text-base font-medium flex items-center justify-center space-x-2 text-gray-900">
-                      <UserIcon className="h-3 w-3 lg:h-4 lg:w-4" />
+                    <label className={`text-sm lg:text-base font-medium flex items-center gap-2 ${isDarkTheme ? 'text-gray-200' : 'text-gray-800'}`}>
+                      <UserIcon className="h-4 w-4" />
                       <span>{t.name}</span>
                     </label>
                     {isEditing ? (
                       <Input
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        className="text-base lg:text-lg font-medium px-4 py-6 lg:px-5 lg:py-6 rounded-full border text-gray-900 bg-white border-gray-200 focus-visible:ring-0 focus-visible:outline-none"
+                        className={`text-base font-medium px-4 py-3 lg:px-4 lg:py-3 rounded-lg border focus-visible:ring-0 focus-visible:outline-none ${isDarkTheme ? 'text-gray-100 bg-white/10 border-white/15' : 'text-gray-900 bg-white border-gray-200'}`}
                       />
                     ) : (
-                      <p className="text-base lg:text-lg font-medium px-4 py-3 lg:px-5 lg:py-3.5 rounded-full border text-gray-900 bg-gray-50 border-gray-100">
+                      <p className={`text-base font-medium px-4 py-3 lg:px-4 lg:py-3 rounded-lg border ${isDarkTheme ? 'text-gray-100 bg-white/10 border-white/15' : 'text-gray-900 bg-gray-50 border-gray-100'}`}>
                         {name || t.notInformed}
                       </p>
                     )}
@@ -413,11 +423,11 @@ export default function ProfilePage() {
 
                   {/* Email */}
                   <div className="space-y-2 w-full max-w-md mx-auto">
-                    <label className="text-sm lg:text-base font-medium flex items-center justify-center space-x-2 text-gray-900">
-                      <EnvelopeIcon className="h-3 w-3 lg:h-4 lg:w-4" />
+                    <label className={`text-sm lg:text-base font-medium flex items-center gap-2 ${isDarkTheme ? 'text-gray-200' : 'text-gray-800'}`}>
+                      <EnvelopeIcon className="h-4 w-4" />
                       <span>{t.email}</span>
                     </label>
-                    <p className="text-base lg:text-lg font-medium px-4 py-3 lg:px-5 lg:py-3.5 rounded-full border text-gray-900 bg-gray-50 border-gray-100">
+                    <p className={`text-base font-medium px-4 py-3 lg:px-4 lg:py-3 rounded-lg border ${isDarkTheme ? 'text-gray-100 bg-white/10 border-white/15' : 'text-gray-900 bg-gray-50 border-gray-100'}`}>
                       {email || t.notInformed}
                     </p>
                   </div>
@@ -427,8 +437,8 @@ export default function ProfilePage() {
                     {isEditing ? (
                       <>
                         <Button
-                          className="w-full rounded-full h-11 lg:h-12 font-semibold text-base text-white"
-                          style={{ backgroundColor: '#91c1f4' }}
+                          className={`w-full rounded-lg h-11 lg:h-11 font-semibold text-base`}
+                          style={{ background: 'var(--btn-bg)', color: 'var(--btn-fg)' } as React.CSSProperties}
                           onClick={handleSaveProfile}
                           disabled={isSaving}
                         >
@@ -436,8 +446,8 @@ export default function ProfilePage() {
                         </Button>
                         <Button
                           variant="ghost"
-                          className="w-full rounded-full h-11 lg:h-12 font-medium text-base text-gray-700 hover:text-gray-900 hover:bg-gray-100 border border-gray-200"
-                          style={{ boxShadow: 'none' }}
+                          className={`w-full rounded-lg h-11 lg:h-11 font-medium text-base ${isDarkTheme ? 'text-gray-300 hover:bg-white/10 border border-white/15' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100 border border-gray-200'}`}
+                          style={{ boxShadow: 'none' } as React.CSSProperties}
                           onClick={handleCancelEdit}
                           disabled={isSaving}
                         >
@@ -446,8 +456,8 @@ export default function ProfilePage() {
                       </>
                     ) : (
                       <Button
-                        className="w-full rounded-full h-11 lg:h-12 font-semibold text-base text-white"
-                        style={{ backgroundColor: '#91c1f4' }}
+                        className={`w-full rounded-lg h-11 lg:h-11 font-semibold text-base`}
+                        style={{ background: 'var(--btn-bg)', color: 'var(--btn-fg)' } as React.CSSProperties}
                         onClick={() => setIsEditing(true)}
                       >
                         {t.editProfile}
@@ -455,8 +465,8 @@ export default function ProfilePage() {
                     )}
                     <Button 
                       variant="ghost"
-                      className="w-full rounded-full h-11 lg:h-12 font-medium text-base text-gray-700 hover:text-gray-900 hover:bg-gray-100 border border-gray-200"
-                      style={{ boxShadow: 'none' }}
+                      className={`w-full rounded-lg h-11 lg:h-11 font-medium text-base ${isDarkTheme ? 'text-gray-300 hover:bg-white/10 border border-white/15' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100 border border-gray-200'}`}
+                      style={{ boxShadow: 'none' } as React.CSSProperties}
                       onClick={() => {
                         if (clinicSlug) {
                           signOut({ callbackUrl: `/${clinicSlug}/login` });
@@ -465,20 +475,14 @@ export default function ProfilePage() {
                         }
                       }}
                     >
-                      <ArrowRightOnRectangleIcon className="h-5 w-5 mr-2" style={{ color: '#91c1f4' }} />
+                      <ArrowRightOnRectangleIcon className="h-5 w-5 mr-2" style={{ color: 'var(--btn-bg)' }} />
                       {t.signOut}
                     </Button>
                   </div>
                 </CardContent>
               </Card>
             </div>
-            {/* Brand strip at bottom */}
-            <div className="py-6">
-              <div className="flex items-center justify-center gap-2">
-                <span className="text-[10px] lg:text-[11px] uppercase tracking-wide text-gray-400">powered by</span>
-                <Image src="/logo.png" alt="Logo" width={56} height={14} className="opacity-70" />
-              </div>
-            </div>
+            {/* Brand strip removed (use wrapper footer) */}
           </div>
         </div>
 
@@ -489,26 +493,26 @@ export default function ProfilePage() {
           <div className="relative">
             <button
               onClick={toggleMenu}
-              className="h-12 w-12 rounded-full bg-turquoise text-white shadow-lg hover:bg-turquoise/90 focus:outline-none focus:ring-2 focus:ring-turquoise/40 flex items-center justify-center"
+              className={`h-10 w-10 rounded-full text-white shadow-lg focus:outline-none focus:ring-2 flex items-center justify-center ${isDarkTheme ? 'bg-white/10 hover:bg-white/15 focus:ring-white/20' : 'bg-turquoise hover:bg-turquoise/90 focus:ring-turquoise/40'}`}
               aria-label="Toggle menu"
             >
-              <Menu className="h-6 w-6" />
+              <Menu className="h-5 w-5" />
             </button>
             {menuOpen && (
-              <div className="absolute bottom-14 right-0 bg-white border border-gray-200 rounded-xl shadow-xl w-56 p-2">
-                <Link href={clinicSlug ? `/${clinicSlug}/profile` : '/patient/profile'} className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
-                  <LucideUser className="mr-2 h-4 w-4 text-gray-600" />
+              <div className={`absolute bottom-14 right-0 rounded-lg shadow-xl w-56 p-2 ${isDarkTheme ? 'bg-[#111111] border border-white/10' : 'bg-white border border-gray-200'}`}>
+                <Link href={clinicSlug ? `/${clinicSlug}/profile` : '/patient/profile'} className={`flex items-center px-3 py-2 text-sm rounded-md ${isDarkTheme ? 'text-gray-200 hover:bg-white/10' : 'text-gray-700 hover:bg-gray-50'}`}>
+                  <LucideUser className={`mr-2 h-4 w-4 ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`} />
                   Profile
                 </Link>
-                <Link href={clinicSlug ? `/${clinicSlug}/referrals` : '/patient/referrals'} className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
-                  <Share2 className="mr-2 h-4 w-4 text-gray-600" />
+                <Link href={clinicSlug ? `/${clinicSlug}/referrals` : '/patient/referrals'} className={`flex items-center px-3 py-2 text-sm rounded-md ${isDarkTheme ? 'text-gray-200 hover:bg-white/10' : 'text-gray-700 hover:bg-gray-50'}`}>
+                  <Share2 className={`mr-2 h-4 w-4 ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`} />
                   Referrals
                 </Link>
                 <button
                   onClick={() => signOut({ callbackUrl: clinicSlug ? `/${clinicSlug}/login` : '/' })}
-                  className="w-full flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50"
+                  className={`w-full flex items-center px-3 py-2 text-sm rounded-md ${isDarkTheme ? 'text-gray-200 hover:bg-white/10' : 'text-gray-700 hover:bg-gray-50'}`}
                 >
-                  <LogOut className="mr-2 h-4 w-4 text-gray-600" />
+                  <LogOut className={`mr-2 h-4 w-4 ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`} />
                   Sign out
                 </button>
               </div>

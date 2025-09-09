@@ -20,13 +20,37 @@ export async function POST(
       return NextResponse.json({ success: false, message: 'Missing email' }, { status: 400 });
     }
 
-    // Resolve doctor by slug
-    const doctor = await prisma.user.findFirst({
-      where: { doctor_slug: slug, role: 'DOCTOR' },
-      select: { id: true },
-    });
+    // Resolve clinic by slug OR subdomain via raw SQL
+    let clinic: { id: string; ownerId: string | null } | null = null;
+    try {
+      const rows = await prisma.$queryRaw<{ id: string; ownerId: string | null }[]>`
+        SELECT id, "ownerId" FROM clinics WHERE slug = ${slug} OR "subdomain" = ${slug} LIMIT 1
+      `;
+      clinic = rows && rows[0] ? rows[0] : null;
+    } catch {}
+
+    // Pick a doctor for this clinic: owner if DOCTOR, else a member DOCTOR
+    let doctor: { id: string } | null = null;
+    if (clinic?.ownerId) {
+      const ownerDoc = await prisma.user.findFirst({ where: { id: clinic.ownerId, role: 'DOCTOR' } as any, select: { id: true } });
+      if (ownerDoc) doctor = ownerDoc as any;
+    }
+    if (!doctor && clinic) {
+      const member = await prisma.clinicMember.findFirst({
+        where: { clinicId: clinic.id, isActive: true, user: { role: 'DOCTOR' } } as any,
+        include: { user: { select: { id: true } } },
+      });
+      if (member?.user) doctor = member.user as any;
+    }
+
+    // Backward-compatibility: if no clinic or doctor from clinic, try resolving by doctor slug directly
     if (!doctor) {
-      return NextResponse.json({ success: false, message: 'Doctor not found for slug' }, { status: 404 });
+      const doc = await prisma.user.findFirst({ where: { doctor_slug: slug, role: 'DOCTOR' } as any, select: { id: true } });
+      if (doc) doctor = doc as any;
+    }
+
+    if (!doctor) {
+      return NextResponse.json({ success: false, message: 'Doctor/Clinic not found for identifier' }, { status: 404 });
     }
 
     // Find patient by email
