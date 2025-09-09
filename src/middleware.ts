@@ -16,7 +16,7 @@ function getPathSlug(pathname: string): string | null {
 // Helper: resolve slug from subdomain (slug.example.com)
 function getHostSlug(host?: string | null): string | null {
   if (!host) return null
-  const base = process.env.APP_BASE_DOMAIN // e.g., app.example.com or example.com
+  const base = process.env.APP_BASE_DOMAIN || process.env.NEXT_PUBLIC_APP_BASE_DOMAIN // e.g., example.com or 127.0.0.1.nip.io
   if (!base) return null
   // Remove port if present (e.g., ":3000") to allow local dev like 127.0.0.1.nip.io
   const lowerHostRaw = host.toLowerCase()
@@ -33,7 +33,8 @@ export default async function middleware(request: NextRequestWithAuth) {
   const isAuthenticated = !!token
   const url = request.nextUrl
   const { pathname } = url
-  const host = request.headers.get('host')
+  // Prefer forwarded host (prod behind proxy/CDN), then request URL hostname, then Host header
+  const host = request.headers.get('x-forwarded-host') || request.nextUrl.host || request.headers.get('host')
 
   // Subdomain tenancy: if host is <slug>.<APP_BASE_DOMAIN>, rewrite to /<slug><pathname>
   // This preserves our existing path-based routing (e.g., /[slug]/login) without changing pages.
@@ -173,6 +174,7 @@ export const config = {
     '/clinic/:path*',
     '/doctor-info/:path*',
     '/login/:path*',
+    '/forgot-password',
     // Slugged roots (first segment as slug)
     '/:path*/doctor/:path*',
     '/:path*/patient/:path*',
