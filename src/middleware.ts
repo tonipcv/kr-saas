@@ -135,6 +135,7 @@ export default async function middleware(request: NextRequestWithAuth) {
 
 export const config = {
   matcher: [
+    '/',
     // Legacy roots
     '/protocols/:path*',
     '/checklist/:path*',
