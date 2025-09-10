@@ -1,5 +1,6 @@
 import React from 'react';
 import { headers } from 'next/headers';
+import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import ProductsGrid from '@/components/products/ProductsGrid';
 import ReferrerBanner from '@/components/referrals/ReferrerBanner';
@@ -18,7 +19,7 @@ export default async function DoctorProductsPage({ params, searchParams }: {
   const cupom = (Array.isArray(resolvedSearch?.cupom) ? resolvedSearch.cupom[0] : resolvedSearch?.cupom) as string | undefined;
 
   // Compute login href: if host is subdomain of base domain, use '/login'; otherwise '/{slug}/login'
-  const hdrs = headers();
+  const hdrs = await headers();
   const hostHeader = hdrs.get('x-forwarded-host') || hdrs.get('host') || '';
   const baseDomain = (process.env.NEXT_PUBLIC_APP_BASE_DOMAIN || process.env.APP_BASE_DOMAIN || '').toLowerCase();
   const hostNoPort = hostHeader.toLowerCase().split(':')[0];
@@ -36,8 +37,14 @@ export default async function DoctorProductsPage({ params, searchParams }: {
   if (!doctor) {
     // Resolve clinic by slug OR subdomain via raw SQL (schema may not have subdomain typed)
     try {
+      // Also try host subdomain candidates (first label)
+      const labels = hostNoPort.split('.');
+      const firstLabel = labels[0] || null;
       const rows = await prisma.$queryRaw<{ id: string; ownerId: string | null; name: string | null; logo: string | null }[]>`
-        SELECT id, "ownerId", name, logo FROM clinics WHERE slug = ${slug} OR "subdomain" = ${slug} LIMIT 1
+        SELECT id, "ownerId", name, logo FROM clinics
+        WHERE ( ${firstLabel} IS NOT NULL AND "subdomain" = ${firstLabel} )
+           OR ( slug = ${slug} OR "subdomain" = ${slug} )
+        LIMIT 1
       `;
       clinic = rows && rows[0] ? (rows[0] as any) : null;
     } catch {}
@@ -55,6 +62,11 @@ export default async function DoctorProductsPage({ params, searchParams }: {
       });
       if (member?.user) doctor = member.user as any;
     }
+  }
+
+  // If neither doctor nor clinic resolved, use global Not Found page
+  if (!doctor && !clinic) {
+    notFound();
   }
 
   // List active products

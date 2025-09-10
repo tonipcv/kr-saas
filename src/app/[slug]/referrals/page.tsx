@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation';
+import { redirect, notFound } from 'next/navigation';
 import { headers } from 'next/headers';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -24,6 +24,7 @@ export default async function SlugReferralsPage({ params }: { params: Promise<{ 
   let buttonTextColor: string | null = null;
   let clinicLogo: string | null = null;
   let clinicName: string | null = null;
+  let clinicFound = false;
   try {
     const rows = await prisma.$queryRaw<{ theme: 'LIGHT'|'DARK'; buttonColor: string | null; buttonTextColor: string | null; logo: string | null; name: string | null }[]>`
       SELECT theme::text as theme, "buttonColor", "buttonTextColor", logo, name
@@ -37,8 +38,13 @@ export default async function SlugReferralsPage({ params }: { params: Promise<{ 
       buttonTextColor = rows[0].buttonTextColor;
       clinicLogo = rows[0].logo || null;
       clinicName = rows[0].name || null;
+      clinicFound = true;
     }
   } catch {}
+
+  if (!clinicFound) {
+    notFound();
+  }
 
   return (
     <div className={theme === 'DARK' ? 'min-h-screen bg-[#0b0b0b] text-gray-100' : 'min-h-screen bg-gradient-to-b from-gray-50 to-white text-gray-900'}

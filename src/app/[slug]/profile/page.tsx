@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation';
+import { redirect, notFound } from 'next/navigation';
 import { headers } from 'next/headers';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -26,6 +26,7 @@ export default async function SlugProfilePage({ params }: { params: Promise<{ sl
   let buttonTextColor: string | null = null;
   let clinicLogo: string | null = null;
   let clinicName: string | null = null;
+  let clinicFound = false;
   try {
     const hdrs = headers();
     const hostHeader = hdrs.get('x-forwarded-host') || hdrs.get('host') || '';
@@ -54,8 +55,13 @@ export default async function SlugProfilePage({ params }: { params: Promise<{ sl
       buttonTextColor = rows[0].buttonTextColor;
       clinicLogo = rows[0].logo || null;
       clinicName = rows[0].name || null;
+      clinicFound = true;
     }
   } catch {}
+
+  if (!clinicFound) {
+    notFound();
+  }
 
   return (
     <div className={theme === 'DARK' ? 'min-h-screen bg-[#0b0b0b] text-gray-100' : 'min-h-screen bg-[#f7f8ff] text-gray-900'}
