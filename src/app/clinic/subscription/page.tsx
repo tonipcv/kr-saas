@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -55,7 +55,7 @@ interface ClinicData {
   subscription: ClinicSubscription | null;
 }
 
-export default function SubscriptionManagement() {
+function SubscriptionManagement() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -521,5 +521,13 @@ export default function SubscriptionManagement() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#111] text-white flex items-center justify-center">Carregando…</div>}>
+      <SubscriptionManagement />
+    </Suspense>
   );
 }

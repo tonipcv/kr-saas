@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 interface Clinic {
@@ -11,6 +11,14 @@ interface Clinic {
 }
 
 export default function ClinicSetupPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#111] text-white flex items-center justify-center p-6">Carregando…</div>}>
+      <ClinicSetupInner />
+    </Suspense>
+  );
+}
+
+function ClinicSetupInner() {
   const search = useSearchParams();
   const router = useRouter();
   const clinicId = search?.get("clinicId") || "";
