@@ -49,22 +49,54 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get doctor's patients through relationships with PatientProfile scoped to this doctor
-    const relationships = await prisma.doctorPatientRelationship.findMany({
+    // Query patients directly, scoped by relationship to this doctor (and clinic when provided).
+    // This avoids including potentially missing related rows that can cause Prisma's
+    // "Field patient is required to return data, got null" when orphaned relationships exist.
+    const users = await prisma.user.findMany({
       where: {
-        doctorId: doctor.id,
-        isActive: true,
-        ...(clinicId && { clinicId: clinicId })
+        role: 'PATIENT',
+        patient_relationships: {
+          some: {
+            doctorId: doctor.id,
+            isActive: true,
+            ...(clinicId ? { clinicId } : {}),
+          },
+        },
       },
-      include: {
-        patient: {
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        created_at: true,
+        birth_date: true,
+        gender: true,
+        address: true,
+        emergency_contact: true,
+        emergency_phone: true,
+        medical_history: true,
+        allergies: true,
+        medications: true,
+        notes: true,
+        is_active: true,
+        // Active prescriptions for context
+        patient_prescriptions: {
+          where: { status: 'ACTIVE' },
           select: {
             id: true,
+            protocol: { select: { id: true, name: true, duration: true } },
+            planned_start_date: true,
+            planned_end_date: true,
+            status: true,
+          },
+        },
+        // Bring tenant-scoped profile (0..1) for this doctor
+        patient_profiles: {
+          where: { doctorId: doctor.id },
+          take: 1,
+          select: {
             name: true,
-            email: true,
             phone: true,
-            birth_date: true,
-            gender: true,
             address: true,
             emergency_contact: true,
             emergency_phone: true,
@@ -72,63 +104,34 @@ export async function GET(request: NextRequest) {
             allergies: true,
             medications: true,
             notes: true,
-            is_active: true,
-            // Active prescriptions for context
-            patient_prescriptions: {
-              where: { status: 'ACTIVE' },
-              select: {
-                id: true,
-                protocol: {
-                  select: { id: true, name: true, duration: true },
-                },
-                planned_start_date: true,
-                planned_end_date: true,
-                status: true,
-              },
-            },
-            // Bring tenant-scoped profile (0..1) for this doctor
-            patient_profiles: {
-              where: { doctorId: doctor.id },
-              take: 1,
-              select: {
-                name: true,
-                phone: true,
-                address: true,
-                emergency_contact: true,
-                emergency_phone: true,
-                medical_history: true,
-                allergies: true,
-                medications: true,
-                notes: true,
-                isActive: true,
-              },
-            },
+            isActive: true,
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { created_at: 'desc' },
     });
 
     // Transform to legacy format
-    const patients = relationships.map((rel) => {
-      const profile = rel.patient.patient_profiles?.[0];
+    const patients = users.map((u) => {
+      const profile = u.patient_profiles?.[0];
       return {
-        id: rel.patient.id,
-        name: profile?.name ?? rel.patient.name,
-        email: rel.patient.email,
-        phone: profile?.phone ?? rel.patient.phone,
-        birthDate: rel.patient.birth_date,
-        gender: rel.patient.gender,
-        address: profile?.address ?? rel.patient.address,
-        emergencyContact: profile?.emergency_contact ?? rel.patient.emergency_contact,
-        emergencyPhone: profile?.emergency_phone ?? rel.patient.emergency_phone,
-        medicalHistory: profile?.medical_history ?? rel.patient.medical_history,
-        allergies: profile?.allergies ?? rel.patient.allergies,
-        medications: profile?.medications ?? rel.patient.medications,
-        notes: profile?.notes ?? rel.patient.notes,
-        isActive: profile?.isActive ?? rel.patient.is_active,
+        id: u.id,
+        name: profile?.name ?? u.name,
+        email: u.email,
+        phone: profile?.phone ?? u.phone,
+        createdAt: u.created_at,
+        birthDate: u.birth_date,
+        gender: u.gender,
+        address: profile?.address ?? u.address,
+        emergencyContact: profile?.emergency_contact ?? u.emergency_contact,
+        emergencyPhone: profile?.emergency_phone ?? u.emergency_phone,
+        medicalHistory: profile?.medical_history ?? u.medical_history,
+        allergies: profile?.allergies ?? u.allergies,
+        medications: profile?.medications ?? u.medications,
+        notes: profile?.notes ?? u.notes,
+        isActive: profile?.isActive ?? u.is_active,
         assignedProtocols:
-          rel.patient.patient_prescriptions?.map((p) => ({
+          u.patient_prescriptions?.map((p) => ({
             id: p.id,
             protocol: p.protocol,
             startDate: p.planned_start_date,

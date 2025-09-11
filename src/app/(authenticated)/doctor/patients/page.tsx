@@ -29,7 +29,9 @@ import {
   PencilIcon,
   ArrowUpTrayIcon,
   UserPlusIcon,
-  UserGroupIcon
+  UserGroupIcon,
+  EllipsisVerticalIcon,
+  ChevronDownIcon
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import { format } from 'date-fns';
@@ -55,6 +57,7 @@ interface Patient {
   notes?: string;
   image?: string;
   is_active: boolean;
+  created_at?: string | Date;
   assigned_protocols?: Array<{
     id: string;
     protocol: {
@@ -114,6 +117,33 @@ export default function PatientsPage() {
   const [itemsPerPage] = useState(6);
   const [showOptionalFields, setShowOptionalFields] = useState(false);
   const [balances, setBalances] = useState<Record<string, number>>({});
+  const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
+  const [rowMenuOpenId, setRowMenuOpenId] = useState<string | null>(null);
+  const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
+
+  // Close menus on outside click or Escape
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const isRowMenu = target.closest('[data-row-menu]') || target.closest('[data-row-menu-button]');
+      const isBulkMenu = target.closest('[data-bulk-menu]') || target.closest('[data-bulk-menu-button]');
+      if (!isRowMenu) setRowMenuOpenId(null);
+      if (!isBulkMenu) setBulkMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setRowMenuOpenId(null);
+        setBulkMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, []);
   
   // Subscription status for gating
   const { subscriptionStatus, loading: subLoading, checkLimit } = useSubscription();
@@ -205,6 +235,7 @@ export default function PatientsPage() {
           medications: patient.medications,
           notes: patient.notes,
           is_active: true,
+          created_at: patient.createdAt,
           assigned_protocols: patient.assignedProtocols?.map((protocol: any) => ({
             id: protocol.id,
             protocol: protocol.protocol,
@@ -480,6 +511,48 @@ export default function PatientsPage() {
     if (patientsSection) {
       patientsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+  };
+
+  const toggleSelectAll = () => {
+    const allSelected = currentPatients.every((p) => selectedIds[p.id]);
+    if (allSelected) {
+      const copy = { ...selectedIds };
+      currentPatients.forEach((p) => { delete copy[p.id]; });
+      setSelectedIds(copy);
+    } else {
+      const copy = { ...selectedIds };
+      currentPatients.forEach((p) => { copy[p.id] = true; });
+      setSelectedIds(copy);
+    }
+  };
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const selectedList = Object.keys(selectedIds).filter((id) => selectedIds[id]);
+
+  const bulkSendPasswordResets = async () => {
+    if (selectedList.length === 0) return;
+    for (const id of selectedList) {
+      const p = patients.find((x) => x.id === id);
+      await sendPasswordResetEmail(id, p?.email || '');
+    }
+    setBulkMenuOpen(false);
+  };
+
+  const bulkDeletePatients = async () => {
+    if (selectedList.length === 0) return;
+    const ok = window.confirm(`Delete ${selectedList.length} client(s)? This cannot be undone.`);
+    if (!ok) return;
+    for (const id of selectedList) {
+      const p = patients.find((x) => x.id === id);
+      if (p) {
+        await deletePatient(p.id, p.name || '');
+      }
+    }
+    setSelectedIds({});
+    setBulkMenuOpen(false);
   };
 
   // Reset pagination when search changes
@@ -877,7 +950,37 @@ export default function PatientsPage() {
                     />
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 relative">
+                  {/* Bulk Actions */}
+                  <div className="relative" data-bulk-menu>
+                    <button
+                      type="button"
+                      onClick={() => { setRowMenuOpenId(null); setBulkMenuOpen((v) => !v); }}
+                      className="h-9 rounded-xl border border-gray-200 bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 text-sm inline-flex items-center gap-1"
+                      disabled={selectedList.length === 0}
+                      title={selectedList.length === 0 ? 'Select clients to enable bulk actions' : ''}
+                      data-bulk-menu-button
+                    >
+                      Bulk Actions{selectedList.length > 0 ? ` (${selectedList.length})` : ''}
+                      <ChevronDownIcon className="h-4 w-4" />
+                    </button>
+                    {bulkMenuOpen && (
+                      <div className="absolute right-0 mt-2 w-56 rounded-lg border border-gray-200 bg-white shadow-lg z-50">
+                        <button
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                          onClick={bulkSendPasswordResets}
+                        >
+                          Send password setup email
+                        </button>
+                        <button
+                          className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                          onClick={bulkDeletePatients}
+                        >
+                          Delete selected
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
                     <span className="text-sm">Filters</span>
                   </Button>
@@ -888,15 +991,22 @@ export default function PatientsPage() {
               </div>
 
               {/* Table */}
-              <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <div className="overflow-visible rounded-2xl border border-gray-200 bg-white shadow-sm">
                 <table className="min-w-full">
                   <thead className="bg-gray-50/80">
                     <tr className="text-left text-xs text-gray-600">
-                      <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Name</th>
-                      <th className="px-3 py-3.5 font-medium">Email</th>
-                      <th className="px-3 py-3.5 font-medium">Phone</th>
+                      <th className="w-10 py-3.5 pl-4 pr-2 sm:pl-6">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-gray-300 text-[#5154e7] focus:ring-[#5154e7]"
+                          onChange={toggleSelectAll}
+                          checked={currentPatients.length > 0 && currentPatients.every((p) => selectedIds[p.id])}
+                          aria-label="Select all"
+                        />
+                      </th>
+                      <th className="py-3.5 pr-3 font-medium">Subscriber</th>
+                      <th className="px-3 py-3.5 font-medium">Subscription Date</th>
                       <th className="px-3 py-3.5 font-medium">Points</th>
-                      <th className="px-3 py-3.5 font-medium">Status</th>
                       <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
                     </tr>
                   </thead>
@@ -905,80 +1015,54 @@ export default function PatientsPage() {
                       const activeProtocol = getActiveProtocol(patient);
                       return (
                         <tr key={patient.id} className="hover:bg-gray-50/60">
-                          <td className="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
-                            {patient.name || 'Name not provided'}
+                          <td className="whitespace-nowrap py-3.5 pl-4 pr-2 sm:pl-6">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-gray-300 text-[#5154e7] focus:ring-[#5154e7]"
+                              checked={!!selectedIds[patient.id]}
+                              onChange={() => toggleSelectOne(patient.id)}
+                              aria-label={`Select ${patient.name || 'client'}`}
+                            />
+                          </td>
+                          <td className="py-3.5 pr-3 text-sm">
+                            <div className="flex items-center gap-3">
+                              <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: '#eef2ff', color: '#4338ca' }}>
+                                {getPatientInitials(patient.name)}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-medium text-gray-900 truncate">{patient.name || 'Name not provided'}</div>
+                                <div className="text-xs text-gray-500 truncate">{patient.email || '-'}</div>
+                              </div>
+                            </div>
                           </td>
                           <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">
-                            {patient.email || '-'}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">
-                            {patient.phone || '-'}
+                            {patient.created_at ? format(new Date(patient.created_at), 'MMM d, yyyy', { locale: enUS }) : '-'}
                           </td>
                           <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
                             {typeof balances[patient.id] === 'number' ? Math.round(balances[patient.id]) : 0}
                           </td>
-                          <td className="whitespace-nowrap px-3 py-3.5 text-sm">
-                            {activeProtocol ? (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">
-                                Active
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">
-                                Inactive
-                              </span>
-                            )}
-                          </td>
                           <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                asChild
-                                className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg h-8 w-8 p-0"
+                            <div className="relative inline-block text-left" data-row-menu>
+                              <button
+                                type="button"
+                                className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900"
+                                onClick={() => { setBulkMenuOpen(false); setRowMenuOpenId((v) => (v === patient.id ? null : patient.id)); }}
+                                aria-haspopup="menu"
+                                aria-expanded={rowMenuOpenId === patient.id}
+                                data-row-menu-button
                               >
-                                <Link href={`/doctor/patients/${patient.id}`}>
-                                  <EyeIcon className="h-4 w-4" />
-                                </Link>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openEditModal(patient)}
-                                className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg h-8 w-8 p-0"
-                              >
-                                <PencilIcon className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setPatientToDelete({ id: patient.id, name: patient.name || 'Unnamed Patient' });
-                                  setShowDeleteConfirm(true);
-                                }}
-                                disabled={deletingPatientId === patient.id}
-                                className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg h-8 w-8 p-0"
-                                title="Delete patient"
-                              >
-                                {deletingPatientId === patient.id ? (
-                                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-red-600 border-t-transparent"></span>
-                                ) : (
-                                  <TrashIcon className="h-3.5 w-3.5" />
-                                )}
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => sendPasswordResetEmail(patient.id, patient.email || '')}
-                                disabled={sendingEmailId === patient.id}
-                                className="border-blue-200 bg-white text-blue-700 hover:bg-blue-50 hover:border-blue-300 rounded-lg font-medium h-8 px-2"
-                                title="Send password setup email"
-                              >
-                                {sendingEmailId === patient.id ? (
-                                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></span>
-                                ) : (
-                                  <PaperAirplaneIcon className="h-3.5 w-3.5" />
-                                )}
-                              </Button>
+                                <EllipsisVerticalIcon className="h-5 w-5" />
+                              </button>
+                              {rowMenuOpenId === patient.id && (
+                                <div className="absolute right-0 mt-2 w-44 origin-top-right rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
+                                  <div className="py-1">
+                                    <Link href={`/doctor/patients/${patient.id}`} className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">View</Link>
+                                    <button className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setRowMenuOpenId(null); openEditModal(patient); }}>Edit</button>
+                                    <button className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setRowMenuOpenId(null); sendPasswordResetEmail(patient.id, patient.email || ''); }}>Send password email</button>
+                                    <button className="block w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50" onClick={() => { setRowMenuOpenId(null); setPatientToDelete({ id: patient.id, name: patient.name || 'Unnamed Patient' }); setShowDeleteConfirm(true); }}>Delete</button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -987,6 +1071,49 @@ export default function PatientsPage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="mt-4 flex items-center justify-between">
+                  <div className="text-sm text-gray-600">
+                    Showing <span className="font-medium">{startIndex + 1}</span> to <span className="font-medium">{Math.min(endIndex, totalPatients)}</span> of <span className="font-medium">{totalPatients}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-lg border-gray-200"
+                      onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeftIcon className="h-4 w-4" />
+                    </Button>
+                    {Array.from({ length: totalPages }).slice(Math.max(0, currentPage - 3), currentPage + 2).map((_, idx) => {
+                      const page = Math.max(1, currentPage - 2) + idx;
+                      if (page > totalPages) return null;
+                      const active = page === currentPage;
+                      return (
+                        <button
+                          key={page}
+                          onClick={() => handlePageChange(page)}
+                          className={cn('h-8 w-8 rounded-lg text-sm', active ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50')}
+                        >
+                          {page}
+                        </button>
+                      );
+                    })}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-lg border-gray-200"
+                      onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronRightIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
