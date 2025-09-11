@@ -30,22 +30,34 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Nome da clínica é obrigatório' }, { status: 400 });
     }
 
-    // Buscar clínica do médico (sem filtrar por enum no SQL; checamos papel depois)
-    const clinic = await prisma.clinic.findFirst({
-      where: {
-        OR: [
-          { ownerId: session.user.id },
-          {
-            members: {
-              some: {
-                userId: session.user.id,
-                isActive: true
-              }
-            }
-          }
-        ]
-      }
-    });
+    // Buscar clínica alvo: se vier clinicId na query e o usuário tiver acesso, usar ela; senão pegar a primeira do usuário
+    const { searchParams } = new URL(request.url);
+    const clinicIdParam = searchParams.get('clinicId');
+
+    let clinic: Awaited<ReturnType<typeof prisma.clinic.findFirst>> = null;
+    if (clinicIdParam) {
+      // validar acesso
+      clinic = await prisma.clinic.findFirst({
+        where: {
+          id: clinicIdParam,
+          OR: [
+            { ownerId: session.user.id },
+            { members: { some: { userId: session.user.id, isActive: true } } }
+          ]
+        }
+      });
+    }
+    if (!clinic) {
+      // fallback para qualquer clínica do usuário (OWNER ou membro ativo)
+      clinic = await prisma.clinic.findFirst({
+        where: {
+          OR: [
+            { ownerId: session.user.id },
+            { members: { some: { userId: session.user.id, isActive: true } } }
+          ]
+        }
+      });
+    }
     console.log('[CLINIC SETTINGS] Clinic resolved?', { found: !!clinic, clinicId: clinic?.id, ownerId: clinic?.ownerId });
 
     if (!clinic) {

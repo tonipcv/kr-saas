@@ -33,13 +33,19 @@ export default function Home() {
       setNavigated(true);
     };
 
-    // If we already have role in session, navigate immediately to avoid flicker/timing
+    // If we already have role in session, handle SUPER_ADMIN immediately,
+    // and defer DOCTOR to a clinic check to decide dashboard vs. trial plans.
     const roleInSession = session?.user?.role;
     if (roleInSession && !navigated) {
-      if (roleInSession === 'SUPER_ADMIN') navigateOnce('/admin');
-      else if (roleInSession === 'DOCTOR') navigateOnce('/doctor/dashboard');
-      else navigateOnce('/patient/referrals');
-      return;
+      if (roleInSession === 'SUPER_ADMIN') {
+        navigateOnce('/admin');
+        return;
+      }
+      // For DOCTOR we will still run the clinic check below
+      if (roleInSession !== 'DOCTOR') {
+        navigateOnce('/patient/referrals');
+        return;
+      }
     }
 
     const checkUserRole = async () => {
@@ -65,8 +71,24 @@ export default function Home() {
             console.log('Redirecting to admin dashboard');
             navigateOnce('/admin');
           } else if (data.role === 'DOCTOR') {
-            console.log('Redirecting to doctor dashboard');
-            navigateOnce('/doctor/dashboard');
+            console.log('Checking doctor clinics to decide destination');
+            try {
+              const clinicRes = await fetch('/api/clinics/current', { headers: { 'Cache-Control': 'no-cache' } });
+              if (clinicRes.ok) {
+                console.log('Active clinic found. Redirecting to doctor dashboard');
+                navigateOnce('/doctor/dashboard');
+              } else if (clinicRes.status === 404) {
+                console.log('No active clinic found. Redirecting to trial plans');
+                navigateOnce('/clinic/planos-trial');
+              } else {
+                console.warn('Unexpected clinics/current response', clinicRes.status);
+                navigateOnce('/doctor/dashboard');
+              }
+            } catch (e) {
+              console.error('Error checking current clinic:', e);
+              // Fallback to dashboard
+              navigateOnce('/doctor/dashboard');
+            }
           } else {
             console.log('Redirecting to patient referrals');
             // Use replace instead of push to avoid browser history issues
@@ -97,7 +119,14 @@ export default function Home() {
         // Fallback using session in memory when available
         const role = session?.user?.role;
         if (role === 'SUPER_ADMIN') navigateOnce('/admin');
-        else if (role === 'DOCTOR') navigateOnce('/doctor/dashboard');
+        else if (role === 'DOCTOR') {
+          // Best-effort clinic check even on fallback
+          try {
+            const clinicRes = await fetch('/api/clinics/current', { headers: { 'Cache-Control': 'no-cache' } });
+            if (clinicRes.status === 404) return navigateOnce('/clinic/planos-trial');
+          } catch {}
+          navigateOnce('/doctor/dashboard');
+        }
         else navigateOnce('/patient/referrals');
       } finally {
         setIsChecking(false);

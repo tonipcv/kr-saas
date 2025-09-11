@@ -10,19 +10,61 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Buscar a clínica do médico
-    const clinic = await prisma.clinic.findFirst({
-      where: {
-        ownerId: session.user.id,
-        isActive: true,
-      },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-      },
-    });
+    // Selecionar a melhor clínica do médico:
+    // Prioridade:
+    // 1) Subscrição ACTIVE com plano pago (monthly_price > 0)
+    // 2) Subscrição ACTIVE (mesmo se preço 0)
+    // 3) Subscrição TRIAL
+    // 4) Sem subscrição -> clínica mais recente
+    const rows = await prisma.$queryRaw<
+      { id: string; name: string; slug: string | null }[]
+    >`
+      WITH user_clinics AS (
+        -- Clínicas onde o usuário é owner OU membro ativo
+        SELECT c.*,
+               CASE WHEN c."ownerId" = ${session.user.id} THEN 1 ELSE 0 END as is_owner
+        FROM clinics c
+        WHERE c."isActive" = true
+          AND (
+            c."ownerId" = ${session.user.id}
+            OR EXISTS (
+              SELECT 1 FROM clinic_members cm
+              WHERE cm."clinicId" = c.id
+                AND cm."userId" = ${session.user.id}
+                AND cm."isActive" = true
+            )
+          )
+      ), latest_sub AS (
+        SELECT cs.*,
+               ROW_NUMBER() OVER (PARTITION BY cs.clinic_id ORDER BY cs.created_at DESC) AS rn
+        FROM clinic_subscriptions cs
+      ), ranked AS (
+        SELECT 
+          uc.id,
+          uc.name,
+          uc.slug,
+          ls.status::text as status,
+          cp.monthly_price,
+          CASE 
+            WHEN ls.status = 'ACTIVE' AND cp.monthly_price IS NOT NULL AND cp.monthly_price > 0 THEN 3
+            WHEN ls.status = 'ACTIVE' THEN 2
+            WHEN ls.status = 'TRIAL' THEN 1
+            ELSE 0
+          END AS priority,
+          uc.is_owner,
+          uc."createdAt" as clinic_created_at,
+          ls.created_at as sub_created_at
+        FROM user_clinics uc
+        LEFT JOIN latest_sub ls ON ls.clinic_id = uc.id AND ls.rn = 1
+        LEFT JOIN clinic_plans cp ON cp.id = ls.plan_id
+      )
+      SELECT id, name, slug
+      FROM ranked
+      ORDER BY priority DESC, is_owner DESC, COALESCE(sub_created_at, clinic_created_at) DESC
+      LIMIT 1
+    `;
 
+    const clinic = rows[0] || null;
     if (!clinic) {
       return NextResponse.json({ error: 'Nenhuma clínica encontrada' }, { status: 404 });
     }

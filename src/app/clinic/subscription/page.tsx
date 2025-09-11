@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +39,7 @@ interface SubscriptionPlan {
   contactOnly?: boolean;
 }
 
+
 interface ClinicSubscription {
   id: string;
   status: string;
@@ -57,10 +58,16 @@ interface ClinicData {
 export default function SubscriptionManagement() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [clinic, setClinic] = useState<ClinicData | null>(null);
   const [availablePlans, setAvailablePlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [annualBilling, setAnnualBilling] = useState(false);
+  // Trial is available for onboarding new clinic flows only
+  const isNewClinic = (searchParams?.get('newClinic') === '1') || (pathname?.includes('/clinic/planos-trial') ?? false);
+  const [redirectingPlanId, setRedirectingPlanId] = useState<string | null>(null);
+  const [eligibleTrial, setEligibleTrial] = useState<boolean>(true);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -72,26 +79,54 @@ export default function SubscriptionManagement() {
     fetchData();
   }, [status, router]);
 
+  // No trial toggle. Trial is chosen via explicit button per plan.
+
   const fetchData = async () => {
     try {
       setLoading(true);
       
-      // Fetch clinic data
-      const clinicResponse = await fetch('/api/clinic');
-      if (clinicResponse.ok) {
-        const clinicData = await clinicResponse.json();
-        const basicClinic = clinicData.clinic;
-        // If we have an ID, refetch with clinicId to include subscription
-        if (basicClinic?.id) {
-          const clinicWithSubRes = await fetch(`/api/clinic?clinicId=${basicClinic.id}`);
-          if (clinicWithSubRes.ok) {
-            const clinicWithSubData = await clinicWithSubRes.json();
-            setClinic(clinicWithSubData.clinic);
+      // Choose the clinic to manage subscription:
+      // 0) If clinicId is provided via query string, use it (highest priority)
+      // 1) Otherwise try /api/clinics/current (best active/paid clinic for the user)
+      // 2) Fallback to /api/clinic default (may auto-create a trial clinic if none exists)
+      let selectedClinicId: string | null = null;
+      const forcedClinicId = searchParams?.get('clinicId');
+
+      if (forcedClinicId) {
+        selectedClinicId = forcedClinicId;
+      } else {
+        try {
+          const bestRes = await fetch('/api/clinics/current', { cache: 'no-store' });
+          if (bestRes.ok) {
+            const best = await bestRes.json();
+            selectedClinicId = best?.clinic?.id || null;
+          }
+        } catch {}
+      }
+
+      if (selectedClinicId) {
+        const clinicWithSubRes = await fetch(`/api/clinic?clinicId=${selectedClinicId}`);
+        if (clinicWithSubRes.ok) {
+          const clinicWithSubData = await clinicWithSubRes.json();
+          setClinic(clinicWithSubData.clinic);
+        }
+      } else {
+        // Fallback
+        const clinicResponse = await fetch('/api/clinic');
+        if (clinicResponse.ok) {
+          const clinicData = await clinicResponse.json();
+          const basicClinic = clinicData.clinic;
+          if (basicClinic?.id) {
+            const clinicWithSubRes = await fetch(`/api/clinic?clinicId=${basicClinic.id}`);
+            if (clinicWithSubRes.ok) {
+              const clinicWithSubData = await clinicWithSubRes.json();
+              setClinic(clinicWithSubData.clinic);
+            } else {
+              setClinic(basicClinic);
+            }
           } else {
             setClinic(basicClinic);
           }
-        } else {
-          setClinic(basicClinic);
         }
       }
 
@@ -104,6 +139,23 @@ export default function SubscriptionManagement() {
         setAvailablePlans([]);
       }
 
+      // Trial is ONLY available when creating a NEW clinic and eligibility is true.
+      if (isNewClinic) {
+        try {
+          const eligRes = await fetch('/api/clinic/subscription/eligibility', { cache: 'no-store' });
+          if (eligRes.ok) {
+            const ej = await eligRes.json();
+            setEligibleTrial(Boolean(ej?.eligibleForTrial));
+          } else {
+            setEligibleTrial(false);
+          }
+        } catch {
+          setEligibleTrial(false);
+        }
+      } else {
+        setEligibleTrial(false);
+      }
+
     } catch (error) {
       console.error('Error loading subscription data:', error);
     } finally {
@@ -111,15 +163,27 @@ export default function SubscriptionManagement() {
     }
   };
 
-  const handlePlanChange = async (plan: SubscriptionPlan) => {
+  const handlePlanChange = async (plan: SubscriptionPlan, trial?: boolean) => {
     try {
       if (!plan || plan.contactOnly) return;
+      setRedirectingPlanId(plan.id);
 
       const res = await fetch('/api/clinic/subscription/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // priceId é opcional no backend; ele mapeia pelo nome do plano
-        body: JSON.stringify({ planId: plan.id, clinicId: clinic?.id })
+        // Quando é nova clínica, não enviamos clinicId para forçar criação de rascunho no backend
+        body: JSON.stringify({ 
+          planId: plan.id, 
+          // If we already have a clinic loaded (e.g., created as draft in onboarding), always use its ID
+          clinicId: clinic?.id || undefined,
+          newClinic: !clinic?.id && isNewClinic ? true : undefined,
+          // Only allow trial for brand new clinic with eligibility
+          trial: (isNewClinic && trial && eligibleTrial) ? true : undefined,
+          // Ensure the newly created clinic (if any) uses the intended name from onboarding
+          clinicName: (isNewClinic ? (clinic?.name || searchParams?.get('clinicName') || undefined) : (clinic?.name || undefined)),
+          subdomain: (isNewClinic ? (searchParams?.get('subdomain') || clinic?.name ? undefined : undefined) : undefined)
+        })
       });
 
       if (!res.ok) {
@@ -136,6 +200,9 @@ export default function SubscriptionManagement() {
     } catch (e: any) {
       console.error('Checkout error:', e);
       alert(e?.message || 'Erro ao redirecionar para o checkout');
+    } finally {
+      // Se não redirecionar, reabilita botão
+      setRedirectingPlanId(null);
     }
   };
 
@@ -152,7 +219,7 @@ export default function SubscriptionManagement() {
 
   if (loading) {
     return (
-      <div className="p-4 pt-6 pb-24">
+      <div className="min-h-screen bg-[#111] p-4 pt-6 pb-24">
         <div className="max-w-5xl mx-auto">
                       {/* Header skeleton */}
             <div className="flex flex-col gap-8 mb-12">
@@ -209,7 +276,7 @@ export default function SubscriptionManagement() {
   }
 
   return (
-    <div className="p-4 pt-16 pb-24">
+    <div className="min-h-screen bg-[#111] p-4 pt-16 pb-24">
       <div className="max-w-5xl mx-auto">
                   <div className="flex flex-col gap-8 mb-12">
             <div className="flex justify-center">
@@ -238,10 +305,16 @@ export default function SubscriptionManagement() {
                 Sair
               </button>
             </div>
+            {isNewClinic && (
+              <div className="rounded-lg border border-[#333333] bg-[#232323] p-4 text-gray-200">
+                <div className="text-sm font-medium">Selecionar plano para nova clínica</div>
+                <div className="text-xs text-gray-400 mt-1">Você está criando uma nova clínica. Ao escolher um plano, iniciaremos o checkout e ativaremos a nova clínica automaticamente após a confirmação do pagamento.</div>
+              </div>
+            )}
           </div>
 
         {/* Current Subscription (show for any plan, including Free) */}
-        {clinic?.subscription && (
+        {!isNewClinic && clinic?.subscription && (
           <div className="mb-8">
             <div className="rounded-lg border border-[#333333] bg-[#2F2F2F] p-6">
               <div className="flex items-center justify-between">
@@ -306,7 +379,7 @@ export default function SubscriptionManagement() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {displayPlans.map((plan: SubscriptionPlan) => {
-              const isCurrentPlan = clinic?.subscription?.plan.name === plan.name;
+              const isCurrentPlan = !isNewClinic && clinic?.subscription?.plan.name === plan.name;
               const isEnterprise = plan.contactOnly || plan.monthlyPrice === null;
 
               return (
@@ -365,17 +438,23 @@ export default function SubscriptionManagement() {
                       </div>
                     </div>
 
-                    <Button
-                      onClick={isEnterprise ? () => window.open('https://calendly.com/getcxlus/free-consultation-to-implement-zuzz', '_blank') : () => handlePlanChange(plan)}
-                      className={`mt-6 w-full h-10 rounded-lg ${
-                        isCurrentPlan 
-                          ? 'bg-[#333333] text-gray-400 cursor-not-allowed' 
-                          : 'bg-gradient-to-r from-[#1b0b3d] via-[#5a23a7] to-[#9b7ae3] text-white hover:opacity-95'
-                      }`}
-                      disabled={isCurrentPlan}
-                    >
-                      {isCurrentPlan ? 'Plano atual' : isEnterprise ? 'Agendar demo' : 'Assinar'}
-                    </Button>
+                    <div className="mt-6">
+                      <Button
+                        onClick={isEnterprise ? () => window.open('https://calendly.com/getcxlus/free-consultation-to-implement-zuzz', '_blank') : () => handlePlanChange(plan, true)}
+                        className={`w-full h-10 rounded-lg transition-colors ${
+                          isCurrentPlan
+                            ? 'bg-[#333333] text-gray-400 cursor-not-allowed'
+                            : 'bg-white text-black border border-white/20 hover:bg-white/90'
+                        }`}
+                        disabled={isCurrentPlan || (!isEnterprise && redirectingPlanId === plan.id)}
+                      >
+                        {isCurrentPlan
+                          ? 'Plano atual'
+                          : isEnterprise
+                            ? 'Agendar demo'
+                            : (redirectingPlanId === plan.id ? 'Redirecionando…' : (eligibleTrial ? 'Teste Grátis 14 dias' : 'Assinar agora'))}
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="px-6 pb-6">

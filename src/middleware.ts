@@ -45,6 +45,12 @@ export default async function middleware(request: NextRequestWithAuth) {
       const isApi = pathname.startsWith('/api')
       const isNext = pathname.startsWith('/_next')
       const isStatic = /\.(?:ico|png|jpg|jpeg|svg|gif|webp|mp3|json|txt|xml|css|js|map)$/i.test(pathname)
+      // Do not rewrite clinic routes — keep /clinic working as-is even on subdomains
+      const isClinicRoute = pathname.startsWith('/clinic')
+      if (isClinicRoute) {
+        return NextResponse.next()
+      }
+
       if (!isApi && !isNext && !isStatic) {
         const firstSeg = getPathSlug(pathname)
         const parts = pathname.split('/').filter(Boolean)
@@ -73,6 +79,11 @@ export default async function middleware(request: NextRequestWithAuth) {
     }
   } catch {
     // Fail open: if any error happens, continue normally
+  }
+
+  // Canonical redirect ONLY for the exact /clinic root. Keep /clinic/* subpaths under /clinic.
+  if (pathname === '/clinic') {
+    return NextResponse.redirect(new URL('/doctor/clinic', request.url))
   }
 
   // Public API allowlist: do NOT require auth for doctor-link resolution

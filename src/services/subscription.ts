@@ -24,25 +24,44 @@ export class SubscriptionService {
 
   // Subscrições
   async getClinicSubscription(clinicId: string): Promise<ClinicSubscription | null> {
-    return prisma.$queryRaw`
-      SELECT 
-        cs.*,
-        cp.*,
-        ca.id as addon_id,
-        ca.type as addon_type,
-        ca.name as addon_name,
-        ca.description as addon_description,
-        ca.quantity as addon_quantity,
-        ca.monthly_price as addon_price
-      FROM clinic_subscriptions cs
-      JOIN clinic_plans cp ON cp.id = cs.plan_id
-      LEFT JOIN clinic_add_on_subscriptions cas ON cas.subscription_id = cs.id
-      LEFT JOIN clinic_add_ons ca ON ca.id = cas.add_on_id
-      WHERE cs.clinic_id = ${clinicId}
-      AND cs.status::text IN ('ACTIVE', 'TRIAL')
-      ORDER BY cs.created_at DESC
-      LIMIT 1
+    // Check if add-on tables exist to avoid triggering error logs
+    const [{ exists }]: any = await prisma.$queryRaw`
+      SELECT to_regclass('public.clinic_add_on_subscriptions') IS NOT NULL as exists
     `;
+
+    if (exists) {
+      return await prisma.$queryRaw`
+        SELECT 
+          cs.*,
+          cp.*,
+          ca.id as addon_id,
+          ca.type as addon_type,
+          ca.name as addon_name,
+          ca.description as addon_description,
+          ca.quantity as addon_quantity,
+          ca.monthly_price as addon_price
+        FROM clinic_subscriptions cs
+        JOIN clinic_plans cp ON cp.id = cs.plan_id
+        LEFT JOIN clinic_add_on_subscriptions cas ON cas.subscription_id = cs.id
+        LEFT JOIN clinic_add_ons ca ON ca.id = cas.add_on_id
+        WHERE cs.clinic_id = ${clinicId}
+        AND cs.status::text IN ('ACTIVE', 'TRIAL')
+        ORDER BY cs.created_at DESC
+        LIMIT 1
+      ` as any;
+    } else {
+      return await prisma.$queryRaw`
+        SELECT 
+          cs.*,
+          cp.*
+        FROM clinic_subscriptions cs
+        JOIN clinic_plans cp ON cp.id = cs.plan_id
+        WHERE cs.clinic_id = ${clinicId}
+        AND cs.status::text IN ('ACTIVE', 'TRIAL')
+        ORDER BY cs.created_at DESC
+        LIMIT 1
+      ` as any;
+    }
   }
 
   async createTrialSubscription(
@@ -155,20 +174,33 @@ export class SubscriptionService {
       return null;
     }
 
-    const [doctorsCount, patientsCount] = await Promise.all([
+    // Resolve doctor (owner) for this clinic to count patients correctly
+    const clinicOwner = await prisma.clinic.findUnique({
+      where: { id: clinicId },
+      select: { ownerId: true }
+    });
+
+    const doctorId = clinicOwner?.ownerId || null;
+
+    const [docRows, patRows]: any[] = await Promise.all([
       prisma.$queryRaw`
-        SELECT COUNT(*)::int
+        SELECT COUNT(*)::int as count
         FROM clinic_members
-        WHERE clinic_id = ${clinicId}
-        AND is_active = true
+        WHERE "clinicId" = ${clinicId}
+        AND "isActive" = true
       `,
-      prisma.$queryRaw`
-        SELECT COUNT(*)::int
-        FROM patient_profiles
-        WHERE doctor_id = ${clinicId}
-        AND is_active = true
-      `
+      doctorId
+        ? prisma.$queryRaw`
+            SELECT COUNT(*)::int as count
+            FROM patient_profiles
+            WHERE doctor_id = ${doctorId}
+            AND is_active = true
+          `
+        : Promise.resolve([{ count: 0 } as any])
     ]);
+
+    const doctorsCount = (docRows?.[0]?.count ?? 0) as number;
+    const patientsCount = (patRows?.[0]?.count ?? 0) as number;
 
     return {
       subscription,

@@ -300,7 +300,7 @@ export default function Navigation() {
           description: 'Manage clients'
         },
         {
-          href: '/clinic',
+          href: '/doctor/clinic',
           label: 'Team',
           icon: BuildingOfficeIcon,
           description: 'Manage clinics and team'
@@ -645,7 +645,7 @@ export default function Navigation() {
               </div>
               {isFreePlan && (
                 <Link
-                  href="/clinic/subscription#plans"
+                  href={currentClinic?.id ? `/clinic/subscription?clinicId=${encodeURIComponent(currentClinic.id)}#plans` : "/clinic/subscription#plans"}
                   className="mt-2 w-full inline-flex items-center justify-center text-xs font-medium text-white bg-gray-900 hover:bg-black rounded-md h-8"
                 >
                   Upgrade
@@ -731,7 +731,7 @@ export default function Navigation() {
                   <div className="relative flex items-center gap-2">
                     {isFreePlan && (
                       <Link
-                        href="/clinic/subscription#plans"
+                        href={currentClinic?.id ? `/clinic/subscription?clinicId=${encodeURIComponent(currentClinic.id)}#plans` : "/clinic/subscription#plans"}
                         className="px-2 h-7 inline-flex items-center justify-center text-[11px] font-medium text-white bg-gray-900 hover:bg-black rounded-md"
                       >
                         Upgrade

@@ -790,8 +790,8 @@ export default function PatientsPage() {
             </div>
 
 
-            {/* Free plan banner – match Products page style (English copy) */}
-            {!subLoading && (!subscriptionStatus || (subscriptionStatus.planName || '').toLowerCase().includes('free')) && (
+            {/* Free plan banner – show only when planName is explicitly Free */}
+            {!subLoading && subscriptionStatus && (subscriptionStatus.planName || '').toLowerCase().includes('free') && (
               <div className="mt-4 mb-1 rounded-2xl px-4 py-4 text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] shadow-sm">
                 <p className="text-sm font-semibold">You're on the Free plan — you can have up to {(subscriptionStatus?.limits?.maxPatients) ?? 10} clients.</p>
                 <p className="text-xs mt-1 opacity-95">Upgrade to unlock all features.</p>

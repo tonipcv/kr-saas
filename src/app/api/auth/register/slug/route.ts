@@ -7,11 +7,11 @@ const SECRET_KEY = process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET || "you
 
 export async function POST(req: Request) {
   try {
-    const { email, token, slug } = await req.json();
+    const { email, token, clinicName, subdomain } = await req.json();
 
-    if (!email || !token || !slug) {
+    if (!email || !token || !clinicName || !subdomain) {
       return NextResponse.json(
-        { message: "Email, token e slug são obrigatórios" },
+        { message: "Email, token, nome da clínica e subdomínio são obrigatórios" },
         { status: 400 }
       );
     }
@@ -33,27 +33,41 @@ export async function POST(req: Request) {
       );
     }
 
-    const normalizedSlug = slug.toLowerCase().trim();
+    const normalizedSub = (subdomain as string).toLowerCase().trim();
 
-    // Verificar se o slug já está em uso
-    const existingClinic = await prisma.clinic.findFirst({
-      where: {
-        slug: normalizedSlug
-      }
-    });
+    // Verificar se o subdomínio já está em uso (ou conflita com slug existente)
+    let existingClinic: any = null;
+    try {
+      existingClinic = await prisma.clinic.findFirst({
+        where: {
+          OR: [
+            { subdomain: normalizedSub },
+            { slug: normalizedSub },
+          ]
+        }
+      });
+    } catch (e: any) {
+      // Fallback para SQL cru se o client não estiver atualizado ainda
+      const rows = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT id FROM clinics WHERE subdomain = $1 OR slug = $1 LIMIT 1`,
+        normalizedSub
+      );
+      existingClinic = rows && rows[0] ? rows[0] : null;
+    }
 
     if (existingClinic) {
       return NextResponse.json(
-        { message: "Este slug já está em uso" },
+        { message: "Este subdomínio já está em uso" },
         { status: 400 }
       );
     }
 
-    // Armazenar temporariamente o slug para uso na etapa final
+    // Armazenar temporariamente clinicName e subdomain para etapa final
     const registrationToken = sign(
       { 
         email,
-        slug: normalizedSlug,
+        clinicName,
+        subdomain: normalizedSub,
         verified: true,
         exp: Math.floor(Date.now() / 1000) + 60 * 30 // 30 minutos
       },
@@ -61,13 +75,13 @@ export async function POST(req: Request) {
     );
 
     return NextResponse.json({
-      message: "Slug salvo com sucesso",
+      message: "Dados da clínica salvos com sucesso",
       token: registrationToken
     });
   } catch (error) {
-    console.error("Slug save error:", error);
+    console.error("Clinic info save error:", error);
     return NextResponse.json(
-      { message: "Erro ao salvar slug" },
+      { message: "Erro ao salvar dados da clínica" },
       { status: 500 }
     );
   }

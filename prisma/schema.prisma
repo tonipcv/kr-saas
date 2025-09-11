@@ -391,6 +391,7 @@ model Clinic {
   website                    String?
   logo                       String?
   slug                       String?                     @unique @db.VarChar(255)
+  subdomain                  String?                     @unique @db.VarChar(255)
   
   // Branding / Theming
   theme                      ClinicTheme                 @default(LIGHT)

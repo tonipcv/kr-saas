@@ -88,7 +88,7 @@ function RegisterPasswordInner() {
 
       setIsSuccess(true);
       
-      // Try to automatically sign the user in and go to the doctor dashboard
+      // Try to automatically sign the user in and then create a draft clinic
       try {
         const result = await signIn('credentials', {
           email: emailParam || '',
@@ -97,7 +97,28 @@ function RegisterPasswordInner() {
         });
 
         if (result?.ok) {
-          router.push('/doctor/dashboard');
+          // Create draft clinic using info forwarded from previous step
+          const clinicName = searchParams.get('clinicName') || '';
+          const subdomain = searchParams.get('subdomain') || '';
+          let target = '/clinic/planos-trial';
+          try {
+            if (clinicName) {
+              const resp = await fetch('/api/clinic/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: clinicName, subdomain }),
+              });
+              if (resp.ok) {
+                const data2 = await resp.json();
+                const cid = data2?.clinic?.id as string | undefined;
+                if (cid) {
+                  target = `/clinic/planos-trial?clinicId=${encodeURIComponent(cid)}&newClinic=1`;
+                }
+              }
+            }
+          } catch {}
+
+          router.push(target);
           router.refresh();
         } else {
           // Fallback to sign-in page if auto sign-in fails
@@ -134,19 +155,19 @@ function RegisterPasswordInner() {
               </div>
               <h1 className="text-xl font-medium text-gray-900 mt-4">Registration complete!</h1>
               <p className="text-sm text-gray-600">
-                Your account has been created and your 7-day trial is active.
+                Your account has been created and your 14-day trial is active.
               </p>
             </div>
 
             <div className="mt-6">
               <p className="text-center text-sm text-gray-600 mb-4">
-                Finalizing your account and redirecting to your dashboard...
+                Finalizing your account and redirecting to your plan selection...
               </p>
               <Link
-                href="/doctor/dashboard"
-                className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#1b0b3d] via-[#5a23a7] to-[#9b7ae3] hover:opacity-90 rounded-lg transition-all duration-300 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5a23a7]"
+                href="/clinic/planos-trial"
+                className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-black hover:bg-gray-900 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
               >
-                Go to dashboard
+                Go to plans
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
@@ -246,9 +267,11 @@ function RegisterPasswordInner() {
               />
             </div>
 
+            {/* Plan selection and trial removed: plan is handled later in /clinic/planos-trial */}
+
             <button
               type="submit"
-              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#1b0b3d] via-[#5a23a7] to-[#9b7ae3] hover:opacity-90 rounded-lg transition-all duration-300 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5a23a7]"
+              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-black hover:bg-gray-900 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
               disabled={isSubmitting}
             >
               {isSubmitting ? 'Finalizing...' : 'Finish registration'}

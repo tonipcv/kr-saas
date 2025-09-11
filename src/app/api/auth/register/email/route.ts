@@ -44,10 +44,27 @@ export async function POST(req: Request) {
       }
     }
 
-    // Check if email already exists
-    const existingUser = await prisma.user.findUnique({
+    // Simple retry helper for transient pool timeouts (P2024)
+    const withRetry = async <T>(fn: () => Promise<T>, attempts = 3, delayMs = 300): Promise<T> => {
+      let lastErr: any;
+      for (let i = 0; i < attempts; i++) {
+        try { return await fn(); } catch (e: any) {
+          lastErr = e;
+          // P2024 / pool timeout or ECONNRESET
+          if (e?.code === 'P2024' || /Timed out fetching a new connection/i.test(e?.message || '') || e?.code === 'ECONNRESET') {
+            if (i < attempts - 1) await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+            continue;
+          }
+          throw e;
+        }
+      }
+      throw lastErr;
+    };
+
+    // Check if email already exists (with retry)
+    const existingUser = await withRetry(() => prisma.user.findUnique({
       where: { email: normalizedEmail },
-    });
+    }));
 
     if (existingUser) {
       // Generate 6-digit verification code for login
@@ -55,13 +72,13 @@ export async function POST(req: Request) {
       const codeExpiry = new Date(Date.now() + 3600000); // 1 hour
 
       // Store the code temporarily
-      await prisma.verificationToken.create({
+      await withRetry(() => prisma.verificationToken.create({
         data: {
           identifier: normalizedEmail,
           token: verificationCode,
           expires: codeExpiry
         }
-      });
+      }));
 
       // Send verification code email
       try {
@@ -89,12 +106,12 @@ export async function POST(req: Request) {
         console.error('Email sending error:', emailError);
         
         // Clean up token if email fails
-        await prisma.verificationToken.deleteMany({
+        await withRetry(() => prisma.verificationToken.deleteMany({
           where: { 
             identifier: normalizedEmail,
             token: verificationCode
           }
-        });
+        }));
         
         throw emailError;
       }
@@ -114,13 +131,13 @@ export async function POST(req: Request) {
     const codeExpiry = new Date(Date.now() + 3600000); // 1 hour
 
     // Store the code temporarily
-    await prisma.verificationToken.create({
+    await withRetry(() => prisma.verificationToken.create({
       data: {
         identifier: normalizedEmail,
         token: verificationCode,
         expires: codeExpiry
       }
-    });
+    }));
 
     // Send verification code email
     try {
@@ -148,12 +165,12 @@ export async function POST(req: Request) {
       console.error('Email sending error:', emailError);
       
       // Clean up token if email fails
-      await prisma.verificationToken.deleteMany({
+      await withRetry(() => prisma.verificationToken.deleteMany({
         where: { 
           identifier: normalizedEmail,
           token: verificationCode
         }
-      });
+      }));
       
       throw emailError;
     }

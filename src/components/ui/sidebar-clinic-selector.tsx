@@ -73,18 +73,16 @@ export function SidebarClinicSelector() {
         <ChevronDown className={`h-4 w-4 text-gray-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {/* Upgrade CTA when on Free plan */}
-      {currentClinic.subscription?.plan?.name?.toLowerCase() === 'free' && (
-        <div className="mt-2 px-1">
-          <Link
-            href="/clinic/subscription"
-            className="w-full flex items-center justify-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
-          >
-            Upgrade
-            <ChevronRight className="h-3 w-3" />
-          </Link>
-        </div>
-      )}
+      {/* Upgrade CTA – sempre disponível para permitir upgrade (Free/Starter/Growth) */}
+      <div className="mt-2 px-1">
+        <Link
+          href={currentClinic?.id ? `/clinic/subscription?clinicId=${encodeURIComponent(currentClinic.id)}#plans` : "/clinic/subscription#plans"}
+          className="w-full flex items-center justify-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
+        >
+          Upgrade
+          <ChevronRight className="h-3 w-3" />
+        </Link>
+      </div>
 
       {/* Dropdown Menu */}
       {isOpen && (
@@ -135,6 +133,19 @@ export function SidebarClinicSelector() {
                   <div className="flex items-center gap-1 text-xs text-gray-500">
                     <Users className="h-3 w-3" />
                     {clinic.members.length} membro{clinic.members.length !== 1 ? 's' : ''}
+                    <span className="mx-1">•</span>
+                    <button
+                      type="button"
+                      className="text-blue-600 hover:underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        switchClinic(clinic.id);
+                        setIsOpen(false);
+                        window.location.href = `/clinic/subscription?clinicId=${encodeURIComponent(clinic.id)}#plans`;
+                      }}
+                    >
+                      Upgrade
+                    </button>
                   </div>
                 </div>
               </button>
@@ -145,7 +156,7 @@ export function SidebarClinicSelector() {
                 className="w-full flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg text-blue-600 text-left"
                 onClick={() => {
                   setIsOpen(false);
-                  // Navigate to create clinic page
+                  // First step: collect business info, then proceed to trial plans
                   window.location.href = '/clinic/new';
                 }}
               >
@@ -153,10 +164,8 @@ export function SidebarClinicSelector() {
                   <Plus className="h-4 w-4 text-blue-600" />
                 </div>
                 <div>
-                  <span className="font-medium text-sm">Criar nova clínica</span>
-                  <div className="text-xs text-gray-500">
-                    Comece uma nova clínica
-                  </div>
+                  <span className="font-medium text-sm">Criar novo negócio</span>
+                  <div className="text-xs text-gray-500">Defina o nome e o subdomínio antes de escolher o plano</div>
                 </div>
               </button>
             </div>

@@ -15,10 +15,13 @@ function RegisterSlugInner() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [slug, setSlug] = useState("");
+  const [clinicName, setClinicName] = useState("");
+  const [subdomain, setSubdomain] = useState("");
   const [isChecking, setIsChecking] = useState(false);
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
-  const [baseUrl] = useState("zuzz.vu/");
+  const [baseDomain] = useState<string>(
+    (typeof window !== 'undefined' && (process.env.NEXT_PUBLIC_APP_BASE_DOMAIN || 'zuzz.vu')) || 'zuzz.vu'
+  );
 
   // Redirecionar se não tiver email ou token
   useEffect(() => {
@@ -27,8 +30,8 @@ function RegisterSlugInner() {
     }
   }, [emailParam, tokenParam, router]);
 
-  // Verificar disponibilidade do slug
-  const checkSlugAvailability = debounce(async (value: string) => {
+  // Verificar disponibilidade do subdomínio
+  const checkSubAvailability = debounce(async (value: string) => {
     if (!value || value.length < 3) {
       setIsAvailable(null);
       return;
@@ -36,7 +39,7 @@ function RegisterSlugInner() {
 
     setIsChecking(true);
     try {
-      const response = await fetch(`/api/auth/register/check-slug?slug=${encodeURIComponent(value)}`);
+      const response = await fetch(`/api/auth/register/check-slug?subdomain=${encodeURIComponent(value)}`);
       const data = await response.json();
       setIsAvailable(data.available);
     } catch (err) {
@@ -47,19 +50,19 @@ function RegisterSlugInner() {
     }
   }, 500);
 
-  // Atualizar verificação quando o slug mudar
+  // Atualizar verificação quando o subdomínio mudar
   useEffect(() => {
-    if (slug) {
-      checkSlugAvailability(slug);
+    if (subdomain) {
+      checkSubAvailability(subdomain);
     } else {
       setIsAvailable(null);
     }
-  }, [slug]);
+  }, [subdomain]);
 
-  const handleSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSubdomainChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     // Permitir apenas letras minúsculas, números e hífen
     const value = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
-    setSlug(value);
+    setSubdomain(value);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -67,14 +70,20 @@ function RegisterSlugInner() {
     setIsSubmitting(true);
     setError(null);
 
-    if (!slug) {
-      setError("O slug é obrigatório");
+    if (!clinicName) {
+      setError("O nome do negócio é obrigatório");
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (!subdomain) {
+      setError("O subdomínio é obrigatório");
       setIsSubmitting(false);
       return;
     }
 
     if (!isAvailable) {
-      setError("Este slug não está disponível");
+      setError("Este subdomínio não está disponível");
       setIsSubmitting(false);
       return;
     }
@@ -86,20 +95,27 @@ function RegisterSlugInner() {
         body: JSON.stringify({ 
           email: emailParam,
           token: tokenParam,
-          slug 
+          clinicName,
+          subdomain,
         })
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Falha ao salvar o slug');
+        throw new Error(data.message || 'Falha ao salvar dados do negócio');
       }
 
-      // Redirect to password setup page
-      router.push(`/auth/register/password?email=${encodeURIComponent(emailParam as string)}&token=${encodeURIComponent(data.token)}`);
+      // Redirect to password setup page, forwarding business info for draft creation after sign-in
+      const q = new URLSearchParams({
+        email: String(emailParam || ''),
+        token: String(data.token || ''),
+        clinicName: clinicName,
+        subdomain: subdomain,
+      });
+      router.push(`/auth/register/password?${q.toString()}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao salvar o slug');
+      setError(err instanceof Error ? err.message : 'Falha ao salvar dados do negócio');
     } finally {
       setIsSubmitting(false);
     }
@@ -117,9 +133,9 @@ function RegisterSlugInner() {
         <div className="w-full max-w-[420px] bg-white rounded-2xl border border-gray-200 p-8 shadow-lg relative z-20">
 
           <div className="text-center space-y-2 mb-6">
-            <h1 className="text-xl font-medium text-gray-900">Personalize seu link</h1>
+            <h1 className="text-xl font-medium text-gray-900">Dados do seu negócio</h1>
             <p className="text-sm text-gray-600">
-              Escolha um endereço único para sua clínica
+              Informe o nome e escolha um subdomínio único para seu acesso
             </p>
           </div>
 
@@ -131,27 +147,45 @@ function RegisterSlugInner() {
           {/* Formulário */}
           <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
             <div>
-              <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-2">
-                Link personalizado
+              <label htmlFor="clinicName" className="block text-sm font-medium text-gray-700 mb-2">
+                Nome do negócio
+              </label>
+              <input
+                type="text"
+                id="clinicName"
+                value={clinicName}
+                onChange={(e) => setClinicName(e.target.value)}
+                required
+                autoComplete="off"
+                className="w-full px-4 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900"
+                placeholder="Negócio Exemplo"
+                minLength={3}
+                maxLength={100}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="subdomain" className="block text-sm font-medium text-gray-700 mb-2">
+                Subdomínio do negócio
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                  <span className="text-gray-500">{baseUrl}</span>
-                </div>
                 <input
                   type="text"
-                  id="slug"
-                  value={slug}
-                  onChange={handleSlugChange}
+                  id="subdomain"
+                  value={subdomain}
+                  onChange={handleSubdomainChange}
                   required
                   autoComplete="off"
-                  className="w-full pl-[90px] pr-10 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900"
-                  placeholder="your-business"
+                  className="w-full pr-[90px] pl-4 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900"
+                  placeholder="nome"
                   minLength={3}
                   maxLength={30}
                 />
-                {slug && (
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <span className="text-gray-500">.{baseDomain}</span>
+                </div>
+                {subdomain && (
+                  <div className="absolute inset-y-0 right-20 flex items-center pr-2">
                     {isChecking ? (
                       <div className="h-4 w-4 border-2 border-t-blue-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></div>
                     ) : isAvailable === true ? (
@@ -163,18 +197,21 @@ function RegisterSlugInner() {
                 )}
               </div>
               <p className="mt-1 text-xs text-gray-500">
+                Seu link ficará assim: <span className="font-medium text-gray-700">{subdomain || 'nome'}.{baseDomain}</span>
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
                 Use apenas letras minúsculas, números e hífen. Mínimo de 3 caracteres.
               </p>
               {isAvailable === false && (
                 <p className="mt-1 text-xs text-red-500">
-                  Este link já está em uso. Por favor, escolha outro.
+                  Este subdomínio já está em uso. Por favor, escolha outro.
                 </p>
               )}
             </div>
 
             <button
               type="submit"
-              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-r from-[#1b0b3d] via-[#5a23a7] to-[#9b7ae3] hover:opacity-90 rounded-lg transition-all duration-300 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5a23a7]"
+              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-black hover:bg-gray-900 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
               disabled={isSubmitting || !isAvailable}
             >
               {isSubmitting ? 'Salvando...' : 'Continuar'}

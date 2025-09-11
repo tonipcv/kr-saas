@@ -41,6 +41,8 @@ export async function POST(req: NextRequest) {
         // Retrieve subscription to get period dates
         const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
         const currentPeriodEnd = new Date((sub.current_period_end || 0) * 1000);
+        const currentPeriodStart = new Date();
+        const trialEndsAt = sub.trial_end ? new Date(sub.trial_end * 1000) : currentPeriodStart;
 
         // Upsert clinic subscription
         const existing = await prisma.clinicSubscription.findFirst({
@@ -52,24 +54,26 @@ export async function POST(req: NextRequest) {
           await prisma.clinicSubscription.update({
             where: { id: existing.id },
             data: {
-              planId,
+              // Ensure plan relation is connected
+              plan: { connect: { id: planId } },
               status: 'ACTIVE',
               stripeCustomerId: stripeCustomerId || existing.stripeCustomerId,
               stripeSubscriptionId,
-              currentPeriodStart: new Date(),
+              currentPeriodStart,
               currentPeriodEnd,
-              trialEndsAt: existing.trialEndsAt ?? null,
+              trialEndsAt,
             },
           });
         } else {
           await prisma.clinicSubscription.create({
             data: {
-              clinicId,
-              planId,
+              // Connect both clinic and plan relations explicitly
+              clinic: { connect: { id: clinicId } },
+              plan: { connect: { id: planId } },
               status: 'ACTIVE',
-              startDate: new Date(),
-              trialEndsAt: null,
-              currentPeriodStart: new Date(),
+              startDate: currentPeriodStart,
+              trialEndsAt,
+              currentPeriodStart,
               currentPeriodEnd,
               stripeCustomerId: stripeCustomerId || undefined,
               stripeSubscriptionId,

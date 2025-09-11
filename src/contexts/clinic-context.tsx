@@ -72,13 +72,55 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        // Se não há clínica atual, selecionar a primeira
+        // Estratégia de seleção da clínica:
+        // 1) Se não há clínica atual, tentar usar a "melhor" clínica fornecida por /api/clinics/current;
+        // 2) Depois, respeitar savedClinicId se existir;
+        // 3) Fallback para a primeira da lista.
         if (!currentClinic && list.length > 0) {
           const savedClinicId = localStorage.getItem('selectedClinicId');
-          const clinicToSelect = savedClinicId 
-            ? list.find((c: ClinicData) => c.id === savedClinicId) || list[0]
-            : list[0];
+          let preferredId: string | null = null;
+
+          try {
+            const bestRes = await fetch('/api/clinics/current', { cache: 'no-store' });
+            if (bestRes.ok) {
+              const best = await bestRes.json();
+              preferredId = best?.clinic?.id || null;
+            }
+          } catch {}
+
+          const clinicToSelect = 
+            (savedClinicId && list.find((c) => c.id === savedClinicId)) ||
+            (preferredId && list.find((c) => c.id === preferredId)) ||
+            list[0];
+
           setCurrentClinic(clinicToSelect);
+        }
+
+        // Se a clínica atual não tem plano ativo (ou é Free) mas existe outra ativa/paga,
+        // alternar automaticamente APENAS quando o usuário ainda não escolheu manualmente uma clínica.
+        // Isto evita que a seleção do usuário (incluindo uma clínica Free) seja revertida.
+        if (list.length > 0) {
+          const hasActivePaid = (c: ClinicData) => {
+            const planName = c?.subscription?.plan?.name?.toLowerCase();
+            const isFree = planName === 'free';
+            return c?.subscription?.status === 'ACTIVE' && !isFree;
+          };
+
+          const bestActive = list.find(hasActivePaid);
+
+          // Respeitar seleção salva do usuário
+          const savedClinicId = localStorage.getItem('selectedClinicId');
+          const userHasSavedSelection = Boolean(savedClinicId);
+
+          if (bestActive) {
+            const currentIsActivePaid = currentClinic && hasActivePaid(currentClinic);
+            // Somente auto-alternar se não houver seleção salva do usuário
+            if (!currentIsActivePaid && !userHasSavedSelection) {
+              setCurrentClinic(bestActive);
+              localStorage.setItem('selectedClinicId', bestActive.id);
+              window.dispatchEvent(new CustomEvent('clinicChanged', { detail: { clinicId: bestActive.id, clinic: bestActive } }));
+            }
+          }
         }
       }
     } catch (error) {
