@@ -1,21 +1,120 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { CogIcon, LinkIcon, LockClosedIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
-import { useSubscription } from '@/hooks/useSubscription';
+import { useClinic } from '@/contexts/clinic-context';
+import { Input } from '@/components/ui/input';
+import { toast } from 'react-hot-toast';
 
 export default function IntegrationsPage() {
-  const { loading, subscriptionStatus } = useSubscription();
-  const planName = subscriptionStatus?.planName || '';
-  const isFree = useMemo(() => planName.toLowerCase() === 'free', [planName]);
-  const isCreator = useMemo(() => planName.toLowerCase() === 'creator', [planName]);
-  const blocked = useMemo(() => !isCreator, [isCreator]);
+  const { currentClinic, isLoading } = useClinic();
+  const planName = currentClinic?.subscription?.plan?.name || '';
+  const planLower = planName.toLowerCase();
+  const isFree = useMemo(() => planLower === 'free', [planLower]);
+  // Unlock for Starter and above (i.e., block only when Free or unknown)
+  const isAtLeastStarter = useMemo(() => !!planLower && planLower !== 'free', [planLower]);
+  // Some sections (e.g., payments/webhooks) may require Creator
+  const isCreator = useMemo(() => planLower === 'creator', [planLower]);
+  const blocked = useMemo(() => !isAtLeastStarter, [isAtLeastStarter]);
 
-  if (loading) {
+  // Xase state
+  const [apiKey, setApiKey] = useState('');
+  const [connecting, setConnecting] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [status, setStatus] = useState<'CONNECTED' | 'DISCONNECTED' | 'PENDING' | 'UNKNOWN'>('UNKNOWN');
+  const [phone, setPhone] = useState<string | null>(null);
+  const [instanceId, setInstanceId] = useState<string | null>(null);
+  const [lastSeenAt, setLastSeenAt] = useState<string | null>(null);
+  const [testTo, setTestTo] = useState('');
+  const [testMsg, setTestMsg] = useState('Olá! Integração ativa pela Zuzz.');
+  const [testing, setTesting] = useState(false);
+
+  const loadStatus = async () => {
+    if (!currentClinic?.id) return;
+    try {
+      setStatusLoading(true);
+      const res = await fetch(`/api/integrations/xase/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load status');
+      if (data.exists) {
+        setStatus((data.status || 'UNKNOWN').toUpperCase());
+        setPhone(data.phone || null);
+        setInstanceId(data.instanceId || null);
+        setLastSeenAt(data.lastSeenAt || null);
+      } else {
+        setStatus('DISCONNECTED');
+        setPhone(null);
+        setInstanceId(null);
+        setLastSeenAt(null);
+      }
+    } catch (e: any) {
+      console.error('Load status error', e);
+      toast.error(e.message || 'Erro ao carregar status');
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStatus();
+  }, [currentClinic?.id]);
+
+  const connect = async () => {
+    if (!currentClinic?.id) return;
+    if (!apiKey.trim()) {
+      toast.error('Informe a API Key da Xase.ai');
+      return;
+    }
+    try {
+      setConnecting(true);
+      const res = await fetch('/api/integrations/xase/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: apiKey.trim(), clinicId: currentClinic.id })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao conectar');
+      toast.success('Conectado com sucesso');
+      setInstanceId(data.instanceId || null);
+      setPhone(data.phone || null);
+      setStatus((data.status || 'CONNECTED').toUpperCase());
+      setLastSeenAt(data.lastSeenAt || null);
+      setApiKey('');
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao conectar');
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const sendTest = async () => {
+    if (!currentClinic?.id) return;
+    if (!testTo.trim()) {
+      toast.error('Informe o número destino (E.164, ex: +5511999999999)');
+      return;
+    }
+    try {
+      setTesting(true);
+      const res = await fetch('/api/integrations/xase/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId: currentClinic.id, to: testTo.trim(), message: testMsg })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao enviar');
+      toast.success('Mensagem de teste enviada');
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao enviar mensagem');
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="lg:ml-64">
@@ -81,6 +180,104 @@ export default function IntegrationsPage() {
 
           {/* Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* WhatsApp (Xase.ai) */}
+            <Card className="relative bg-white border border-gray-200 rounded-xl hover:border-gray-300 transition">
+              {blocked && (
+                <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-1 text-xs">
+                  <LockClosedIcon className="h-3.5 w-3.5" /> Locked
+                </div>
+              )}
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                    <CogIcon className="h-5 w-5 text-gray-500" /> WhatsApp (via Xase.ai)
+                  </CardTitle>
+                  <div className="text-xs">
+                    {statusLoading ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200">Loading...</span>
+                    ) : status === 'CONNECTED' ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Connected</span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Disconnected</span>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4 text-sm">
+                  <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none space-y-3' : 'space-y-3'}>
+                    <p className="text-gray-600">
+                      Cole sua API Key da Xase.ai e conecte seu WhatsApp. A Zuzz usará essa conexão para disparos.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        placeholder="Xase API Key"
+                      />
+                      <Button onClick={connect} disabled={connecting || !apiKey.trim()} className="rounded-xl">
+                        {connecting ? 'Connecting...' : 'Connect'}
+                      </Button>
+                      <Button variant="outline" onClick={loadStatus} disabled={statusLoading} className="rounded-xl">
+                        Refresh
+                      </Button>
+                    </div>
+                    <Separator />
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <div className="text-gray-500">Status</div>
+                        <div className="font-medium text-gray-900">{status}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Número</div>
+                        <div className="font-medium text-gray-900">{phone || '-'}</div>
+                      </div>
+                      <div className="col-span-2">
+                        <div className="text-gray-500">Instance</div>
+                        <div className="font-mono text-xs text-gray-800 break-all">{instanceId || '-'}</div>
+                      </div>
+                      <div className="col-span-2">
+                        <div className="text-gray-500">Última conexão</div>
+                        <div className="text-gray-900">{lastSeenAt ? new Date(lastSeenAt).toLocaleString() : '-'}</div>
+                      </div>
+                    </div>
+                    <Separator />
+                    <div className="space-y-2">
+                      <div className="text-gray-700 font-medium">Enviar mensagem de teste</div>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={testTo}
+                          onChange={(e) => setTestTo(e.target.value)}
+                          placeholder="Número destino (+5511999999999)"
+                        />
+                        <Input
+                          value={testMsg}
+                          onChange={(e) => setTestMsg(e.target.value)}
+                          placeholder="Mensagem"
+                        />
+                        <Button onClick={sendTest} disabled={testing || status !== 'CONNECTED'} className="rounded-xl">
+                          {testing ? 'Sending...' : 'Send test'}
+                        </Button>
+                      </div>
+                    </div>
+                    {status !== 'CONNECTED' && (
+                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2">
+                        Sua instância parece desconectada. Abra o app da Xase.ai para reconectar via QR code.
+                      </p>
+                    )}
+                  </div>
+                  {!isAtLeastStarter && (
+                    <div className="pt-2">
+                      <Link href="/clinic/subscription">
+                        <Button variant="outline" className="border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-lg h-9 px-4">
+                          Upgrade plan
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
             {/* Stripe */}
             <Card className="relative bg-white border border-gray-200 rounded-xl hover:border-gray-300 transition">
               {blocked && (
