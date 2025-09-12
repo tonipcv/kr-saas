@@ -70,7 +70,7 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const { name, image, google_review_link, doctor_slug, public_cover_image_url, public_page_template } = body;
+    const { name, image, phone, google_review_link, doctor_slug, public_cover_image_url, public_page_template } = body;
 
     // Get current user to check role
     const currentUser = await prisma.user.findUnique({
@@ -84,6 +84,9 @@ export async function PUT(req: Request) {
 
     // Prepare update data
     const updateData: any = { name, image };
+    if (typeof phone === 'string') {
+      updateData.phone = phone.trim();
+    }
 
     // Only doctors can update google_review_link
     if (currentUser.role === 'DOCTOR' && google_review_link !== undefined) {

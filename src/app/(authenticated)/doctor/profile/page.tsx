@@ -4,7 +4,6 @@ import { useSession, signOut } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useClinic } from "@/contexts/clinic-context";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -26,7 +25,6 @@ import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 import Image from "next/image";
 import Link from 'next/link';
 import { useRouter } from "next/navigation";
-import { cn } from "@/lib/utils";
 
 interface UserStats {
   totalPatients?: number;
@@ -45,6 +43,7 @@ export default function DoctorProfilePage() {
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [image, setImage] = useState('');
   const [imageKey, setImageKey] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -96,6 +95,7 @@ export default function DoctorProfilePage() {
             const profileData = await profileResponse.json();
             setName(profileData.name || '');
             setEmail(profileData.email || '');
+            setPhone(profileData.phone || '');
             setGoogleReviewLink(profileData.google_review_link || profileData.googleReviewLink || '');
             setPublicCoverImageUrl(profileData.public_cover_image_url || '');
             setPublicPageTemplate(profileData.public_page_template || 'DEFAULT');
@@ -209,10 +209,7 @@ export default function DoctorProfilePage() {
         body: JSON.stringify({ 
           name, 
           image: newImage || image,
-          google_review_link: googleReviewLink,
-          doctor_slug: doctorSlug,
-          public_cover_image_url: publicCoverImageUrl || null,
-          public_page_template: publicPageTemplate,
+          phone,
         }),
       });
 
@@ -238,17 +235,7 @@ export default function DoctorProfilePage() {
     }
   };
 
-  const getRoleDisplay = () => {
-    switch (userRole) {
-      case 'DOCTOR':
-        // Use gradient for Doctor tag to match branding
-        return { label: 'Doctor', color: 'bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white border-transparent', icon: UserIcon };
-      case 'SUPER_ADMIN':
-        return { label: 'Super Admin', color: 'bg-purple-100 text-purple-700 border-purple-200', icon: ShieldCheckIcon };
-      default:
-        return { label: 'Doctor', color: 'bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white border-transparent', icon: UserIcon };
-    }
-  };
+  // Removed role badge display
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
@@ -322,8 +309,7 @@ export default function DoctorProfilePage() {
     );
   }
 
-  const roleInfo = getRoleDisplay();
-  const RoleIcon = roleInfo.icon;
+  // Role badge removed
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
@@ -353,6 +339,7 @@ export default function DoctorProfilePage() {
                             setGoogleReviewLink(data.google_review_link || data.googleReviewLink || '');
                             setPublicCoverImageUrl(data.public_cover_image_url || '');
                             setPublicPageTemplate(data.public_page_template || 'DEFAULT');
+                            setPhone(data.phone || '');
                             if (data.doctor_slug) {
                               setDoctorSlug(data.doctor_slug);
                             } else if (data.name) {
@@ -432,10 +419,7 @@ export default function DoctorProfilePage() {
                           disabled={isUploading}
                         />
                       </div>
-                      {/* Role badge */}
-                      <Badge className={cn("text-sm font-medium border", roleInfo.color)}> 
-                        {roleInfo.label}
-                      </Badge>
+                      {/* Role badge removed */}
                     </div>
 
                     {/* Form Fields */}
@@ -458,70 +442,17 @@ export default function DoctorProfilePage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-semibold text-gray-900">Public Slug</label>
+                        <label className="text-sm font-semibold text-gray-900">WhatsApp</label>
                         <Input
-                          value={doctorSlug}
-                          onChange={(e) => setDoctorSlug(e.target.value)}
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
                           disabled={!isEditing}
-                          placeholder="your-name"
+                          placeholder="Ex: +5511999999999"
                           className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 rounded-md h-8"
                         />
-                        <p className="text-xs text-gray-500">
-                          This defines your public referral URL: /{doctorSlug || 'your-slug'} (letters, numbers and hyphens only)
-                        </p>
+                        <p className="text-xs text-gray-500">Formato E.164 (inclua o código do país), ex: +5511999999999</p>
                       </div>
-                      <div className="space-y-2 md:col-span-2">
-                        <label className="text-sm font-semibold text-gray-900">Google Review Link</label>
-                        <Input
-                          value={googleReviewLink}
-                          onChange={(e) => setGoogleReviewLink(e.target.value)}
-                          disabled={!isEditing}
-                          placeholder="https://g.page/r/..."
-                          className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 rounded-md h-8"
-                        />
-                        <p className="text-xs text-gray-500">
-                          Link para avaliações do Google que será mostrado aos pacientes após reset de senha
-                        </p>
-                      </div>
-
-                      {/* Public Cover Image URL */}
-                      <div className="space-y-2 md:col-span-2">
-                        <label className="text-sm font-semibold text-gray-900">Public Cover Image URL</label>
-                        <Input
-                          value={publicCoverImageUrl}
-                          onChange={(e) => setPublicCoverImageUrl(e.target.value)}
-                          disabled={!isEditing}
-                          placeholder="https://.../cover.jpg"
-                          className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-900 rounded-md h-8"
-                        />
-                        {publicCoverImageUrl ? (
-                          <div className="mt-2">
-                            <div className="relative w-full max-w-xl h-32 rounded-md overflow-hidden border border-gray-200">
-                              <Image src={publicCoverImageUrl} alt="Public cover" fill className="object-cover" unoptimized />
-                            </div>
-                            <p className="text-xs text-gray-500 mt-1">Preview of your public page cover.</p>
-                          </div>
-                        ) : (
-                          <p className="text-xs text-gray-500">Optional. Appears on your public page header.</p>
-                        )}
-                      </div>
-
-                      {/* Public Page Template */}
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-gray-900">Public Page Template</label>
-                        <select
-                          value={publicPageTemplate}
-                          onChange={(e) => setPublicPageTemplate(e.target.value as any)}
-                          disabled={!isEditing}
-                          className="h-8 rounded-md bg-white border border-gray-300 text-gray-900 px-2 text-sm"
-                        >
-                          <option value="DEFAULT">Default</option>
-                          <option value="MINIMAL">Minimal</option>
-                          <option value="HERO_CENTER">Hero Center</option>
-                          <option value="HERO_LEFT">Hero Left</option>
-                        </select>
-                        <p className="text-xs text-gray-500">Choose how your public page looks.</p>
-                      </div>
+                      
                     </div>
 
                     {/* Actions (kept minimal) */}
