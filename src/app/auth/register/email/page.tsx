@@ -19,7 +19,7 @@ function RegisterEmailInner() {
     setError(null);
 
     if (!email) {
-      setError("Email é obrigatório");
+      setError("Email is required");
       setIsSubmitting(false);
       return;
     }
@@ -34,7 +34,7 @@ function RegisterEmailInner() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Falha ao enviar código de verificação');
+        throw new Error(data.message || 'Failed to send verification code');
       }
 
       // Verificar se é um usuário existente
@@ -46,7 +46,7 @@ function RegisterEmailInner() {
         router.push(`/auth/register/verify?email=${encodeURIComponent(email)}`);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao enviar código de verificação');
+      setError(err instanceof Error ? err.message : 'Failed to send verification code');
     } finally {
       setIsSubmitting(false);
     }
@@ -63,7 +63,7 @@ function RegisterEmailInner() {
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-[420px] bg-white rounded-2xl border border-gray-200 p-8 shadow-lg relative z-20">
 
-          {/* Tabs minimalistas */}
+          {/* Tabs */}
           <div className="mb-4">
             <div className="inline-flex items-center rounded-xl border border-gray-200 p-1 bg-white/60 backdrop-blur-sm">
               <Link
@@ -83,8 +83,10 @@ function RegisterEmailInner() {
             <div className="mb-6 text-red-600 text-center text-sm">{error}</div>
           )}
 
-          {/* Formulário */}
+          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
+            {/* Minimal helper message above the email */}
+            <p className="text-sm text-gray-700">Enter your email to start your 14-day free trial.</p>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                 Email
@@ -97,21 +99,21 @@ function RegisterEmailInner() {
                 required
                 autoComplete="off"
                 className="w-full px-4 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900 placeholder-gray-500"
-                placeholder="email@exemple.com"
+                placeholder="email@example.com"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-black hover:bg-gray-900 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
+              className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-b from-gray-900 to-black hover:opacity-90 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Sending code...' : 'Continue'}
+              {isSubmitting ? 'Sending…' : 'Start 14-day free trial'}
               <ArrowRight className="h-4 w-4" />
             </button>
           </form>
 
-          {/* Link para login */}
+          {/* Login link */}
           <div className="mt-6 text-center">
             <Link
               href="/auth/signin"

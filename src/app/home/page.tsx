@@ -4,6 +4,7 @@ import ReferralStepper from '@/components/ReferralStepper';
 import TestimonialsCarousel from '@/components/TestimonialsCarousel';
 import LogosMarquee from '@/components/LogosMarquee';
 import RotatingWord from '@/components/RotatingWord';
+import FAQ from '@/components/FAQ';
 
 export default function PublicHome() {
   const testimonials = [
@@ -40,6 +41,44 @@ export default function PublicHome() {
       company: 'Wellness Pro',
       avatar: '/dep34.avif',
     },
+  ];
+  const faqItems = [
+    {
+      q: 'What is Zuzz and how does it help my business grow?',
+      a: 'Zuzz is a membership and loyalty platform that helps service businesses such as clinics, gyms, spas, dentists and restaurants grow without relying on paid ads. By combining subscriptions, rewards and referrals, Zuzz increases predictable revenue and customer retention.'
+    },
+    {
+      q: 'How does the loyalty program work?',
+      a: 'Your clients earn rewards when they book more services, refer friends or leave reviews. This drives repeat purchases, boosts average ticket size and turns happy clients into promoters.'
+    },
+    {
+      q: 'Can Zuzz also bring me new customers?',
+      a: 'Yes. With built-in referral programs, your existing clients become a powerful acquisition channel, bringing in qualified new customers at a lower cost than ads.'
+    },
+    {
+      q: 'Does it only work for clinics?',
+      a: 'No. Zuzz is built for all service-based SMBs. It works seamlessly for beauty clinics, fitness studios, dental practices, spas and restaurants.'
+    },
+    {
+      q: 'Do I need integrations to get started?',
+      a: 'No. Zuzz works as a standalone platform. If you already use POS, scheduling or CRM software, Zuzz can connect to it for a smoother workflow.'
+    },
+    {
+      q: 'Can I customize rewards and campaigns?',
+      a: 'Yes. You can set incentives that match your goals whether attracting new clients, increasing loyalty or reactivating past customers.'
+    },
+    {
+      q: 'What results can I expect?',
+      a: 'Businesses using Zuzz have seen revenue grow by more than 30 percent in the first months through higher retention and repeat sales.'
+    },
+    {
+      q: 'How long does setup take?',
+      a: 'Less than 30 minutes. Your branded program can be live the same day.'
+    },
+    {
+      q: 'How do I try Zuzz?',
+      a: 'Book a demo with our team and launch your loyalty membership program with your own brand in minutes.'
+    }
   ];
   return (
     <main className="min-h-screen bg-white flex flex-col">
@@ -356,6 +395,9 @@ export default function PublicHome() {
           </div>
         </div>
       </section>
+
+      {/* FAQ */}
+      <FAQ items={faqItems} />
 
       {/* Footer */}
       <footer className="border-t border-gray-100">
