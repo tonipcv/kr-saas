@@ -3,6 +3,7 @@ import Image from 'next/image';
 import ReferralStepper from '@/components/ReferralStepper';
 import TestimonialsCarousel from '@/components/TestimonialsCarousel';
 import LogosMarquee from '@/components/LogosMarquee';
+import RotatingWord from '@/components/RotatingWord';
 
 export default function PublicHome() {
   const testimonials = [
@@ -46,32 +47,18 @@ export default function PublicHome() {
       <section className="relative overflow-hidden">
         <div className="bg-gradient-to-r from-[#6d28d9] via-[#7c3aed] to-[#8b5cf6]">
           <div className="relative">
-            {/* Wave texture (SVG lines) */}
-            <svg className="pointer-events-none absolute inset-0 opacity-30" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 200" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="g" x1="0" x2="1" y1="0" y2="0">
-                  <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
-                  <stop offset="100%" stopColor="#ffffff" stopOpacity="0.1" />
-                </linearGradient>
-              </defs>
-              {Array.from({ length: 12 }).map((_, i) => (
-                <path key={i} d={`M0 ${10 + i*15} C 300 ${-20 + i*18}, 900 ${40 + i*12}, 1200 ${10 + i*15}`} fill="none" stroke="url(#g)" strokeWidth="2" />
-              ))}
-            </svg>
-            <div className="relative z-10">
-              <div className="max-w-7xl mx-auto px-4">
-                <div className="py-2.5 md:py-3">
-                  <div className="mx-auto flex items-center justify-center gap-3 flex-wrap">
-                    <span className="text-xs md:text-sm font-medium text-white text-center">
-                      Celebrating 1,000+ happy customers and $100M+ in added revenue. Enjoy 14 days free!
-                    </span>
-                    <Link
-                      href="/auth/register/email-14"
-                      className="inline-flex items-center px-3 py-1 rounded-full text-[11px] md:text-xs font-semibold bg-white text-gray-900 hover:opacity-90 shadow-sm"
-                    >
-                      Try now
-                    </Link>
-                  </div>
+            <div className="max-w-7xl mx-auto px-4">
+              <div className="py-2.5 md:py-3">
+                <div className="mx-auto flex items-center justify-center gap-3 flex-wrap">
+                  <span className="text-xs md:text-sm font-medium text-white text-center">
+                    Celebrating 1,000+ happy customers and $100M+ in added revenue. Enjoy 14 days free!
+                  </span>
+                  <Link
+                    href="/auth/register/email-14"
+                    className="inline-flex items-center px-3 py-1 rounded-full text-[11px] md:text-xs font-semibold bg-white text-gray-900 hover:opacity-90 shadow-sm"
+                  >
+                    Try now
+                  </Link>
                 </div>
               </div>
             </div>
@@ -112,8 +99,12 @@ export default function PublicHome() {
         </div>
         <div className="max-w-7xl mx-auto px-4 py-36 md:py-48">
           <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-4xl md:text-7xl font-extrabold tracking-tight leading-tight bg-gradient-to-b from-[#2d3238] to-[#545860] bg-clip-text text-transparent motion-safe:animate-fade-up">
-              Grow with Rewards
+            <h1 className="text-4xl md:text-7xl font-extrabold tracking-tight leading-tight text-gray-900 motion-safe:animate-fade-up">
+              Grow with {" "}
+              <RotatingWord
+                words={["Rewards","Loyalty","Intelligence"]}
+                className="bg-gradient-to-b from-[#2d3238] to-[#545860] bg-clip-text text-transparent"
+              />
             </h1>
             <p className="hidden sm:block mt-5 md:mt-6 text-gray-600 text-base md:text-2xl max-w-3xl mx-auto motion-safe:animate-fade-up [animation-delay:120ms]">
               Launch referrals, reward points, and redeemable codes in minutes. Simple, minimal, and built to scale.
@@ -180,7 +171,7 @@ export default function PublicHome() {
       <section className="py-10 md:py-12 bg-gradient-to-b from-white to-[rgba(250,250,255,0.6)]">
         <div className="max-w-7xl mx-auto px-4">
           <h4 className="text-center text-sm md:text-base font-medium text-gray-800">
-            Used daily by more than 6,000 small and large businesses.
+            Used daily by more than 1,000 small and large businesses.
           </h4>
           <div className="mt-6">
             <LogosMarquee logos={['/logos/1.png','/logos/2.png','/logos/3.png','/logos/4.png','/logos/5.png','/logos/6.png','/logos/7.png','/logos/8.png','/logos/9.png','/logos/10.png','/logos/11.png']} />
