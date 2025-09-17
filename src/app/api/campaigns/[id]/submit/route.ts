@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { FEATURES, isFeatureEnabledForDoctor } from '@/lib/feature-flags';
 import { isExistingPatient, getUserByReferralCode, generateUniqueReferralCode } from '@/lib/referral-utils';
 import { sendReferralNotification } from '@/lib/referral-email-service';
+import { emitEvent } from '@/lib/events';
+import { EventActor, EventType } from '@prisma/client';
 
 // Helper to ensure campaign features are enabled
 async function ensureFeatureEnabled(doctorId: string) {
@@ -313,6 +315,34 @@ export async function POST(
       } catch (e) {
         console.error('[campaigns-submit] Failed to persist coupon on lead', e);
       }
+    }
+
+    // Fire analytics (non-blocking)
+    try {
+      // Try resolve clinicId from doctorId (owner or membership)
+      let clinicId: string | null = null;
+      try {
+        const owned = await prisma.clinic.findFirst({ where: { ownerId: doctorId }, select: { id: true } });
+        if (owned?.id) clinicId = owned.id;
+      } catch {}
+      if (!clinicId) {
+        try {
+          const membership = await prisma.clinicMember.findFirst({ where: { userId: doctorId, isActive: true }, select: { clinicId: true } });
+          if (membership?.clinicId) clinicId = membership.clinicId;
+        } catch {}
+      }
+      if (clinicId) {
+        const ua = request.headers.get('user-agent') || undefined;
+        await emitEvent({
+          eventType: EventType.lead_created,
+          actor: EventActor.system,
+          clinicId,
+          customerId: null,
+          metadata: { source: 'campaign_form', device: ua, campaign_id: campaign.id },
+        });
+      }
+    } catch (e) {
+      console.error('[events] campaign lead_created emit failed', e);
     }
 
     // Fire and forget notification (keeps parity with referrals submit)

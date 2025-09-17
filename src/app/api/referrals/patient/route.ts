@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getUserCreditsBalance, ensureUserHasReferralCode } from '@/lib/referral-utils';
+import { emitEvent } from '@/lib/events';
+import { EventActor, EventType } from '@prisma/client';
 import { verifyMobileAuth } from '@/lib/mobile-auth';
 
 // GET - Patient dashboard (credits, referrals, rewards)
@@ -434,6 +436,36 @@ export async function POST(req: NextRequest) {
       // Do not increment currentRedemptions while PENDING; availability is based on APPROVED/FULFILLED
       return redemption;
     });
+
+    // Analytics: reward_claimed (non-blocking)
+    try {
+      // Resolve clinicId from resolvedDoctorId if possible
+      let clinicId: string | null = null;
+      const doctorId = (resolvedDoctorId as any) || null;
+      if (doctorId) {
+        try {
+          const owned = await prisma.clinic.findFirst({ where: { ownerId: doctorId }, select: { id: true } });
+          if (owned?.id) clinicId = owned.id;
+        } catch {}
+        if (!clinicId) {
+          try {
+            const membership = await prisma.clinicMember.findFirst({ where: { userId: doctorId, isActive: true }, select: { clinicId: true } });
+            if (membership?.clinicId) clinicId = membership.clinicId;
+          } catch {}
+        }
+      }
+      if (clinicId) {
+        await emitEvent({
+          eventType: EventType.reward_claimed,
+          actor: EventActor.customer,
+          clinicId,
+          customerId: userId,
+          metadata: { reward_id: result.rewardId },
+        });
+      }
+    } catch (e) {
+      console.error('[events] reward_claimed emit failed', e);
+    }
 
     return NextResponse.json({
       success: true,

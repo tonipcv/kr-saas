@@ -3,6 +3,8 @@ import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import nodemailer from "nodemailer";
 import { createVerificationEmail } from "@/email-templates/auth/verification";
+import { emitEvent } from '@/lib/events';
+import { EventActor, EventType } from '@prisma/client';
 
 if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD || !process.env.SMTP_FROM) {
   throw new Error('Missing SMTP configuration environment variables');
@@ -52,6 +54,35 @@ export async function POST(req: Request) {
       });
       
       userId = updatedUser.id;
+
+      // Fire analytics: customer_updated (non-blocking)
+      try {
+        // Resolve clinicId via doctor ownership or membership if provided
+        let clinicId: string | null = null;
+        if (doctorId) {
+          try {
+            const owned = await prisma.clinic.findFirst({ where: { ownerId: doctorId }, select: { id: true } });
+            if (owned?.id) clinicId = owned.id;
+          } catch {}
+          if (!clinicId) {
+            try {
+              const membership = await prisma.clinicMember.findFirst({ where: { userId: doctorId, isActive: true }, select: { clinicId: true } });
+              if (membership?.clinicId) clinicId = membership.clinicId;
+            } catch {}
+          }
+        }
+        if (clinicId) {
+          await emitEvent({
+            eventType: EventType.customer_updated,
+            actor: EventActor.system,
+            clinicId,
+            customerId: updatedUser.id,
+            metadata: { changes: { name: { from: existingUser.name || null, to: updatedUser.name || null } } },
+          });
+        }
+      } catch (e) {
+        console.error('[events] customer_updated emit failed', e);
+      }
     }
 
     // Generate verification code (6 digits)
@@ -100,6 +131,34 @@ export async function POST(req: Request) {
       });
       
       userId = user.id;
+
+      // Fire analytics: customer_created (non-blocking)
+      try {
+        let clinicId: string | null = null;
+        if (doctorId) {
+          try {
+            const owned = await prisma.clinic.findFirst({ where: { ownerId: doctorId }, select: { id: true } });
+            if (owned?.id) clinicId = owned.id;
+          } catch {}
+          if (!clinicId) {
+            try {
+              const membership = await prisma.clinicMember.findFirst({ where: { userId: doctorId, isActive: true }, select: { clinicId: true } });
+              if (membership?.clinicId) clinicId = membership.clinicId;
+            } catch {}
+          }
+        }
+        if (clinicId) {
+          await emitEvent({
+            eventType: EventType.customer_created,
+            actor: EventActor.system,
+            clinicId,
+            customerId: user.id,
+            metadata: { nome: name, canal_origem: 'register', consentimento_marketing: false },
+          });
+        }
+      } catch (e) {
+        console.error('[events] customer_created emit failed', e);
+      }
       
       // Create verification token for new users
       await prisma.verificationToken.create({

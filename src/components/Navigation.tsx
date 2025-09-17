@@ -341,6 +341,18 @@ export default function Navigation() {
           icon: CogIcon,
           description: 'Connect external tools'
         },
+        {
+          href: '/doctor/events',
+          label: 'Events',
+          icon: PresentationChartBarIcon,
+          description: 'Metrics & timelines'
+        },
+        {
+          href: '/doctor/broadcast',
+          label: 'Broadcast',
+          icon: ChatBubbleLeftRightIcon,
+          description: 'Send WhatsApp and campaigns'
+        },
       ]
     }
   ], []);

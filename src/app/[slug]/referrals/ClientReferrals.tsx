@@ -168,6 +168,11 @@ export default function ClientReferrals() {
   const router = useRouter();
   const params = useParams<{ slug: string }>();
   const slug = params?.slug;
+  // Derive clinic/page slug from URL path as a fallback when needed
+  const pathSlug = (typeof window !== 'undefined')
+    ? (window.location.pathname.split('/').filter(Boolean)[0] || '')
+    : '';
+  const effectiveSlug = (slug || pathSlug || '').toString().trim();
   const { data: session, status } = useSession();
   const language: Lang = 'pt';
   const t = translations.pt;
@@ -213,6 +218,8 @@ export default function ClientReferrals() {
     display_title?: string | null;
     display_message?: string | null;
   }>>([]);
+  const [isDark, setIsDark] = useState(false);
+  const [loginHref, setLoginHref] = useState<string>('');
   const displayPatientName = patientName || session?.user?.name || 'Paciente';
   const displayDoctorName = doctorName || 'Dr. Especialista';
   const displayPoints = creditsBalance;
@@ -220,8 +227,93 @@ export default function ClientReferrals() {
 
   const toggleMenu = () => setMenuOpen(!menuOpen);
 
+  // Compute login href similar to products page logic
+  const computeLoginHref = () => {
+    try {
+      // Always derive the slug from the current URL to avoid switching to doctor slug
+      const pathSlug = (typeof window !== 'undefined' ? (window.location.pathname.split('/').filter(Boolean)[0] || '') : (effectiveSlug || slug || '')).toString();
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const href = `${origin}/${pathSlug}/login`;
+      if (typeof window !== 'undefined') console.debug('[logout] computed href', { pathSlug, href });
+      return href;
+    } catch {
+      const pathSlug = (typeof window !== 'undefined' ? (window.location.pathname.split('/').filter(Boolean)[0] || '') : (effectiveSlug || slug || '')).toString();
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      return `${origin}/${pathSlug}/login`;
+    }
+  };
+
+  // Resolve clinic subdomain to build absolute login URL when applicable
+  useEffect(() => {
+    const slugVal = (effectiveSlug || slug || '').toString().trim().toLowerCase();
+    if (!slugVal || typeof window === 'undefined') return;
+    const baseDomain = (process.env.NEXT_PUBLIC_APP_BASE_DOMAIN || process.env.APP_BASE_DOMAIN || '').toLowerCase();
+    const protocol = window.location.protocol || 'https:';
+    const host = window.location.host.toLowerCase();
+    const hostNoPort = host.split(':')[0];
+    const isAlreadyOnSubdomain = baseDomain && hostNoPort.endsWith(baseDomain) && hostNoPort.replace(new RegExp(baseDomain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'), '').replace(/\.$/, '').length > 0;
+    const relativeFallback = `/${slugVal}/login`;
+    if (!baseDomain) {
+      setLoginHref(relativeFallback);
+      return;
+    }
+    let aborted = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/clinic/by-slug/${encodeURIComponent(slugVal)}`, { cache: 'no-store' });
+        const json = await res.json().catch(() => ({}));
+        const clinic = json?.data || json; // support either {data:{}} or raw
+        // If API doesn't return subdomain, fall back to slug as subdomain
+        const sub = ((clinic?.subdomain || clinic?.subDomain || '') || slugVal).toString().trim().toLowerCase();
+        if (aborted) return;
+        // Build absolute URL when on root/base domain; on clinic subdomain, use '/login'
+        const absolute = `${protocol}//${sub}.${baseDomain}/login`;
+        setLoginHref(isAlreadyOnSubdomain ? '/login' : absolute);
+      } catch {
+        setLoginHref(relativeFallback);
+      }
+    })();
+    return () => { aborted = true; };
+  }, [effectiveSlug, slug]);
+
+  // Detect dark theme via body/html classes or data-theme attributes
+  useEffect(() => {
+    const detect = () => {
+      if (typeof document === 'undefined') return false;
+      const el = document.documentElement;
+      const body = document.body;
+      const darkClass = el.classList.contains('dark') || body.classList.contains('dark');
+      const darkData = (el.getAttribute('data-theme') || body.getAttribute('data-theme') || '').toLowerCase() === 'dark';
+      return darkClass || darkData;
+    };
+    setIsDark(detect());
+    const obs = new MutationObserver(() => setIsDark(detect()));
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme'] });
+    obs.observe(document.body, { attributes: true, attributeFilter: ['class', 'data-theme'] });
+    return () => obs.disconnect();
+  }, []);
+
+  // Fetch clinic theme by slug and merge with detection
+  useEffect(() => {
+    const slugVal = (effectiveSlug || '').toString().trim().toLowerCase();
+    if (!slugVal) return;
+    let aborted = false;
+    const run = async () => {
+      try {
+        const res = await fetch(`/api/clinic/theme?slug=${encodeURIComponent(slugVal)}`, { cache: 'no-store' });
+        const json = await res.json().catch(() => ({ success: false }));
+        if (aborted) return;
+        const clinicDark = json?.success && json?.data?.theme === 'DARK';
+        if (clinicDark) setIsDark(true);
+      } catch {}
+    };
+    run();
+    return () => { aborted = true; };
+  }, [effectiveSlug]);
+
   const fetchCouponTemplates = async () => {
-    const slugVal = (doctorSlug || slug || '').toString().trim();
+    // Prefer the clinic/page slug (from route or URL), fallback to doctorSlug
+    const slugVal = (effectiveSlug || doctorSlug || '').toString().trim();
     if (!slugVal) {
       setCouponTemplates([]);
       return [] as any[];
@@ -258,12 +350,13 @@ export default function ClientReferrals() {
     }
   }, [shareModalOpen, doctorSlug, slug]);
 
-  // Redirect unauthenticated users to slug login
+  // Redirect unauthenticated users to clinic-aware login
   useEffect(() => {
-    if (status === 'unauthenticated' && slug) {
-      router.replace(`/${slug}/login`);
+    if (status === 'unauthenticated' && (slug || effectiveSlug)) {
+      const href = computeLoginHref();
+      router.replace(href);
     }
-  }, [status, router, slug]);
+  }, [status, router, slug, loginHref]);
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -355,14 +448,14 @@ export default function ClientReferrals() {
   };
 
   useEffect(() => {
-    const slugVal = (doctorSlug || '').trim();
-    const code = (referralCode || '').trim();
+    const slugVal = (effectiveSlug || doctorSlug || '').toString().trim();
+    const code = (referralCode || '').toString().trim();
     if (!slugVal || !code) return;
     const controller = new AbortController();
     const run = async () => {
-      const url = `/api/referrals/resolve?doctor_slug=${encodeURIComponent(slugVal)}&code=${encodeURIComponent(code)}`;
+      const url = `/api/referrals/doctor/by-slug/${encodeURIComponent(slugVal)}?code=${encodeURIComponent(code)}`;
       try {
-        const res = await fetch(url, { signal: controller.signal });
+        const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
         await res.json().catch(() => ({}));
       } catch (e) {
         if ((e as any)?.name === 'AbortError') return;
@@ -370,15 +463,16 @@ export default function ClientReferrals() {
     };
     run();
     return () => controller.abort();
-  }, [doctorSlug, referralCode]);
+  }, [effectiveSlug, doctorSlug, referralCode]);
 
   useEffect(() => {
-    const slugVal = (doctorSlug || '').trim();
+    const slugVal = (effectiveSlug || doctorSlug || '').toString().trim();
     if (!slugVal) return;
     let aborted = false;
     const run = async () => {
       try {
-        const res = await fetch(`/api/campaigns/doctor/${encodeURIComponent(slugVal)}`);
+        const qs = new URLSearchParams({ slug: slugVal });
+        const res = await fetch(`/api/campaigns/resolve?${qs.toString()}`);
         const payload = await res.json().catch(() => ({ success: false }));
         if (aborted) return;
         if (res.ok && Array.isArray(payload?.data)) setCampaigns(payload.data);
@@ -389,7 +483,7 @@ export default function ClientReferrals() {
     };
     run();
     return () => { aborted = true; };
-  }, [doctorSlug]);
+  }, [effectiveSlug, doctorSlug]);
 
   useEffect(() => {
     if (viewSection !== 'products') return;
@@ -474,7 +568,8 @@ export default function ClientReferrals() {
   const generateReferralLink = (style = 'default') => {
     const rawBase = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
     const baseUrl = (rawBase || '').replace(/\/+$/, '');
-    const slugVal = (doctorSlug || '').trim().replace(/^\/+/, '');
+    // Prefer the clinic/page slug (from route or URL), fallback to doctorSlug
+    const slugVal = (effectiveSlug || doctorSlug || '').toString().trim().replace(/^\/+/, '');
     const rcode = referralCode || 'DEMO123';
     if (!slugVal) return '';
     const link = `${baseUrl}/${slugVal}?code=${rcode}`;
@@ -639,14 +734,14 @@ export default function ClientReferrals() {
   // For brevity here, reuse the existing JSX structure. The key change is the floating menu links below.
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className={`min-h-screen ${isDark ? 'bg-gray-950' : 'bg-white'}`}>
       {/* The whole original JSX UI goes here. If needed, I can inline it entirely. */}
       {/* Share Modal with coupon links below */}
       <Dialog open={shareModalOpen} onOpenChange={setShareModalOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className={`sm:max-w-lg ${isDark ? '!bg-gray-900 !text-gray-100 !border-gray-800' : ''}`}>
           <DialogHeader>
-            <DialogTitle>Compartilhe sua indicação</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className={isDark ? 'text-gray-100' : ''}>Compartilhe sua indicação</DialogTitle>
+            <DialogDescription className={isDark ? 'text-gray-300' : ''}>
               Envie seu link via WhatsApp, SMS ou Email, ou copie-o.
             </DialogDescription>
           </DialogHeader>
@@ -654,6 +749,7 @@ export default function ClientReferrals() {
             <div className="grid grid-cols-3 gap-2">
               <Button
                 variant="secondary"
+                className={isDark ? 'bg-gray-800 text-gray-100 hover:bg-gray-700 border border-gray-700' : ''}
                 onClick={() => {
                   const url = generateReferralLink();
                   if (!url) return;
@@ -665,6 +761,7 @@ export default function ClientReferrals() {
               </Button>
               <Button
                 variant="secondary"
+                className={isDark ? 'bg-gray-800 text-gray-100 hover:bg-gray-700 border border-gray-700' : ''}
                 onClick={() => {
                   const url = generateReferralLink();
                   if (!url) return;
@@ -676,6 +773,7 @@ export default function ClientReferrals() {
               </Button>
               <Button
                 variant="secondary"
+                className={isDark ? 'bg-gray-800 text-gray-100 hover:bg-gray-700 border border-gray-700' : ''}
                 onClick={() => {
                   const url = generateReferralLink();
                   if (!url) return;
@@ -690,73 +788,77 @@ export default function ClientReferrals() {
             </div>
             <div className="flex items-center gap-2">
               <input
-                className="w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-2 text-sm"
+                className={`w-full rounded-md px-2 py-2 text-sm ${isDark ? 'border border-gray-700 bg-gray-800 text-gray-100' : 'border border-gray-200 bg-gray-50'}`}
                 value={generateReferralLink()}
                 readOnly
               />
-              <Button onClick={copyReferralLink} variant="secondary">
+              <Button onClick={copyReferralLink} variant="secondary" className={isDark ? 'bg-gray-800 text-gray-100 hover:bg-gray-700 border border-gray-700' : ''}>
                 <Copy className="h-4 w-4 mr-2" /> Copiar
               </Button>
             </div>
 
-            <div className="pt-2 border-t" />
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-sm font-medium text-gray-900">Condições especiais</div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-600">{couponTemplates.length} encontradas</span>
-                  <Button size="sm" variant="ghost" onClick={fetchCouponTemplates} disabled={loadingCoupons}>
-                    {loadingCoupons ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Recarregar'}
-                  </Button>
+            {/* Special conditions list: show only if loading or there are items */}
+            {(loadingCoupons || couponTemplates.length > 0) && (
+              <>
+                <div className={`pt-2 ${isDark ? 'border-t border-gray-800' : 'border-t'}`} />
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Condições especiais</div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{couponTemplates.length} encontradas</span>
+                      <Button size="sm" variant="ghost" onClick={fetchCouponTemplates} disabled={loadingCoupons} className={isDark ? 'text-gray-300 hover:bg-gray-800' : ''}>
+                        {loadingCoupons ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Recarregar'}
+                      </Button>
+                    </div>
+                  </div>
+                  {loadingCoupons && (
+                    <div className={`flex items-center text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Carregando...
+                    </div>
+                  )}
+                  {!loadingCoupons && couponTemplates.length > 0 && (
+                    <ul className={`divide-y rounded-md ${isDark ? 'border border-gray-700 divide-gray-800' : 'divide-gray-100 border'}`}>
+                      {couponTemplates.map((c) => {
+                        const base = (process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '') || '').replace(/\/\/+$/, '');
+                        // Prefer clinic/page slug to keep context
+                        const dslug = (effectiveSlug || doctorSlug || slug || '').toString().replace(/^\/+/, '');
+                        const url = `${base}/${dslug}?cupom=${encodeURIComponent(c.slug)}`;
+                        return (
+                          <li key={c.id} className="p-3 flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className={`text-sm font-medium break-words ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{c.display_title || c.name}</div>
+                              {c.display_message && (
+                                <div className={`text-xs mt-0.5 break-words ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{c.display_message}</div>
+                              )}
+                              <div className="mt-1">
+                                <code className={`text-xs break-all ${isDark ? 'text-gray-200 bg-gray-800' : 'text-gray-700 bg-gray-50'} px-1 py-0.5 rounded`}>{url}</code>
+                              </div>
+                            </div>
+                            <div className="shrink-0">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className={isDark ? 'bg-gray-800 text-gray-100 hover:bg-gray-700 border border-gray-700' : ''}
+                                onClick={async () => {
+                                  try {
+                                    await navigator.clipboard.writeText(url);
+                                    toast.success('Link copiado');
+                                  } catch {
+                                    toast.error('Não foi possível copiar');
+                                  }
+                                }}
+                              >
+                                <Copy className="h-4 w-4 mr-1" /> Copiar
+                              </Button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </div>
-              </div>
-              {loadingCoupons && (
-                <div className="flex items-center text-gray-600 text-sm">
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Carregando...
-                </div>
-              )}
-              {!loadingCoupons && couponTemplates.length === 0 && (
-                <div className="text-sm text-gray-600">Nenhuma condição especial ativa no momento.</div>
-              )}
-              {!loadingCoupons && couponTemplates.length > 0 && (
-                <ul className="divide-y divide-gray-100 border rounded-md">
-                  {couponTemplates.map((c) => {
-                    const base = (process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '') || '').replace(/\/+$/, '');
-                    const dslug = (doctorSlug || slug || '').toString().replace(/^\/+/, '');
-                    const url = `${base}/${dslug}?cupom=${encodeURIComponent(c.slug)}`;
-                    return (
-                      <li key={c.id} className="p-3 flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-gray-900 break-words">{c.display_title || c.name}</div>
-                          {c.display_message && (
-                            <div className="text-xs text-gray-600 mt-0.5 break-words">{c.display_message}</div>
-                          )}
-                          <div className="mt-1">
-                            <code className="text-xs break-all text-gray-700 bg-gray-50 px-1 py-0.5 rounded">{url}</code>
-                          </div>
-                        </div>
-                        <div className="shrink-0">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={async () => {
-                              try {
-                                await navigator.clipboard.writeText(url);
-                                toast.success('Link copiado');
-                              } catch {
-                                toast.error('Não foi possível copiar');
-                              }
-                            }}
-                          >
-                            <Copy className="h-4 w-4 mr-1" /> Copiar
-                          </Button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button onClick={() => setShareModalOpen(false)} variant="secondary">Fechar</Button>
@@ -765,43 +867,42 @@ export default function ClientReferrals() {
       </Dialog>
       {/* Special Conditions (Coupons) Modal */}
       <Dialog open={couponsOpen} onOpenChange={setCouponsOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className={`sm:max-w-lg ${isDark ? '!bg-gray-900 !text-gray-100 !border-gray-800' : ''}`}>
           <DialogHeader>
-            <DialogTitle>Condições especiais</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className={isDark ? 'text-gray-100' : ''}>Condições especiais</DialogTitle>
+            <DialogDescription className={isDark ? 'text-gray-300' : ''}>
               Links públicos de ofertas e condições especiais criadas pelo médico.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 max-h-[50vh] overflow-auto">
             {loadingCoupons && (
-              <div className="flex items-center text-gray-600 text-sm">
+              <div className={`flex items-center text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Carregando...
               </div>
             )}
-            {!loadingCoupons && couponTemplates.length === 0 && (
-              <div className="text-sm text-gray-600">Nenhuma condição especial ativa no momento.</div>
-            )}
             {!loadingCoupons && couponTemplates.length > 0 && (
-              <ul className="divide-y divide-gray-100 border rounded-md">
+              <ul className={`divide-y rounded-md ${isDark ? 'border border-gray-700 divide-gray-800' : 'divide-gray-100 border'}`}>
                 {couponTemplates.map((c) => {
-                  const base = (process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '') || '').replace(/\/+$/, '');
-                  const dslug = (doctorSlug || slug || '').toString().replace(/^\/+/, '');
+                  const base = (process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '') || '').replace(/\/\/+$/, '');
+                  // Prefer the clinic/page slug for public coupon links
+                  const dslug = (effectiveSlug || doctorSlug || slug || '').toString().replace(/^\/+/, '');
                   const url = `${base}/${dslug}?cupom=${encodeURIComponent(c.slug)}`;
                   return (
                     <li key={c.id} className="p-3 flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="text-sm font-medium text-gray-900 break-words">{c.display_title || c.name}</div>
+                        <div className={`text-sm font-medium break-words ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{c.display_title || c.name}</div>
                         {c.display_message && (
-                          <div className="text-xs text-gray-600 mt-0.5 break-words">{c.display_message}</div>
+                          <div className={`text-xs mt-0.5 break-words ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{c.display_message}</div>
                         )}
                         <div className="mt-1">
-                          <code className="text-xs break-all text-gray-700 bg-gray-50 px-1 py-0.5 rounded">{url}</code>
+                          <code className={`text-xs break-all ${isDark ? 'text-gray-200 bg-gray-800' : 'text-gray-700 bg-gray-50'} px-1 py-0.5 rounded`}>{url}</code>
                         </div>
                       </div>
                       <div className="shrink-0">
                         <Button
                           size="sm"
                           variant="secondary"
+                          className={isDark ? 'bg-gray-800 text-gray-100 hover:bg-gray-700 border border-gray-700' : ''}
                           onClick={async () => {
                             try {
                               await navigator.clipboard.writeText(url);
@@ -844,11 +945,11 @@ export default function ClientReferrals() {
                 <Share2 className="mr-2 h-4 w-4 text-gray-600" />
                 Compartilhar
               </button>
-              <Link href={`/${slug}/profile`} className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
+              <Link href={`/${(effectiveSlug || slug || '').toString()}/profile`} className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
                 <User className="mr-2 h-4 w-4 text-gray-600" />
                 Profile
               </Link>
-              <Link href={`/${slug}/referrals`} className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
+              <Link href={`/${(effectiveSlug || slug || '').toString()}/referrals`} className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
                 <Share2 className="mr-2 h-4 w-4 text-gray-600" />
                 Referrals
               </Link>
@@ -860,11 +961,19 @@ export default function ClientReferrals() {
                 Condições especiais
               </button>
               <button
-                onClick={() => signOut({ callbackUrl: '/' })}
+                onClick={async () => {
+                  const href = computeLoginHref();
+                  try {
+                    await signOut({ redirect: false });
+                  } finally {
+                    if (typeof window !== 'undefined') console.debug('[logout] navigating to', href);
+                    window.location.href = href;
+                  }
+                }}
                 className="w-full flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50"
               >
                 <LogOut className="mr-2 h-4 w-4 text-gray-600" />
-                Sign out
+                Sair
               </button>
             </div>
           )}

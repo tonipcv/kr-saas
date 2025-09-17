@@ -133,11 +133,13 @@ export default function ReferrerBanner({ slug }: Props) {
     const hasCampaignText = !!campaignOfferText;
     const hasCouponParam = couponParams.length > 0;
     const hasTemplate = !!templateTitle || !!templateMessage;
-    if (referrerName || hasCampaignText || hasCouponParam || hasTemplate) {
+    // Also show when a referral code is present, even if we couldn't resolve the referrer name
+    const hasReferralCode = !!code;
+    if (referrerName || hasCampaignText || hasCouponParam || hasTemplate || hasReferralCode) {
       const t = setTimeout(() => setShow(true), 30);
       return () => clearTimeout(t);
     }
-  }, [referrerName, campaignOfferText, templateTitle, templateMessage, couponParams.join('|')]);
+  }, [referrerName, campaignOfferText, templateTitle, templateMessage, couponParams.join('|'), code]);
 
   // Show loading only when we have code and are fetching referrer
   if (code && loading && !referrerName) {
@@ -148,10 +150,11 @@ export default function ReferrerBanner({ slug }: Props) {
     );
   }
 
-  // Decide if banner should show: only when there is meaningful content
+  // Decide if banner should show: show on referrerName, campaign/coupon/template OR when a code exists
   const hasCampaignText = !!campaignOfferText;
   const hasTemplate = !!templateTitle || !!templateMessage;
-  if (!referrerName && !hasCampaignText && !hasTemplate) return null;
+  const hasReferralCode = !!code;
+  if (!referrerName && !hasCampaignText && !hasTemplate && !hasReferralCode) return null;
 
   // Resolve dynamic offer text based on coupon (description only)
   const benefitText = (() => {
@@ -178,11 +181,11 @@ export default function ReferrerBanner({ slug }: Props) {
     : '';
   const sentence = referrerName
     ? `${referrerName} indicou você para receber ${benefitLower}!`
-    : (benefitLower ? `Você recebeu ${benefitLower}!` : '');
+    : (benefitLower ? `Você recebeu ${benefitLower}!` : (hasReferralCode ? 'Você foi indicado por um amigo!' : ''));
 
   return (
-    <div className={`mt-1 mb-2 px-2 transition-all duration-300 ${show ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}>
-      <div className="mx-auto max-w-2xl rounded-md border border-emerald-200 bg-emerald-50/70 p-2 shadow-sm">
+    <div className={`mt-4 md:mt-6 mb-4 md:mb-6 px-3 md:px-4 transition-all duration-300 ${show ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}>
+      <div className="mx-auto max-w-3xl rounded-lg border border-emerald-200 bg-emerald-50/70 p-3 md:p-4 shadow-sm">
         <div className="flex items-center justify-center gap-2">
           <div className="shrink-0 rounded-full bg-emerald-100 p-1 text-emerald-700">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4" aria-hidden>

@@ -174,33 +174,35 @@ export class SubscriptionService {
       return null;
     }
 
-    // Resolve doctor (owner) for this clinic to count patients correctly
-    const clinicOwner = await prisma.clinic.findUnique({
-      where: { id: clinicId },
-      select: { ownerId: true }
+    // Count active clinic members and patients across ALL clinic members
+    const members: Array<{ userId: string }> = await prisma.clinicMember.findMany({
+      where: { clinicId, isActive: true },
+      select: { userId: true }
     });
+    const memberUserIds = members.map(m => m.userId);
 
-    const doctorId = clinicOwner?.ownerId || null;
-
-    const [docRows, patRows]: any[] = await Promise.all([
+    const [docRows, patientsCount]: any[] = await Promise.all([
       prisma.$queryRaw`
         SELECT COUNT(*)::int as count
         FROM clinic_members
         WHERE "clinicId" = ${clinicId}
         AND "isActive" = true
       `,
-      doctorId
-        ? prisma.$queryRaw`
-            SELECT COUNT(*)::int as count
-            FROM patient_profiles
-            WHERE doctor_id = ${doctorId}
-            AND is_active = true
-          `
-        : Promise.resolve([{ count: 0 } as any])
+      memberUserIds.length > 0
+        ? prisma.patientProfile.count({ where: { doctorId: { in: memberUserIds }, isActive: true } })
+        : Promise.resolve(0)
     ]);
 
     const doctorsCount = (docRows?.[0]?.count ?? 0) as number;
-    const patientsCount = (patRows?.[0]?.count ?? 0) as number;
+
+    // Resolve patients limit with safe defaults when plan data is missing
+    let patientsLimit = Number((subscription as any).maxPatients ?? 0);
+    if (!patientsLimit || Number.isNaN(patientsLimit)) {
+      const planName = String((subscription as any).name || (subscription as any).plan_name || '').toLowerCase();
+      if (planName.includes('starter')) patientsLimit = 1000;
+      else if (planName.includes('free')) patientsLimit = 100; // conservative default for Free
+      else patientsLimit = 1000; // default safe cap to avoid blocking paid users
+    }
 
     return {
       subscription,
@@ -210,8 +212,8 @@ export class SubscriptionService {
           limit: subscription.maxDoctors
         },
         patients: {
-          current: patientsCount,
-          limit: subscription.maxPatients
+          current: Number(patientsCount || 0),
+          limit: patientsLimit
         }
       }
     };

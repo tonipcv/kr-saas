@@ -30,6 +30,7 @@ export default function DoctorCouponTemplatesPage() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [doctorSlug, setDoctorSlug] = useState<string | null>(null);
+  const clinicSlug = (currentClinic?.slug || '').trim() || null;
 
   const [isCreating, setIsCreating] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
@@ -183,6 +184,7 @@ export default function DoctorCouponTemplatesPage() {
           display_message: createData.display_message || undefined,
           config: parsedConfig,
           is_active: !!createData.is_active,
+          clinicId: currentClinic?.id,
         })
       });
       let json: any = null;
@@ -439,10 +441,10 @@ export default function DoctorCouponTemplatesPage() {
                     </div>
                     <div className="col-span-12 md:col-span-2 text-[13px] text-gray-700 truncate">{t.slug}</div>
                     <div className="col-span-12 md:col-span-3 text-[12px] text-gray-700 truncate">
-                      {doctorSlug && t.slug ? (
+                      {(clinicSlug || doctorSlug) && t.slug ? (
                         (() => {
                           const origin = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || '');
-                          const path = `/${doctorSlug}`;
+                          const path = `/${clinicSlug || doctorSlug}`;
                           const href = `${origin}${path}?cupom=${encodeURIComponent(t.slug)}`;
                           return (
                             <a href={href} target="_blank" className="text-[#5893ec] hover:underline break-all" onClick={(e) => e.stopPropagation()} rel="noreferrer">

@@ -9,7 +9,8 @@ export const revalidate = 0;
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const slug = (searchParams.get('slug') || '').trim();
+    // Prefer explicit clinicSlug. Keep `slug` for backward compatibility.
+    const clinicSlug = (searchParams.get('clinicSlug') || searchParams.get('slug') || '').trim().toLowerCase();
     const cupomParams = searchParams.getAll('cupom');
     const couponParams = searchParams.getAll('coupon');
 
@@ -18,17 +19,38 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, data: [], message: 'Missing cupom keys' });
     }
     
-    console.log('[api/coupon-templates/resolve] Resolving for keys:', keys);
+    console.log('[api/coupon-templates/resolve] Resolving for keys:', keys, 'clinicSlug:', clinicSlug || '(none)');
 
-    // Query templates directly by slug without requiring doctor resolution
-    // Our script showed templates exist but clinic might not
-    const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT id, doctor_id, slug, name, display_title, display_message, is_active
-       FROM coupon_templates
-       WHERE is_active = true AND LOWER(slug) = ANY($1)
-       LIMIT 20`,
-      keys
-    );
+    let rows: any[] = [];
+    if (clinicSlug) {
+      // Try to resolve by clinic slug/subdomain first
+      const clinic: Array<{ id: string }> = await prisma.$queryRawUnsafe(
+        `SELECT id FROM clinics WHERE LOWER(slug) = $1 OR LOWER("subdomain") = $1 LIMIT 1`,
+        clinicSlug
+      );
+      const clinicId = clinic?.[0]?.id || null;
+      if (clinicId) {
+        rows = await prisma.$queryRawUnsafe(
+          `SELECT id, doctor_id, clinic_id, slug, name, display_title, display_message, is_active
+           FROM coupon_templates
+           WHERE is_active = true AND clinic_id = $1 AND LOWER(slug) = ANY($2)
+           LIMIT 50`,
+          clinicId,
+          keys
+        );
+      }
+    }
+
+    // Backward compatibility: fall back to plain key lookup (no clinic filter)
+    if (!rows || rows.length === 0) {
+      rows = await prisma.$queryRawUnsafe(
+        `SELECT id, doctor_id, clinic_id, slug, name, display_title, display_message, is_active
+         FROM coupon_templates
+         WHERE is_active = true AND LOWER(slug) = ANY($1)
+         LIMIT 50`,
+        keys
+      );
+    }
     
     console.log('[api/coupon-templates/resolve] Raw rows found:', rows.length, JSON.stringify(rows, null, 2));
 

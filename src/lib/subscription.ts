@@ -18,6 +18,7 @@ export interface SubscriptionStatus {
   planFeatures?: PlanFeatures;
   planId?: string;
   trialDays?: number | null;
+  clinicId?: string;
 }
 
 export interface PlanFeatures {
@@ -131,6 +132,7 @@ export async function getClinicSubscriptionStatus(userId: string): Promise<Subsc
       status: sub.status,
       planId: plan.id,
       trialDays: plan.trialDays ?? null,
+      clinicId: data.clinicId,
       limits: {
         maxDoctors: plan.maxDoctors ?? 0,
         maxPatients: plan.maxPatients ?? 0,
@@ -144,15 +146,11 @@ export async function getClinicSubscriptionStatus(userId: string): Promise<Subsc
   }
 }
 
-// Count helpers across clinic members
-async function countClinicPatients(userId: string): Promise<number> {
-  const clinicIds = await findClinicsForUser(userId);
-  if (clinicIds.length === 0) return 0;
-  const clinicId = clinicIds[0];
+// Count patients for a specific clinic (scoped to its members)
+async function countClinicPatientsForClinic(clinicId: string): Promise<number> {
   const members = await prisma.clinicMember.findMany({ where: { clinicId, isActive: true }, select: { userId: true } });
   const ids = members.map(m => m.userId);
   if (ids.length === 0) return 0;
-  // User model uses snake_case field `doctor_id`
   return prisma.user.count({ where: { role: 'PATIENT', doctor_id: { in: ids } } });
 }
 
@@ -162,7 +160,9 @@ export async function canAddPatient(userId: string): Promise<{ allowed: boolean;
   if (!status) return { allowed: false, message: 'Subscription não encontrada' };
   if (!status.isActive) return { allowed: false, message: 'Subscription inativa ou expirada' };
 
-  const current = await countClinicPatients(userId);
+  const clinicId = status.clinicId;
+  if (!clinicId) return { allowed: false, message: 'Clínica não encontrada para a assinatura' };
+  const current = await countClinicPatientsForClinic(clinicId);
   if (current >= status.limits.maxPatients) {
     return { allowed: false, message: `Limite de ${status.limits.maxPatients} pacientes atingido. Faça upgrade do seu plano.` };
   }

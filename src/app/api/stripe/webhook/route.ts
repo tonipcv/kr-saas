@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { emitEvent } from '@/lib/events';
+import { EventActor, EventType } from '@prisma/client';
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
@@ -80,6 +82,34 @@ export async function POST(req: NextRequest) {
             },
           });
         }
+
+        // Emit events (non-blocking)
+        try {
+          if (clinicId) {
+            // Membership started on first activation
+            await emitEvent({
+              eventId: event.id,
+              eventType: EventType.membership_started,
+              actor: EventActor.system,
+              clinicId,
+              metadata: {
+                plan_id: planId || null,
+                tier: 'basic',
+                price: (session.amount_total ?? 0) / 100,
+                duration: null,
+              },
+            });
+            // Also record a billing event
+            await emitEvent({
+              eventType: EventType.subscription_billed,
+              actor: EventActor.system,
+              clinicId,
+              metadata: { plan_id: planId || null, amount: (session.amount_total ?? 0) / 100, status: 'paid' },
+            });
+          }
+        } catch (e) {
+          console.error('[events] stripe checkout.session.completed emit failed', e);
+        }
         break;
       }
 
@@ -97,6 +127,23 @@ export async function POST(req: NextRequest) {
             currentPeriodEnd,
           },
         });
+
+        // Emit a billing-related event to reflect status change
+        try {
+          // Find clinicId by subscription
+          const subRow = await prisma.clinicSubscription.findFirst({ where: { stripeSubscriptionId }, select: { clinicId: true, planId: true } });
+          if (subRow?.clinicId) {
+            await emitEvent({
+              eventId: event.id,
+              eventType: EventType.subscription_billed,
+              actor: EventActor.system,
+              clinicId: subRow.clinicId,
+              metadata: { plan_id: subRow.planId, amount: null, status: sub.status },
+            });
+          }
+        } catch (e) {
+          console.error('[events] stripe customer.subscription.updated emit failed', e);
+        }
         break;
       }
 
@@ -110,6 +157,22 @@ export async function POST(req: NextRequest) {
             canceledAt: new Date(),
           },
         });
+
+        // Emit cancellation
+        try {
+          const subRow = await prisma.clinicSubscription.findFirst({ where: { stripeSubscriptionId }, select: { clinicId: true, planId: true } });
+          if (subRow?.clinicId) {
+            await emitEvent({
+              eventId: event.id,
+              eventType: EventType.subscription_canceled,
+              actor: EventActor.system,
+              clinicId: subRow.clinicId,
+              metadata: { reason: 'no_value', plan_id: subRow.planId },
+            });
+          }
+        } catch (e) {
+          console.error('[events] stripe customer.subscription.deleted emit failed', e);
+        }
         break;
       }
 

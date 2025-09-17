@@ -249,7 +249,7 @@ export default async function DoctorProductsPage({ params, searchParams }: {
             Nenhum produto disponível no momento.
           </div>
         ) : (
-          <ProductsGrid slug={slug} doctorId={doctor.id as any} products={products as any} branding={{ theme, buttonColor, buttonTextColor }} />
+          <ProductsGrid slug={slug} doctorId={doctor.id as any} products={products as any} branding={{ theme, buttonColor, buttonTextColor }} clinicId={clinic?.id} />
         )}
       </div>
       {/* Footer */}

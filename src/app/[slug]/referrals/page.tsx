@@ -10,7 +10,7 @@ export default async function SlugReferralsPage({ params }: { params: Promise<{ 
 
   const session = await getServerSession(authOptions);
   if (!session) {
-    const hdrs = headers();
+    const hdrs = await headers();
     const hostHeader = hdrs.get('x-forwarded-host') || hdrs.get('host') || '';
     const baseDomain = (process.env.NEXT_PUBLIC_APP_BASE_DOMAIN || process.env.APP_BASE_DOMAIN || '').toLowerCase();
     const hostNoPort = hostHeader.toLowerCase().split(':')[0];
@@ -55,6 +55,7 @@ export default async function SlugReferralsPage({ params }: { params: Promise<{ 
         forceClinicHeader
         isDarkTheme={theme === 'DARK'}
         brandColors={{ bg: buttonColor || undefined, fg: buttonTextColor || undefined }}
+        forcedSlug={slug}
       />
       {/* Footer */}
       <div className="mt-10 pb-8 flex justify-center">

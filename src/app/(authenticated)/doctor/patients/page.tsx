@@ -120,6 +120,12 @@ export default function PatientsPage() {
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
   const [rowMenuOpenId, setRowMenuOpenId] = useState<string | null>(null);
   const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
+  // WhatsApp dialog state
+  const [waDialogOpen, setWaDialogOpen] = useState(false);
+  const [waPatientId, setWaPatientId] = useState<string | null>(null);
+  const [waPatientName, setWaPatientName] = useState<string>('');
+  const [waMessage, setWaMessage] = useState<string>('Olá! Aqui é da clínica, tudo bem?');
+  const [waSending, setWaSending] = useState(false);
 
   // Close menus on outside click or Escape
   useEffect(() => {
@@ -162,6 +168,7 @@ export default function PatientsPage() {
     medications: '',
     notes: ''
   });
+  const [sendAccessNow, setSendAccessNow] = useState<boolean>(false);
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -186,7 +193,7 @@ export default function PatientsPage() {
       const openParam = params.get('add') || params.get('new');
       if (!openParam) return;
       (async () => {
-        const res = await checkLimit('patients');
+        const res = await checkLimit('patients', currentClinic?.id);
         if (!res.allowed) {
           toast.error(res.message || 'Upgrade required to add more clients');
           return;
@@ -323,7 +330,7 @@ export default function PatientsPage() {
       if (newPatient.medications?.trim()) patientData.medications = newPatient.medications.trim();
       if (newPatient.notes?.trim()) patientData.notes = newPatient.notes.trim();
 
-      const response = await fetch(`/api/patients/${patientToEdit.id}`, {
+      const response = await fetch(`/api/patients/${patientToEdit.id}?clinicId=${encodeURIComponent(currentClinic.id)}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -378,7 +385,7 @@ export default function PatientsPage() {
       if (newPatient.medications?.trim()) patientData.medications = newPatient.medications.trim();
       if (newPatient.notes?.trim()) patientData.notes = newPatient.notes.trim();
 
-      const response = await fetch('/api/patients', {
+      const response = await fetch(`/api/patients?clinicId=${encodeURIComponent(currentClinic.id)}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -392,15 +399,18 @@ export default function PatientsPage() {
         throw new Error(result.error || 'Erro ao criar paciente');
       }
 
-      // Automatically send password reset email
-      if (result.id) {
-        await sendPasswordResetEmail(result.id, result.email || newPatient.email);
-      }
+      // Optionally send access email immediately
+      try {
+        if (sendAccessNow && result?.id) {
+          await sendPasswordResetEmail(result.id, result.email || newPatient.email);
+        }
+      } catch {}
 
       toast.success('Cliente criado com sucesso!');
       loadPatients();
       setShowAddPatient(false);
       resetForm();
+      setSendAccessNow(false);
     } catch (err) {
       console.error('Error creating patient:', err);
       toast.error(err instanceof Error ? err.message : 'Erro ao criar paciente');
@@ -413,7 +423,7 @@ export default function PatientsPage() {
     try {
       setDeletingPatientId(patientId);
       
-      const response = await fetch(`/api/patients/${patientId}`, {
+      const response = await fetch(`/api/patients/${patientId}?clinicId=${encodeURIComponent(currentClinic.id)}`, {
         method: 'DELETE'
       });
 
@@ -444,6 +454,33 @@ export default function PatientsPage() {
   const handleDeleteCancel = () => {
     setShowDeleteConfirm(false);
     setPatientToDelete(null);
+  };
+
+  const openWhatsAppDialog = (patient: Patient) => {
+    setWaPatientId(patient.id);
+    setWaPatientName(patient.name || 'Cliente');
+    setWaMessage('Olá! Aqui é da clínica, tudo bem?');
+    setWaDialogOpen(true);
+  };
+
+  const sendWhatsAppToPatient = async () => {
+    if (!currentClinic?.id || !waPatientId) return;
+    try {
+      setWaSending(true);
+      const res = await fetch('/api/integrations/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId: currentClinic.id, patientId: waPatientId, message: waMessage || 'Olá!' })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Falha ao enviar WhatsApp');
+      toast.success('Mensagem enviada no WhatsApp');
+      setWaDialogOpen(false);
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao enviar WhatsApp');
+    } finally {
+      setWaSending(false);
+    }
   };
 
   const sendPasswordResetEmail = async (patientId: string, patientEmail: string) => {
@@ -830,7 +867,7 @@ export default function PatientsPage() {
                   variant="outline"
                   className="rounded-xl h-9 px-3 border-gray-200 text-gray-700 hover:bg-gray-50"
                   onClick={async () => {
-                    const res = await checkLimit('patients');
+                    const res = await checkLimit('patients', currentClinic?.id);
                     if (!res.allowed) {
                       toast.error(res.message || 'Upgrade required to import more clients');
                       return;
@@ -847,9 +884,10 @@ export default function PatientsPage() {
                 <Button
                   className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium"
                   onClick={async () => {
-                    const res = await checkLimit('patients');
+                    const res = await checkLimit('patients', currentClinic?.id);
                     if (!res.allowed) {
-                      toast.error(res.message || 'Upgrade required to add more clients');
+                      const extra = (res.current != null && res.limit != null) ? ` (${res.current}/${res.limit})` : '';
+                      toast.error((res.message || 'Your plan has reached the max clients limit') + extra);
                       return;
                     }
                     resetForm();
@@ -875,6 +913,27 @@ export default function PatientsPage() {
                 </div>
               </div>
             )}
+
+      {/* WhatsApp Send Dialog */}
+      <Dialog open={waDialogOpen} onOpenChange={setWaDialogOpen}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Enviar WhatsApp</DialogTitle>
+            <DialogDescription>Mensagem para {waPatientName}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label htmlFor="wa_message">Mensagem</Label>
+            <Textarea id="wa_message" value={waMessage} onChange={(e) => setWaMessage(e.target.value)} placeholder="Digite sua mensagem" rows={5} />
+            <p className="text-xs text-gray-500">O envio usa a integração oficial do WhatsApp configurada em Doctor → Integrations.</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setWaDialogOpen(false)} disabled={waSending}>Cancelar</Button>
+            <Button onClick={sendWhatsAppToPatient} disabled={waSending || !waMessage.trim()} className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white">
+              {waSending ? 'Enviando...' : 'Enviar'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
             {/* Top pill tabs */}
             <div className="mt-3 flex items-center gap-2">
@@ -1005,6 +1064,7 @@ export default function PatientsPage() {
                         />
                       </th>
                       <th className="py-3.5 pr-3 font-medium">Subscriber</th>
+                      <th className="px-3 py-3.5 font-medium">Birth Date</th>
                       <th className="px-3 py-3.5 font-medium">Subscription Date</th>
                       <th className="px-3 py-3.5 font-medium">Points</th>
                       <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
@@ -1029,11 +1089,14 @@ export default function PatientsPage() {
                               <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: '#eef2ff', color: '#4338ca' }}>
                                 {getPatientInitials(patient.name)}
                               </div>
-                              <div className="min-w-0">
-                                <div className="font-medium text-gray-900 truncate">{patient.name || 'Name not provided'}</div>
-                                <div className="text-xs text-gray-500 truncate">{patient.email || '-'}</div>
+                              <div>
+                                <div className="font-medium text-gray-900 leading-5">{patient.name || '—'}</div>
+                                <div className="text-gray-500 text-xs leading-4">{patient.email}</div>
                               </div>
                             </div>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">
+                            {patient.birth_date ? format(new Date(patient.birth_date), 'MMM d, yyyy', { locale: enUS }) : '-'}
                           </td>
                           <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">
                             {patient.created_at ? format(new Date(patient.created_at), 'MMM d, yyyy', { locale: enUS }) : '-'}
@@ -1058,6 +1121,7 @@ export default function PatientsPage() {
                                   <div className="py-1">
                                     <Link href={`/doctor/patients/${patient.id}`} className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">View</Link>
                                     <button className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setRowMenuOpenId(null); openEditModal(patient); }}>Edit</button>
+                                    <button className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setRowMenuOpenId(null); openWhatsAppDialog(patient); }}>Send WhatsApp</button>
                                     <button className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setRowMenuOpenId(null); sendPasswordResetEmail(patient.id, patient.email || ''); }}>Send password email</button>
                                     <button className="block w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50" onClick={() => { setRowMenuOpenId(null); setPatientToDelete({ id: patient.id, name: patient.name || 'Unnamed Patient' }); setShowDeleteConfirm(true); }}>Delete</button>
                                   </div>
@@ -1158,6 +1222,16 @@ export default function PatientsPage() {
                     value={newPatient.phone}
                     onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
                     placeholder="Phone number"
+                  />
+                </div>
+                <div className="space-y-2 col-span-2 sm:col-span-1">
+                  <Label htmlFor="add_birth_date">Birth Date</Label>
+                  <Input
+                    id="add_birth_date"
+                    type="date"
+                    value={newPatient.birth_date}
+                    onChange={(e) => setNewPatient({ ...newPatient, birth_date: e.target.value })}
+                    placeholder="Birth date"
                   />
                 </div>
               </div>

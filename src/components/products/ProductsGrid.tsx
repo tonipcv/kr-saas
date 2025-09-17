@@ -18,11 +18,13 @@ export default function ProductsGrid({
   doctorId,
   products,
   branding,
+  clinicId,
 }: {
   slug: string;
   doctorId: string | number;
   products: Product[];
   branding?: { theme?: 'LIGHT' | 'DARK'; buttonColor?: string | null; buttonTextColor?: string | null };
+  clinicId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Product | null>(null);
@@ -81,6 +83,8 @@ export default function ProductsGrid({
           name: name.trim() || undefined,
           phone: whatsapp.trim() || undefined,
           doctorId,
+          clinic_id: clinicId || undefined,
+          clinic_slug: slug,
           // keep for auditing/linking
           referrerCode: referrerCode || undefined,
           // optionally include slug for future compatibility
@@ -144,19 +148,27 @@ export default function ProductsGrid({
               target.searchParams.set('text', merged);
             }
           } catch {}
-          // Show success UI and then redirect after a brief delay
+          // Show success UI with the final URL; do not auto-redirect to let the user see/copy the code
           const finalUrl = target.toString();
           setRedirectUrl(finalUrl);
           setSuccess(true);
-          setTimeout(() => {
-            try { window.location.href = finalUrl; } catch {}
-          }, 500);
           return; // prevent falling through to generic success
         } catch (e) {
           // If URL is malformed, fallback to success state
           console.warn('Invalid confirmationUrl, showing success modal instead');
         }
       }
+      // No confirmationUrl: prefer staying on page and show success with a link to clinic referrals
+      if (data?.referralCode) {
+        const params = new URLSearchParams();
+        params.set('code', String(data.referralCode));
+        if (coupon) params.set('cupom', coupon);
+        const dest = `/${encodeURIComponent(slug)}/referrals?${params.toString()}`;
+        setRedirectUrl(dest);
+        setSuccess(true);
+        return;
+      }
+      // Fallback: show success UI if no referralCode for some reason
       setSuccess(true);
     } catch (err: any) {
       setError(err?.message || 'Erro inesperado');
@@ -382,21 +394,34 @@ export default function ProductsGrid({
                 </div>
                 <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                   {redirectUrl
-                    ? 'Parabéns, estamos redirecionando você para um dos nossos atendentes...'
+                    ? 'Parabéns! Antes de continuar, copie seu código abaixo.'
                     : 'Em breve um dos nossos atendentes entrará em contato com você!'}
                 </p>
-                {leadReferralCode && coupon ? (
-                  <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Seu CUPOM é: <span className="font-semibold text-gray-800">{leadReferralCode}</span>
+                {leadReferralCode ? (
+                  <div className="flex items-center justify-center">
+                    <div className={`w-full max-w-md ${isDark ? 'bg-[#0d0d0d] border border-gray-800' : 'bg-white border border-gray-200'} rounded-2xl p-4 shadow-sm`}>
+                      <div className={`text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2`}>{coupon ? 'Seu CUPOM' : 'Seu CÓDIGO'}</div>
+                      <div className="flex items-center justify-between gap-3">
+                        <code className={`${isDark ? 'text-white' : 'text-gray-900'} font-mono tracking-widest text-2xl sm:text-3xl select-all`}>{leadReferralCode}</code>
+                        <button
+                          type="button"
+                          className={`shrink-0 inline-flex items-center rounded-full px-3 py-1.5 text-xs font-medium ${isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
+                          onClick={() => navigator.clipboard.writeText(leadReferralCode!)}
+                        >
+                          Copiar
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ) : null}
                 {redirectUrl ? (
-                  <div className="flex items-center justify-center gap-3 text-xs text-gray-600">
-                    <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"></path>
-                    </svg>
-                    <a href={redirectUrl} className="underline hover:no-underline">Abrir agora</a>
+                  <div className="flex items-center justify-center gap-3">
+                    <a
+                      href={redirectUrl}
+                      className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-medium ${isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
+                    >
+                      Continuar
+                    </a>
                   </div>
                 ) : null}
                 <div className="flex items-center justify-center gap-2">

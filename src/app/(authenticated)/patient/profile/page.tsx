@@ -97,7 +97,7 @@ interface UserStats {
   lastLogin?: string;
 }
 
-export default function ProfilePage({ isDarkTheme, brandColors, publicClinic }: { isDarkTheme?: boolean; brandColors?: { bg?: string | null; fg?: string | null }; publicClinic?: { logo?: string | null; name?: string | null } } = {}) {
+export default function ProfilePage({ isDarkTheme, brandColors, publicClinic, forcedSlug }: { isDarkTheme?: boolean; brandColors?: { bg?: string | null; fg?: string | null }; publicClinic?: { logo?: string | null; name?: string | null }; forcedSlug?: string } = {}) {
   const router = useRouter();
   const { data: session, update } = useSession();
   const [isEditing, setIsEditing] = useState(false);
@@ -116,6 +116,17 @@ export default function ProfilePage({ isDarkTheme, brandColors, publicClinic }: 
   const [isSaving, setIsSaving] = useState(false);
 
   const toggleMenu = () => setMenuOpen((prev) => !prev);
+
+  // Resolve effective clinic/page slug for links and logout
+  const effectiveSlug = (() => {
+    if (forcedSlug && typeof forcedSlug === 'string' && forcedSlug.trim()) return forcedSlug.trim();
+    if (clinicSlug && clinicSlug.trim()) return clinicSlug.trim();
+    if (typeof window !== 'undefined') {
+      const seg = (window.location.pathname.split('/').filter(Boolean)[0] || '').trim();
+      if (seg) return seg;
+    }
+    return '';
+  })();
 
   // Detect browser language
   useEffect(() => {
@@ -162,12 +173,14 @@ export default function ProfilePage({ isDarkTheme, brandColors, publicClinic }: 
                 setUserStats(stats);
               }
 
-              // Get clinic slug for logout redirect
-              const clinicSlugResponse = await fetch('/api/patient/clinic-slug');
-              if (clinicSlugResponse.ok) {
-                const clinicData = await clinicSlugResponse.json();
-                setClinicSlug(clinicData.clinicSlug);
-              }
+              // Get clinic slug for logout redirect (best effort; forcedSlug may already cover this)
+              try {
+                const clinicSlugResponse = await fetch('/api/patient/clinic-slug', { cache: 'no-store' });
+                if (clinicSlugResponse.ok) {
+                  const clinicData = await clinicSlugResponse.json();
+                  if (clinicData?.clinicSlug) setClinicSlug(clinicData.clinicSlug);
+                }
+              } catch {}
             }
           } else {
             setUserRole('PATIENT');
@@ -468,8 +481,9 @@ export default function ProfilePage({ isDarkTheme, brandColors, publicClinic }: 
                       className={`w-full rounded-lg h-11 lg:h-11 font-medium text-base ${isDarkTheme ? 'text-gray-300 hover:bg-white/10 border border-white/15' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100 border border-gray-200'}`}
                       style={{ boxShadow: 'none' } as React.CSSProperties}
                       onClick={() => {
-                        if (clinicSlug) {
-                          signOut({ callbackUrl: `/${clinicSlug}/login` });
+                        const slug = effectiveSlug;
+                        if (slug) {
+                          signOut({ callbackUrl: `/${slug}/login` });
                         } else {
                           signOut({ callbackUrl: '/auth/signin' });
                         }
@@ -500,16 +514,16 @@ export default function ProfilePage({ isDarkTheme, brandColors, publicClinic }: 
             </button>
             {menuOpen && (
               <div className={`absolute bottom-14 right-0 rounded-lg shadow-xl w-56 p-2 ${isDarkTheme ? 'bg-[#111111] border border-white/10' : 'bg-white border border-gray-200'}`}>
-                <Link href={clinicSlug ? `/${clinicSlug}/profile` : '/patient/profile'} className={`flex items-center px-3 py-2 text-sm rounded-md ${isDarkTheme ? 'text-gray-200 hover:bg-white/10' : 'text-gray-700 hover:bg-gray-50'}`}>
+                <Link href={effectiveSlug ? `/${effectiveSlug}/profile` : '/patient/profile'} className={`flex items-center px-3 py-2 text-sm rounded-md ${isDarkTheme ? 'text-gray-200 hover:bg-white/10' : 'text-gray-700 hover:bg-gray-50'}`}>
                   <LucideUser className={`mr-2 h-4 w-4 ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`} />
                   Profile
                 </Link>
-                <Link href={clinicSlug ? `/${clinicSlug}/referrals` : '/patient/referrals'} className={`flex items-center px-3 py-2 text-sm rounded-md ${isDarkTheme ? 'text-gray-200 hover:bg-white/10' : 'text-gray-700 hover:bg-gray-50'}`}>
+                <Link href={effectiveSlug ? `/${effectiveSlug}/referrals` : '/patient/referrals'} className={`flex items-center px-3 py-2 text-sm rounded-md ${isDarkTheme ? 'text-gray-200 hover:bg-white/10' : 'text-gray-700 hover:bg-gray-50'}`}>
                   <Share2 className={`mr-2 h-4 w-4 ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`} />
                   Referrals
                 </Link>
                 <button
-                  onClick={() => signOut({ callbackUrl: clinicSlug ? `/${clinicSlug}/login` : '/' })}
+                  onClick={() => signOut({ callbackUrl: effectiveSlug ? `/${effectiveSlug}/login` : '/' })}
                   className={`w-full flex items-center px-3 py-2 text-sm rounded-md ${isDarkTheme ? 'text-gray-200 hover:bg-white/10' : 'text-gray-700 hover:bg-gray-50'}`}
                 >
                   <LogOut className={`mr-2 h-4 w-4 ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`} />

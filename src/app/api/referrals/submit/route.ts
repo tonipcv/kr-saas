@@ -9,6 +9,8 @@ import {
   CREDIT_TYPE
 } from '@/lib/referral-utils';
 import { sendReferralNotification } from '@/lib/referral-email-service';
+import { emitEvent } from '@/lib/events';
+import { EventActor, EventType } from '@prisma/client';
 
 
 
@@ -16,6 +18,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { name, email, phone, doctorId, referrerCode } = body;
+    const clinicSlugFromBody: string | undefined = (body.clinic_slug || body.clinicSlug || '').trim() || undefined;
     const rawCustomFields = typeof body.customFields === 'object' && body.customFields ? body.customFields : undefined;
     // Accept slug as alternative to doctorId for backward compatibility
     const doctorSlug: string | undefined = body.doctor_slug || body.doctorSlug;
@@ -283,6 +286,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Resolve clinicId BEFORE creating the lead (doctor context): prefer clinic_slug, fallback to owner/membership
+    let resolvedClinicId: string | null = null;
+    if (clinicSlugFromBody) {
+      try {
+        const clinic = await prisma.clinic.findFirst({
+          where: { OR: [{ slug: clinicSlugFromBody }, { subdomain: clinicSlugFromBody }] },
+          select: { id: true },
+        });
+        if (clinic?.id) resolvedClinicId = clinic.id;
+      } catch {}
+    }
+    if (!resolvedClinicId) {
+      try {
+        const owned = await prisma.clinic.findFirst({ where: { ownerId: resolvedDoctorId as string }, select: { id: true } });
+        if (owned?.id) resolvedClinicId = owned.id;
+      } catch {}
+    }
+    if (!resolvedClinicId) {
+      try {
+        const membership = await prisma.clinicMember.findFirst({ where: { userId: resolvedDoctorId as string, isActive: true }, select: { clinicId: true } });
+        if (membership?.clinicId) resolvedClinicId = membership.clinicId;
+      } catch {}
+    }
+
     // Criar a indicação
     // Merge provided custom fields with auditing info
     const providedCustom = rawCustomFields;
@@ -320,6 +347,7 @@ export async function POST(request: NextRequest) {
         referralCode: leadReferralCode!,
         status: REFERRAL_STATUS.PENDING,
         doctorId: resolvedDoctorId as string,
+        clinicId: resolvedClinicId,
         referrerId: referrer?.id || null,
         source: 'referral_form',
         // Persist provided referrerCode and any product context for auditing and UI
@@ -343,6 +371,59 @@ export async function POST(request: NextRequest) {
       referrerId: referralLead.referrerId || null,
       createdAt: referralLead.createdAt,
     });
+
+    // Fire analytics (non-blocking)
+    try {
+      const clinicId = resolvedClinicId;
+      if (clinicId) {
+        const ua = request.headers.get('user-agent') || undefined;
+        const campaignId = (rawCustomFields as any)?.campaign?.id || undefined;
+        const couponKey = (rawCustomFields as any)?.campaign?.coupon || undefined;
+        const discountPercent = typeof (rawCustomFields as any)?.campaign?.discountPercent === 'number'
+          ? (rawCustomFields as any)?.campaign?.discountPercent
+          : undefined;
+        const price = typeof (rawCustomFields as any)?.offer?.amount === 'number'
+          ? (rawCustomFields as any)?.offer?.amount
+          : undefined;
+        const metadata: Record<string, any> = {
+          source: 'referral',
+          device: ua,
+          // Lead info
+          name: (name || undefined),
+          email: (email || undefined),
+          phone: (phone || undefined),
+          // Referral context
+          referrer_code: (referrerCode || undefined),
+          referrer_id: (referrer as any)?.id || undefined,
+          referrer_name: ((referrer as any)?.name as string | null) || undefined,
+          referrer_email: ((referrer as any)?.email as string | null) || undefined,
+          referral_code: String(referralLead.referralCode || ''),
+          // Doctor/clinic context
+          doctor_id: resolvedDoctorId || undefined,
+          doctor_slug: doctorSlug || undefined,
+          clinic_slug: clinicSlugFromBody || undefined,
+          // Product context
+          product_id: (rawCustomFields as any)?.productId ?? undefined,
+          product_name: (rawCustomFields as any)?.productName ?? undefined,
+          product_category: (rawCustomFields as any)?.productCategory ?? undefined,
+          price,
+          coupon: couponKey,
+          discount_percent: discountPercent,
+        };
+        if (typeof campaignId === 'string' && campaignId.trim()) {
+          metadata.campaign_id = campaignId.trim();
+        }
+        await emitEvent({
+          eventType: EventType.lead_created,
+          actor: EventActor.system,
+          clinicId,
+          customerId: ((referrer as any)?.id as string | undefined) ?? null,
+          metadata,
+        });
+      }
+    } catch (e) {
+      console.error('[events] lead_created emit failed', e);
+    }
 
     // Send notifications
     sendReferralNotification(referralLead.id).catch(error => {

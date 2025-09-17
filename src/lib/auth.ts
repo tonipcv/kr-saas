@@ -3,6 +3,8 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
+import { emitEvent } from '@/lib/events';
+import { EventActor, EventType } from '@prisma/client';
 import { compare } from "bcryptjs";
 
 declare module "next-auth" {
@@ -183,4 +185,67 @@ export const authOptions: AuthOptions = {
       return session;
     },
   },
-}; 
+  events: {
+    async signIn({ user }) {
+      try {
+        // Resolve clinicId differently for PATIENT vs DOCTOR/STAFF to ensure events appear on doctor events page
+        let clinicId: string | null = null;
+
+        const roleRaw = (user as any)?.role || null;
+        const role = typeof roleRaw === 'string'
+          ? (roleRaw.toLowerCase() === 'super admin' || roleRaw.toLowerCase() === 'super_admin'
+              ? 'super_admin'
+              : roleRaw.toLowerCase())
+          : null;
+        if (role === 'PATIENT') {
+          // Find patient's active doctor, then infer that doctor's clinic
+          try {
+            const rel = await prisma.doctorPatientRelationship.findFirst({
+              where: { patientId: user.id, isActive: true },
+              select: { doctorId: true },
+            });
+            if (rel?.doctorId) {
+              // Prefer clinic owned by doctor
+              const owned = await prisma.clinic.findFirst({ where: { ownerId: rel.doctorId }, select: { id: true } });
+              if (owned?.id) clinicId = owned.id;
+              // Fallback: first clinic where doctor is a member
+              if (!clinicId) {
+                const membership = await prisma.clinicMember.findFirst({ where: { userId: rel.doctorId, isActive: true }, select: { clinicId: true } });
+                if (membership?.clinicId) clinicId = membership.clinicId;
+              }
+            }
+          } catch (e) {
+            console.warn('[auth.signIn] Failed to resolve clinic for PATIENT via relationship', e);
+          }
+        }
+
+        // For doctors or staff, keep previous heuristic on their own identity
+        if (!clinicId) {
+          try {
+            const owned = await prisma.clinic.findFirst({ where: { ownerId: user.id }, select: { id: true } });
+            if (owned?.id) clinicId = owned.id;
+          } catch {}
+        }
+        if (!clinicId) {
+          try {
+            const membership = await prisma.clinicMember.findFirst({ where: { userId: user.id, isActive: true }, select: { clinicId: true } });
+            if (membership?.clinicId) clinicId = membership.clinicId;
+          } catch {}
+        }
+
+        if (clinicId) {
+          await emitEvent({
+            eventType: EventType.user_logged_in,
+            actor: EventActor.system,
+            clinicId,
+            metadata: { user_id: user.id, role: role as any },
+          });
+        } else {
+          console.warn('[events] user_logged_in not emitted: clinicId unresolved for user', user.id, 'role', role);
+        }
+      } catch (e) {
+        console.error('[events] user_logged_in emit failed', e);
+      }
+    },
+  },
+};

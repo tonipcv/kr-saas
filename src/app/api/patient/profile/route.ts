@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { emitEvent } from '@/lib/events';
+import { EventActor, EventType } from '@prisma/client';
 import { verifyMobileAuth } from '@/lib/mobile-auth';
 
 // GET /api/patient/profile - Get patient profile information
@@ -97,10 +99,25 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verificar se o usuário existe e é paciente
+    // Verificar se o usuário existe e é paciente; capturar snapshot para diff
     const existingUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true }
+      select: {
+        role: true,
+        name: true,
+        phone: true,
+        birthDate: true,
+        gender: true,
+        address: true,
+        emergencyContact: true,
+        emergencyPhone: true,
+        medicalHistory: true,
+        allergies: true,
+        medications: true,
+        notes: true,
+        image: true,
+        doctorId: true,
+      }
     });
 
     if (!existingUser) {
@@ -172,6 +189,53 @@ export async function PUT(request: NextRequest) {
         }
       }
     });
+
+    // Emit analytics: customer_updated (non-blocking)
+    try {
+      // Compute changes object only for modified fields
+      const fields: Array<keyof typeof updatedUser> = [
+        'name','phone','birthDate','gender','address','emergencyContact','emergencyPhone','medicalHistory','allergies','medications','notes','image'
+      ] as any;
+      const changes: Record<string, { from: any; to: any }> = {};
+      for (const f of fields) {
+        const beforeVal = (existingUser as any)?.[f] ?? null;
+        const afterVal = (updatedUser as any)?.[f] ?? null;
+        // Compare by value; for Date compare ISO
+        const beforeCmp = beforeVal instanceof Date ? beforeVal.toISOString() : beforeVal;
+        const afterCmp = afterVal instanceof Date ? afterVal.toISOString() : afterVal;
+        if (beforeCmp !== afterCmp) {
+          changes[f as string] = { from: beforeVal, to: afterVal };
+        }
+      }
+      if (Object.keys(changes).length > 0) {
+        // Resolve clinicId via doctor ownership or membership using updatedUser.doctorId
+        let clinicId: string | null = null;
+        const doctorId = (updatedUser as any)?.doctorId as string | null;
+        if (doctorId) {
+          try {
+            const owned = await prisma.clinic.findFirst({ where: { ownerId: doctorId }, select: { id: true } });
+            if (owned?.id) clinicId = owned.id;
+          } catch {}
+          if (!clinicId) {
+            try {
+              const membership = await prisma.clinicMember.findFirst({ where: { userId: doctorId, isActive: true }, select: { clinicId: true } });
+              if (membership?.clinicId) clinicId = membership.clinicId;
+            } catch {}
+          }
+        }
+        if (clinicId) {
+          await emitEvent({
+            eventType: EventType.customer_updated,
+            actor: EventActor.customer,
+            clinicId,
+            customerId: updatedUser.id,
+            metadata: { changes },
+          });
+        }
+      }
+    } catch (e) {
+      console.error('[events] customer_updated emit failed', e);
+    }
 
     return NextResponse.json({ user: updatedUser });
 

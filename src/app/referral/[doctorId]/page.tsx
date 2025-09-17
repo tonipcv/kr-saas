@@ -86,6 +86,7 @@ export default function ReferralPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [countdown, setCountdown] = useState(5);
+  const [leadReferralCode, setLeadReferralCode] = useState<string | null>(null);
   const [language, setLanguage] = useState<'pt' | 'en'>('pt');
 
   const [formData, setFormData] = useState({
@@ -147,50 +148,34 @@ export default function ReferralPage() {
     return () => { cancelled = true; };
   }, [doctorId, referrerCode]);
 
-  // Redirecionamento automático após sucesso
+  // Redirecionamento automático após sucesso (contexto da clínica)
   useEffect(() => {
-    if (success) {
-      setCountdown(5);
-      
-      const interval = setInterval(() => {
-        setCountdown(prev => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            // Verificar se o usuário está logado como paciente
-            fetch('/api/auth/session')
-              .then(res => res.json())
-              .then(session => {
-                if (session?.user) {
-                  // Se está logado, verificar se é paciente
-                  fetch('/api/auth/role')
-                    .then(res => res.json())
-                    .then(data => {
-                      if (data.role === 'PATIENT') {
-                        window.location.href = '/patient/referrals';
-                      } else {
-                        window.location.href = '/';
-                      }
-                    })
-                    .catch(() => {
-                      window.location.href = '/';
-                    });
-                } else {
-                  // Se não está logado, redirecionar para login
-                  window.location.href = '/auth/signin';
-                }
-              })
-              .catch(() => {
-                window.location.href = '/';
-              });
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-
-      return () => clearInterval(interval);
+    if (!success || !leadReferralCode) return;
+    let cancelled = false;
+    async function goToClinicReferrals() {
+      try {
+        const url = `/api/referrals/doctor/${doctorId}`;
+        const res = await fetch(url);
+        const data = await res.json().catch(() => ({}));
+        const slug = (data?.doctor?.doctor_slug || '').trim();
+        if (!cancelled && slug) {
+          const qs = new URLSearchParams({ code: String(leadReferralCode) });
+          // Preserve coupon if present in current URL
+          try {
+            const u = new URL(window.location.href);
+            const coupon = u.searchParams.get('cupom') || u.searchParams.get('coupon');
+            if (coupon) qs.set('cupom', coupon);
+          } catch {}
+          window.location.replace(`/${encodeURIComponent(slug)}/referrals?${qs.toString()}`);
+          return;
+        }
+      } catch {}
+      // Fallback: go to root if we cannot resolve slug
+      if (!cancelled) window.location.replace('/');
     }
-  }, [success]);
+    goToClinicReferrals();
+    return () => { cancelled = true; };
+  }, [success, leadReferralCode, doctorId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -212,6 +197,7 @@ export default function ReferralPage() {
       const data = await response.json();
 
       if (response.ok) {
+        if (data?.referralCode) setLeadReferralCode(String(data.referralCode));
         setSuccess(true);
         setFormData({ name: '', email: '', phone: '', referrerCode: referrerCode || '' });
       } else {

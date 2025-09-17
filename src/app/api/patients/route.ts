@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { emitEvent } from '@/lib/events';
+import { EventActor, EventType } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
   try {
@@ -54,12 +56,10 @@ export async function GET(request: NextRequest) {
     // "Field patient is required to return data, got null" when orphaned relationships exist.
     const users = await prisma.user.findMany({
       where: {
-        role: 'PATIENT',
         patient_relationships: {
           some: {
             doctorId: doctor.id,
             isActive: true,
-            ...(clinicId ? { clinicId } : {}),
           },
         },
       },
@@ -171,6 +171,8 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    const { searchParams } = new URL(request.url);
+    const clinicIdParam = searchParams.get('clinicId');
     const {
       name,
       email,
@@ -200,6 +202,23 @@ export async function POST(request: NextRequest) {
       select: { id: true, name: true, email: true }
     });
 
+    // Resolve clinicId for event emission (prefer param if doctor has access)
+    async function resolveClinicIdForDoctor(doctorId: string): Promise<string | null> {
+      if (clinicIdParam) {
+        // Allow when doctor owns the clinic
+        const owns = await prisma.clinic.findFirst({ where: { id: clinicIdParam, ownerId: doctorId }, select: { id: true } });
+        if (owns?.id) return owns.id;
+        // Or when doctor is an active member of the clinic
+        const access = await prisma.clinicMember.findFirst({ where: { userId: doctorId, clinicId: clinicIdParam, isActive: true }, select: { clinicId: true } });
+        if (access?.clinicId) return access.clinicId;
+      }
+      // Fallbacks
+      const owned = await prisma.clinic.findFirst({ where: { ownerId: doctorId }, select: { id: true } });
+      if (owned?.id) return owned.id;
+      const membership = await prisma.clinicMember.findFirst({ where: { userId: doctorId, isActive: true }, select: { clinicId: true } });
+      return membership?.clinicId || null;
+    }
+
     if (existingUser) {
       // If user exists, link/reactivate and upsert a PatientProfile scoped to this doctor
       const existingRel = await prisma.doctorPatientRelationship.findUnique({
@@ -212,6 +231,7 @@ export async function POST(request: NextRequest) {
         select: { id: true, isActive: true },
       });
 
+      let createdRel = false;
       if (!existingRel) {
         await prisma.doctorPatientRelationship.create({
           data: {
@@ -221,11 +241,13 @@ export async function POST(request: NextRequest) {
             isPrimary: false,
           },
         });
+        createdRel = true;
       } else if (!existingRel.isActive) {
         await prisma.doctorPatientRelationship.update({
           where: { id: existingRel.id },
           data: { isActive: true },
         });
+        createdRel = true;
       }
 
       // Upsert the per-doctor profile with the provided fields
@@ -260,6 +282,28 @@ export async function POST(request: NextRequest) {
           isActive: true,
         },
       });
+
+      // Emit event to show in /doctor/events
+      try {
+        const clinicId = await resolveClinicIdForDoctor(doctor.id);
+        if (clinicId) {
+          console.log('[events] patient link emit', { clinicId, doctorId: doctor.id, userId: existingUser.id, createdRel, eventType: createdRel ? 'customer_created' : 'customer_updated' });
+          // If relationship was newly created/reactivated, treat as customer_created for this doctor; else customer_updated
+          const eventType = createdRel ? EventType.customer_created : EventType.customer_updated;
+          await emitEvent({
+            eventId: `${eventType}_clinic_${clinicId}_doctor_${doctor.id}_user_${existingUser.id}`,
+            eventType,
+            actor: EventActor.clinic,
+            clinicId,
+            customerId: existingUser.id,
+            metadata: createdRel
+              ? { nome: name || existingUser.name || email }
+              : { changes: { name, phone, address, emergencyContact, emergencyPhone } },
+          });
+        }
+      } catch (e) {
+        console.error('[events] patient link emit failed', e);
+      }
 
       return NextResponse.json({
         id: existingUser.id,
@@ -322,6 +366,24 @@ export async function POST(request: NextRequest) {
 
       return patient;
     });
+
+    // Emit customer_created for brand new user
+    try {
+      const clinicId = await resolveClinicIdForDoctor(doctor.id);
+      if (clinicId) {
+        console.log('[events] patient create emit', { clinicId, doctorId: doctor.id, userId: result.id, eventType: 'customer_created' });
+        await emitEvent({
+          eventId: `customer_created_clinic_${clinicId}_doctor_${doctor.id}_user_${result.id}`,
+          eventType: EventType.customer_created,
+          actor: EventActor.clinic,
+          clinicId,
+          customerId: result.id,
+          metadata: { nome: name },
+        });
+      }
+    } catch (e) {
+      console.error('[events] patient create emit failed', e);
+    }
 
     return NextResponse.json({
       id: result.id,

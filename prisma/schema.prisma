@@ -1707,3 +1707,85 @@ model CouponRedemption {
   @@map("coupon_redemptions")
 }
 
+
+/// Unified events store for analytics and auditing
+model Event {
+  id         String   @id @default(cuid())
+  eventId    String?  @unique @map("event_id")
+  eventType  EventType @map("event_type")
+  customerId String?  @map("customer_id")
+  clinicId   String   @map("clinic_id")
+  actor      EventActor
+  timestamp  DateTime @default(now())
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([clinicId, timestamp], map: "idx_events_clinic_ts")
+  @@index([eventType, timestamp], map: "idx_events_type_ts")
+  @@index([customerId, timestamp], map: "idx_events_customer_ts")
+  @@map("events")
+}
+
+/// Canonical list of event types
+enum EventType {
+  // Cliente (Ciclo de Vida)
+  customer_created
+  customer_updated
+  customer_visit
+  lead_created
+  lead_converted
+  review_submitted
+  feedback_negative
+
+  // Transação / Pagamento
+  purchase_made
+  purchase_refund
+  payment_processed
+  subscription_billed
+  subscription_canceled
+  chargeback_reported
+
+  // Loyalty / Rewards
+  reward_created
+  reward_offered
+  reward_viewed
+  reward_claimed
+  reward_redeemed
+  reward_expired
+  points_earned
+  points_spent
+
+  // Comunicação / Engajamento
+  campaign_sent
+  campaign_opened
+  campaign_clicked
+  campaign_replied
+  conversation_started
+  conversation_closed
+
+  // Membership
+  membership_started
+  membership_renewed
+  membership_canceled
+  membership_upgraded
+
+  // IA (Feedback Loop)
+  prediction_made
+  action_taken
+  outcome_recorded
+
+  // Sistema / Infra
+  user_logged_in
+  config_changed
+  integration_added
+}
+
+/// Actor who originated the event
+enum EventActor {
+  customer
+  clinic
+  system
+  ai
+  @@map("event_actor_enum")
+}
+

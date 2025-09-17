@@ -6,32 +6,47 @@ export const revalidate = 0;
 
 // Public: GET /api/coupon-templates/doctor/[slug]
 // Lists active coupon templates for a doctor by public slug
-export async function GET(_req: NextRequest, { params }: { params: { slug: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
-    const slug = (params?.slug || '').trim().toLowerCase();
+    const resolved = await params;
+    const slug = (resolved?.slug || '').trim().toLowerCase();
     if (!slug) {
       return NextResponse.json({ success: false, error: 'Missing slug' }, { status: 400 });
     }
 
-    // Find doctor id by public slug
-    const doctor = await prisma.user.findFirst({
-      where: { doctor_slug: slug },
-      select: { id: true },
-    });
-
-    if (!doctor?.id) {
-      return NextResponse.json({ success: true, data: [], message: 'Doctor not found' });
+    // Try clinic first
+    const clinicRows = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM clinics WHERE slug = ${slug} OR "subdomain" = ${slug} LIMIT 1
+    `;
+    const clinicId = clinicRows?.[0]?.id || null;
+    let rows: any[] = [];
+    if (clinicId) {
+      rows = await prisma.$queryRawUnsafe(
+        `SELECT id, doctor_id, clinic_id, name, slug, display_title, display_message, is_active, created_at, updated_at
+         FROM coupon_templates
+         WHERE clinic_id = $1 AND is_active = true
+         ORDER BY created_at DESC
+         LIMIT 100`,
+        clinicId
+      );
+    } else {
+      // Fallback: Find doctor id by public slug and list by doctor_id (legacy)
+      const doctor = await prisma.user.findFirst({
+        where: { doctor_slug: slug },
+        select: { id: true },
+      });
+      if (!doctor?.id) {
+        return NextResponse.json({ success: true, data: [], message: 'Doctor/Clinic not found' });
+      }
+      rows = await prisma.$queryRawUnsafe(
+        `SELECT id, doctor_id, clinic_id, name, slug, display_title, display_message, is_active, created_at, updated_at
+         FROM coupon_templates
+         WHERE doctor_id = $1 AND is_active = true
+         ORDER BY created_at DESC
+         LIMIT 100`,
+        doctor.id
+      );
     }
-
-    // Query only active templates
-    const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT id, doctor_id, name, slug, display_title, display_message, is_active, created_at, updated_at
-       FROM coupon_templates
-       WHERE doctor_id = $1 AND is_active = true
-       ORDER BY created_at DESC
-       LIMIT 100`,
-      doctor.id
-    );
 
     const data = rows.map((r) => ({
       id: String(r.id),

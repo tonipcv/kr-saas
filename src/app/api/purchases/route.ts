@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { recalculateMembershipLevel } from '@/lib/membership';
+import { emitEvent } from '@/lib/events';
+import { EventActor, EventType } from '@prisma/client';
 
 // Unified JSON response helpers
 function ok(data: any) {
@@ -147,7 +149,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch product for price and credits per unit
-    const product = await prisma.products.findUnique({ where: { id: productId }, select: { id: true, name: true, price: true, creditsPerUnit: true } });
+    const product = await prisma.products.findUnique({
+      where: { id: productId },
+      select: { id: true, name: true, price: true, creditsPerUnit: true, category: true, productCategory: { select: { name: true } }, clinicId: true }
+    });
     if (!product) return badRequest('Produto não encontrado');
 
     // Monetary and points as Decimal
@@ -214,6 +219,89 @@ export async function POST(req: NextRequest) {
 
       return purchase;
     });
+
+    // Fire analytics: points_earned and purchase_made (non-blocking)
+    try {
+      // Resolve clinicId: prefer product's clinic, then fall back to doctor ownership or membership
+      let clinicId: string | null = product.clinicId || null;
+      try {
+        if (!clinicId) {
+          const owned = await prisma.clinic.findFirst({ where: { ownerId: doctorId }, select: { id: true } });
+          if (owned?.id) clinicId = owned.id;
+        }
+      } catch {}
+      if (!clinicId) {
+        try {
+          const membership = await prisma.clinicMember.findFirst({ where: { userId: doctorId, isActive: true }, select: { clinicId: true } });
+          if (membership?.clinicId) clinicId = membership.clinicId;
+        } catch {}
+      }
+
+      if (clinicId) {
+        // points_earned: mirror the ledger entry
+        try {
+          const pts = Number(pointsAwarded);
+          await emitEvent({
+            eventId: `points_${result.id}`,
+            eventType: EventType.points_earned,
+            actor: EventActor.customer,
+            clinicId,
+            customerId: result.userId,
+            timestamp: result.createdAt as any,
+            metadata: { value: pts, source: 'purchase', source_id: result.id },
+          });
+        } catch {}
+
+        const value = Number(result.totalPrice);
+        const categoria = String(
+          (product as any)?.category || (product as any)?.productCategory?.name || 'outros'
+        );
+        const eventPayload = {
+          eventId: `purchase_${result.id}`,
+          eventType: EventType.purchase_made,
+          actor: EventActor.clinic,
+          clinicId,
+          customerId: result.userId,
+          timestamp: result.createdAt as any,
+          metadata: {
+            value,
+            currency: 'BRL',
+            items: [
+              {
+                name: product.name ?? product.id,
+                categoria,
+                qty: quantity,
+                price: Number(unitPrice),
+              },
+            ],
+            channel: 'online',
+            purchase_id: result.id,
+            idempotency_key: idempotencyKey || null,
+          },
+        } as const;
+        console.log('[events] Emitting purchase_made', JSON.stringify(eventPayload));
+        await emitEvent({
+          eventId: `purchase_${result.id}`,
+          eventType: EventType.purchase_made,
+          actor: EventActor.clinic,
+          clinicId,
+          customerId: result.userId,
+          timestamp: result.createdAt as any,
+          metadata: {
+            value,
+            currency: 'BRL',
+            items: [
+              { name: product.name ?? product.id, categoria, qty: quantity, price: Number(unitPrice) }
+            ],
+            channel: 'online',
+            purchase_id: result.id,
+            idempotency_key: idempotencyKey || null,
+          }
+        });
+      }
+    } catch (e) {
+      console.error('[events] purchase_made emit failed', e);
+    }
 
     return ok({ purchase: result });
   } catch (err: any) {

@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CheckCircleIcon, PlusIcon, ChevronLeftIcon as PageLeftIcon, ChevronRightIcon as PageRightIcon } from '@heroicons/react/24/outline';
+import { CheckCircleIcon, PlusIcon, ChevronLeftIcon as PageLeftIcon, ChevronRightIcon as PageRightIcon, TrashIcon, EllipsisHorizontalIcon } from '@heroicons/react/24/outline';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 interface Patient {
   id: string;
@@ -61,6 +62,16 @@ export default function PurchasesPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTargetId, setConfirmTargetId] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editQuantity, setEditQuantity] = useState<string>('1');
+  const [editNotes, setEditNotes] = useState<string>('');
+  const [editing, setEditing] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Derived flags
   const isFree = (planName || '').toLowerCase() === 'free';
@@ -84,6 +95,38 @@ export default function PurchasesPage() {
       setAvailablePlans([]);
     } finally {
       setPlansLoading(false);
+    }
+  };
+
+  const openEdit = (p: PurchaseItem) => {
+    setEditError(null);
+    setEditId(p.id);
+    setEditQuantity(String(p.quantity ?? '1'));
+    setEditNotes(p.notes || '');
+    setEditOpen(true);
+  };
+
+  const submitEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editId) return;
+    try {
+      setEditing(true);
+      setEditError(null);
+      const qty = Number(editQuantity);
+      if (!Number.isFinite(qty) || qty < 1) throw new Error('Quantidade inválida');
+      const res = await fetch(`/api/purchases/${encodeURIComponent(editId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity: qty, notes: editNotes || null })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.message || 'Falha ao atualizar');
+      await loadPurchases(page);
+      setEditOpen(false);
+    } catch (e: any) {
+      setEditError(e?.message || 'Erro inesperado');
+    } finally {
+      setEditing(false);
     }
   };
 
@@ -189,6 +232,27 @@ export default function PurchasesPage() {
   }, [currentClinic]);
 
   const selectedProduct = useMemo(() => products.find(p => p.id === productId), [products, productId]);
+
+  const deletePurchaseInner = async (id: string) => {
+    try {
+      setDeleteError(null);
+      setDeletingId(id);
+      const res = await fetch(`/api/purchases/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.message || 'Falha ao apagar compra');
+      await loadPurchases(page);
+    } catch (e: any) {
+      setDeleteError(e?.message || 'Erro inesperado ao apagar');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const openDelete = (id: string) => {
+    setDeleteError(null);
+    setConfirmTargetId(id);
+    setConfirmOpen(true);
+  };
 
   const formatPrice = (price?: number) => {
     if (price == null) return undefined;
@@ -348,7 +412,8 @@ export default function PurchasesPage() {
                     <th className="px-3 py-3.5 font-medium">Unit</th>
                     <th className="px-3 py-3.5 font-medium">Total</th>
                     <th className="px-3 py-3.5 font-medium">Points</th>
-                    <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Notes</th>
+                    <th className="px-3 py-3.5 font-medium">Notes</th>
+                    <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -370,7 +435,25 @@ export default function PurchasesPage() {
                           <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{formatPrice(toNum(p.unitPrice)) || '-'}</td>
                           <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{formatPrice(toNum(p.totalPrice)) || '-'}</td>
                           <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{toNum(p.pointsAwarded)} pts</td>
-                          <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm text-gray-600 sm:pr-6">{p.notes || '-'}</td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">{p.notes || '-'}</td>
+                          <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right sm:pr-6">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-8 rounded-lg">
+                                  <EllipsisHorizontalIcon className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-40">
+                                <DropdownMenuItem onClick={() => openEdit(p)}>Editar</DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className={`text-red-600 ${deletingId ? 'opacity-50 pointer-events-none' : ''}`}
+                                  onClick={() => { if (!deletingId) openDelete(p.id); }}
+                                >
+                                  Excluir
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </td>
                         </tr>
                       );
                     })
@@ -385,6 +468,63 @@ export default function PurchasesPage() {
               {purchasesError}
             </div>
           )}
+          {deleteError && (
+            <div className="mt-3 rounded-xl border border-red-200 bg-red-50 text-red-800 px-4 py-2 text-sm">
+              {deleteError}
+            </div>
+          )}
+
+          {/* Delete Confirmation Modal */}
+          <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <DialogContent className="max-w-md bg-white border border-gray-200 rounded-2xl">
+              <DialogHeader>
+                <DialogTitle className="text-[18px] font-semibold text-gray-900">Confirmar exclusão</DialogTitle>
+              </DialogHeader>
+              <div className="text-sm text-gray-700">
+                Esta ação apagará a compra e ajustará os pontos do paciente. Deseja continuar?
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <Button type="button" variant="outline" className="h-9 rounded-xl" onClick={() => setConfirmOpen(false)} disabled={!!deletingId}>Cancelar</Button>
+                <Button
+                  type="button"
+                  className="h-9 rounded-xl bg-red-600 text-white hover:bg-red-700"
+                  onClick={async () => {
+                    if (!confirmTargetId) return;
+                    await deletePurchaseInner(confirmTargetId);
+                    setConfirmOpen(false);
+                    setConfirmTargetId(null);
+                  }}
+                  disabled={!!deletingId}
+                >
+                  {deletingId ? 'Apagando…' : 'Apagar'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Edit Purchase Modal */}
+          <Dialog open={editOpen} onOpenChange={setEditOpen}>
+            <DialogContent className="max-w-md bg-white border border-gray-200 rounded-2xl">
+              <DialogHeader>
+                <DialogTitle className="text-[18px] font-semibold text-gray-900">Editar compra</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={submitEdit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade</label>
+                  <Input type="number" min={1} step={1} value={editQuantity} onChange={(e) => setEditQuantity(e.target.value)} className="h-10 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
+                  <Textarea rows={3} value={editNotes} onChange={(e) => setEditNotes(e.target.value)} className="rounded-xl" />
+                </div>
+                {editError && <div className="text-sm text-red-600">{editError}</div>}
+                <div className="flex items-center gap-2 justify-end">
+                  <Button type="button" variant="outline" className="h-10 rounded-xl" onClick={() => setEditOpen(false)} disabled={editing}>Cancelar</Button>
+                  <Button type="submit" className="h-10 rounded-xl bg-gray-900 text-white" disabled={editing}>{editing ? 'Salvando…' : 'Salvar'}</Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
 
           {/* Pagination */}
           <div className="mt-4 flex items-center justify-between">

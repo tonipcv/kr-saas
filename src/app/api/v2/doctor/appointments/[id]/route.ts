@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { updateCalendarEvent, deleteCalendarEvent } from '@/lib/googleCalendar';
+import { emitEvent } from '@/lib/events';
+import { EventActor, EventType } from '@prisma/client';
 
 // GET - Get a specific appointment
 export async function GET(
@@ -148,6 +150,45 @@ export async function PATCH(
         console.error('Error updating Google Calendar event:', calendarError);
         // Continue without Google Calendar update
       }
+    }
+
+    // Emit analytics: customer_visit when status becomes COMPLETED (non-blocking)
+    try {
+      if (updateData.status === 'COMPLETED' && existingAppointment.status !== 'COMPLETED') {
+        // Compute duration if possible (minutes)
+        const start = updatedAppointment.startTime || existingAppointment.startTime;
+        const end = updatedAppointment.endTime || existingAppointment.endTime;
+        let duration: number | null = null;
+        if (start && end) {
+          try {
+            duration = Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000));
+          } catch {}
+        }
+        // Resolve clinicId by doctor ownership or membership
+        let clinicId: string | null = null;
+        try {
+          const owned = await prisma.clinic.findFirst({ where: { ownerId: existingAppointment.doctorId }, select: { id: true } });
+          if (owned?.id) clinicId = owned.id;
+        } catch {}
+        if (!clinicId) {
+          try {
+            const membership = await prisma.clinicMember.findFirst({ where: { userId: existingAppointment.doctorId, isActive: true }, select: { clinicId: true } });
+            if (membership?.clinicId) clinicId = membership.clinicId;
+          } catch {}
+        }
+        if (clinicId) {
+          await emitEvent({
+            eventType: EventType.customer_visit,
+            actor: EventActor.clinic,
+            clinicId,
+            customerId: updatedAppointment.patientId,
+            timestamp: updatedAppointment.endTime ?? undefined,
+            metadata: { visit_type: 'appointment', duration_minutes: duration },
+          });
+        }
+      }
+    } catch (e) {
+      console.error('[events] customer_visit emit failed', e);
     }
 
     return NextResponse.json({

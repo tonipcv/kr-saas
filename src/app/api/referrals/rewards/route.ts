@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { canCreateReward } from '@/lib/subscription';
+import { emitEvent } from '@/lib/events';
+import { EventActor, EventType } from '@prisma/client';
 
 // GET - Listar recompensas do médico
 export async function GET(req: Request) {
@@ -185,6 +187,22 @@ export async function POST(req: Request) {
       rewardId: reward.id,
       durationMs: Date.now() - startTs,
     });
+
+    // Emit analytics: reward_created (non-blocking)
+    try {
+      await emitEvent({
+        eventType: EventType.reward_created,
+        actor: EventActor.clinic,
+        clinicId,
+        metadata: {
+          reward_id: reward.id,
+          type: 'points',
+          rules: { creditsRequired },
+        },
+      });
+    } catch (e) {
+      console.error('[events] reward_created emit failed', e);
+    }
 
     return NextResponse.json({ reward });
 

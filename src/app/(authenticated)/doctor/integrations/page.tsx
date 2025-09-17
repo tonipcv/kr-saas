@@ -6,11 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { CogIcon, LinkIcon, LockClosedIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useClinic } from '@/contexts/clinic-context';
 import { Input } from '@/components/ui/input';
 import { toast } from 'react-hot-toast';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export default function IntegrationsPage() {
+  const router = useRouter();
   const { currentClinic, isLoading } = useClinic();
   const planName = currentClinic?.subscription?.plan?.name || '';
   const planLower = planName.toLowerCase();
@@ -32,6 +35,35 @@ export default function IntegrationsPage() {
   const [testTo, setTestTo] = useState('');
   const [testMsg, setTestMsg] = useState('Olá! Integração ativa pela Zuzz.');
   const [testing, setTesting] = useState(false);
+
+  // WhatsApp (Official) state
+  const [waAccessToken, setWaAccessToken] = useState('');
+  const [waPhoneNumberId, setWaPhoneNumberId] = useState('');
+  const [waWabaId, setWaWabaId] = useState('');
+  const [waStatusLoading, setWaStatusLoading] = useState(false);
+  const [waStatus, setWaStatus] = useState<'CONNECTED' | 'DISCONNECTED' | 'UNKNOWN'>('UNKNOWN');
+  const [waPhone, setWaPhone] = useState<string | null>(null);
+  const [waTesting, setWaTesting] = useState(false);
+  const [waTestTo, setWaTestTo] = useState('');
+  const [waTestMsg, setWaTestMsg] = useState('Olá! Integração WhatsApp (oficial) ativa.');
+
+  // Page loading while both integrations status are being fetched
+  const pageLoading = isLoading || statusLoading || waStatusLoading;
+
+  // Onboarding wizard state (Business → WABA → Number)
+  const [waWizardOpen, setWaWizardOpen] = useState(false);
+  const [waBizLoading, setWaBizLoading] = useState(false);
+  const [waWabaLoading, setWaWabaLoading] = useState(false);
+  const [waNumLoading, setWaNumLoading] = useState(false);
+  const [waBusinesses, setWaBusinesses] = useState<any[]>([]);
+  const [waWabas, setWaWabas] = useState<any[]>([]);
+  const [waNumbers, setWaNumbers] = useState<any[]>([]);
+  const [waSelectedBusiness, setWaSelectedBusiness] = useState<string>('');
+  const [waSelectedWaba, setWaSelectedWaba] = useState<string>('');
+  const [waSelectedNumber, setWaSelectedNumber] = useState<string>('');
+  const [waFinishing, setWaFinishing] = useState(false);
+
+  // (templates moved to dedicated page)
 
   const loadStatus = async () => {
     if (!currentClinic?.id) return;
@@ -59,9 +91,210 @@ export default function IntegrationsPage() {
     }
   };
 
+  // (templates moved to dedicated page)
+
+  // Onboarding fetchers
+  const fetchBusinesses = async () => {
+    if (!currentClinic?.id) return;
+    try {
+      setWaBizLoading(true);
+      setWaBusinesses([]);
+      const res = await fetch(`/api/integrations/whatsapp/onboarding?type=businesses&clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao listar Businesses');
+      setWaBusinesses(Array.isArray(data?.data?.data) ? data.data.data : []);
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao listar Businesses');
+    } finally {
+      setWaBizLoading(false);
+    }
+  };
+
+  const fetchWabas = async (businessId: string) => {
+    if (!currentClinic?.id) return;
+    try {
+      setWaWabaLoading(true);
+      setWaWabas([]);
+      const res = await fetch(`/api/integrations/whatsapp/onboarding?type=wabas&business_id=${encodeURIComponent(businessId)}&clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao listar WABAs');
+      setWaWabas(Array.isArray(data?.data?.data) ? data.data.data : []);
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao listar WABAs');
+    } finally {
+      setWaWabaLoading(false);
+    }
+  };
+
+  const fetchNumbers = async (wabaId: string) => {
+    if (!currentClinic?.id) return;
+    try {
+      setWaNumLoading(true);
+      setWaNumbers([]);
+      const res = await fetch(`/api/integrations/whatsapp/onboarding?type=numbers&waba_id=${encodeURIComponent(wabaId)}&clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao listar números');
+      setWaNumbers(Array.isArray(data?.data?.data) ? data.data.data : []);
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao listar números');
+    } finally {
+      setWaNumLoading(false);
+    }
+  };
+
+  const openWizard = async () => {
+    setWaWizardOpen(true);
+    setWaSelectedBusiness('');
+    setWaSelectedWaba('');
+    setWaSelectedNumber('');
+    setWaWabas([]);
+    setWaNumbers([]);
+    await fetchBusinesses();
+  };
+
+  const finalizeWizard = async () => {
+    if (!currentClinic?.id) return;
+    if (!waSelectedNumber) {
+      toast.error('Selecione um número');
+      return;
+    }
+    try {
+      setWaFinishing(true);
+      const meta = { business_id: waSelectedBusiness };
+      const res = await fetch('/api/integrations/whatsapp/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId: currentClinic.id, phoneNumberId: waSelectedNumber, wabaId: waSelectedWaba, meta })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao conectar');
+      toast.success('WhatsApp conectado com sucesso');
+      setWaWizardOpen(false);
+      await loadWaStatus();
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao finalizar conexão');
+    } finally {
+      setWaFinishing(false);
+    }
+  };
+
   useEffect(() => {
     loadStatus();
   }, [currentClinic?.id]);
+
+  // WhatsApp (Official) handlers
+  const loadWaStatus = async () => {
+    if (!currentClinic?.id) return;
+    try {
+      setWaStatusLoading(true);
+      const res = await fetch(`/api/integrations/whatsapp/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load status');
+      if (data.exists) {
+        setWaStatus((data.status || 'UNKNOWN').toUpperCase());
+        setWaPhone(data.phone || null);
+        setWaPhoneNumberId(data.phoneNumberId || '');
+        setWaWabaId((data as any).wabaId || '');
+      } else {
+        setWaStatus('DISCONNECTED');
+        setWaPhone(null);
+        setWaPhoneNumberId('');
+        setWaWabaId('');
+      }
+    } catch (e: any) {
+      console.error('WA Load status error', e);
+      toast.error(e.message || 'Erro ao carregar status WhatsApp');
+    } finally {
+      setWaStatusLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadWaStatus();
+  }, [currentClinic?.id]);
+
+  // Read OAuth result from URL and notify
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const oauth = url.searchParams.get('wa_oauth');
+    const reason = url.searchParams.get('reason');
+    if (oauth) {
+      if (oauth === 'ok') {
+        toast.success('Facebook conectado. Selecione o WABA e o número.');
+      } else {
+        // Try to parse Graph error JSON for better diagnostics
+        let message = reason || 'desconhecido';
+        try {
+          const parsed = JSON.parse(reason || '');
+          const err = parsed?.error || {};
+          const details = {
+            message: err.message,
+            type: err.type,
+            code: err.code,
+            fbtrace_id: err.fbtrace_id,
+          };
+          console.error('[WA OAuth] Facebook error during token exchange', details);
+          message = err?.message ? `${err.message} (code ${err.code || 'n/a'})` : message;
+        } catch {
+          console.error('[WA OAuth] Error during token exchange:', reason);
+        }
+        toast.error(`Erro no OAuth: ${message}`);
+      }
+      url.searchParams.delete('wa_oauth');
+      url.searchParams.delete('reason');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
+
+  const connectWa = async () => {
+    if (!currentClinic?.id) return;
+    if (!waAccessToken.trim() || !waPhoneNumberId.trim()) {
+      toast.error('Informe Access Token e Phone Number ID do WhatsApp');
+      return;
+    }
+    try {
+      setConnecting(true);
+      const res = await fetch('/api/integrations/whatsapp/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId: currentClinic.id, accessToken: waAccessToken.trim(), phoneNumberId: waPhoneNumberId.trim(), wabaId: waWabaId.trim() || undefined })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao conectar WhatsApp');
+      toast.success('WhatsApp conectado');
+      setWaPhone(data.phone || null);
+      setWaStatus((data.status || 'CONNECTED').toUpperCase());
+      setWaAccessToken('');
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao conectar WhatsApp');
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const sendWaTest = async () => {
+    if (!currentClinic?.id) return;
+    if (!waTestTo.trim()) {
+      toast.error('Informe o número destino (+5511999999999)');
+      return;
+    }
+    try {
+      setWaTesting(true);
+      const res = await fetch('/api/integrations/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId: currentClinic.id, to: waTestTo.trim(), message: waTestMsg })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao enviar');
+      toast.success('Mensagem enviada via WhatsApp');
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao enviar mensagem');
+    } finally {
+      setWaTesting(false);
+    }
+  };
 
   const connect = async () => {
     if (!currentClinic?.id) return;
@@ -114,7 +347,7 @@ export default function IntegrationsPage() {
     }
   };
 
-  if (isLoading) {
+  if (pageLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="lg:ml-64">
@@ -128,23 +361,60 @@ export default function IntegrationsPage() {
               <div className="h-10 bg-gray-200 rounded-xl w-32 animate-pulse"></div>
             </div>
 
-            {/* Cards Skeleton */}
+            {/* Cards Skeleton - Xase and WhatsApp Official */}
             <div className="grid gap-6 md:grid-cols-2">
-              {[1, 2].map((i) => (
-                <Card key={i} className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                  <CardHeader className="pb-4">
-                    <div className="h-6 bg-gray-200 rounded-lg w-2/3 animate-pulse"></div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="h-4 bg-gray-100 rounded w-full animate-pulse"></div>
-                    <div className="h-4 bg-gray-100 rounded w-2/3 animate-pulse"></div>
-                    <div className="flex items-center gap-2 pt-2">
-                      <div className="h-9 bg-gray-100 rounded-xl w-36 animate-pulse"></div>
+              {/* Xase.ai card skeleton */}
+              <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
+                <CardHeader className="pb-4">
+                  <div className="h-6 bg-gray-200 rounded-lg w-1/2 animate-pulse"></div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="h-4 bg-gray-100 rounded w-5/6 animate-pulse"></div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-9 bg-gray-100 rounded-xl flex-1 animate-pulse"></div>
+                    <div className="h-9 bg-gray-100 rounded-xl w-28 animate-pulse"></div>
+                    <div className="h-9 bg-gray-100 rounded-xl w-24 animate-pulse"></div>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="h-4 bg-gray-100 rounded w-24 animate-pulse"></div>
+                    <div className="h-4 bg-gray-100 rounded w-24 animate-pulse"></div>
+                    <div className="col-span-2 h-4 bg-gray-100 rounded w-64 animate-pulse"></div>
+                    <div className="col-span-2 h-4 bg-gray-100 rounded w-48 animate-pulse"></div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* WhatsApp Official card skeleton */}
+              <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
+                <CardHeader className="pb-4">
+                  <div className="h-6 bg-gray-200 rounded-lg w-1/2 animate-pulse"></div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="h-4 bg-gray-100 rounded w-5/6 animate-pulse"></div>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                    <div className="h-9 bg-gray-100 rounded-xl animate-pulse"></div>
+                    <div className="h-9 bg-gray-100 rounded-xl animate-pulse"></div>
+                    <div className="h-9 bg-gray-100 rounded-xl animate-pulse"></div>
+                    <div className="flex items-center gap-2">
                       <div className="h-9 bg-gray-100 rounded-xl w-28 animate-pulse"></div>
+                      <div className="h-9 bg-gray-100 rounded-xl w-24 animate-pulse"></div>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-9 bg-gray-100 rounded-xl w-40 animate-pulse"></div>
+                    <div className="h-9 bg-gray-100 rounded-xl w-48 animate-pulse"></div>
+                    <div className="h-9 bg-gray-100 rounded-xl w-36 animate-pulse"></div>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="h-4 bg-gray-100 rounded w-24 animate-pulse"></div>
+                    <div className="h-4 bg-gray-100 rounded w-24 animate-pulse"></div>
+                    <div className="col-span-2 h-4 bg-gray-100 rounded w-64 animate-pulse"></div>
+                    <div className="col-span-2 h-4 bg-gray-100 rounded w-48 animate-pulse"></div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </div>
@@ -152,239 +422,274 @@ export default function IntegrationsPage() {
     );
   }
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       <div className="lg:ml-64">
         <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
           {/* Header */}
-          <div className="flex justify-between items-start mb-8">
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900 mb-1">Integrations</h1>
-              <p className="text-sm text-gray-500">Connect external tools and services</p>
-            </div>
+          <div className="mb-6">
+            <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Integrações</h1>
+            <p className="text-sm text-gray-500">Conecte suas ferramentas para habilitar automações e disparos.</p>
           </div>
 
-          {/* Free plan banner */}
+          {/* Free plan note */}
           {isFree && (
-            <div className="mb-4 rounded-2xl px-4 py-4 text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] shadow-sm">
-              <p className="text-sm font-semibold">You're on the Free plan — Integrations are limited.</p>
-              <p className="text-xs mt-1 opacity-95">Upgrade to the Creator plan to unlock full integrations and automations.</p>
-              <div className="mt-3">
-                <Link href="/clinic/subscription">
-                  <Button size="sm" variant="secondary" className="h-8 rounded-lg bg-white text-gray-800 hover:bg-gray-100">
-                    See plans
-                  </Button>
-                </Link>
-              </div>
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white text-gray-700 px-3 py-1 text-xs">
+              <LockClosedIcon className="h-4 w-4" /> Plano Free — integrações limitadas. <Link href="/clinic/subscription" className="underline hover:text-gray-900">Ver planos</Link>
             </div>
           )}
 
           {/* Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* WhatsApp (Xase.ai) */}
-            <Card className="relative bg-white border border-gray-200 rounded-xl hover:border-gray-300 transition">
+            <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
               {blocked && (
                 <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-1 text-xs">
                   <LockClosedIcon className="h-3.5 w-3.5" /> Locked
                 </div>
               )}
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                    <CogIcon className="h-5 w-5 text-gray-500" /> WhatsApp (via Xase.ai)
+                  <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                    <CogIcon className="h-5 w-5 text-gray-500" /> WhatsApp (Xase.ai)
                   </CardTitle>
                   <div className="text-xs">
                     {statusLoading ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200">Loading...</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200">Carregando…</span>
                     ) : status === 'CONNECTED' ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Connected</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Conectado</span>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Disconnected</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Desconectado</span>
                     )}
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4 text-sm">
-                  <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none space-y-3' : 'space-y-3'}>
-                    <p className="text-gray-600">
-                      Cole sua API Key da Xase.ai e conecte seu WhatsApp. A Zuzz usará essa conexão para disparos.
-                    </p>
+                <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Xase API Key" />
                     <div className="flex items-center gap-2">
-                      <Input
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
-                        placeholder="Xase API Key"
-                      />
-                      <Button onClick={connect} disabled={connecting || !apiKey.trim()} className="rounded-xl">
-                        {connecting ? 'Connecting...' : 'Connect'}
+                      <Button onClick={connect} disabled={connecting || !apiKey.trim()} className="h-9 rounded-lg w-full sm:w-auto">
+                        {connecting ? 'Conectando…' : 'Conectar'}
                       </Button>
-                      <Button variant="outline" onClick={loadStatus} disabled={statusLoading} className="rounded-xl">
-                        Refresh
-                      </Button>
+                      <Button variant="outline" onClick={loadStatus} disabled={statusLoading} className="h-9 rounded-lg w-full sm:w-auto">Atualizar</Button>
                     </div>
-                    <Separator />
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <div className="text-gray-500">Status</div>
-                        <div className="font-medium text-gray-900">{status}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">Número</div>
-                        <div className="font-medium text-gray-900">{phone || '-'}</div>
-                      </div>
-                      <div className="col-span-2">
-                        <div className="text-gray-500">Instance</div>
-                        <div className="font-mono text-xs text-gray-800 break-all">{instanceId || '-'}</div>
-                      </div>
-                      <div className="col-span-2">
-                        <div className="text-gray-500">Última conexão</div>
-                        <div className="text-gray-900">{lastSeenAt ? new Date(lastSeenAt).toLocaleString() : '-'}</div>
-                      </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-gray-500">Status</div>
+                      <div className="font-medium text-gray-900">{status}</div>
                     </div>
-                    <Separator />
-                    <div className="space-y-2">
-                      <div className="text-gray-700 font-medium">Enviar mensagem de teste</div>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          value={testTo}
-                          onChange={(e) => setTestTo(e.target.value)}
-                          placeholder="Número destino (+5511999999999)"
-                        />
-                        <Input
-                          value={testMsg}
-                          onChange={(e) => setTestMsg(e.target.value)}
-                          placeholder="Mensagem"
-                        />
-                        <Button onClick={sendTest} disabled={testing || status !== 'CONNECTED'} className="rounded-xl">
-                          {testing ? 'Sending...' : 'Send test'}
-                        </Button>
-                      </div>
+                    <div>
+                      <div className="text-gray-500">Número</div>
+                      <div className="font-medium text-gray-900">{phone || '-'}</div>
                     </div>
-                    {status !== 'CONNECTED' && (
-                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2">
-                        Sua instância parece desconectada. Abra o app da Xase.ai para reconectar via QR code.
-                      </p>
+                    <div className="col-span-2">
+                      <div className="text-gray-500">Instance</div>
+                      <div className="font-mono text-xs text-gray-800 break-all">{instanceId || '-'}</div>
+                    </div>
+                    <div className="col-span-2">
+                      <div className="text-gray-500">Última conexão</div>
+                      <div className="text-gray-900">{lastSeenAt ? new Date(lastSeenAt).toLocaleString() : '-'}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <Input value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="Destino (+5511999999999)" />
+                    <Input value={testMsg} onChange={(e) => setTestMsg(e.target.value)} placeholder="Mensagem" />
+                    <Button onClick={sendTest} disabled={testing || status !== 'CONNECTED'} className="h-9 rounded-lg w-full sm:w-auto">
+                      {testing ? 'Enviando…' : 'Enviar teste'}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            {/* WhatsApp (Oficial) */}
+            <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
+              {blocked && (
+                <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-1 text-xs">
+                  <LockClosedIcon className="h-3.5 w-3.5" /> Locked
+                </div>
+              )}
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                    <CogIcon className="h-5 w-5 text-gray-500" /> WhatsApp (Oficial)
+                  </CardTitle>
+                  <div className="text-xs">
+                    {waStatusLoading ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200">Carregando…</span>
+                    ) : waStatus === 'CONNECTED' ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Conectado</span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Desconectado</span>
                     )}
                   </div>
-                  {!isAtLeastStarter && (
-                    <div className="pt-2">
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                    <Input value={waAccessToken} onChange={(e) => setWaAccessToken(e.target.value)} placeholder="Access Token" />
+                    <Input value={waPhoneNumberId} onChange={(e) => setWaPhoneNumberId(e.target.value)} placeholder="Phone Number ID" />
+                    <Input value={waWabaId} onChange={(e) => setWaWabaId(e.target.value)} placeholder="WABA ID (opcional)" />
+                    <div className="flex items-center gap-2">
+                      <Button onClick={connectWa} disabled={connecting || !waAccessToken.trim() || !waPhoneNumberId.trim()} className="h-9 rounded-lg w-full md:w-auto">
+                        {connecting ? 'Conectando…' : 'Conectar'}
+                      </Button>
+                      <Button variant="outline" onClick={loadWaStatus} disabled={waStatusLoading} className="h-9 rounded-lg w-full md:w-auto">Atualizar</Button>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="outline"
+                      className="h-9 rounded-lg border-gray-200"
+                      onClick={() => {
+                        if (!currentClinic?.id) return toast.error('Selecione uma clínica');
+                        const returnTo = '/doctor/integrations';
+                        window.location.href = `/api/integrations/whatsapp/oauth/start?clinicId=${encodeURIComponent(currentClinic.id)}&returnTo=${encodeURIComponent(returnTo)}`;
+                      }}
+                    >
+                      Conectar Facebook
+                    </Button>
+                    <Button variant="secondary" className="h-9 rounded-lg" onClick={openWizard}>Wizard de número</Button>
+                    <Link href="/doctor/integrations/whatsapp/templates">
+                      <Button variant="secondary" className="h-9 rounded-lg" disabled={waStatus !== 'CONNECTED'}>Templates</Button>
+                    </Link>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-gray-500">Status</div>
+                      <div className="font-medium text-gray-900">{waStatus}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">Número</div>
+                      <div className="font-medium text-gray-900">{waPhone || '-'}</div>
+                    </div>
+                    <div className="col-span-2">
+                      <div className="text-gray-500">Phone Number ID</div>
+                      <div className="font-mono text-xs text-gray-800 break-all">{waPhoneNumberId || '-'}</div>
+                    </div>
+                    <div className="col-span-2">
+                      <div className="text-gray-500">WABA ID</div>
+                      <div className="font-mono text-xs text-gray-800 break-all">{waWabaId || '-'}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <Input value={waTestTo} onChange={(e) => setWaTestTo(e.target.value)} placeholder="Destino (+5511999999999)" />
+                    <Input value={waTestMsg} onChange={(e) => setWaTestMsg(e.target.value)} placeholder="Mensagem" />
+                    <Button onClick={sendWaTest} disabled={waTesting || waStatus !== 'CONNECTED'} className="h-9 rounded-lg w-full md:w-auto">
+                      {waTesting ? 'Enviando…' : 'Enviar teste'}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            {/* Stripe */}
+            <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
+              {blocked && (
+                <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-1 text-xs">
+                  <LockClosedIcon className="h-3.5 w-3.5" /> Locked
+                </div>
+              )}
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  <CogIcon className="h-5 w-5 text-gray-500" /> Pagamentos (Stripe)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-sm">
+                  <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
+                    <p className="text-gray-600">Conecte uma conta Stripe para habilitar pagamentos online.</p>
+                    <a href="https://stripe.com/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium mt-2">
+                      <LinkIcon className="h-4 w-4" /> Saiba mais
+                    </a>
+                  </div>
+                  <div className="flex items-center gap-2 mt-3">
+                    {isCreator ? (
+                      <Link href="/doctor/payments">
+                        <Button className="bg-gray-900 hover:bg-black text-white rounded-lg h-9 px-4 font-medium">
+                          Abrir pagamentos
+                        </Button>
+                      </Link>
+                    ) : (
                       <Link href="/clinic/subscription">
                         <Button variant="outline" className="border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-lg h-9 px-4">
                           Upgrade plan
                         </Button>
                       </Link>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-            {/* Stripe */}
-            <Card className="relative bg-white border border-gray-200 rounded-xl hover:border-gray-300 transition">
-              {blocked && (
-                <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-1 text-xs">
-                  <LockClosedIcon className="h-3.5 w-3.5" /> Locked
-                </div>
-              )}
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                    <CogIcon className="h-5 w-5 text-gray-500" /> Payments (Stripe)
-                  </CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4 text-sm">
-                  <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
-                    <p className="text-gray-600">
-                      Enable online payments for your services by connecting a Stripe account.
-                    </p>
-                    <div className="flex items-center gap-2 pt-1">
-                      {/* Keep learn more inside blurred block so it appears disabled when blocked */}
-                      <a
-                        href="https://stripe.com/"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium"
-                      >
-                        <LinkIcon className="h-4 w-4" /> Learn more
-                      </a>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 pt-1">
-                    {isCreator ? (
-                      <Link href="/doctor/payments">
-                        <Button className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl h-9 px-4 font-medium">
-                          Open payment setup
-                        </Button>
-                      </Link>
-                    ) : (
-                      <Link href="/clinic/subscription">
-                        <Button variant="outline" className="border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-lg h-9 px-4">
-                          Upgrade to Creator
-                        </Button>
-                      </Link>
                     )}
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Webhooks */}
-            <Card className="relative bg-white border border-gray-200 rounded-xl hover:border-gray-300 transition">
-              {blocked && (
-                <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-1 text-xs">
-                  <LockClosedIcon className="h-3.5 w-3.5" /> Locked
-                </div>
-              )}
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                    <LinkIcon className="h-5 w-5 text-gray-500" /> Webhooks & Automations
-                  </CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4 text-sm">
-                  <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none space-y-4' : 'space-y-4'}>
-                    <p className="text-gray-600">
-                      Use webhooks to connect with automation platforms (Zapier, Make, n8n) or your own systems.
-                    </p>
-                    <div className="space-y-2">
-                      <p className="text-gray-700 font-medium">Common events:</p>
-                      <ul className="list-disc list-inside text-gray-600">
-                        <li>New referral received</li>
-                        <li>Service purchased</li>
-                        <li>Patient assigned to protocol</li>
-                      </ul>
-                    </div>
-                    <Separator />
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        className="border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-lg h-9 px-4"
-                      >
-                        View docs
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {isCreator ? (
-                      <Button className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl h-9 px-4 font-medium">
-                        Create webhook
-                      </Button>
-                    ) : (
-                      <Link href="/clinic/subscription">
-                        <Button variant="outline" className="border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-lg h-9 px-4">
-                          Upgrade to Creator
-                        </Button>
-                      </Link>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-500">Need a custom integration? Contact support.</p>
                 </div>
               </CardContent>
             </Card>
           </div>
+          {/* WhatsApp Onboarding Wizard */}
+          <Dialog open={waWizardOpen} onOpenChange={setWaWizardOpen}>
+            <DialogContent className="sm:max-w-[680px]">
+              <DialogHeader>
+                <DialogTitle>Conectar WhatsApp (Oficial)</DialogTitle>
+                <DialogDescription>
+                  Selecione o Business → WABA → Número e finalize a conexão.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <div className="text-sm text-gray-700 mb-1">Business</div>
+                  <select
+                    className="w-full border rounded-lg h-9 px-2"
+                    value={waSelectedBusiness}
+                    onChange={async (e) => {
+                      const v = e.target.value; setWaSelectedBusiness(v); setWaSelectedWaba(''); setWaSelectedNumber(''); setWaWabas([]); setWaNumbers([]);
+                      if (v) await fetchWabas(v);
+                    }}
+                  >
+                    <option value="">{waBizLoading ? 'Carregando...' : 'Selecione um Business'}</option>
+                    {waBusinesses.map((b: any) => (
+                      <option key={b.id} value={b.id}>{b.name || b.id}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-700 mb-1">WABA</div>
+                  <select
+                    className="w-full border rounded-lg h-9 px-2"
+                    value={waSelectedWaba}
+                    onChange={async (e) => {
+                      const v = e.target.value; setWaSelectedWaba(v); setWaSelectedNumber(''); setWaNumbers([]);
+                      if (v) await fetchNumbers(v);
+                    }}
+                    disabled={!waSelectedBusiness}
+                  >
+                    <option value="">{waWabaLoading ? 'Carregando...' : (waSelectedBusiness ? 'Selecione um WABA' : 'Selecione um Business primeiro')}</option>
+                    {waWabas.map((w: any) => (
+                      <option key={w.id} value={w.id}>{w.name || w.id}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-700 mb-1">Número</div>
+                  <select
+                    className="w-full border rounded-lg h-9 px-2"
+                    value={waSelectedNumber}
+                    onChange={(e) => setWaSelectedNumber(e.target.value)}
+                    disabled={!waSelectedWaba}
+                  >
+                    <option value="">{waNumLoading ? 'Carregando...' : (waSelectedWaba ? 'Selecione um número' : 'Selecione um WABA primeiro')}</option>
+                    {waNumbers.map((n: any) => (
+                      <option key={n.id} value={n.id}>{`${n.display_phone_number || n.id}${n.verified_name ? ' — ' + n.verified_name : ''}`}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setWaWizardOpen(false)}>Cancelar</Button>
+                <Button onClick={finalizeWizard} disabled={!waSelectedNumber || waFinishing} className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white">
+                  {waFinishing ? 'Conectando...' : 'Conectar'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Templates modal removed; see dedicated page at /doctor/integrations/whatsapp/templates */}
         </div>
       </div>
     </div>

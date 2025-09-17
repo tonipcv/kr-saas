@@ -33,7 +33,7 @@ export async function recalculateMembershipLevel(
   // Find appropriate level for this clinic
   const level = await tx.membershipLevel.findFirst({
     where: { 
-      clinicId: doctorClinic.clinicId,
+      clinic_id: doctorClinic.clinicId,
       isActive: true, 
       minPoints: { lte: total } 
     },

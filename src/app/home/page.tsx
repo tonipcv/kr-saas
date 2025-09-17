@@ -230,37 +230,141 @@ export default function PublicHome() {
           </div>
 
           <div className="mt-8 md:mt-12 grid md:grid-cols-3 gap-4 md:gap-6">
-            {/* Referrals */}
-            <div className="rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
-              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] md:text-[11px] font-medium ring-1 ring-gray-200 text-gray-600 bg-white">01</span>
-              <h3 className="mt-3 text-base md:text-lg font-semibold text-gray-900 tracking-tight">Referrals</h3>
-              <p className="hidden sm:block mt-2 text-sm text-gray-600">Track invites, conversions, and rewards with clear attribution.</p>
-              <ul className="mt-3 space-y-1.5 text-sm text-gray-600 list-disc list-inside">
-                <li>Unique links per creator or customer</li>
-                <li>Flexible conversion events</li>
-              </ul>
+            {/* ZuzzBack */}
+            <div className="group rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
+              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">ZuzzBack</h3>
+              <p className="mt-2 text-sm text-gray-700 font-medium">Smart cashback that builds habits.</p>
+              {/* Mobile: tap to expand */}
+              <div className="sm:hidden">
+                <details className="mt-2">
+                  <summary className="text-sm text-gray-600 cursor-pointer select-none">Read more</summary>
+                  <p className="mt-2 text-sm text-gray-600">Every purchase returns credits (ZuzzBack) clients can use for future visits. Instead of chasing discounts, you’re rewarding loyalty — driving repeat bookings and predictable revenue.</p>
+                </details>
+              </div>
+              {/* Desktop: hover to reveal */}
+              <div className="hidden sm:block mt-2 text-sm text-gray-600 sm:max-h-0 sm:opacity-0 sm:group-hover:max-h-40 sm:group-hover:opacity-100 sm:transition-all sm:duration-300 sm:ease-out overflow-hidden">
+                <p>Every purchase returns credits (ZuzzBack) clients can use for future visits. Instead of chasing discounts, you’re rewarding loyalty — driving repeat bookings and predictable revenue.</p>
+              </div>
             </div>
 
-            {/* Points */}
-            <div className="rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
-              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] md:text-[11px] font-medium ring-1 ring-gray-200 text-gray-600 bg-white">02</span>
-              <h3 className="mt-3 text-base md:text-lg font-semibold text-gray-900 tracking-tight">Points</h3>
-              <p className="hidden sm:block mt-2 text-sm text-gray-600">Award points for actions and allow redemptions with rules.</p>
-              <ul className="mt-3 space-y-1.5 text-sm text-gray-600 list-disc list-inside">
-                <li>Any action → points mapping</li>
-                <li>Redeem with guardrails</li>
-              </ul>
+            {/* Pulse Rewards */}
+            <div className="group rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
+              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">Pulse Rewards</h3>
+              <p className="mt-2 text-sm text-gray-700 font-medium">Exclusive perks that keep clients engaged.</p>
+              <div className="sm:hidden">
+                <details className="mt-2">
+                  <summary className="text-sm text-gray-600 cursor-pointer select-none">Read more</summary>
+                  <p className="mt-2 text-sm text-gray-600">Design custom offers, digital vouchers, and VIP perks for new and returning clients. Whether it’s “20% off for first-timers” or “double points in your birthday month,” you control the rules, and Zuzz handles the delivery.</p>
+                </details>
+              </div>
+              <div className="hidden sm:block mt-2 text-sm text-gray-600 sm:max-h-0 sm:opacity-0 sm:group-hover:max-h-40 sm:group-hover:opacity-100 sm:transition-all sm:duration-300 sm:ease-out overflow-hidden">
+                <p>Design custom offers, digital vouchers, and VIP perks for new and returning clients. Whether it’s “20% off for first-timers” or “double points in your birthday month,” you control the rules, and Zuzz handles the delivery.</p>
+              </div>
             </div>
 
-            {/* Rewards Codes */}
-            <div className="rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
-              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] md:text-[11px] font-medium ring-1 ring-gray-200 text-gray-600 bg-white">03</span>
-              <h3 className="mt-3 text-base md:text-lg font-semibold text-gray-900 tracking-tight">Rewards Codes</h3>
-              <p className="hidden sm:block mt-2 text-sm text-gray-600">Generate unique codes and control redemption limits.</p>
-              <ul className="mt-3 space-y-1.5 text-sm text-gray-600 list-disc list-inside">
-                <li>Single-use or multi-use</li>
-                <li>Expiry and redemption caps</li>
-              </ul>
+            {/* ZuzzFlow */}
+            <div className="group rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
+              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">ZuzzFlow</h3>
+              <p className="mt-2 text-sm text-gray-700 font-medium">Recover abandoned bookings with WhatsApp.</p>
+              <div className="sm:hidden">
+                <details className="mt-2">
+                  <summary className="text-sm text-gray-600 cursor-pointer select-none">Read more</summary>
+                  <p className="mt-2 text-sm text-gray-600">Zuzz detects incomplete checkouts or unconfirmed reservations and automatically sends reminders through WhatsApp. These smart nudges recover sales that would otherwise slip away.</p>
+                </details>
+              </div>
+              <div className="hidden sm:block mt-2 text-sm text-gray-600 sm:max-h-0 sm:opacity-0 sm:group-hover:max-h-40 sm:group-hover:opacity-100 sm:transition-all sm:duration-300 sm:ease-out overflow-hidden">
+                <p>Zuzz detects incomplete checkouts or unconfirmed reservations and automatically sends reminders through WhatsApp. These smart nudges recover sales that would otherwise slip away.</p>
+              </div>
+            </div>
+
+            {/* WakeUp */}
+            <div className="group rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
+              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">WakeUp</h3>
+              <p className="mt-2 text-sm text-gray-700 font-medium">Bring back inactive clients.</p>
+              <div className="sm:hidden">
+                <details className="mt-2">
+                  <summary className="text-sm text-gray-600 cursor-pointer select-none">Read more</summary>
+                  <p className="mt-2 text-sm text-gray-600">Clients gone silent for 60, 90, or 120 days? WakeUp sends personalized reactivation campaigns that turn lost opportunities into new revenue streams.</p>
+                </details>
+              </div>
+              <div className="hidden sm:block mt-2 text-sm text-gray-600 sm:max-h-0 sm:opacity-0 sm:group-hover:max-h-40 sm:group-hover:opacity-100 sm:transition-all sm:duration-300 sm:ease-out overflow-hidden">
+                <p>Clients gone silent for 60, 90, or 120 days? WakeUp sends personalized reactivation campaigns that turn lost opportunities into new revenue streams.</p>
+              </div>
+            </div>
+
+            {/* DuoZuzz */}
+            <div className="group rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
+              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">DuoZuzz</h3>
+              <p className="mt-2 text-sm text-gray-700 font-medium">Referrals made simple.</p>
+              <div className="sm:hidden">
+                <details className="mt-2">
+                  <summary className="text-sm text-gray-600 cursor-pointer select-none">Read more</summary>
+                  <p className="mt-2 text-sm text-gray-600">Give every client a personal invite code. When they bring a friend, both receive rewards. Your clients become your best sales reps, growing your customer base organically.</p>
+                </details>
+              </div>
+              <div className="hidden sm:block mt-2 text-sm text-gray-600 sm:max-h-0 sm:opacity-0 sm:group-hover:max-h-40 sm:group-hover:opacity-100 sm:transition-all sm:duration-300 sm:ease-out overflow-hidden">
+                <p>Give every client a personal invite code. When they bring a friend, both receive rewards. Your clients become your best sales reps, growing your customer base organically.</p>
+              </div>
+            </div>
+
+            {/* EchoScore */}
+            <div className="group rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
+              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">EchoScore</h3>
+              <p className="mt-2 text-sm text-gray-700 font-medium">Feedback that pays off.</p>
+              <div className="sm:hidden">
+                <details className="mt-2">
+                  <summary className="text-sm text-gray-600 cursor-pointer select-none">Read more</summary>
+                  <p className="mt-2 text-sm text-gray-600">After each service, clients receive a quick rating request via WhatsApp. Their answers feed into your NPS, push reviews to Google, and reward them with points — boosting both your reputation and loyalty.</p>
+                </details>
+              </div>
+              <div className="hidden sm:block mt-2 text-sm text-gray-600 sm:max-h-0 sm:opacity-0 sm:group-hover:max-h-40 sm:group-hover:opacity-100 sm:transition-all sm:duration-300 sm:ease-out overflow-hidden">
+                <p>After each service, clients receive a quick rating request via WhatsApp. Their answers feed into your NPS, push reviews to Google, and reward them with points — boosting both your reputation and loyalty.</p>
+              </div>
+            </div>
+
+            {/* SmartPulse */}
+            <div className="group rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
+              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">SmartPulse</h3>
+              <p className="mt-2 text-sm text-gray-700 font-medium">Automated triggers that just work.</p>
+              <div className="sm:hidden">
+                <details className="mt-2">
+                  <summary className="text-sm text-gray-600 cursor-pointer select-none">Read more</summary>
+                  <p className="mt-2 text-sm text-gray-600">From birthdays to package renewals, Zuzz sends the right incentive at the right time. These behavioral triggers keep your brand top of mind, without any manual work.</p>
+                </details>
+              </div>
+              <div className="hidden sm:block mt-2 text-sm text-gray-600 sm:max-h-0 sm:opacity-0 sm:group-hover:max-h-40 sm:group-hover:opacity-100 sm:transition-all sm:duration-300 sm:ease-out overflow-hidden">
+                <p>From birthdays to package renewals, Zuzz sends the right incentive at the right time. These behavioral triggers keep your brand top of mind, without any manual work.</p>
+              </div>
+            </div>
+
+            {/* ZuzzTalk */}
+            <div className="group rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
+              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">ZuzzTalk</h3>
+              <p className="mt-2 text-sm text-gray-700 font-medium">Conversational commerce powered by AI.</p>
+              <div className="sm:hidden">
+                <details className="mt-2">
+                  <summary className="text-sm text-gray-600 cursor-pointer select-none">Read more</summary>
+                  <p className="mt-2 text-sm text-gray-600">Your clients can chat with your business on WhatsApp — asking questions, booking services, or paying instantly. ZuzzTalk suggests upgrades, answers FAQs, and sells for you 24/7.</p>
+                </details>
+              </div>
+              <div className="hidden sm:block mt-2 text-sm text-gray-600 sm:max-h-0 sm:opacity-0 sm:group-hover:max-h-40 sm:group-hover:opacity-100 sm:transition-all sm:duration-300 sm:ease-out overflow-hidden">
+                <p>Your clients can chat with your business on WhatsApp — asking questions, booking services, or paying instantly. ZuzzTalk suggests upgrades, answers FAQs, and sells for you 24/7.</p>
+              </div>
+            </div>
+
+            {/* ZuzzVision */}
+            <div className="group rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
+              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">ZuzzVision</h3>
+              <p className="mt-2 text-sm text-gray-700 font-medium">See the full picture, not scattered numbers.</p>
+              <div className="sm:hidden">
+                <details className="mt-2">
+                  <summary className="text-sm text-gray-600 cursor-pointer select-none">Read more</summary>
+                  <p className="mt-2 text-sm text-gray-600">A single dashboard showing acquisition, retention, reactivation, referrals, and NPS. With ZuzzVision, you get predictable revenue insights and a clear view of what drives growth.</p>
+                </details>
+              </div>
+              <div className="hidden sm:block mt-2 text-sm text-gray-600 sm:max-h-0 sm:opacity-0 sm:group-hover:max-h-40 sm:group-hover:opacity-100 sm:transition-all sm:duration-300 sm:ease-out overflow-hidden">
+                <p>A single dashboard showing acquisition, retention, reactivation, referrals, and NPS. With ZuzzVision, you get predictable revenue insights and a clear view of what drives growth.</p>
+              </div>
             </div>
           </div>
         </div>

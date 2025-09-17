@@ -272,7 +272,7 @@ interface Redemption {
   };
 }
 
-export default function PatientReferralsPage({ publicClinic, forceClinicHeader, isDarkTheme, brandColors }: { publicClinic?: { logo?: string | null; name?: string | null }; forceClinicHeader?: boolean; isDarkTheme?: boolean; brandColors?: { bg?: string | null; fg?: string | null } } = {}) {
+export default function PatientReferralsPage({ publicClinic, forceClinicHeader, isDarkTheme, brandColors, forcedSlug }: { publicClinic?: { logo?: string | null; name?: string | null }; forceClinicHeader?: boolean; isDarkTheme?: boolean; brandColors?: { bg?: string | null; fg?: string | null }; forcedSlug?: string } = {}) {
   const { data: session } = useSession();
   // Force Portuguese on this page regardless of browser language
   const language: 'pt' | 'en' = 'pt';
@@ -349,7 +349,7 @@ export default function PatientReferralsPage({ publicClinic, forceClinicHeader, 
 
   // Coupons fetching for Share modal
   const loadCoupons = async () => {
-    const slug = (doctorSlug || '').trim();
+    const slug = (forcedSlug || doctorSlug || '').trim();
     if (!slug) return;
     setCouponsLoading(true);
     setCouponsError(null);
@@ -593,16 +593,16 @@ export default function PatientReferralsPage({ publicClinic, forceClinicHeader, 
     }
   }, [doctorSlug, doctorId, referralCode, doctorName]);
 
-  // Validate the pair (doctorSlug, referralCode) against the resolver API when available
+  // Validate the pair (clinic/doctor slug, referralCode) using clinic-aware resolver when available
   useEffect(() => {
-    const slug = (doctorSlug || '').trim();
+    const slug = (forcedSlug || doctorSlug || '').trim();
     const code = (referralCode || '').trim();
     if (!slug || !code) return;
 
     const controller = new AbortController();
     const run = async () => {
-      const url = `/api/referrals/resolve?doctor_slug=${encodeURIComponent(slug)}&code=${encodeURIComponent(code)}`;
-      console.debug('[PatientReferrals] Resolving referral via API:', url);
+      const url = `/api/referrals/doctor/by-slug/${encodeURIComponent(slug)}?code=${encodeURIComponent(code)}`;
+      console.debug('[PatientReferrals] Resolving referral via clinic-aware API:', url);
       try {
         const res = await fetch(url, { signal: controller.signal });
         const payload = await res.json().catch(() => ({}));
@@ -618,69 +618,116 @@ export default function PatientReferralsPage({ publicClinic, forceClinicHeader, 
     };
     run();
     return () => controller.abort();
-  }, [doctorSlug, referralCode]);
+  }, [forcedSlug, doctorSlug, referralCode]);
 
-  // Fetch published campaigns for the doctor's public page (patient-visible)
-  useEffect(() => {
-    const slug = (doctorSlug || '').trim();
-    if (!slug) return;
-    let aborted = false;
-    const run = async () => {
-      try {
-        const res = await fetch(`/api/campaigns/doctor/${encodeURIComponent(slug)}`);
-        const payload = await res.json().catch(() => ({ success: false }));
-        if (aborted) return;
-        if (res.ok && Array.isArray(payload?.data)) {
-          setCampaigns(payload.data);
-        } else {
-          setCampaigns([]);
-        }
-      } catch (e) {
-        console.warn('[PatientReferrals] campaigns fetch error', e);
+// Log state changes affecting link generation
+useEffect(() => {
+  console.debug('[PatientReferrals] state update', {
+    doctorSlug,
+    doctorId,
+    referralCode,
+    doctorName,
+  });
+  if (!doctorSlug || !referralCode) {
+    const reasons: string[] = [];
+    if (!doctorSlug) reasons.push('doctorSlug is missing');
+    if (!referralCode) reasons.push('referralCode is missing');
+    console.warn('[PatientReferrals] Slug link not ready:', reasons.join(' | '));
+  } else {
+    console.info('[PatientReferrals] Slug link ready');
+  }
+}, [doctorSlug, doctorId, referralCode, doctorName]);
+
+// Validate the pair (clinic/doctor slug, referralCode) using clinic-aware resolver when available
+useEffect(() => {
+  const slug = (forcedSlug || doctorSlug || '').trim();
+  const code = (referralCode || '').trim();
+  if (!slug || !code) return;
+
+  const controller = new AbortController();
+  const run = async () => {
+    const url = `/api/referrals/doctor/by-slug/${encodeURIComponent(slug)}?code=${encodeURIComponent(code)}`;
+    console.debug('[PatientReferrals] Resolving referral via clinic-aware API:', url);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      const payload = await res.json().catch(() => ({}));
+      if (res.ok) {
+        console.info('[PatientReferrals] Resolve OK', payload);
+      } else {
+        console.warn('[PatientReferrals] Resolve NOT OK', { status: res.status, payload });
+      }
+    } catch (e) {
+      if ((e as any)?.name === 'AbortError') return;
+      console.error('[PatientReferrals] Resolve error', e);
+    }
+  };
+  run();
+  return () => controller.abort();
+}, [forcedSlug, doctorSlug, referralCode]);
+
+// Fetch published campaigns resolved by slug (clinic-first)
+useEffect(() => {
+  const slug = (forcedSlug || doctorSlug || '').trim();
+  if (!slug) return;
+  let aborted = false;
+  const run = async () => {
+    try {
+      const qs = new URLSearchParams({ slug });
+      const res = await fetch(`/api/campaigns/resolve?${qs.toString()}`);
+      const payload = await res.json().catch(() => ({ success: false }));
+      if (aborted) return;
+      if (res.ok && Array.isArray(payload?.data)) {
+        setCampaigns(payload.data);
+      } else {
         setCampaigns([]);
       }
-    };
-    run();
-    return () => {
-      aborted = true;
-    };
-  }, [doctorSlug]);
+    } catch (e) {
+      console.warn('[PatientReferrals] campaigns fetch error', e);
+      setCampaigns([]);
+    } finally {
+    }
+  };
+  run();
+  return () => {
+    aborted = true;
+  };
+}, [forcedSlug, doctorSlug]);
 
-  // When user opens Products tab, fetch products from public patient-safe endpoint
-  useEffect(() => {
-    if (viewSection !== 'products') return;
-    const did = (doctorId || '').trim();
-    if (!did) return;
-    let aborted = false;
-    const run = async () => {
-      setLoadingProducts(true);
-      try {
-        const res = await fetch(`/api/v2/patients/doctors/${encodeURIComponent(did)}/products`);
-        const json = await res.json().catch(() => ({ success: false }));
-        if (aborted) return;
-        if (res.ok && json?.success && Array.isArray(json.data)) {
-          const list = (json.data as any[]).map((p) => ({
-            id: p.id,
-            name: p.name,
-            description: p.description || '',
-            category: p.category || '',
-            originalPrice: p.price ?? null,
-            creditsPerUnit: p.creditsPerUnit ?? 0,
-          }));
-          setDoctorProducts(list);
-        } else {
-          setDoctorProducts([]);
-        }
-      } catch (e) {
-        console.warn('[PatientReferrals] products fetch error', e);
+// When user opens Products tab, fetch products from public patient-safe endpoint
+useEffect(() => {
+  if (viewSection !== 'products') return;
+  const did = (doctorId || '').trim();
+  if (!did) return;
+  let aborted = false;
+  const run = async () => {
+    setLoadingProducts(true);
+    try {
+      const res = await fetch(`/api/v2/patients/doctors/${encodeURIComponent(did)}/products`);
+      const json = await res.json().catch(() => ({ success: false }));
+      if (aborted) return;
+      if (res.ok && json?.success && Array.isArray(json.data)) {
+        const list = (json.data as any[]).map((p) => ({
+          id: p.id,
+          name: p.name,
+          description: p.description || '',
+          category: p.category || '',
+          originalPrice: p.price ?? null,
+          creditsPerUnit: p.creditsPerUnit ?? 0,
+        }));
+        setDoctorProducts(list);
+      } else {
         setDoctorProducts([]);
-      } finally {
-        if (!aborted) setLoadingProducts(false);
       }
-    };
-    run();
-    return () => { aborted = true; };
-  }, [viewSection, doctorId]);
+    } catch (e) {
+      console.warn('[PatientReferrals] products fetch error', e);
+      setDoctorProducts([]);
+    } finally {
+      if (!aborted) setLoadingProducts(false);
+    }
+  };
+  run();
+  return () => { aborted = true; };
+}, [viewSection, doctorId]);
 
   const handleRedeemReward = async (rewardId: string) => {
     setRedeeming(rewardId);
@@ -737,13 +784,13 @@ export default function PatientReferralsPage({ publicClinic, forceClinicHeader, 
   const generateReferralLink = (style = 'default') => {
     const rawBase = window.location.origin;
     const baseUrl = (rawBase || '').replace(/\/+$/, '');
-    const slug = (doctorSlug || '').trim().replace(/^\/+/, '');
+    const slug = (forcedSlug || doctorSlug || '').trim().replace(/^\/+/, '');
     const did = doctorId || 'demo-doctor';
     const rcode = referralCode || 'DEMO123';
     // Preferred format: /[doctor_slug]?code=
     const usingSlug = Boolean(slug);
     if (!slug) {
-      console.warn('[PatientReferrals] Missing doctorSlug. Cannot generate referral link without slug.');
+      console.warn('[PatientReferrals] Missing slug. Cannot generate referral link without slug.');
       return '';
     }
     const link = `${baseUrl}/${slug}?code=${rcode}`;
@@ -1945,12 +1992,12 @@ return (
             </button>
             {menuOpen && (
               <div className="absolute bottom-14 right-0 bg-white border border-gray-200 rounded-xl shadow-xl w-56 p-2">
-                <Link href={doctorSlug ? `/${doctorSlug}/profile` : '/patient/profile'} className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
+                <Link href={forcedSlug ? `/${forcedSlug}/profile` : '/patient/profile'} className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50">
                   <User className="mr-2 h-4 w-4 text-gray-600" />
                   Profile
                 </Link>
                 <button
-                  onClick={() => signOut({ callbackUrl: doctorSlug ? `/${doctorSlug}/login` : '/login' })}
+                  onClick={() => signOut({ callbackUrl: forcedSlug ? `/${forcedSlug}/login` : '/login' })}
                   className="w-full flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50"
                 >
                   <LogOut className="mr-2 h-4 w-4 text-gray-600" />

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { emitEvent } from '@/lib/events';
+import { EventActor, EventType } from '@prisma/client';
 
 // GET /api/referrals/redemptions/fulfill-confirm?token=...&rid=...
 export async function GET(req: Request) {
@@ -26,7 +28,13 @@ export async function GET(req: Request) {
       return NextResponse.redirect(new URL(`/patient/referrals?confirm_usage=expired`, baseUrl));
     }
 
-    const redemption = await prisma.rewardRedemption.findUnique({ where: { id: rid } });
+    const redemption = await prisma.rewardRedemption.findUnique({
+      where: { id: rid },
+      include: {
+        user: { select: { id: true } },
+        reward: { select: { id: true, doctorId: true, clinicId: true } },
+      }
+    });
     if (!redemption) {
       return NextResponse.redirect(new URL(`/patient/referrals?confirm_usage=not_found`, baseUrl));
     }
@@ -48,6 +56,50 @@ export async function GET(req: Request) {
       });
       await tx.verificationToken.delete({ where: { identifier_token: { identifier, token } } });
     });
+
+    // Emit analytics (non-blocking): reward_redeemed and points_spent
+    try {
+      // Resolve clinicId: prefer reward.clinicId; otherwise from doctor ownership/membership
+      let clinicId: string | null = (redemption as any)?.reward?.clinicId ?? null;
+      const doctorId: string | null = (redemption as any)?.reward?.doctorId ?? null;
+      if (!clinicId && doctorId) {
+        try {
+          const owned = await prisma.clinic.findFirst({ where: { ownerId: doctorId }, select: { id: true } });
+          if (owned?.id) clinicId = owned.id;
+        } catch {}
+        if (!clinicId) {
+          try {
+            const membership = await prisma.clinicMember.findFirst({ where: { userId: doctorId, isActive: true }, select: { clinicId: true } });
+            if (membership?.clinicId) clinicId = membership.clinicId;
+          } catch {}
+        }
+      }
+      if (clinicId) {
+        const customerId: string | null = (redemption as any)?.user?.id ?? null;
+        // reward_redeemed
+        await emitEvent({
+          eventType: EventType.reward_redeemed,
+          actor: EventActor.customer,
+          clinicId,
+          customerId: customerId ?? undefined,
+          metadata: { reward_id: (redemption as any)?.reward?.id || rid },
+        });
+        // points_spent (reflects consumption on fulfillment)
+        try {
+          const rd = await prisma.rewardRedemption.findUnique({ where: { id: rid }, select: { creditsUsed: true } });
+          const value = rd ? Number((rd as any).creditsUsed) : null;
+          await emitEvent({
+            eventType: EventType.points_spent,
+            actor: EventActor.customer,
+            clinicId,
+            customerId: customerId ?? undefined,
+            metadata: { value, usage: 'gift' },
+          });
+        } catch {}
+      }
+    } catch (e) {
+      console.error('[events] reward_redeemed/points_spent emit failed', e);
+    }
 
     return NextResponse.redirect(new URL(`/patient/referrals?confirm_usage=ok`, baseUrl));
   } catch (error: any) {

@@ -107,16 +107,18 @@ export default function DoctorDashboard() {
         const dashboardPromise = fetch(`/api/v2/doctor/dashboard-summary?clinicId=${currentClinic.id}`);
         const patientsPromise = fetch(`/api/patients?clinicId=${currentClinic.id}`);
         const protocolsPromise = fetch(`/api/protocols?clinicId=${currentClinic.id}`);
+        const managePromise = fetch(`/api/referrals/manage?page=1&limit=1&clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
 
         // Non-critical (deferred) requests in parallel, will be processed after first paint
-        const kpisPromise = fetch('/api/v2/doctor/referrals/kpis', { cache: 'no-store' }).catch(() => null);
+        const kpisPromise = fetch(`/api/v2/doctor/referrals/kpis?clinicId=${currentClinic.id}`, { cache: 'no-store' }).catch(() => null);
         const rewardsPromise = fetch('/api/referrals/rewards').catch(() => null);
 
         // Await only the core requests for first render
-        const [dashboardResponse, patientsResponse, protocolsResponse] = await Promise.all([
+        const [dashboardResponse, patientsResponse, protocolsResponse, manageResponse] = await Promise.all([
           dashboardPromise,
           patientsPromise,
           protocolsPromise,
+          managePromise,
         ]);
 
         let dashboardData: any = { success: false };
@@ -171,6 +173,22 @@ export default function DoctorDashboard() {
 
         setPatients(transformedPatients);
         setProtocols(transformedProtocols);
+
+        // Manage totals (to match /doctor/referrals page): referrals total and obtained value by clinic
+        if (manageResponse?.ok) {
+          try {
+            const manageJson = await manageResponse.json();
+            const obtainedValue = Number(manageJson?.stats?.obtainedValue || 0);
+            const totalLeads = Number(manageJson?.pagination?.total || 0);
+            setStats((prev) => ({
+              ...prev,
+              referralsCount: totalLeads,
+              revenueCollected: obtainedValue,
+            }));
+          } catch (e) {
+            console.error('Failed parsing manage totals', e);
+          }
+        }
 
         // Set dashboard statistics from the dashboard endpoint
         if (dashboardData.success && dashboardData.data) {
@@ -243,7 +261,7 @@ export default function DoctorDashboard() {
             console.error('Error loading rewards summary (deferred):', e);
           }
 
-          // Final safety fallback: manage stats, only if revenue/referrals still zero
+          // Final safety fallback: manage stats (scoped to clinic), only if revenue/referrals still zero
           try {
             if (typeof window !== 'undefined') {
               const needRevenueOrReferrals = (prev: DashboardStats) => !prev.revenueCollected || !prev.referralsCount;
@@ -254,7 +272,7 @@ export default function DoctorDashboard() {
                 return prev;
               });
               if (shouldFetchManage) {
-                const leadsRes = await fetch(`/api/referrals/manage?page=1&limit=1`, { cache: 'no-store' });
+                const leadsRes = await fetch(`/api/referrals/manage?page=1&limit=1&clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
                 if (leadsRes.ok) {
                   const leadsJson = await leadsRes.json();
                   const obtainedValue = Number(leadsJson?.stats?.obtainedValue || 0);
@@ -476,7 +494,7 @@ export default function DoctorDashboard() {
               }, {
                 title: 'Referrals',
                 value: stats.referralsCount,
-                note: 'last 30 days'
+                note: 'total'
               }, {
                 title: 'Users',
                 value: stats.usersCount,

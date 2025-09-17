@@ -343,16 +343,16 @@ export default function DoctorReferralsPage() {
           <div className="mb-4">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
               <div>
-                <h1 className="text-[20px] font-semibold text-gray-900 tracking-[-0.01em] mb-1">Referrals</h1>
-                <p className="text-sm text-gray-500">Manage referral leads and track conversions</p>
+                <h1 className="text-[18px] font-semibold text-gray-900 tracking-[-0.01em] mb-0.5">Referrals</h1>
+                <p className="text-xs text-gray-500">Manage referral leads and track conversions</p>
               </div>
               <div className="flex items-center gap-2">
-                <Button asChild variant="outline" className="rounded-xl h-9 px-3 border-gray-200 text-gray-700 hover:bg-gray-50">
+                <Button asChild variant="outline" className="rounded-full h-7 px-2.5 border-gray-300 text-gray-800 hover:bg-gray-50 text-[11px]">
                   <Link href="/doctor/pipeline" className="flex items-center gap-2">
                     <span>Pipeline</span>
                   </Link>
                 </Button>
-                <Button onClick={copyReferralLink} className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl h-9 px-4 font-medium">
+                <Button onClick={copyReferralLink} className="bg-gray-900 hover:bg-gray-800 text-white rounded-full h-7 px-3 text-xs font-medium">
                   Copy referral link
                 </Button>
               </div>
@@ -361,23 +361,23 @@ export default function DoctorReferralsPage() {
 
 
           {/* Tabs */}
-          <div className="flex space-x-1 mb-8">
+          <div className="flex space-x-2 mb-6">
             <button
               onClick={() => setActiveTab('active')}
-              className={`px-6 py-3 rounded-xl font-semibold text-xs transition-all ${
+              className={`px-4 py-2 rounded-full font-semibold text-[11px] transition-all border ${
                 activeTab === 'active'
-                  ? 'bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white shadow-md'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-gray-900 text-white border-gray-900 shadow-sm'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'
               }`}
             >
               Active ({activeStats.total})
             </button>
             <button
               onClick={() => setActiveTab('rejected')}
-              className={`px-6 py-3 rounded-xl font-semibold text-xs transition-all ${
+              className={`px-4 py-2 rounded-full font-semibold text-[11px] transition-all border ${
                 activeTab === 'rejected'
-                  ? 'bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white shadow-md'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-gray-900 text-white border-gray-900 shadow-sm'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'
               }`}
             >
               Rejected ({rejectedStats.rejected})
@@ -455,11 +455,11 @@ export default function DoctorReferralsPage() {
 
           {/* Referrals Table */}
           <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-lg font-bold text-gray-900">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-bold text-gray-900">
                 {activeTab === 'active' ? 'Active Referrals' : 'Rejected Referrals'}
               </CardTitle>
-              <CardDescription className="text-sm text-gray-600">
+              <CardDescription className="text-xs text-gray-600">
                 {activeTab === 'active' 
                   ? 'Referrals that are pending, contacted, or converted'
                   : 'Referrals that have been rejected'
@@ -470,49 +470,49 @@ export default function DoctorReferralsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-sm font-semibold text-gray-900">Name</TableHead>
-                    <TableHead className="text-sm font-semibold text-gray-900">Phone</TableHead>
-                    <TableHead className="text-sm font-semibold text-gray-900">Product</TableHead>
-                    <TableHead className="text-sm font-semibold text-gray-900">Campaign</TableHead>
-                    <TableHead className="text-sm font-semibold text-gray-900">Valor</TableHead>
-                    <TableHead className="text-sm font-semibold text-gray-900">Cupom</TableHead>
-                    <TableHead className="text-sm font-semibold text-gray-900">Referred by</TableHead>
-                    <TableHead className="text-sm font-semibold text-gray-900">Status</TableHead>
-                    <TableHead className="text-sm font-semibold text-gray-900">Date</TableHead>
-                    <TableHead className="text-sm font-semibold text-gray-900">Actions</TableHead>
+                    <TableHead className="text-xs font-semibold text-gray-900">Name</TableHead>
+                    <TableHead className="text-xs font-semibold text-gray-900">Phone</TableHead>
+                    <TableHead className="text-xs font-semibold text-gray-900">Product</TableHead>
+                    <TableHead className="text-xs font-semibold text-gray-900">Campaign</TableHead>
+                    <TableHead className="text-xs font-semibold text-gray-900">Valor</TableHead>
+                    <TableHead className="text-xs font-semibold text-gray-900">Cupom</TableHead>
+                    <TableHead className="text-xs font-semibold text-gray-900">Referred by</TableHead>
+                    <TableHead className="text-xs font-semibold text-gray-900">Status</TableHead>
+                    <TableHead className="text-xs font-semibold text-gray-900">Date</TableHead>
+                    <TableHead className="text-xs font-semibold text-gray-900">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredLeads.map((lead) => {
                     return (
                       <TableRow key={lead.id}>
-                        <TableCell className="text-sm font-semibold text-gray-900">{lead.name}</TableCell>
-                        <TableCell className="text-sm text-gray-700">{lead.phone || '—'}</TableCell>
-                        <TableCell className="text-sm text-gray-700">
+                        <TableCell className="text-xs font-semibold text-gray-900">{lead.name}</TableCell>
+                        <TableCell className="text-xs text-gray-700">{lead.phone || '—'}</TableCell>
+                        <TableCell className="text-xs text-gray-700">
                           {lead.customFields?.productName ? (
                             <div>
-                              <p className="text-sm text-gray-900">{lead.customFields.productName}</p>
-                              <p className="text-xs text-gray-500">{lead.customFields.productCategory || '—'}</p>
+                              <p className="text-xs text-gray-900">{lead.customFields.productName}</p>
+                              <p className="text-[11px] text-gray-500">{lead.customFields.productCategory || '—'}</p>
                             </div>
                           ) : '—'}
                         </TableCell>
-                        <TableCell className="text-sm text-gray-700">{lead.campaign?.title || '—'}</TableCell>
-                        <TableCell className="text-sm text-gray-700">
+                        <TableCell className="text-xs text-gray-700">{lead.campaign?.title || '—'}</TableCell>
+                        <TableCell className="text-xs text-gray-700">
                           {typeof lead.customFields?.productPrice === 'number'
                             ? formatCurrency(lead.customFields!.productPrice as number)
                             : (typeof lead.customFields?.offer?.amount === 'number'
                                 ? formatCurrency(lead.customFields!.offer!.amount as number)
                                 : '—')}
                         </TableCell>
-                        <TableCell className="text-sm text-gray-700">
+                        <TableCell className="text-xs text-gray-700">
                           {lead.customFields?.coupon?.code ? (
                             <div className="inline-flex items-center gap-2">
-                              <code className="font-mono text-xs tracking-widest text-gray-900 bg-gray-100 rounded px-2 py-1">
+                              <code className="font-mono text-[11px] tracking-widest text-gray-900 bg-gray-100 rounded px-2 py-0.5">
                                 {lead.customFields.coupon.code}
                               </code>
                               <button
                                 type="button"
-                                className="text-[11px] text-[#5893ec] hover:underline"
+                                className="text-[11px] text-gray-700 hover:underline"
                                 onClick={() => navigator.clipboard.writeText(lead.customFields!.coupon!.code)}
                               >
                                 Copiar
@@ -522,34 +522,33 @@ export default function DoctorReferralsPage() {
                         </TableCell>
                         <TableCell>
                           <div>
-                            <p className="text-sm font-semibold text-gray-900">{lead.referrer?.name ?? 'Direct'}</p>
-                            <p className="text-xs text-gray-500">{lead.referrer?.email ?? '—'}</p>
+                            <p className="text-xs font-semibold text-gray-900">{lead.referrer?.name ?? 'Direct'}</p>
+                            <p className="text-[11px] text-gray-500">{lead.referrer?.email ?? '—'}</p>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge className={`bg-gray-100 text-gray-800 rounded-lg px-3 py-1 text-xs font-medium`}>
+                          <Badge className={`bg-gray-100 text-gray-800 rounded-lg px-2.5 py-0.5 text-[11px] font-medium`}>
                             {statusConfig[lead.status as keyof typeof statusConfig]?.label || lead.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-sm text-gray-700">
+                        <TableCell className="text-xs text-gray-700">
                           {new Date(lead.createdAt).toLocaleDateString('en-US')}
                         </TableCell>
                         <TableCell>
                           <Dialog>
                             <DialogTrigger asChild>
                               <Button 
-                                variant="outline" 
                                 size="sm"
                                 onClick={() => openUpdateDialog(lead)}
-                                className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-9 px-3 text-xs font-semibold"
+                                className="bg-gray-900 hover:bg-gray-800 text-white rounded-full h-7 px-3 text-[11px] font-semibold"
                               >
                                 Manage
                               </Button>
                             </DialogTrigger>
                             <DialogContent className="bg-white rounded-2xl">
                               <DialogHeader>
-                                <DialogTitle className="text-lg font-bold text-gray-900">Manage Referral</DialogTitle>
-                                <DialogDescription className="text-sm text-gray-600">
+                                <DialogTitle className="text-base font-bold text-gray-900">Manage Referral</DialogTitle>
+                                <DialogDescription className="text-xs text-gray-600">
                                   Update the status and add notes about this referral
                                 </DialogDescription>
                               </DialogHeader>
@@ -610,7 +609,7 @@ export default function DoctorReferralsPage() {
                                     onChange={(e) => setUpdateForm(prev => ({ ...prev, notes: e.target.value }))}
                                     placeholder="Add notes about the contact..."
                                     rows={3}
-                                    className="mt-2 bg-white border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] text-gray-900 placeholder:text-gray-500 rounded-xl font-medium"
+                                    className="mt-2 bg-white border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] text-gray-900 placeholder:text-gray-500 rounded-xl font-medium text-sm"
                                   />
                                 </div>
                               </div>
@@ -619,7 +618,7 @@ export default function DoctorReferralsPage() {
                                 <Button 
                                   onClick={handleStatusUpdate}
                                   disabled={updating === selectedLead?.id}
-                                  className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl h-10 px-6 font-semibold"
+                                  className="bg-gray-900 hover:bg-gray-800 text-white rounded-xl h-9 px-5 text-sm font-semibold"
                                 >
                                   {updating === selectedLead?.id ? (
                                     <>
@@ -659,10 +658,9 @@ export default function DoctorReferralsPage() {
               {totalPages > 1 && (
                 <div className="flex justify-center mt-8 space-x-3">
                   <Button
-                    variant="outline"
                     onClick={() => setPage(p => Math.max(1, p - 1))}
                     disabled={page === 1}
-                    className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-10 px-4 font-semibold"
+                    className={`rounded-full h-9 px-4 font-semibold ${page === 1 ? 'bg-gray-300 text-white' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
                   >
                     Previous
                   </Button>
@@ -670,10 +668,9 @@ export default function DoctorReferralsPage() {
                     Page {page} of {totalPages}
                   </span>
                   <Button
-                    variant="outline"
                     onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                     disabled={page === totalPages}
-                    className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-10 px-4 font-semibold"
+                    className={`rounded-full h-9 px-4 font-semibold ${page === totalPages ? 'bg-gray-300 text-white' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
                   >
                     Next
                   </Button>

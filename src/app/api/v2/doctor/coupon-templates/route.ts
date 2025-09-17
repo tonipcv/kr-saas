@@ -45,10 +45,36 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get('offset') || '0', 10);
     const search = searchParams.get('search')?.toLowerCase() || '';
     const isActive = searchParams.get('is_active'); // 'true' | 'false' | null
+    const clinicId = (searchParams.get('clinicId') || '').trim() || null;
 
-    const whereClauses: string[] = ['doctor_id = $1'];
-    const params: any[] = [userId];
-    let idx = params.length + 1;
+    // When clinicId is provided, ensure the doctor has access to the clinic (owner or active member)
+    if (clinicId) {
+      const hasAccess = await prisma.clinic.findFirst({
+        where: {
+          id: clinicId,
+          OR: [
+            { ownerId: userId },
+            { members: { some: { userId, isActive: true } } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (!hasAccess) {
+        return NextResponse.json({ success: false, error: 'Access denied to this clinic' }, { status: 403 });
+      }
+    }
+
+    const whereClauses: string[] = [];
+    const params: any[] = [];
+    let idx = 1;
+    if (clinicId) {
+      whereClauses.push(`clinic_id = $${idx++}`);
+      params.push(clinicId);
+    } else {
+      // Backward compatibility: list by doctor when no clinic provided
+      whereClauses.push(`doctor_id = $${idx++}`);
+      params.push(userId);
+    }
 
     if (isActive === 'true' || isActive === 'false') {
       whereClauses.push(`is_active = $${idx++}`);
@@ -63,7 +89,7 @@ export async function GET(request: NextRequest) {
     const whereSql = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
     const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT id, doctor_id, name, slug, display_title, display_message, config, is_active, created_at, updated_at
+      `SELECT id, doctor_id, clinic_id, name, slug, display_title, display_message, config, is_active, created_at, updated_at
        FROM coupon_templates
        ${whereSql}
        ORDER BY created_at DESC
@@ -123,28 +149,47 @@ export async function POST(request: NextRequest) {
       display_title,
       display_message,
       config,
-      is_active = true
+      is_active = true,
+      clinicId,
     } = body || {};
 
     if (!slug || !name) {
       return NextResponse.json({ success: false, error: 'slug and name are required' }, { status: 400 });
     }
 
-    // Ensure unique (doctor_id, slug)
+    // If clinic-scoped creation, authorize and ensure unique (clinic_id, slug)
+    if (!clinicId) {
+      return NextResponse.json({ success: false, error: 'clinicId is required' }, { status: 400 });
+    }
+    const hasAccess = await prisma.clinic.findFirst({
+      where: {
+        id: clinicId,
+        OR: [
+          { ownerId: userId },
+          { members: { some: { userId, isActive: true } } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!hasAccess) {
+      return NextResponse.json({ success: false, error: 'Access denied to this clinic' }, { status: 403 });
+    }
+
     const exists: Array<{ id: string }> = await prisma.$queryRawUnsafe(
-      `SELECT id FROM coupon_templates WHERE doctor_id = $1 AND slug = $2 LIMIT 1`,
-      userId, slug
+      `SELECT id FROM coupon_templates WHERE clinic_id = $1 AND slug = $2 LIMIT 1`,
+      clinicId, slug
     );
     if (exists && exists.length > 0) {
-      return NextResponse.json({ success: false, error: 'slug already exists for this doctor' }, { status: 409 });
+      return NextResponse.json({ success: false, error: 'slug already exists for this clinic' }, { status: 409 });
     }
 
     const now = new Date();
     const idRow: Array<{ id: string }> = await prisma.$queryRawUnsafe(
-      `INSERT INTO coupon_templates (id, doctor_id, name, slug, display_title, display_message, config, is_active, created_at, updated_at)
-       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)
+      `INSERT INTO coupon_templates (id, doctor_id, clinic_id, name, slug, display_title, display_message, config, is_active, created_at, updated_at)
+       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10)
        RETURNING id`,
       userId,
+      clinicId,
       name,
       slug,
       display_title || null,
@@ -157,7 +202,7 @@ export async function POST(request: NextRequest) {
 
     const newId = idRow?.[0]?.id;
     const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT id, doctor_id, name, slug, display_title, display_message, config, is_active, created_at, updated_at
+      `SELECT id, doctor_id, clinic_id, name, slug, display_title, display_message, config, is_active, created_at, updated_at
        FROM coupon_templates WHERE id = $1`,
       newId
     );

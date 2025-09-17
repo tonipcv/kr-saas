@@ -48,17 +48,18 @@ export async function GET(req: Request) {
     }
 
     // Filtros
-    const where: any = {
-      doctorId: session.user.id,
-      ...(clinicId && { clinicId }),
-    };
+    // When clinicId is provided and access is validated, list all referrals for that clinic (any doctor inside)
+    // Otherwise, default to this doctor's own referrals
+    const where: any = clinicId
+      ? { clinicId }
+      : { doctorId: session.user.id };
 
     if (status && status !== 'ALL') {
       where.status = status;
     }
 
     // Buscar indicações
-    const [leads, total] = await Promise.all([
+    const [rawLeads, total] = await Promise.all([
       prisma.referralLead.findMany({
         where,
         include: {
@@ -91,7 +92,12 @@ export async function GET(req: Request) {
       obtainedValue: 0
     };
 
-    // Update stats based on leads
+    // Shape leads for UI (add `referrer` field) and update stats
+    const leads = (rawLeads as any[]).map((l) => ({
+      ...l,
+      referrer: l.User_referral_leads_referrerIdToUser || null,
+    }));
+
     leads.forEach((lead: any) => {
       stats[lead.status.toLowerCase()] = (stats[lead.status.toLowerCase()] || 0) + 1;
       

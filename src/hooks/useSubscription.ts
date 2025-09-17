@@ -73,13 +73,19 @@ export function useSubscription() {
     fetchSubscription();
   }, [session?.user?.id]);
 
-  const checkLimit = async (type: 'patients' | 'protocols' | 'courses' | 'products'): Promise<{ allowed: boolean; message?: string }> => {
+  const checkLimit = async (
+    type: 'patients' | 'protocols' | 'courses' | 'products',
+    clinicId?: string
+  ): Promise<{ allowed: boolean; message?: string; current?: number; limit?: number }> => {
     if (!session?.user?.id) {
       return { allowed: false, message: 'Usuário não autenticado' };
     }
 
     try {
-      const response = await fetch(`/api/subscription/check-limit?type=${type}`, {
+      const url = new URL('/api/subscription/check-limit', window.location.origin);
+      url.searchParams.set('type', type);
+      if (clinicId) url.searchParams.set('clinicId', clinicId);
+      const response = await fetch(url.toString(), {
         method: 'GET',
       });
 

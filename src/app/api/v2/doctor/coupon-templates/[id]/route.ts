@@ -54,23 +54,54 @@ export async function PATCH(
       is_active
     } = body || {};
 
-    // Verify ownership
-    const owner: Array<{ doctor_id: string }> = await prisma.$queryRawUnsafe(
-      `SELECT doctor_id FROM coupon_templates WHERE id = $1 LIMIT 1`,
+    // Verify ownership/clinic access
+    const tplRows: Array<{ doctor_id: string; clinic_id: string | null }> = await prisma.$queryRawUnsafe(
+      `SELECT doctor_id, clinic_id FROM coupon_templates WHERE id = $1 LIMIT 1`,
       id
     );
-    if (!owner?.[0] || owner[0].doctor_id !== userId) {
+    const tpl = tplRows?.[0];
+    if (!tpl) {
+      return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
+    }
+    // If template is clinic-scoped, require access to that clinic
+    if (tpl.clinic_id) {
+      const hasAccess = await prisma.clinic.findFirst({
+        where: {
+          id: tpl.clinic_id,
+          OR: [
+            { ownerId: userId },
+            { members: { some: { userId, isActive: true } } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (!hasAccess) {
+        return NextResponse.json({ success: false, error: 'Access denied to this clinic' }, { status: 403 });
+      }
+    } else if (tpl.doctor_id !== userId) {
+      // Legacy doctor-scoped: still require ownership
       return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
     }
 
-    // Unique slug per doctor if changing slug
+    // Unique slug scope: within clinic if clinic_id exists, else within doctor
     if (typeof slug === 'string' && slug.trim().length > 0) {
-      const exists: Array<{ id: string }> = await prisma.$queryRawUnsafe(
-        `SELECT id FROM coupon_templates WHERE doctor_id = $1 AND slug = $2 AND id <> $3 LIMIT 1`,
-        userId, slug, id
-      );
-      if (exists && exists.length > 0) {
-        return NextResponse.json({ success: false, error: 'slug already exists for this doctor' }, { status: 409 });
+      let exists: Array<{ id: string }> = [];
+      if (tpl.clinic_id) {
+        exists = await prisma.$queryRawUnsafe(
+          `SELECT id FROM coupon_templates WHERE clinic_id = $1 AND slug = $2 AND id <> $3 LIMIT 1`,
+          tpl.clinic_id, slug, id
+        );
+        if (exists && exists.length > 0) {
+          return NextResponse.json({ success: false, error: 'slug already exists for this clinic' }, { status: 409 });
+        }
+      } else {
+        exists = await prisma.$queryRawUnsafe(
+          `SELECT id FROM coupon_templates WHERE doctor_id = $1 AND slug = $2 AND id <> $3 LIMIT 1`,
+          userId, slug, id
+        );
+        if (exists && exists.length > 0) {
+          return NextResponse.json({ success: false, error: 'slug already exists for this doctor' }, { status: 409 });
+        }
       }
     }
 

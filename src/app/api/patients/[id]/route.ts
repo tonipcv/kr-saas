@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { emitEvent } from '@/lib/events';
+import { EventActor, EventType } from '@prisma/client';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -24,11 +26,12 @@ export async function GET(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
+    const { id } = await params;
     // Check if doctor has access to this patient and include per-doctor PatientProfile
     const relationship = await prisma.doctorPatientRelationship.findFirst({
       where: {
         doctorId: doctor.id,
-        patientId: params.id,
+        patientId: id,
         isActive: true,
       },
       include: {
@@ -105,7 +108,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -124,11 +127,13 @@ export async function PUT(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
+    const { id } = await params;
+
     // Check if doctor has access to this patient
     const relationship = await prisma.doctorPatientRelationship.findFirst({
       where: {
         doctorId: doctor.id,
-        patientId: params.id,
+        patientId: id,
         isActive: true
       }
     });
@@ -157,10 +162,10 @@ export async function PUT(
     const result = await prisma.$transaction(async (tx) => {
       // Upsert tenant-scoped PatientProfile
       const profile = await tx.patientProfile.upsert({
-        where: { doctorId_userId: { doctorId: doctor.id, userId: params.id } },
+        where: { doctorId_userId: { doctorId: doctor.id, userId: id } },
         create: {
           doctorId: doctor.id,
-          userId: params.id,
+          userId: id,
           ...(name !== undefined ? { name } : {}),
           ...(phone !== undefined ? { phone } : {}),
           ...(address !== undefined ? { address } : {}),
@@ -187,7 +192,7 @@ export async function PUT(
 
       // Update selected global fields on User
       const user = await tx.user.update({
-        where: { id: params.id },
+        where: { id },
         data: {
           ...(email ? { email } : {}),
           ...(birthDate ? { birth_date: new Date(birthDate) } : {}),
@@ -199,8 +204,42 @@ export async function PUT(
       return { profile, user };
     });
 
+    // Emit event: customer_updated
+    try {
+      // Prefer clinicId from query when valid for this doctor (owner OR active member)
+      const { searchParams } = new URL(request.url);
+      const clinicIdParam = searchParams.get('clinicId');
+      let clinicId: string | null = null;
+      if (clinicIdParam) {
+        const owns = await prisma.clinic.findFirst({ where: { id: clinicIdParam, ownerId: doctor.id }, select: { id: true } });
+        if (owns?.id) clinicId = owns.id;
+        if (!clinicId) {
+          const access = await prisma.clinicMember.findFirst({ where: { userId: doctor.id, clinicId: clinicIdParam, isActive: true }, select: { clinicId: true } });
+          if (access?.clinicId) clinicId = access.clinicId;
+        }
+      }
+      const owned = await prisma.clinic.findFirst({ where: { ownerId: doctor.id }, select: { id: true } });
+      if (owned?.id && !clinicId) clinicId = owned.id;
+      if (!clinicId) {
+        const membership = await prisma.clinicMember.findFirst({ where: { userId: doctor.id, isActive: true }, select: { clinicId: true } });
+        if (membership?.clinicId) clinicId = membership.clinicId;
+      }
+      if (clinicId) {
+        await emitEvent({
+          eventId: `customer_updated_clinic_${clinicId}_doctor_${doctor.id}_user_${id}`,
+          eventType: EventType.customer_updated,
+          actor: EventActor.clinic,
+          clinicId,
+          customerId: id,
+          metadata: { changes: { name, email, phone, birthDate, gender, address, emergencyContact, emergencyPhone } },
+        });
+      }
+    } catch (e) {
+      console.error('[events] patient update emit failed', e);
+    }
+
     return NextResponse.json({
-      id: params.id,
+      id: id,
       name: name,
       email: result.user.email,
       phone: phone,
@@ -217,7 +256,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -236,7 +275,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    const patientId = params.id;
+    const { id } = await params;
+    const patientId = id;
     
     // Check if doctor has access to this patient
     const relationship = await prisma.doctorPatientRelationship.findFirst({
@@ -274,6 +314,43 @@ export async function DELETE(
         data: { isActive: false },
       });
     });
+
+    // Emit audit event: config_changed for deletion
+    try {
+      const { searchParams } = new URL(request.url);
+      const clinicIdParam = searchParams.get('clinicId');
+      let clinicId: string | null = null;
+      if (clinicIdParam) {
+        const owns = await prisma.clinic.findFirst({ where: { id: clinicIdParam, ownerId: doctor.id }, select: { id: true } });
+        if (owns?.id) clinicId = owns.id;
+        if (!clinicId) {
+          const access = await prisma.clinicMember.findFirst({ where: { userId: doctor.id, clinicId: clinicIdParam, isActive: true }, select: { clinicId: true } });
+          if (access?.clinicId) clinicId = access.clinicId;
+        }
+      }
+      const owned = await prisma.clinic.findFirst({ where: { ownerId: doctor.id }, select: { id: true } });
+      if (owned?.id && !clinicId) clinicId = owned.id;
+      if (!clinicId) {
+        const membership = await prisma.clinicMember.findFirst({ where: { userId: doctor.id, isActive: true }, select: { clinicId: true } });
+        if (membership?.clinicId) clinicId = membership.clinicId;
+      }
+      if (clinicId) {
+        await emitEvent({
+          eventId: `patient_deleted_clinic_${clinicId}_doctor_${doctor.id}_user_${patientId}`,
+          eventType: EventType.config_changed,
+          actor: EventActor.clinic,
+          clinicId,
+          customerId: patientId,
+          metadata: {
+            field_changed: 'patient_deleted_manual',
+            old_value: { patient_id: patientId, doctor_id: doctor.id },
+            new_value: null,
+          },
+        });
+      }
+    } catch (e) {
+      console.error('[events] patient delete emit failed', e);
+    }
 
     return NextResponse.json({ message: 'Patient deleted successfully' });
 
