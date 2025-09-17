@@ -30,6 +30,11 @@ export default function ClientRegister({ slug, initialBranding }: { slug: string
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [phone, setPhone] = useState('+55');
   const [lang, setLang] = useState<'pt'|'en'|'es'>('pt');
+  const [step, setStep] = useState<'form' | 'verify'>('form');
+  const [code, setCode] = useState('');
+  const [sendingCode, setSendingCode] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [lastRegistered, setLastRegistered] = useState<{ email: string; phone: string; password: string; name: string; birthDate?: string } | null>(null);
 
   // Simple i18n dictionary
   const i18n: Record<'pt'|'en'|'es', Record<string, string>> = {
@@ -45,6 +50,14 @@ export default function ClientRegister({ slug, initialBranding }: { slug: string
       placeholderName: 'Seu nome',
       placeholderEmail: 'm@exemplo.com',
       placeholderPassword: 'Digite sua senha',
+      verifyPhoneTitle: 'Verificação por SMS',
+      verifyPhoneDesc: 'Enviamos um código por SMS para o seu número. Digite abaixo para confirmar.',
+      codeLabel: 'Código',
+      codePlaceholder: '000000',
+      resend: 'Reenviar código',
+      verifying: 'Verificando…',
+      verify: 'Confirmar',
+      back: 'Voltar',
     },
     en: {
       name: 'Name',
@@ -58,6 +71,14 @@ export default function ClientRegister({ slug, initialBranding }: { slug: string
       placeholderName: 'Your name',
       placeholderEmail: 'm@example.com',
       placeholderPassword: 'Enter your password',
+      verifyPhoneTitle: 'SMS verification',
+      verifyPhoneDesc: 'We sent a code via SMS to your number. Enter it below to confirm.',
+      codeLabel: 'Code',
+      codePlaceholder: '000000',
+      resend: 'Resend code',
+      verifying: 'Verifying…',
+      verify: 'Verify',
+      back: 'Back',
     },
     es: {
       name: 'Nombre',
@@ -71,6 +92,14 @@ export default function ClientRegister({ slug, initialBranding }: { slug: string
       placeholderName: 'Tu nombre',
       placeholderEmail: 'm@ejemplo.com',
       placeholderPassword: 'Ingresa tu contraseña',
+      verifyPhoneTitle: 'Verificación por SMS',
+      verifyPhoneDesc: 'Enviamos un código por SMS a tu número. Escríbelo abajo para confirmar.',
+      codeLabel: 'Código',
+      codePlaceholder: '000000',
+      resend: 'Reenviar código',
+      verifying: 'Verificando…',
+      verify: 'Confirmar',
+      back: 'Volver',
     },
   };
 
@@ -159,28 +188,81 @@ export default function ClientRegister({ slug, initialBranding }: { slug: string
         throw new Error(json?.error || 'Erro ao criar conta');
       }
 
-      // 2) Auto sign-in
-      const si = await signIn('credentials', { email, password, redirect: false });
-      if (si?.error) {
-        throw new Error('Conta criada, mas falha ao entrar automaticamente');
+      // 2) Send SMS verification code
+      setLastRegistered({ email, phone: submittedPhone, password, name, birthDate });
+      setSendingCode(true);
+      const sms = await fetch('/api/v2/public/register/sms/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: submittedPhone, refer: `register:${slug}` }),
+      });
+      const smsJson = await sms.json().catch(() => ({}));
+      if (!sms.ok || !smsJson?.success) {
+        const providerInfo = smsJson?.providerStatus ? ` (prov=${smsJson.providerStatus})` : '';
+        const providerBody = smsJson?.providerBody ? ` - ${typeof smsJson.providerBody === 'string' ? smsJson.providerBody : JSON.stringify(smsJson.providerBody)}` : (smsJson?.details ? ` - ${smsJson.details}` : '');
+        throw new Error((smsJson?.error || 'Falha ao enviar SMS') + providerInfo + providerBody);
       }
+      setStep('verify');
+      return;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error during registration');
+    } finally {
+      setIsSubmitting(false);
+      setSendingCode(false);
+    }
+  };
 
-      // 3) Persist patient profile fields
+  const resendCode = async () => {
+    if (!lastRegistered?.phone) return;
+    try {
+      setSendingCode(true);
+      setError(null);
+      const sms = await fetch('/api/v2/public/register/sms/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: lastRegistered.phone, refer: `register:${slug}` }),
+      });
+      const smsJson = await sms.json().catch(() => ({}));
+      if (!sms.ok || !smsJson?.success) {
+        throw new Error(smsJson?.error || 'Falha ao enviar SMS');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao reenviar SMS');
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lastRegistered) return;
+    try {
+      setVerifying(true);
+      setError(null);
+      const v = await fetch('/api/v2/public/register/sms/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: lastRegistered.phone, code }),
+      });
+      const vj = await v.json().catch(() => ({}));
+      if (!v.ok || !vj?.success) {
+        throw new Error(vj?.error || 'Código inválido');
+      }
+      // On verified, auto sign-in then persist profile and redirect
+      const si = await signIn('credentials', { email: lastRegistered.email, password: lastRegistered.password, redirect: false });
+      if (si?.error) throw new Error('Conta verificada, mas falha ao entrar');
       try {
         await fetch('/api/patient/profile', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, phone: submittedPhone, birthDate }),
+          body: JSON.stringify({ name: lastRegistered.name, phone: lastRegistered.phone, birthDate: lastRegistered.birthDate }),
         });
       } catch {}
-
-      // 4) Redirect to referrals
       window.location.replace(`/${slug}/referrals`);
-      return;
-    } catch (err) {
-      setError('Error during registration');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao verificar código');
     } finally {
-      setIsSubmitting(false);
+      setVerifying(false);
     }
   };
 
@@ -231,7 +313,8 @@ export default function ClientRegister({ slug, initialBranding }: { slug: string
             <div className="mb-6 text-red-600 text-center text-sm">{error}</div>
           )}
 
-          {/* Register form */}
+          {/* Register form / Verify step */}
+          {step === 'form' ? (
           <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
             <div>
               <label htmlFor="name" className={`block text-sm font-medium ${labelClass} mb-2`}>{i18n[lang].name}</label>
@@ -297,6 +380,45 @@ export default function ClientRegister({ slug, initialBranding }: { slug: string
               {isSubmitting ? i18n[lang].creatingAccount : i18n[lang].createAccount}
             </button>
           </form>
+          ) : (
+            <form onSubmit={handleVerify} className="space-y-5" autoComplete="off">
+              <div>
+                <h2 className={`text-base font-semibold ${displayTheme === 'DARK' ? 'text-gray-100' : 'text-gray-900'}`}>{i18n[lang].verifyPhoneTitle}</h2>
+                <p className={`mt-1 text-sm ${displayTheme === 'DARK' ? 'text-gray-400' : 'text-gray-600'}`}>{i18n[lang].verifyPhoneDesc}</p>
+              </div>
+              <div>
+                <label htmlFor="code" className={`block text-sm font-medium ${labelClass} mb-2`}>{i18n[lang].codeLabel}</label>
+                <input
+                  type="text"
+                  id="code"
+                  name="code"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D+/g, ''))}
+                  className={`w-full px-4 py-2.5 text-sm ${displayTheme === 'DARK' ? 'bg-[#0f0f0f] border-gray-700 text-gray-100 placeholder:text-gray-400 focus:ring-gray-700 focus:border-gray-600' : 'bg-white border-gray-300 text-gray-900 focus:ring-[#5154e7]/20 focus:border-[#5154e7]'} border rounded-lg transition-all duration-200`}
+                  placeholder={i18n[lang].codePlaceholder}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <button type="button" onClick={() => setStep('form')} className={`text-sm ${linkPrimary}`}>{i18n[lang].back}</button>
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={resendCode} disabled={sendingCode} className="text-sm disabled:opacity-60 disabled:cursor-not-allowed">
+                    {i18n[lang].resend}
+                  </button>
+                  <button
+                    type="submit"
+                    className="py-2.5 px-4 text-sm font-medium rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300"
+                    style={{ backgroundColor: 'var(--btn-bg)', color: 'var(--btn-fg)' }}
+                    disabled={verifying}
+                  >
+                    {verifying ? i18n[lang].verifying : i18n[lang].verify}
+                  </button>
+                </div>
+              </div>
+            </form>
+          )}
 
           {/* Footer links */}
           <div className="mt-6 text-center space-y-3">

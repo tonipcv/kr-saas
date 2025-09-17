@@ -61,9 +61,18 @@ export default async function middleware(request: NextRequestWithAuth) {
           const dest = new URL(`/forgot-password${url.search}`, request.url)
           return NextResponse.redirect(dest)
         }
+        // Canonicalize: if URL is /{slug}/register, redirect to clean /register
+        if (firstSeg === slugFromHost && secondSeg === 'register') {
+          const dest = new URL(`/register${url.search}`, request.url)
+          return NextResponse.redirect(dest)
+        }
         // Keep clean URLs visible, but rewrite internally to the slugged routes so pages resolve
         if (firstSeg === 'forgot-password') {
           const rewriteUrl = new URL(`/${slugFromHost}/forgot-password${url.search}`, request.url)
+          return NextResponse.rewrite(rewriteUrl)
+        }
+        if (firstSeg === 'register') {
+          const rewriteUrl = new URL(`/${slugFromHost}/register${url.search}`, request.url)
           return NextResponse.rewrite(rewriteUrl)
         }
         if (firstSeg === 'login') {
@@ -185,6 +194,7 @@ export const config = {
     '/clinic/:path*',
     '/doctor-info/:path*',
     '/login/:path*',
+    '/register',
     '/forgot-password',
     // Slugged roots (first segment as slug)
     '/:path*/doctor/:path*',
