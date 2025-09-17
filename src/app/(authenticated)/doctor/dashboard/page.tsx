@@ -21,6 +21,7 @@ import Link from 'next/link';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import ProjectionLineChart, { SeriesPoint } from "@/components/charts/ProjectionLineChart";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface Patient {
   id: string;
@@ -88,6 +89,8 @@ export default function DoctorDashboard() {
   const [copied, setCopied] = useState(false);
   const [rewardsSummary, setRewardsSummary] = useState<{ configured: number; pending: number; redeemed: number }>({ configured: 0, pending: 0, redeemed: 0 });
   const [showLinksPanel, setShowLinksPanel] = useState(false);
+  const [showRegisterQr, setShowRegisterQr] = useState(false);
+  const [showQrPanel, setShowQrPanel] = useState(false);
 
   // Simple skeleton helpers
   const SkeletonLine = ({ className = '' }: { className?: string }) => (
@@ -323,6 +326,14 @@ export default function DoctorDashboard() {
     : '';
 
   const patientLoginUrl = publicUrl ? `${publicUrl}/login` : '';
+  const patientRegisterUrl = publicUrl ? `${publicUrl}/register` : '';
+
+  const qrPngUrl = patientRegisterUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=360x360&data=${encodeURIComponent(patientRegisterUrl)}`
+    : '';
+  const qrLoginPngUrl = patientLoginUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=360x360&data=${encodeURIComponent(patientLoginUrl)}`
+    : '';
 
   const copyPublicUrl = async () => {
     if (!publicUrl) return;
@@ -343,6 +354,17 @@ export default function DoctorDashboard() {
       setTimeout(() => setCopied(false), 1500);
     } catch (e) {
       console.error('Failed to copy patient login URL:', e);
+    }
+  };
+
+  const copyPatientRegisterUrl = async () => {
+    if (!patientRegisterUrl) return;
+    try {
+      await navigator.clipboard.writeText(patientRegisterUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (e) {
+      console.error('Failed to copy patient register URL:', e);
     }
   };
 
@@ -420,10 +442,16 @@ export default function DoctorDashboard() {
                   New client
                 </button>
                 <button
-                  onClick={() => setShowLinksPanel((v) => !v)}
+                  onClick={() => { setShowLinksPanel((v) => !v); if (!showLinksPanel) setShowQrPanel(false); }}
                   className="inline-flex h-8 items-center rounded-full px-3 text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300"
                 >
                   Your links
+                </button>
+                <button
+                  onClick={() => { setShowQrPanel((v) => !v); if (!showQrPanel) setShowLinksPanel(false); }}
+                  className="inline-flex h-8 items-center rounded-full px-3 text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300"
+                >
+                  Your QR Codes
                 </button>
               </div>
 
@@ -439,6 +467,85 @@ export default function DoctorDashboard() {
                           <>
                             <button onClick={copyPatientLoginUrl} className="text-[11px] text-gray-600 hover:text-gray-900">Copiar</button>
                             <a href={patientLoginUrl} target="_blank" className="text-[11px] text-blue-600 hover:text-blue-700">Abrir</a>
+                          </>
+                        )}
+
+              {showQrPanel && (
+                <div className="absolute right-0 top-10 z-20 w-[380px] rounded-xl border border-gray-200 bg-white shadow-xl p-4">
+                  <p className="text-[11px] text-gray-500 font-medium mb-2">QR Codes</p>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-[11px] text-gray-600 mb-1">Login para pacientes</p>
+                      {patientLoginUrl ? (
+                        <div className="flex items-start gap-3">
+                          <div className="relative h-24 w-24">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={qrLoginPngUrl} alt="Login QR" className="h-24 w-24" />
+                            {currentClinic?.logo && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={currentClinic.logo}
+                                alt="Clinic logo"
+                                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-8 rounded-md bg-white p-0.5 shadow"
+                              />
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <code className="block text-[11px] text-gray-900 truncate border border-gray-200 rounded px-2 py-1 bg-gray-50">{patientLoginUrl}</code>
+                            <div className="mt-2 flex items-center gap-2">
+                              <button onClick={copyPatientLoginUrl} className="text-[11px] text-gray-600 hover:text-gray-900">Copiar</button>
+                              <a href={patientLoginUrl} target="_blank" className="text-[11px] text-blue-600 hover:text-blue-700">Abrir</a>
+                              <a href={qrLoginPngUrl} download={`login-qr.png`} className="text-[11px] text-gray-600 hover:text-gray-900">Baixar QR</a>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-gray-600">Defina seu slug no perfil</div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-gray-600 mb-1">Cadastro de pacientes</p>
+                      {patientRegisterUrl ? (
+                        <div className="flex items-start gap-3">
+                          <div className="relative h-24 w-24">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={qrPngUrl} alt="Register QR" className="h-24 w-24" />
+                            {currentClinic?.logo && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={currentClinic.logo}
+                                alt="Clinic logo"
+                                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-8 rounded-md bg-white p-0.5 shadow"
+                              />
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <code className="block text-[11px] text-gray-900 truncate border border-gray-200 rounded px-2 py-1 bg-gray-50">{patientRegisterUrl}</code>
+                            <div className="mt-2 flex items-center gap-2">
+                              <button onClick={copyPatientRegisterUrl} className="text-[11px] text-gray-600 hover:text-gray-900">Copiar</button>
+                              <a href={patientRegisterUrl} target="_blank" className="text-[11px] text-blue-600 hover:text-blue-700">Abrir</a>
+                              <a href={qrPngUrl} download={`register-qr.png`} className="text-[11px] text-gray-600 hover:text-gray-900">Baixar QR</a>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-gray-600">Defina seu slug no perfil</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-gray-600 mb-1">Cadastro de pacientes</p>
+                      <div className="flex items-center gap-2">
+                        <code className="block text-[11px] text-gray-900 truncate border border-gray-200 rounded px-2 py-1 bg-gray-50 max-w-[240px]">{patientRegisterUrl || 'Defina seu slug no perfil'}</code>
+                        {patientRegisterUrl && (
+                          <>
+                            <button onClick={copyPatientRegisterUrl} className="text-[11px] text-gray-600 hover:text-gray-900">Copiar</button>
+                            <a href={patientRegisterUrl} target="_blank" className="text-[11px] text-blue-600 hover:text-blue-700">Abrir</a>
+                            <button onClick={() => setShowRegisterQr(true)} className="text-[11px] text-gray-600 hover:text-gray-900">QR Code</button>
                           </>
                         )}
                       </div>
@@ -457,6 +564,52 @@ export default function DoctorDashboard() {
                     </div>
                   </div>
                   <p className="text-[11px] text-gray-500 mt-3">Cada paciente receberá um link individualizado para indicações baseado nas campanhas criadas.</p>
+                </div>
+              )}
+
+              {showQrPanel && (
+                <div className="absolute right-0 top-10 z-20 w-[380px] rounded-xl border border-gray-200 bg-white shadow-xl p-4">
+                  <p className="text-[11px] text-gray-500 font-medium mb-2">QR Codes</p>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-[11px] text-gray-600 mb-1">Login para pacientes</p>
+                      {patientLoginUrl ? (
+                        <div className="flex items-start gap-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={qrLoginPngUrl} alt="Login QR" className="h-24 w-24" />
+                          <div className="flex-1">
+                            <code className="block text-[11px] text-gray-900 truncate border border-gray-200 rounded px-2 py-1 bg-gray-50">{patientLoginUrl}</code>
+                            <div className="mt-2 flex items-center gap-2">
+                              <button onClick={copyPatientLoginUrl} className="text-[11px] text-gray-600 hover:text-gray-900">Copiar</button>
+                              <a href={patientLoginUrl} target="_blank" className="text-[11px] text-blue-600 hover:text-blue-700">Abrir</a>
+                              <a href={qrLoginPngUrl} download={`login-qr.png`} className="text-[11px] text-gray-600 hover:text-gray-900">Baixar QR</a>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-gray-600">Defina seu slug no perfil</div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-gray-600 mb-1">Cadastro de pacientes</p>
+                      {patientRegisterUrl ? (
+                        <div className="flex items-start gap-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={qrPngUrl} alt="Register QR" className="h-24 w-24" />
+                          <div className="flex-1">
+                            <code className="block text-[11px] text-gray-900 truncate border border-gray-200 rounded px-2 py-1 bg-gray-50">{patientRegisterUrl}</code>
+                            <div className="mt-2 flex items-center gap-2">
+                              <button onClick={copyPatientRegisterUrl} className="text-[11px] text-gray-600 hover:text-gray-900">Copiar</button>
+                              <a href={patientRegisterUrl} target="_blank" className="text-[11px] text-blue-600 hover:text-blue-700">Abrir</a>
+                              <a href={qrPngUrl} download={`register-qr.png`} className="text-[11px] text-gray-600 hover:text-gray-900">Baixar QR</a>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-gray-600">Defina seu slug no perfil</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -717,6 +870,44 @@ export default function DoctorDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Register QR Dialog */}
+      <Dialog open={showRegisterQr} onOpenChange={setShowRegisterQr}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>QR Code – Patient Register</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {patientRegisterUrl ? (
+              <>
+                <div className="flex items-center justify-center">
+                  <div className="relative h-56 w-56">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={qrPngUrl} alt="QR Code" className="h-56 w-56" />
+                    {currentClinic?.logo && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={currentClinic.logo}
+                        alt="Clinic logo"
+                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-12 w-12 rounded-lg bg-white p-1 shadow"
+                      />
+                    )}
+                  </div>
+                </div>
+                <div className="rounded border border-gray-200 bg-gray-50 p-2">
+                  <code className="text-[11px] break-all">{patientRegisterUrl}</code>
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  <button onClick={() => navigator.clipboard.writeText(patientRegisterUrl)} className="text-sm px-3 py-1.5 rounded border border-gray-300 text-gray-800 bg-white hover:bg-gray-50">Copiar link</button>
+                  <a href={qrPngUrl} download={`register-qr.png`} className="text-sm px-3 py-1.5 rounded bg-gray-900 text-white hover:bg-gray-800">Baixar PNG</a>
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-gray-600">Defina seu slug no perfil para gerar o QR Code.</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

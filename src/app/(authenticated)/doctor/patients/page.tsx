@@ -1064,6 +1064,7 @@ export default function PatientsPage() {
                         />
                       </th>
                       <th className="py-3.5 pr-3 font-medium">Subscriber</th>
+                      <th className="px-3 py-3.5 font-medium">Phone</th>
                       <th className="px-3 py-3.5 font-medium">Birth Date</th>
                       <th className="px-3 py-3.5 font-medium">Subscription Date</th>
                       <th className="px-3 py-3.5 font-medium">Points</th>
@@ -1094,6 +1095,9 @@ export default function PatientsPage() {
                                 <div className="text-gray-500 text-xs leading-4">{patient.email}</div>
                               </div>
                             </div>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">
+                            {patient.phone || '-'}
                           </td>
                           <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">
                             {patient.birth_date ? format(new Date(patient.birth_date), 'MMM d, yyyy', { locale: enUS }) : '-'}

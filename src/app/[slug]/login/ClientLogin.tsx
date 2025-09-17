@@ -38,6 +38,50 @@ export default function ClientLogin({ slug, initialBranding }: { slug: string; i
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [showNotMemberModal, setShowNotMemberModal] = useState(false);
 
+  // i18n
+  const [lang, setLang] = useState<'pt'|'en'|'es'>('pt');
+  const i18n: Record<'pt'|'en'|'es', Record<string, string>> = {
+    pt: {
+      email: 'Email',
+      password: 'Senha',
+      placeholderEmail: 'm@exemplo.com',
+      placeholderPassword: 'Digite sua senha',
+      signIn: 'Entrar',
+      signingIn: 'Entrando…',
+      noAccount: 'Não tem conta?',
+      seeProducts: 'Ver produtos e serviços',
+      forgot: 'Esqueceu sua senha?',
+    },
+    en: {
+      email: 'Email',
+      password: 'Password',
+      placeholderEmail: 'm@example.com',
+      placeholderPassword: 'Enter your password',
+      signIn: 'Sign in',
+      signingIn: 'Signing in…',
+      noAccount: "Don’t have an account?",
+      seeProducts: 'See products and services',
+      forgot: 'Forgot your password?',
+    },
+    es: {
+      email: 'Correo',
+      password: 'Contraseña',
+      placeholderEmail: 'm@ejemplo.com',
+      placeholderPassword: 'Ingresa tu contraseña',
+      signIn: 'Iniciar sesión',
+      signingIn: 'Iniciando…',
+      noAccount: '¿No tienes una cuenta?',
+      seeProducts: 'Ver productos y servicios',
+      forgot: '¿Olvidaste tu contraseña?',
+    },
+  };
+  useEffect(() => {
+    try {
+      const l = typeof navigator !== 'undefined' ? (navigator.language || navigator.languages?.[0] || 'pt').toLowerCase() : 'pt';
+      setLang(l.startsWith('pt') ? 'pt' : l.startsWith('es') ? 'es' : 'en');
+    } catch { setLang('pt'); }
+  }, []);
+
   // Prime clinic state from initialBranding for immediate logo/theme display
   useEffect(() => {
     if (initialBranding) {
@@ -136,6 +180,10 @@ export default function ClientLogin({ slug, initialBranding }: { slug: string; i
   const displayTheme = clinic?.theme ?? initialBranding.theme ?? 'LIGHT';
   const btnBg = clinic?.buttonColor ?? initialBranding.buttonColor ?? '#111827';
   const btnFg = clinic?.buttonTextColor ?? initialBranding.buttonTextColor ?? '#ffffff';
+  const labelClass = displayTheme === 'DARK' ? 'text-gray-300' : 'text-gray-700';
+  const linkPrimary = displayTheme === 'DARK' ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700';
+  const linkMuted = displayTheme === 'DARK' ? 'text-gray-300 hover:text-gray-100' : 'text-gray-600 hover:text-gray-900';
+  const mutedText = displayTheme === 'DARK' ? 'text-gray-300' : 'text-gray-700';
 
   // Compute forgot-password href: if host is subdomain, use '/forgot-password'; otherwise '/{slug}/forgot-password'
   const forgotHref = useMemo(() => {
@@ -206,7 +254,7 @@ export default function ClientLogin({ slug, initialBranding }: { slug: string; i
               {/* Form */}
               <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                  <label htmlFor="email" className={`block text-sm font-medium ${labelClass} mb-2`}>{i18n[lang].email}</label>
                   <input
                     type="email"
                     id="email"
@@ -214,11 +262,11 @@ export default function ClientLogin({ slug, initialBranding }: { slug: string; i
                     required
                     autoComplete="off"
                     className={`w-full px-4 py-2.5 text-sm ${displayTheme === 'DARK' ? 'bg-[#0f0f0f] border-gray-700 text-gray-100 placeholder:text-gray-400 focus:ring-gray-700 focus:border-gray-600' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:ring-[#5154e7]/20 focus:border-[#5154e7]'} border rounded-lg transition-all duration-200`}
-                    placeholder="m@example.com"
+                    placeholder={i18n[lang].placeholderEmail}
                   />
                 </div>
                 <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                  <label htmlFor="password" className={`block text-sm font-medium ${labelClass} mb-2`}>{i18n[lang].password}</label>
                   <input
                     type="password"
                     id="password"
@@ -226,7 +274,7 @@ export default function ClientLogin({ slug, initialBranding }: { slug: string; i
                     required
                     autoComplete="current-password"
                     className={`w-full px-4 py-2.5 text-sm ${displayTheme === 'DARK' ? 'bg-[#0f0f0f] border-gray-700 text-gray-100 placeholder:text-gray-400 focus:ring-gray-700 focus:border-gray-600' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:ring-[#5154e7]/20 focus:border-[#5154e7]'} border rounded-lg transition-all duration-200`}
-                    placeholder="Enter your password"
+                    placeholder={i18n[lang].placeholderPassword}
                   />
                 </div>
                 <button
@@ -235,7 +283,7 @@ export default function ClientLogin({ slug, initialBranding }: { slug: string; i
                   style={{ backgroundColor: 'var(--btn-bg)', color: 'var(--btn-fg)' }}
                   disabled={isSigningIn}
                 >
-                  {isSigningIn ? 'Signing in...' : 'Sign in'}
+                  {isSigningIn ? i18n[lang].signingIn : i18n[lang].signIn}
                 </button>
               </form>
             </>
@@ -243,18 +291,18 @@ export default function ClientLogin({ slug, initialBranding }: { slug: string; i
 
           {/* Footer links */}
           <div className="mt-6 text-center space-y-3">
-            <div className="text-sm text-gray-700">Don’t have an account?</div>
+            <div className={`text-sm ${mutedText}`}>{i18n[lang].noAccount}</div>
             <Link
               href={`/${slug}`}
-              className="text-sm text-blue-600 hover:text-blue-700 transition-colors duration-200 block"
+              className={`text-sm ${linkPrimary} transition-colors duration-200 block`}
             >
-              Ver produtos e serviços
+              {i18n[lang].seeProducts}
             </Link>
             <Link
               href={forgotHref}
-              className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 block"
+              className={`text-sm ${linkMuted} transition-colors duration-200 block`}
             >
-              Forgot your password?
+              {i18n[lang].forgot}
             </Link>
           </div>
         </div>

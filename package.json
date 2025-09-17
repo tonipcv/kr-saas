@@ -84,6 +84,7 @@
     "react-dom": "^19.0.0",
     "react-dropzone": "^14.3.8",
     "react-hot-toast": "^2.5.2",
+    "react-international-phone": "^4.6.0",
     "react-markdown": "^9.0.3",
     "react-tsparticles": "^2.12.2",
     "sharp": "^0.34.2",
