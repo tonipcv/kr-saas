@@ -321,12 +321,27 @@ export default function DoctorDashboard() {
     loadProfile();
   }, [session]);
 
-  const publicUrl = doctorSlug
-    ? `${(process.env.NEXT_PUBLIC_APP_URL as string) || (typeof window !== 'undefined' ? window.location.origin : '')}/${doctorSlug}`
-    : '';
+  // Base domain for multi-tenant subdomains (e.g., zuzz.vu or 127.0.0.1.nip.io)
+  const baseDomain = (process.env.NEXT_PUBLIC_APP_BASE_DOMAIN as string) || '';
 
-  const patientLoginUrl = publicUrl ? `${publicUrl}/login` : '';
-  const patientRegisterUrl = publicUrl ? `${publicUrl}/register` : '';
+  // Prefer clinic subdomain; fallback to doctorSlug (legacy)
+  const tenantSlug = (currentClinic as any)?.subdomain || doctorSlug || '';
+
+  // Build subdomain URL if base domain is configured; otherwise fallback to path-based
+  const buildTenantUrl = (path: string = '/') => {
+    if (!tenantSlug) return '';
+    if (baseDomain) {
+      const proto = typeof window !== 'undefined' ? window.location.protocol : 'https:';
+      const port = typeof window !== 'undefined' && window.location.port ? `:${window.location.port}` : '';
+      return `${proto}//${tenantSlug}.${baseDomain}${port}${path}`;
+    }
+    const origin = (process.env.NEXT_PUBLIC_APP_URL as string) || (typeof window !== 'undefined' ? window.location.origin : '');
+    return `${origin}/${tenantSlug}${path}`;
+  };
+
+  const publicUrl = buildTenantUrl('/');
+  const patientLoginUrl = buildTenantUrl('/login');
+  const patientRegisterUrl = buildTenantUrl('/register');
 
   const qrPngUrl = patientRegisterUrl
     ? `https://api.qrserver.com/v1/create-qr-code/?size=360x360&data=${encodeURIComponent(patientRegisterUrl)}`
