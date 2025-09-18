@@ -63,13 +63,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get total patients count
-    const totalPatients = await prisma.doctorPatientRelationship.count({
+    // Get total patients count (distinct users) to match Patients page semantics
+    // Count users that have an active relationship with this doctor.
+    // When clinicId is provided, include legacy relationships with clinicId = null as well.
+    const totalPatients = await prisma.user.count({
       where: {
-        doctorId: userId,
-        isActive: true,
-        ...(clinicId && { clinicId: clinicId })
-      }
+        patient_relationships: {
+          some: clinicId
+            ? {
+                doctorId: userId,
+                isActive: true,
+                OR: [
+                  { clinicId: clinicId },
+                  { clinicId: null },
+                ],
+              }
+            : {
+                doctorId: userId,
+                isActive: true,
+              },
+        },
+      },
     });
 
     // Get active protocols count

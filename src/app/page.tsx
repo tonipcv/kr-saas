@@ -43,7 +43,7 @@ export default function Home() {
       }
       // For DOCTOR we will still run the clinic check below
       if (roleInSession !== 'DOCTOR') {
-        navigateOnce('/patient/referrals');
+        navigateOnce('/home');
         return;
       }
     }
@@ -90,17 +90,12 @@ export default function Home() {
               navigateOnce('/doctor/dashboard');
             }
           } else {
-            console.log('Redirecting to patient referrals');
-            // Use replace instead of push to avoid browser history issues
-            // Try both path formats to handle different environments
+            console.log('Redirecting to public home for non-doctor roles');
             try {
-              console.log('Attempting to redirect to authenticated patient referrals');
-              navigateOnce('/patient/referrals');
+              navigateOnce('/home');
             } catch (e) {
               console.error('Error redirecting:', e);
-              // Fallback to alternative path format
-              console.log('Falling back to alternative path format for referrals');
-              navigateOnce('/patient/referrals');
+              navigateOnce('/home');
             }
           }
         } else if (response.status === 401) {
@@ -127,7 +122,7 @@ export default function Home() {
           } catch {}
           navigateOnce('/doctor/dashboard');
         }
-        else navigateOnce('/patient/referrals');
+        else navigateOnce('/home');
       } finally {
         setIsChecking(false);
       }
