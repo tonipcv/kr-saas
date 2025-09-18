@@ -506,7 +506,10 @@ export default function Navigation() {
     <Button
       variant="ghost"
       className={cn(
-        "w-full h-9 flex items-center justify-start gap-2 px-3 rounded-md font-medium transition-colors",
+        // Make doctor/admin (light theme) nav more compact
+        shouldUseLightTheme
+          ? "w-full h-8 flex items-center justify-start gap-2 px-3 rounded-md font-medium transition-colors"
+          : "w-full h-9 flex items-center justify-start gap-2 px-3 rounded-md font-medium transition-colors",
         shouldUseLightTheme
           ? "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
           : "text-white/70 hover:bg-white/5 hover:text-white",
@@ -519,10 +522,12 @@ export default function Navigation() {
       )}
     >
       <item.icon className={cn(
-        "h-4.5 w-4.5 flex-shrink-0",
+        // Slightly smaller icons on doctor/admin nav
+        shouldUseLightTheme ? "h-4 w-4 flex-shrink-0" : "h-4.5 w-4.5 flex-shrink-0",
         shouldUseLightTheme ? "text-gray-500" : "text-white/70"
       )} />
-      <span className="text-sm truncate">{item.label}</span>
+      {/* Smaller label on doctor/admin nav */}
+      <span className={cn(shouldUseLightTheme ? "text-xs truncate" : "text-sm truncate")}>{item.label}</span>
     </Button>
   );
 
