@@ -540,14 +540,14 @@ export default function DoctorRewardsPage() {
               <h1 className="text-xl font-semibold text-gray-900 mb-1">Rewards</h1>
               <p className="text-sm text-gray-500">Create and manage rewards for your referral program</p>
             </div>
-            <Button onClick={openCreateDialog} className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl h-10 px-5 font-medium">
+            <Button onClick={openCreateDialog} className="bg-gray-900 hover:bg-black text-white rounded-xl h-10 px-5 font-medium">
               New reward
             </Button>
           </div>
 
           {/* Free plan banner */}
           {isFree && (
-            <div className="mb-4 rounded-2xl px-4 py-4 text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] shadow-sm">
+            <div className="mb-4 rounded-2xl px-4 py-4 text-white bg-gray-900 shadow-sm">
               <p className="text-sm font-semibold">You're on the Free plan — limited to 3 rewards.</p>
               <p className="text-xs mt-1 opacity-95">Upgrade to create unlimited rewards and unlock more features.</p>
               <div className="mt-3">
@@ -666,7 +666,7 @@ export default function DoctorRewardsPage() {
                                 <div className="flex items-center gap-2">
                                   <Button
                                     size="sm"
-                                    className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-md h-7 px-3"
+                                    className="bg-gray-900 hover:bg-black text-white rounded-md h-7 px-3"
                                     onClick={() => handleApproveRedemption(r.id)}
                                     disabled={actionLoadingId === r.id}
                                   >
@@ -706,7 +706,7 @@ export default function DoctorRewardsPage() {
                                 <div className="flex items-center gap-2">
                                   <Button
                                     size="sm"
-                                    className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-md h-7 px-3"
+                                    className="bg-gray-900 hover:bg-black text-white rounded-md h-7 px-3"
                                     onClick={() => handleFulfillRequest(r.id)}
                                     disabled={actionLoadingId === r.id}
                                   >
@@ -733,7 +733,7 @@ export default function DoctorRewardsPage() {
                   <p className="text-gray-500 font-medium mb-6">
                     Create rewards to incentivize referrals from your patients
                   </p>
-                  <Button onClick={openCreateDialog} className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl h-10 px-5 font-medium">
+                  <Button onClick={openCreateDialog} className="bg-gray-900 hover:bg-black text-white rounded-xl h-10 px-5 font-medium">
                     Create first reward
                   </Button>
                 </div>
@@ -821,7 +821,7 @@ export default function DoctorRewardsPage() {
                 <Button 
                   onClick={handleCreate}
                   disabled={submitting || !formData.title || !formData.description || !formData.creditsRequired}
-                  className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl h-10 px-6 font-medium"
+                  className="bg-gray-900 hover:bg-black text-white rounded-xl h-10 px-6 font-medium"
                 >
                   {submitting ? (
                     <>
@@ -880,7 +880,7 @@ export default function DoctorRewardsPage() {
                       className="mt-2 bg-white border-gray-300 rounded-xl h-10"
                     />
                   </div>
-                  <Button onClick={handleGenerateCodes} disabled={codesSubmitting || !codesRewardId} className="w-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl h-10 font-medium">
+                  <Button onClick={handleGenerateCodes} disabled={codesSubmitting || !codesRewardId} className="w-full bg-gray-900 hover:bg-black text-white rounded-xl h-10 font-medium">
                     {codesSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     Generate
                   </Button>
@@ -894,7 +894,7 @@ export default function DoctorRewardsPage() {
                       onChange={(e) => setCodesForm((p) => ({ ...p, manual: e.target.value }))}
                       className="mt-2 bg-white border-gray-300 rounded-xl"
                     />
-                    <Button onClick={handleImportCodes} disabled={codesSubmitting || !codesRewardId || !codesForm.manual.trim()} className="mt-2 w-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl h-10 font-semibold">
+                    <Button onClick={handleImportCodes} disabled={codesSubmitting || !codesRewardId || !codesForm.manual.trim()} className="mt-2 w-full bg-gray-900 hover:bg-black text-white rounded-xl h-10 font-semibold">
                       {codesSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                       Import
                     </Button>
@@ -970,7 +970,7 @@ export default function DoctorRewardsPage() {
                     value={formData.title}
                     onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                     placeholder="e.g., Free consultation"
-                    className="mt-2 bg-white border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] text-gray-900 placeholder:text-gray-500 rounded-xl h-10 font-medium"
+                    className="mt-2 bg-white border-gray-300 focus:border-gray-900 focus:ring-gray-900 text-gray-900 placeholder:text-gray-500 rounded-xl h-10 font-medium"
                   />
                 </div>
 
@@ -982,7 +982,7 @@ export default function DoctorRewardsPage() {
                     onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                     placeholder="Describe the reward details..."
                     rows={3}
-                    className="mt-2 bg-white border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] text-gray-900 placeholder:text-gray-500 rounded-xl font-medium"
+                    className="mt-2 bg-white border-gray-300 focus:border-gray-900 focus:ring-gray-900 text-gray-900 placeholder:text-gray-500 rounded-xl font-medium"
                   />
                 </div>
 
@@ -996,7 +996,7 @@ export default function DoctorRewardsPage() {
                       value={formData.creditsRequired}
                       onChange={(e) => setFormData(prev => ({ ...prev, creditsRequired: e.target.value }))}
                       placeholder="1"
-                      className="mt-2 bg-white border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] text-gray-900 placeholder:text-gray-500 rounded-xl h-10 font-medium"
+                      className="mt-2 bg-white border-gray-300 focus:border-gray-900 focus:ring-gray-900 text-gray-900 placeholder:text-gray-500 rounded-xl h-10 font-medium"
                     />
                   </div>
 
@@ -1009,7 +1009,7 @@ export default function DoctorRewardsPage() {
                       value={formData.maxRedemptions}
                       onChange={(e) => setFormData(prev => ({ ...prev, maxRedemptions: e.target.value }))}
                       placeholder="Unlimited"
-                      className="mt-2 bg-white border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] text-gray-900 placeholder:text-gray-500 rounded-xl h-10 font-medium"
+                      className="mt-2 bg-white border-gray-300 focus:border-gray-900 focus:ring-gray-900 text-gray-900 placeholder:text-gray-500 rounded-xl h-10 font-medium"
                     />
                   </div>
                 </div>
@@ -1022,7 +1022,7 @@ export default function DoctorRewardsPage() {
                 <Button 
                   onClick={handleEdit}
                   disabled={submitting || !formData.title || !formData.description || !formData.creditsRequired}
-                  className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white rounded-xl h-10 px-6 font-semibold"
+                  className="bg-gray-900 hover:bg-black text-white rounded-xl h-10 px-6 font-semibold"
                 >
                   {submitting ? (
                     <>
@@ -1077,7 +1077,7 @@ export default function DoctorRewardsPage() {
                           </div>
                         </div>
                         <div className="p-4">
-                          <Button className="w-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white hover:opacity-90">
+                          <Button className="w-full bg-gray-900 hover:bg-black text-white rounded-xl h-10 font-medium">
                             {isCurrent ? 'Current plan' : 'Upgrade'}
                           </Button>
                           <div className="mt-3 space-y-2">

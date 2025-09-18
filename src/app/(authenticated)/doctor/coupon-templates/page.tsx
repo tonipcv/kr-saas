@@ -233,7 +233,7 @@ export default function DoctorCouponTemplatesPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsCreating(true)}
-                className="inline-flex h-8 items-center rounded-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] px-3 text-xs font-medium text-white hover:opacity-90 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5893ec]"
+                className="inline-flex h-8 items-center rounded-full bg-gray-900 px-3 text-xs font-medium text-white hover:bg-black shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
               >
                 Novo modelo
               </button>
@@ -344,20 +344,20 @@ export default function DoctorCouponTemplatesPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Slug</label>
-                    <input value={editData.slug} onChange={e => setEditData(s => ({ ...s, slug: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5893ec]" />
+                    <input value={editData.slug} onChange={e => setEditData(s => ({ ...s, slug: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Nome</label>
-                    <input value={editData.name} onChange={e => setEditData(s => ({ ...s, name: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5893ec]" />
+                    <input value={editData.name} onChange={e => setEditData(s => ({ ...s, name: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
                   </div>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Título de exibição</label>
-                  <input value={editData.display_title} onChange={e => setEditData(s => ({ ...s, display_title: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5893ec]" />
+                  <input value={editData.display_title} onChange={e => setEditData(s => ({ ...s, display_title: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Mensagem de exibição</label>
-                  <textarea value={editData.display_message} onChange={e => setEditData(s => ({ ...s, display_message: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5893ec]" rows={3} />
+                  <textarea value={editData.display_message} onChange={e => setEditData(s => ({ ...s, display_message: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" rows={3} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Produtos vinculados (opcional)</label>
@@ -396,7 +396,7 @@ export default function DoctorCouponTemplatesPage() {
                 {editError && <div className="text-xs text-red-500">{editError}</div>}
                 <div className="flex items-center justify-end gap-2 pt-1">
                   <button type="button" onClick={() => setIsEditing(false)} className="h-8 px-3 text-xs rounded-full border border-gray-200">Cancelar</button>
-                  <button type="submit" disabled={editLoading} className="inline-flex h-8 items-center rounded-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] px-3 text-xs font-medium text-white hover:opacity-90 shadow-sm disabled:opacity-50">
+                  <button type="submit" disabled={editLoading} className="inline-flex h-8 items-center rounded-full bg-gray-900 px-3 text-xs font-medium text-white hover:bg-black shadow-sm disabled:opacity-50">
                     {editLoading ? 'Salvando...' : 'Salvar'}
                   </button>
                 </div>
@@ -447,7 +447,7 @@ export default function DoctorCouponTemplatesPage() {
                           const path = `/${clinicSlug || doctorSlug}`;
                           const href = `${origin}${path}?cupom=${encodeURIComponent(t.slug)}`;
                           return (
-                            <a href={href} target="_blank" className="text-[#5893ec] hover:underline break-all" onClick={(e) => e.stopPropagation()} rel="noreferrer">
+                            <a href={href} target="_blank" className="text-gray-700 hover:text-gray-900 hover:underline break-all" onClick={(e) => e.stopPropagation()} rel="noreferrer">
                               {href}
                             </a>
                           );
@@ -531,20 +531,20 @@ export default function DoctorCouponTemplatesPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Slug</label>
-                    <input value={createData.slug} onChange={e => setCreateData(s => ({ ...s, slug: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5893ec]" placeholder="ex: avaliacao-gratis" />
+                    <input value={createData.slug} onChange={e => setCreateData(s => ({ ...s, slug: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" placeholder="ex: avaliacao-gratis" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Nome</label>
-                    <input value={createData.name} onChange={e => setCreateData(s => ({ ...s, name: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5893ec]" placeholder="Nome interno" />
+                    <input value={createData.name} onChange={e => setCreateData(s => ({ ...s, name: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" placeholder="Nome interno" />
                   </div>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Título de exibição (opcional)</label>
-                  <input value={createData.display_title} onChange={e => setCreateData(s => ({ ...s, display_title: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5893ec]" placeholder="Ex: Desconto de 20% no primeiro procedimento" />
+                  <input value={createData.display_title} onChange={e => setCreateData(s => ({ ...s, display_title: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" placeholder="Ex: Desconto de 20% no primeiro procedimento" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Mensagem de exibição (opcional)</label>
-                  <textarea value={createData.display_message} onChange={e => setCreateData(s => ({ ...s, display_message: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5893ec]" rows={3} placeholder="Texto a ser mostrado no cupom" />
+                  <textarea value={createData.display_message} onChange={e => setCreateData(s => ({ ...s, display_message: e.target.value }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" rows={3} placeholder="Texto a ser mostrado no cupom" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Produtos vinculados (opcional)</label>
@@ -583,7 +583,7 @@ export default function DoctorCouponTemplatesPage() {
                 {createError && <div className="text-xs text-red-500">{createError}</div>}
                 <div className="flex items-center justify-end gap-2 pt-1">
                   <button type="button" onClick={() => setIsCreating(false)} className="h-8 px-3 text-xs rounded-full border border-gray-200">Cancelar</button>
-                  <button type="submit" disabled={createLoading} className="inline-flex h-8 items-center rounded-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] px-3 text-xs font-medium text-white hover:opacity-90 shadow-sm disabled:opacity-50">
+                  <button type="submit" disabled={createLoading} className="inline-flex h-8 items-center rounded-full bg-gray-900 px-3 text-xs font-medium text-white hover:bg-black shadow-sm disabled:opacity-50">
                     {createLoading ? 'Salvando...' : 'Criar'}
                   </button>
                 </div>

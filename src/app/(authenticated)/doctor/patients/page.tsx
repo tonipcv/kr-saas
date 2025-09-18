@@ -882,7 +882,7 @@ export default function PatientsPage() {
                   <ArrowUpTrayIcon className="h-4 w-4 sm:ml-2" />
                 </Button>
                 <Button
-                  className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium"
+                  className="bg-gray-900 hover:bg-black text-white shadow-sm rounded-xl h-9 px-4 font-medium"
                   onClick={async () => {
                     const res = await checkLimit('patients', currentClinic?.id);
                     if (!res.allowed) {
@@ -903,7 +903,7 @@ export default function PatientsPage() {
 
             {/* Free plan banner – show only when planName is explicitly Free */}
             {!subLoading && subscriptionStatus && (subscriptionStatus.planName || '').toLowerCase().includes('free') && (
-              <div className="mt-4 mb-1 rounded-2xl px-4 py-4 text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] shadow-sm">
+              <div className="mt-4 mb-1 rounded-2xl px-4 py-4 text-white bg-gray-900 shadow-sm">
                 <p className="text-sm font-semibold">You're on the Free plan — you can have up to {(subscriptionStatus?.limits?.maxPatients) ?? 10} clients.</p>
                 <p className="text-xs mt-1 opacity-95">Upgrade to unlock all features.</p>
                 <div className="mt-3">
@@ -928,7 +928,9 @@ export default function PatientsPage() {
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setWaDialogOpen(false)} disabled={waSending}>Cancelar</Button>
-            <Button onClick={sendWhatsAppToPatient} disabled={waSending || !waMessage.trim()} className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white">
+            <Button
+              className="bg-black hover:bg-gray-900 text-white"
+              onClick={sendWhatsAppToPatient} disabled={waSending || !waMessage.trim()}>
               {waSending ? 'Enviando...' : 'Enviar'}
             </Button>
           </div>
@@ -956,7 +958,7 @@ export default function PatientsPage() {
 
           {isLoading ? (
             <div className="text-center py-12">
-              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#5154e7] border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-gray-300 border-t-gray-900 align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
               <p className="mt-4 text-gray-600">Loading clients...</p>
             </div>
           ) : patients.length === 0 ? (
@@ -975,7 +977,7 @@ export default function PatientsPage() {
               </p>
               <div className="mt-6">
                 <Button
-                  className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl font-medium"
+                  className="bg-gray-900 hover:bg-black text-white shadow-sm rounded-xl font-medium"
                   onClick={async () => {
                     const res = await checkLimit('patients');
                     if (!res.allowed) {
@@ -1005,7 +1007,7 @@ export default function PatientsPage() {
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       placeholder="Search clients..."
-                      className="block w-full h-10 rounded-xl border border-gray-200 bg-white pl-10 pr-3 text-[14px] text-gray-900 shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5154e7]"
+                      className="block w-full h-10 rounded-xl border border-gray-200 bg-white pl-10 pr-3 text-[14px] text-gray-900 shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
                     />
                   </div>
                 </div>
@@ -1060,7 +1062,7 @@ export default function PatientsPage() {
                     <div key={patient.id} className="rounded-2xl border border-gray-200 bg-white shadow-sm p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-start gap-3 min-w-0">
-                          <div className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: '#eef2ff', color: '#4338ca' }}>
+                          <div className="h-9 w-9 rounded-full bg-gray-100 text-gray-700 flex items-center justify-center text-xs font-semibold">
                             {getPatientInitials(patient.name)}
                           </div>
                           <div className="min-w-0">
@@ -1136,7 +1138,7 @@ export default function PatientsPage() {
                       <th className="w-10 py-3.5 pl-4 pr-2 sm:pl-6">
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-gray-300 text-[#5154e7] focus:ring-[#5154e7]"
+                          className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
                           onChange={toggleSelectAll}
                           checked={currentPatients.length > 0 && currentPatients.every((p) => selectedIds[p.id])}
                           aria-label="Select all"
@@ -1158,7 +1160,7 @@ export default function PatientsPage() {
                           <td className="whitespace-nowrap py-3.5 pl-4 pr-2 sm:pl-6">
                             <input
                               type="checkbox"
-                              className="h-4 w-4 rounded border-gray-300 text-[#5154e7] focus:ring-[#5154e7]"
+                              className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
                               checked={!!selectedIds[patient.id]}
                               onChange={() => toggleSelectOne(patient.id)}
                               aria-label={`Select ${patient.name || 'client'}`}
@@ -1166,7 +1168,7 @@ export default function PatientsPage() {
                           </td>
                           <td className="py-3.5 pr-3 text-sm">
                             <div className="flex items-center gap-3">
-                              <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: '#eef2ff', color: '#4338ca' }}>
+                              <div className="h-8 w-8 rounded-full bg-gray-100 text-gray-700 flex items-center justify-center text-xs font-semibold">
                                 {getPatientInitials(patient.name)}
                               </div>
                               <div>
@@ -1362,7 +1364,7 @@ export default function PatientsPage() {
               <Button
                 onClick={addPatient}
                 disabled={isAddingPatient}
-                className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white"
+                className="bg-gray-900 hover:bg-black text-white"
               >
                 {isAddingPatient ? (
                   <>
@@ -1545,7 +1547,7 @@ export default function PatientsPage() {
               <Button
                 onClick={updatePatient}
                 disabled={isEditingPatient}
-                className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white"
+                className="bg-gray-900 hover:bg-black text-white"
               >
                 {isEditingPatient ? (
                   <>

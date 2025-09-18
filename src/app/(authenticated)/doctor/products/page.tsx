@@ -303,7 +303,7 @@ export default function ProductsPage() {
                 <h1 className="text-[20px] font-semibold text-gray-900 tracking-[-0.01em]">Products</h1>
                 <p className="text-sm text-gray-500 mt-1">Manage products recommended in your protocols</p>
               </div>
-              <Button asChild className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium">
+              <Button asChild className="bg-gray-900 hover:bg-black text-white shadow-sm rounded-xl h-9 px-4 font-medium">
                 <Link href="/doctor/products/create">
                   <PlusIcon className="h-4 w-4 mr-2" />
                   New Product
@@ -327,9 +327,13 @@ export default function ProductsPage() {
                   <p className="text-sm font-semibold text-gray-800">Products list is locked on the Free plan.</p>
                   <p className="text-xs text-gray-600 mt-1">Upgrade to view and manage your products.</p>
                   <div className="mt-3">
-                    <Button size="sm" className="h-8 bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white hover:opacity-90 rounded-lg" onClick={openPlansModal}>
-                      See plans
-                    </Button>
+                    <Button
+                    size="sm"
+                    className="h-8 bg-gray-900 text-white hover:bg-black rounded-lg focus:ring-gray-900"
+                    onClick={openPlansModal}
+                  >
+                    See plans
+                  </Button>
                   </div>
                 </div>
               </div>
@@ -352,7 +356,7 @@ export default function ProductsPage() {
                 <div className="mt-6">
                   <Button
                     asChild
-                    className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl font-medium"
+                    className="bg-gray-900 hover:bg-black text-white shadow-sm rounded-xl font-medium"
                   >
                     <Link href="/doctor/products/create">
                       <PlusIcon className="h-4 w-4 mr-2" />
@@ -376,7 +380,7 @@ export default function ProductsPage() {
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="Search products..."
-                    className="block w-full h-10 rounded-xl border border-gray-200 bg-white pl-10 pr-3 text-[14px] text-gray-900 shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5154e7]"
+                    className="block w-full h-10 rounded-xl border border-gray-200 bg-white pl-10 pr-3 text-[14px] text-gray-900 shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
                   />
                 </div>
               </div>

@@ -343,7 +343,7 @@ export default function PurchasesPage() {
                 {isFree ? (
                   <Button
                     onClick={openPlansModal}
-                    className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium"
+                    className="bg-gray-900 hover:bg-black text-white shadow-sm rounded-xl h-9 px-4 font-medium"
                   >
                     <PlusIcon className="h-4 w-4 mr-2" />
                     Record Purchase
@@ -351,7 +351,7 @@ export default function PurchasesPage() {
                 ) : (
                   <Button
                     onClick={() => setIsModalOpen(true)}
-                    className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-9 px-4 font-medium"
+                    className="bg-gray-900 hover:bg-black text-white shadow-sm rounded-xl h-9 px-4 font-medium"
                   >
                     <PlusIcon className="h-4 w-4 mr-2" />
                     Record Purchase
@@ -418,7 +418,37 @@ export default function PurchasesPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {isLoadingPurchases ? (
-                    <tr><td className="px-6 py-6 text-sm text-gray-500" colSpan={8}>Loading purchases...</td></tr>
+                    Array.from({ length: 6 }).map((_, i) => (
+                      <tr key={`sk-${i}`}>
+                        <td className="py-3.5 pl-4 pr-3 sm:pl-6">
+                          <div className="h-4 w-28 bg-gray-100 rounded animate-pulse" />
+                        </td>
+                        <td className="px-3 py-3.5">
+                          <div className="h-4 w-36 bg-gray-100 rounded animate-pulse" />
+                        </td>
+                        <td className="px-3 py-3.5">
+                          <div className="h-4 w-40 bg-gray-100 rounded animate-pulse" />
+                        </td>
+                        <td className="px-3 py-3.5">
+                          <div className="h-4 w-10 bg-gray-100 rounded animate-pulse" />
+                        </td>
+                        <td className="px-3 py-3.5">
+                          <div className="h-4 w-16 bg-gray-100 rounded animate-pulse" />
+                        </td>
+                        <td className="px-3 py-3.5">
+                          <div className="h-4 w-16 bg-gray-100 rounded animate-pulse" />
+                        </td>
+                        <td className="px-3 py-3.5">
+                          <div className="h-4 w-12 bg-gray-100 rounded animate-pulse" />
+                        </td>
+                        <td className="px-3 py-3.5">
+                          <div className="h-4 w-24 bg-gray-100 rounded animate-pulse" />
+                        </td>
+                        <td className="py-3.5 pl-3 pr-4 sm:pr-6 text-right">
+                          <div className="h-8 w-8 bg-gray-100 rounded-lg animate-pulse inline-block" />
+                        </td>
+                      </tr>
+                    ))
                   ) : purchases.length === 0 ? (
                     <tr><td className="px-6 py-6 text-sm text-gray-500" colSpan={8}>No purchases yet.</td></tr>
                   ) : (
@@ -631,7 +661,7 @@ export default function PurchasesPage() {
                 )}
 
                 <div className="flex items-center gap-2">
-                  <Button type="submit" disabled={isSubmitting || !patientId || !productId} className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90 text-white shadow-sm rounded-xl h-10 px-4 font-medium">
+                  <Button type="submit" disabled={isSubmitting || !patientId || !productId} className="bg-gray-900 hover:bg-black text-white shadow-sm rounded-xl h-10 px-4 font-medium">
                     {isSubmitting ? 'Saving...' : 'Save Purchase'}
                   </Button>
                   <Button type="button" variant="outline" disabled={isSubmitting} className="h-10 rounded-xl" onClick={() => { setPatientId(''); setProductId(''); setQuantity('1'); setNotes(''); setMessage(null); setError(null); }}>

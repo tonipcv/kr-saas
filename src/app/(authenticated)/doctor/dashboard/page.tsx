@@ -428,10 +428,11 @@ export default function DoctorDashboard() {
 
   // Professional chart data: build past 30 days + projection 14 days (placeholder; hook to API later)
   const today = new Date();
+  const oneDayMs = 24 * 60 * 60 * 1000;
   const daysAgo = (n: number) => new Date(today.getFullYear(), today.getMonth(), today.getDate() - n).getTime();
   const base: number[] = [0, 30, 0, 0, 360, 180, 0, 0, 210, 0, 0, 0, 1080, 170, 0, 0, 0, 980, 820, 0, 0, 0, 300, 0, 0, 0, 820, 0, 0, 60];
-  const pastSeries: SeriesPoint[] = base.map((v, idx) => [daysAgo(base.length - 1 - idx), v]);
-  const lastPast = base[base.length - 1] || 0;
+  const [pastSeries, setPastSeries] = useState<SeriesPoint[]>(base.map((v, idx) => [daysAgo(base.length - 1 - idx), v]));
+  const lastPast = pastSeries.length ? (pastSeries[pastSeries.length - 1][1] as number) : 0;
   const projLen = 14;
   const projectionSeries: SeriesPoint[] = Array.from({ length: projLen }, (_, i) => {
     const t = new Date(today.getFullYear(), today.getMonth(), today.getDate() + (i + 1)).getTime();
@@ -439,6 +440,53 @@ export default function DoctorDashboard() {
     const val = Math.max(0, Math.round(lastPast * (1 + 0.03 * (i + 1)) + (i % 7 === 3 ? 300 : 0)));
     return [t, val];
   });
+
+  // Load real referrals time series (client-side aggregation) without changing chart design
+  useEffect(() => {
+    const loadReferralsSeries = async () => {
+      if (!currentClinic) return;
+      try {
+        const to = new Date();
+        const from = new Date(to.getTime() - 30 * oneDayMs);
+        const qs = new URLSearchParams({ page: '1', limit: '1000', clinicId: currentClinic.id });
+        const res = await fetch(`/api/referrals/manage?${qs.toString()}`, { cache: 'no-store' });
+        if (!res.ok) return; // keep placeholder
+        const json = await res.json().catch(() => null);
+        const items = json?.leads || json?.data?.items || json?.items || [];
+        // build empty day buckets [from..to]
+        const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+        const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+        const buckets = new Map<number, number>();
+        for (let t = start.getTime(); t <= end.getTime(); t += oneDayMs) {
+          buckets.set(t, 0);
+        }
+        // aggregate by calendar date from the record (YYYY-MM-DD), independent of timezone
+        for (const it of items) {
+          const raw = String(it.createdAt || it.created_at || it.date || it.timestamp || '');
+          let keyTime: number | null = null;
+          // Try to extract YYYY-MM-DD to avoid timezone shifts
+          const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+          if (m) {
+            const yy = Number(m[1]);
+            const mm = Number(m[2]);
+            const dd = Number(m[3]);
+            keyTime = new Date(yy, mm - 1, dd).getTime();
+          } else {
+            const d = new Date(raw || Date.now());
+            keyTime = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+          }
+          if (keyTime == null) continue;
+          if (keyTime < start.getTime() || keyTime > end.getTime()) continue;
+          if (buckets.has(keyTime)) buckets.set(keyTime, (buckets.get(keyTime) || 0) + 1);
+        }
+        const series: SeriesPoint[] = Array.from(buckets.entries()).sort((a,b)=>a[0]-b[0]).map(([t,v]) => [t, v]);
+        if (series.length) setPastSeries(series);
+      } catch {
+        // ignore, keep placeholder series
+      }
+    };
+    loadReferralsSeries();
+  }, [currentClinic]);
 
   return (
     <div className="min-h-screen bg-white overflow-x-hidden">

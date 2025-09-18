@@ -73,14 +73,13 @@ export function SidebarClinicSelector() {
         <ChevronDown className={`h-4 w-4 text-gray-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {/* Upgrade CTA – sempre disponível para permitir upgrade (Free/Starter/Growth) */}
-      <div className="mt-2 px-1">
+      {/* Upgrade CTA – botão preto em baixo */}
+      <div className="mt-3 px-1">
         <Link
           href={currentClinic?.id ? `/clinic/subscription?clinicId=${encodeURIComponent(currentClinic.id)}#plans` : "/clinic/subscription#plans"}
-          className="w-full flex items-center justify-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
+          className="block w-full h-8 rounded-md bg-gray-900 text-white text-xs font-semibold text-center leading-8 hover:bg-black transition-colors"
         >
           Upgrade
-          <ChevronRight className="h-3 w-3" />
         </Link>
       </div>
 
