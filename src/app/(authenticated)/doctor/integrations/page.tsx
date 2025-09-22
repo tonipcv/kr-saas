@@ -47,6 +47,18 @@ export default function IntegrationsPage() {
   const [waTestTo, setWaTestTo] = useState('');
   const [waTestMsg, setWaTestMsg] = useState('Olá! Integração WhatsApp (oficial) ativa.');
 
+  // Email (SendPulse) intermediary flow — user only verifies sender email (no API keys)
+  const [senderName, setSenderName] = useState('');
+  const [senderEmail, setSenderEmail] = useState('');
+  const [emailConnecting, setEmailConnecting] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<'VERIFIED' | 'PENDING' | 'DISCONNECTED' | 'UNKNOWN'>('UNKNOWN');
+  const [emailSession, setEmailSession] = useState<string>('');
+  const [verifyCode, setVerifyCode] = useState<string>('');
+  const [verifying, setVerifying] = useState<boolean>(false);
+  const [verifyMsg, setVerifyMsg] = useState<string>('');
+  const [emailStatusLoading, setEmailStatusLoading] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState<string>('');
+
   // Page loading while both integrations status are being fetched
   const pageLoading = isLoading || statusLoading || waStatusLoading;
 
@@ -213,6 +225,42 @@ export default function IntegrationsPage() {
     loadWaStatus();
   }, [currentClinic?.id]);
 
+  // Email status loader (DB-backed)
+  const loadEmailDbStatus = async () => {
+    if (!currentClinic?.id) return;
+    try {
+      setEmailStatusLoading(true);
+      const res = await fetch(`/api/integrations/email/senders/by-clinic?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Erro ao carregar status do email');
+      if (data?.exists) {
+        const normalized = String(data.status || 'UNKNOWN').toUpperCase();
+        setEmailStatus(normalized as any);
+        const vEmail = String(data.email || '');
+        setVerifiedEmail(vEmail);
+        if (normalized === 'VERIFIED' && !senderEmail) {
+          setSenderEmail(vEmail);
+        }
+        const vName = String(data.senderName || '').trim();
+        if (vName && !senderName) {
+          setSenderName(vName);
+        }
+      } else {
+        setEmailStatus('DISCONNECTED');
+        setVerifiedEmail('');
+      }
+    } catch (e: any) {
+      console.error('Email Load status error', e);
+      toast.error(e?.message || 'Erro ao carregar status do email');
+    } finally {
+      setEmailStatusLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadEmailDbStatus();
+  }, [currentClinic?.id]);
+
   // Read OAuth result from URL and notify
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -345,82 +393,10 @@ export default function IntegrationsPage() {
     } finally {
       setTesting(false);
     }
-  };
-
-  if (pageLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="lg:ml-64">
-          <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
-            {/* Header Skeleton */}
-            <div className="flex justify-between items-start mb-8">
-              <div>
-                <div className="h-8 bg-gray-200 rounded-lg w-32 mb-2 animate-pulse"></div>
-                <div className="h-5 bg-gray-100 rounded-lg w-64 animate-pulse"></div>
-              </div>
-              <div className="h-10 bg-gray-200 rounded-xl w-32 animate-pulse"></div>
-            </div>
-
-            {/* Cards Skeleton - Xase and WhatsApp Official */}
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* Xase.ai card skeleton */}
-              <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                <CardHeader className="pb-4">
-                  <div className="h-6 bg-gray-200 rounded-lg w-1/2 animate-pulse"></div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="h-4 bg-gray-100 rounded w-5/6 animate-pulse"></div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-9 bg-gray-100 rounded-xl flex-1 animate-pulse"></div>
-                    <div className="h-9 bg-gray-100 rounded-xl w-28 animate-pulse"></div>
-                    <div className="h-9 bg-gray-100 rounded-xl w-24 animate-pulse"></div>
-                  </div>
-                  <Separator />
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="h-4 bg-gray-100 rounded w-24 animate-pulse"></div>
-                    <div className="h-4 bg-gray-100 rounded w-24 animate-pulse"></div>
-                    <div className="col-span-2 h-4 bg-gray-100 rounded w-64 animate-pulse"></div>
-                    <div className="col-span-2 h-4 bg-gray-100 rounded w-48 animate-pulse"></div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* WhatsApp Official card skeleton */}
-              <Card className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                <CardHeader className="pb-4">
-                  <div className="h-6 bg-gray-200 rounded-lg w-1/2 animate-pulse"></div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="h-4 bg-gray-100 rounded w-5/6 animate-pulse"></div>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                    <div className="h-9 bg-gray-100 rounded-xl animate-pulse"></div>
-                    <div className="h-9 bg-gray-100 rounded-xl animate-pulse"></div>
-                    <div className="h-9 bg-gray-100 rounded-xl animate-pulse"></div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-9 bg-gray-100 rounded-xl w-28 animate-pulse"></div>
-                      <div className="h-9 bg-gray-100 rounded-xl w-24 animate-pulse"></div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-9 bg-gray-100 rounded-xl w-40 animate-pulse"></div>
-                    <div className="h-9 bg-gray-100 rounded-xl w-48 animate-pulse"></div>
-                    <div className="h-9 bg-gray-100 rounded-xl w-36 animate-pulse"></div>
-                  </div>
-                  <Separator />
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="h-4 bg-gray-100 rounded w-24 animate-pulse"></div>
-                    <div className="h-4 bg-gray-100 rounded w-24 animate-pulse"></div>
-                    <div className="col-span-2 h-4 bg-gray-100 rounded w-64 animate-pulse"></div>
-                    <div className="col-span-2 h-4 bg-gray-100 rounded w-48 animate-pulse"></div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
   }
+
+  // (email connect handled inline in the Email card via request-verification)
+
   return (
     <div className="min-h-screen bg-white">
       <div className="lg:ml-64">
@@ -467,7 +443,7 @@ export default function IntegrationsPage() {
                 <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Xase API Key" />
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button onClick={connect} disabled={connecting || !apiKey.trim()} className="h-9 rounded-lg w-full sm:w-auto">
                         {connecting ? 'Conectando…' : 'Conectar'}
                       </Button>
@@ -498,6 +474,130 @@ export default function IntegrationsPage() {
                     <Button onClick={sendTest} disabled={testing || status !== 'CONNECTED'} className="h-9 rounded-lg w-full sm:w-auto">
                       {testing ? 'Enviando…' : 'Enviar teste'}
                     </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            {/* Email (SendPulse) – Intermediado pela Zuzz */}
+            <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
+              {blocked && (
+                <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-1 text-xs">
+                  <LockClosedIcon className="h-3.5 w-3.5" /> Locked
+                </div>
+              )}
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                    <CogIcon className="h-5 w-5 text-gray-500" /> Email (SendPulse) — remetente profissional
+                  </CardTitle>
+                  <div className="text-xs">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">
+                      {emailStatus}
+                    </span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <Input value={senderName} onChange={(e) => setSenderName(e.target.value)} placeholder="Nome do remetente (ex.: Clínica Zuzz)" />
+                    <Input value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} placeholder="Email do remetente (ex.: contato@clinica.com)" />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={async () => {
+                          if (!currentClinic?.id) return toast.error('Selecione uma clínica');
+                          if (!senderEmail.trim()) return toast.error('Informe o email do remetente');
+                          try {
+                            setEmailConnecting(true);
+                            const res = await fetch('/api/integrations/email/senders/request-verification', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ clinicId: currentClinic.id, email: senderEmail.trim(), name: senderName.trim() || undefined })
+                            });
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
+                            toast.success('Enviamos um email de confirmação para o seu remetente');
+                            setEmailStatus('PENDING');
+                            if (data?.sessionToken) setEmailSession(String(data.sessionToken));
+                            setVerifyMsg('');
+                            setVerifiedEmail('');
+                          } catch (e: any) {
+                            toast.error(e?.message || 'Falha ao solicitar verificação');
+                          } finally {
+                            setEmailConnecting(false);
+                          }
+                        }}
+                        disabled={emailConnecting || !senderEmail.trim()}
+                        className="h-9 rounded-lg w-full md:w-auto"
+                      >
+                        {emailConnecting ? 'Enviando…' : 'Solicitar confirmação'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={loadEmailDbStatus}
+                        disabled={emailStatusLoading}
+                        className="h-9 rounded-lg w-full md:w-auto"
+                      >
+                        {emailStatusLoading ? 'Carregando…' : 'Atualizar'}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 gap-2 text-sm">
+                    <div>
+                      <div className="text-gray-500">Status</div>
+                      <div className="text-gray-900 font-medium">{emailStatus}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">Remetente verificado</div>
+                      <div className="text-gray-900 font-medium break-all">{verifiedEmail || '-'}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">Nome do remetente</div>
+                      <div className="text-gray-900 font-medium break-all">{senderName || '-'}</div>
+                    </div>
+                    {emailStatus === 'PENDING' && (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                        <Input value={verifyCode} onChange={(e) => setVerifyCode(e.target.value)} placeholder="Código de 6 dígitos" />
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="secondary"
+                            onClick={async () => {
+                              if (!emailSession) return toast.error('Sessão não encontrada, solicite novamente');
+                              if (!verifyCode.trim()) return toast.error('Informe o código recebido por email');
+                              try {
+                                setVerifying(true);
+                                setVerifyMsg('');
+                                const res = await fetch('/api/integrations/email/senders/confirm', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ token: emailSession, code: verifyCode.trim() })
+                                });
+                                const data = await res.json().catch(() => ({}));
+                                if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
+                                setEmailStatus('VERIFIED');
+                                setVerifyMsg('Remetente verificado com sucesso.');
+                                // Refresh from DB to retrieve verified email
+                                await loadEmailDbStatus();
+                              } catch (e: any) {
+                                setVerifyMsg(e?.message || 'Erro ao verificar código');
+                              } finally {
+                                setVerifying(false);
+                              }
+                            }}
+                            disabled={verifying || !verifyCode.trim()}
+                            className="h-9 rounded-lg w-full md:w-auto"
+                          >
+                            {verifying ? 'Verificando…' : 'Confirmar código'}
+                          </Button>
+                        </div>
+                        {verifyMsg && <div className="md:col-span-3 text-[12px] text-gray-600">{verifyMsg}</div>}
+                      </div>
+                    )}
+                    <div>
+                      <div className="text-gray-500">Webhook (interno)</div>
+                      <div className="font-mono text-xs text-gray-800 break-all">/api/webhooks/sendpulse</div>
+                    </div>
+                    <p className="text-[12px] text-gray-500">A Zuzz intermedia a integração. Você só confirma o seu email e usamos as nossas credenciais para enviar. Depois podemos configurar domínio (SPF/DKIM) para melhor entregabilidade.</p>
                   </div>
                 </div>
               </CardContent>

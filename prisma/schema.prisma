@@ -1789,3 +1789,20 @@ enum EventActor {
   @@map("event_actor_enum")
 }
 
+/// Campaign broadcast jobs (mapped to existing SQL table "campaign_jobs")
+model CampaignJob {
+  id         String   @id
+  doctorId   String   @map("doctor_id")
+  campaignId String   @map("campaign_id")
+  channel    String   // 'whatsapp' | 'sms' | 'email'
+  trigger    String?
+  scheduleAt DateTime @map("schedule_at") @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @map("created_at")
+  status     String   // 'scheduled' | 'running' | 'done' | 'failed' | 'cancelled'
+  lastError  String?  @map("last_error")
+
+  @@index([doctorId])
+  @@index([scheduleAt])
+  @@index([status])
+  @@map("campaign_jobs")
+}

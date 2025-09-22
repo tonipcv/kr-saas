@@ -13,7 +13,6 @@ import {
   DocumentTextIcon,
   CogIcon,
   PresentationChartBarIcon,
-  BookOpenIcon,
   ShieldCheckIcon,
   BuildingOfficeIcon,
   GiftIcon,
@@ -352,6 +351,12 @@ export default function Navigation() {
           label: 'Broadcast',
           icon: ChatBubbleLeftRightIcon,
           description: 'Send WhatsApp and campaigns'
+        },
+        {
+          href: '/doctor/automation',
+          label: 'Automation',
+          icon: SparklesIcon,
+          description: 'Triggers & actions'
         },
       ]
     }

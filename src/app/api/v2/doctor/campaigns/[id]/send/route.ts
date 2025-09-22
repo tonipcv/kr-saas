@@ -7,6 +7,8 @@ import { FEATURES, isFeatureEnabledForDoctor } from '@/lib/feature-flags';
 import { z } from 'zod';
 import { emitEvent } from '@/lib/events';
 import { EventActor, EventType } from '@prisma/client';
+import { decryptSecret } from '@/lib/crypto';
+import { sendWhatsAppTemplate, sendWhatsAppText } from '@/lib/whatsapp';
 
 const bodySchema = z.object({
   channel: z.enum(['whatsapp', 'email', 'sms']).default('whatsapp'),
@@ -30,12 +32,17 @@ async function authDoctor(request: NextRequest) {
       userId = mobileUser.id;
       userRole = mobileUser.role;
     }
+
+    // If WhatsApp channel and not dryRun but no toPreview provided, return an explicit error for MVP
+    if (channel === 'whatsapp' && !dryRun && !toPreviewRaw) {
+      return NextResponse.json({ success: false, error: 'toPreview is required for WhatsApp send (MVP). Preencha o campo "Para" com o número em formato internacional, ex.: 5511999999999.' }, { status: 400 });
+    }
   }
   if (!userId || userRole !== 'DOCTOR') return null;
   return userId;
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const doctorId = await authDoctor(request);
     if (!doctorId) return unauthorizedResponse();
@@ -46,7 +53,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ success: false, error: 'Feature disabled' }, { status: 403 });
     }
 
-    const id = params.id;
+    const { id } = await params;
     if (!id) return NextResponse.json({ success: false, error: 'Campaign id required' }, { status: 400 });
 
     // Validate body
@@ -56,6 +63,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ success: false, error: 'Invalid body', details: parsed.error.flatten() }, { status: 400 });
     }
     const { channel, audienceSize, dryRun, trigger } = parsed.data;
+    const useTemplate = Boolean((json as any)?.useTemplate);
+    const templateName: string | null = (json as any)?.templateName || null;
+    const templateLanguage: string = (json as any)?.templateLanguage || 'pt_BR';
+    const toPreviewRaw: string = (json as any)?.toPreview || '';
+    const freeMessage: string = (json as any)?.message || '';
 
     // Ensure campaign exists and belongs to doctor
     const rows: any[] = await prisma.$queryRawUnsafe(
@@ -98,7 +110,61 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       console.error('[events] campaign_sent emit failed', e);
     }
 
-    // Placeholder: actual dispatch to be implemented by the integration layer
+    // MVP dispatch: if WhatsApp channel and a single preview number is provided, try immediate send
+    if (channel === 'whatsapp' && !dryRun && toPreviewRaw) {
+      if (!clinicId) {
+        return NextResponse.json({ success: false, error: 'Clinic not resolved for doctor' }, { status: 400 });
+      }
+      // Load WhatsApp integration for clinic
+      const rows = await prisma.$queryRawUnsafe<Array<{ api_key_enc: string; iv: string; instance_id: string | null }>>(
+        `SELECT api_key_enc, iv, instance_id FROM clinic_integrations WHERE clinic_id = $1 AND provider = 'WHATSAPP' LIMIT 1`,
+        clinicId,
+      );
+      if (!rows || rows.length === 0) {
+        return NextResponse.json({ success: false, error: 'WhatsApp not configured for clinic' }, { status: 400 });
+      }
+      const row = rows[0];
+      if (!row.instance_id) {
+        return NextResponse.json({ success: false, error: 'WhatsApp phone number not set for clinic' }, { status: 400 });
+      }
+
+      const token = decryptSecret(row.iv, row.api_key_enc);
+      let toPreview = (toPreviewRaw || '').toString().trim().replace(/\D+/g, '');
+      if (!toPreview || toPreview.length < 10) {
+        return NextResponse.json({ success: false, error: 'Invalid destination number. Use full international format, e.g., 5511999999999.' }, { status: 400 });
+      }
+
+      try {
+        let waResp: any;
+        if (useTemplate) {
+          if (!templateName) {
+            return NextResponse.json({ success: false, error: 'templateName is required when useTemplate=true' }, { status: 400 });
+          }
+          waResp = await sendWhatsAppTemplate(token, row.instance_id, toPreview, templateName, templateLanguage);
+        } else {
+          if (!freeMessage) {
+            return NextResponse.json({ success: false, error: 'message is required for free-form WhatsApp messages' }, { status: 400 });
+          }
+          waResp = await sendWhatsAppText(token, row.instance_id, toPreview, freeMessage);
+        }
+        // Debug: log immediate Graph response
+        try { console.log('[WA Campaign Send] immediate response', JSON.stringify(waResp)); } catch {}
+        const messageId = waResp?.messages?.[0]?.id || null;
+        if (!messageId) {
+          const details = waResp?.error || waResp || null;
+          return NextResponse.json({ success: false, error: 'WhatsApp did not return a message id', details }, { status: 400 });
+        }
+        return NextResponse.json({ success: true, data: { id: campaign.id, channel, audienceSize, messageId } });
+      } catch (err: any) {
+        const hint = useTemplate
+          ? 'Check if template name/language exist and are approved for this WABA.'
+          : 'If recipient did not message in the last 24h, use a pre-approved template to initiate the conversation.';
+        try { console.error('[WA Campaign Send] error', err); } catch {}
+        return NextResponse.json({ success: false, error: err?.message || 'WhatsApp send failed', hint }, { status: 400 });
+      }
+    }
+
+    // Default placeholder response (no immediate dispatch)
     return NextResponse.json({ success: true, data: { id: campaign.id, channel, audienceSize } });
   } catch (e: any) {
     console.error('Error in POST /api/v2/doctor/campaigns/[id]/send:', e);

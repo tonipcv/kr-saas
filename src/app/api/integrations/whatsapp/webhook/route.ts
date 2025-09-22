@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
         const value = change?.value || {};
         const phoneNumberId: string | undefined = value?.metadata?.phone_number_id || value?.phone_number_id;
         const messages: any[] = Array.isArray(value?.messages) ? value.messages : [];
+        const statuses: any[] = Array.isArray(value?.statuses) ? value.statuses : [];
         const clinicRow = phoneNumberId
           ? await prisma.$queryRawUnsafe<any[]>(
               `SELECT clinic_id, api_key_enc, iv FROM clinic_integrations WHERE provider = 'WHATSAPP' AND instance_id = $1 LIMIT 1`,
@@ -51,6 +52,19 @@ export async function POST(req: NextRequest) {
             const { decryptSecret } = await import('@/lib/crypto');
             accessToken = decryptSecret(clinicRow[0].iv, clinicRow[0].api_key_enc);
           } catch {}
+        }
+
+        // Log delivery/read/failed statuses for troubleshooting
+        for (const st of statuses) {
+          try {
+            const status = st?.status;
+            const recipientId = st?.recipient_id;
+            const messageId = st?.id;
+            const errors = Array.isArray(st?.errors) ? st.errors : [];
+            console.log('[WA Status]', { status, recipientId, messageId, errors });
+          } catch (e) {
+            console.error('[WA Status] parse error', e);
+          }
         }
 
         for (const msg of messages) {
