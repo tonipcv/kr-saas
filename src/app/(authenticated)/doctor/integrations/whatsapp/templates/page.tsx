@@ -32,6 +32,8 @@ export default function WhatsAppTemplatesPage() {
   const [newBody, setNewBody] = useState('Olá {{1}}, tudo bem?');
   const [newFooter, setNewFooter] = useState('');
   const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -61,6 +63,28 @@ export default function WhatsAppTemplatesPage() {
       toast.error(e.message || 'Erro ao carregar templates');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Delete selected template from WABA
+  const deleteTemplate = async () => {
+    if (!clinicId || !selected?.name) return;
+    try {
+      setDeleting(true);
+      const res = await fetch('/api/integrations/whatsapp/templates', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId, name: selected.name, language: selected.language })
+      });
+      const j = await res.json().catch(()=>({}));
+      if (!res.ok) throw new Error(j?.error || 'Falha ao excluir template');
+      toast.success('Template excluído do WhatsApp');
+      setDeleteOpen(false);
+      await load();
+    } catch (e:any) {
+      toast.error(e?.message || 'Erro ao excluir template');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -128,32 +152,32 @@ export default function WhatsAppTemplatesPage() {
         <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">WhatsApp templates</h1>
-              <p className="text-sm text-gray-500">Templates do WABA conectado, com filtros e detalhes.</p>
+              <h1 className="text-lg font-semibold text-gray-900">WhatsApp templates</h1>
+              <p className="text-xs text-gray-500">Templates do WABA conectado, com filtros e detalhes.</p>
             </div>
             <div className="flex items-center gap-2">
               <Link href="/doctor/integrations">
-                <Button variant="outline" className="rounded-lg">Voltar</Button>
+                <Button size="sm" variant="outline" className="rounded-lg">Voltar</Button>
               </Link>
-              <Button onClick={load} disabled={loading} className="rounded-lg">{loading ? 'Atualizando…' : 'Refresh'}</Button>
-              <Button onClick={() => setCreateOpen(true)} className="rounded-lg bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white">Criar template</Button>
+              <Button size="sm" onClick={load} disabled={loading} className="rounded-lg">{loading ? 'Atualizando…' : 'Refresh'}</Button>
+              <Button size="sm" onClick={() => setCreateOpen(true)} className="rounded-lg bg-black text-white hover:bg-black/90">Criar template</Button>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             {/* Sidebar filters and list */}
             <div className="lg:col-span-1 bg-white border border-gray-200 rounded-xl p-3 space-y-3">
-              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por nome" />
+              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por nome" className="h-8 text-[13px]" />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2">
-                <select className="h-9 rounded-lg border px-2" value={statusFilter} onChange={(e)=>setStatusFilter(e.target.value)}>
+                <select className="h-8 rounded-lg border px-2 text-[13px]" value={statusFilter} onChange={(e)=>setStatusFilter(e.target.value)}>
                   <option value="">Status</option>
                   {statuses.map((s) => (<option key={s} value={s}>{s}</option>))}
                 </select>
-                <select className="h-9 rounded-lg border px-2" value={categoryFilter} onChange={(e)=>setCategoryFilter(e.target.value)}>
+                <select className="h-8 rounded-lg border px-2 text-[13px]" value={categoryFilter} onChange={(e)=>setCategoryFilter(e.target.value)}>
                   <option value="">Categoria</option>
                   {categories.map((c) => (<option key={c} value={c}>{c}</option>))}
                 </select>
-                <select className="h-9 rounded-lg border px-2" value={languageFilter} onChange={(e)=>setLanguageFilter(e.target.value)}>
+                <select className="h-8 rounded-lg border px-2 text-[13px]" value={languageFilter} onChange={(e)=>setLanguageFilter(e.target.value)}>
                   <option value="">Idioma</option>
                   {languages.map((l) => (<option key={l} value={l}>{l}</option>))}
                 </select>
@@ -161,16 +185,16 @@ export default function WhatsAppTemplatesPage() {
               <Separator />
               <div className="max-h-[60vh] overflow-auto divide-y rounded-lg border">
                 {loading ? (
-                  <div className="p-3 text-sm text-gray-600">Carregando…</div>
+                  <div className="p-3 text-xs text-gray-600">Carregando…</div>
                 ) : error ? (
-                  <div className="p-3 text-sm text-red-600">{error}</div>
+                  <div className="p-3 text-xs text-red-600">{error}</div>
                 ) : filtered.length === 0 ? (
-                  <div className="p-3 text-sm text-gray-600">Nenhum template encontrado.</div>
+                  <div className="p-3 text-xs text-gray-600">Nenhum template encontrado.</div>
                 ) : (
                   filtered.map((t) => (
-                    <button key={t.id} className={`w-full text-left p-3 text-sm hover:bg-gray-50 ${selected?.id===t.id?'bg-gray-50':''}`} onClick={()=>setSelected(t)}>
-                      <div className="font-medium text-gray-900 truncate">{t.name}</div>
-                      <div className="text-xs text-gray-500 truncate">{t.category} • {t.language}</div>
+                    <button key={t.id} className={`w-full text-left p-2.5 text-[13px] hover:bg-gray-50 ${selected?.id===t.id?'bg-gray-50':''}`} onClick={()=>setSelected(t)}>
+                      <div className="text-[13px] font-medium text-gray-900 truncate leading-5">{t.name}</div>
+                      <div className="text-[11px] text-gray-500 truncate">{t.category} • {t.language}</div>
                     </button>
                   ))
                 )}
@@ -183,56 +207,118 @@ export default function WhatsAppTemplatesPage() {
                 <p className="text-sm text-gray-600">Selecione um template para ver detalhes.</p>
               ) : (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
                     <div>
-                      <div className="text-lg font-semibold text-gray-900">{selected.name}</div>
-                      <div className="text-xs text-gray-500">{selected.category} • {selected.language}</div>
+                      <div className="text-[15px] font-semibold text-gray-900 leading-5">{selected.name}</div>
+                      <div className="text-[11px] text-gray-500">{selected.category} • {selected.language}</div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 ml-auto">
+                      <Button size="sm" variant="outline" className="rounded-lg" onClick={()=>setDeleteOpen(true)} disabled={deleting}>Excluir</Button>
                       {selected.quality_score?.score && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200 text-xs">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200 text-[10px]">
                           QS: {selected.quality_score.score}
                         </span>
                       )}
-                      <span className={
-                        'inline-flex items-center px-2 py-0.5 rounded-full ring-1 ring-inset text-xs ' +
-                        (selected.status === 'APPROVED' ? 'bg-green-50 text-green-700 ring-green-200' :
-                         selected.status === 'PENDING' ? 'bg-amber-50 text-amber-700 ring-amber-200' :
-                         'bg-gray-50 text-gray-700 ring-gray-200')
-                      }>
+                      <span
+                        className={
+                          'inline-flex items-center px-2 py-0.5 rounded-full ring-1 ring-inset text-[10px] ' +
+                          (selected.status === 'APPROVED' ? 'bg-green-50 text-green-700 ring-green-200' :
+                           selected.status === 'PENDING' ? 'bg-amber-50 text-amber-700 ring-amber-200' :
+                           'bg-gray-50 text-gray-700 ring-gray-200')
+                        }
+                      >
                         {selected.status}
                       </span>
                     </div>
                   </div>
                   <Separator />
                   {detailsLoading ? (
-                    <p className="text-sm text-gray-600">Carregando componentes…</p>
+                    <p className="text-[11px] text-gray-600">Carregando componentes…</p>
                   ) : !details ? (
-                    <p className="text-sm text-gray-600">Sem detalhes disponíveis.</p>
+                    <p className="text-[11px] text-gray-600">Sem detalhes disponíveis.</p>
                   ) : (
-                    <div className="space-y-3">
-                      {(details.components || []).map((c: any, idx: number) => (
-                        <div key={idx} className="rounded-md border p-3">
-                          <div className="text-xs uppercase text-gray-500 mb-1">{c.type}</div>
-                          {c.type === 'BODY' && (
-                            <pre className="whitespace-pre-wrap text-sm text-gray-900">{c.text}</pre>
-                          )}
-                          {c.type === 'FOOTER' && (
-                            <div className="text-sm text-gray-700">{c.text}</div>
-                          )}
-                          {c.type === 'HEADER' && (
-                            <div className="text-sm text-gray-700">{c.format || 'TEXT'} {c.text ? `— ${c.text}` : ''}</div>
-                          )}
-                          {c.type === 'BUTTONS' && (
-                            <ul className="list-disc pl-5 text-sm text-gray-800">
-                              {(c.buttons || []).map((b: any, i: number) => (
-                                <li key={i}>{b.type}: {b.text || b.url || b.phone_number}</li>
-                              ))}
-                            </ul>
-                          )}
+                    // Visualização estilo WhatsApp
+                    (() => {
+                      const comps = Array.isArray(details.components) ? details.components : [];
+                      const header = comps.find((c:any)=>c.type==='HEADER');
+                      const body = comps.find((c:any)=>c.type==='BODY');
+                      const footer = comps.find((c:any)=>c.type==='FOOTER');
+                      const buttons = comps.find((c:any)=>c.type==='BUTTONS');
+
+                      const renderWithVars = (text: string) => {
+                        // Destacar variáveis {{1}}, {{2}} com "chips"
+                        const parts: any[] = [];
+                        const regex = /\{\{\d+\}\}/g;
+                        let lastIndex = 0;
+                        let match: RegExpExecArray | null;
+                        while ((match = regex.exec(text))) {
+                          if (match.index > lastIndex) {
+                            parts.push(<span key={`t-${lastIndex}`}>{text.slice(lastIndex, match.index)}</span>);
+                          }
+                          parts.push(
+                            <span key={`v-${match.index}`} className="inline-flex items-center px-1.5 py-0.5 text-[11px] bg-emerald-50 text-emerald-700 rounded border border-emerald-200">
+                              {match[0]}
+                            </span>
+                          );
+                          lastIndex = match.index + match[0].length;
+                        }
+                        if (lastIndex < text.length) parts.push(<span key={`t-end`}>{text.slice(lastIndex)}</span>);
+                        return parts;
+                      };
+
+                      return (
+                        <div className="w-full max-w-md mx-auto">
+                          <div className="bg-[#e5ddd5] rounded-2xl p-4 border border-gray-200">
+                            {/* Simulação da conversa */}
+                            <div className="space-y-2">
+                              {/* Balão da mensagem (template preview) */}
+                              <div className="max-w-[85%] bg-white rounded-lg shadow p-3">
+                                {header?.text ? (
+                                  <div className="text-[11px] font-semibold text-emerald-700 mb-1">
+                                    {header.text}
+                                  </div>
+                                ) : null}
+
+                                {body?.text ? (
+                                  <div className="text-[12px] text-gray-900 whitespace-pre-wrap leading-5">
+                                    {renderWithVars(body.text)}
+                                  </div>
+                                ) : (
+                                  <div className="text-[13px] text-gray-500 italic">Sem corpo (BODY)</div>
+                                )}
+
+                                {footer?.text ? (
+                                  <div className="mt-2 text-[10px] text-gray-500">
+                                    {footer.text}
+                                  </div>
+                                ) : null}
+                              </div>
+
+                              {/* Botões */}
+                              {Array.isArray(buttons?.buttons) && buttons.buttons.length > 0 && (
+                                <div className="max-w-[85%] flex flex-col gap-2 mt-1">
+                                  {buttons.buttons.map((b:any, i:number) => (
+                                    <button
+                                      key={i}
+                                      type="button"
+                                      className={`w-full text-center rounded-md border text-[12px] py-2 ${b.type==='URL' ? 'bg-white border-emerald-300 text-emerald-700' : 'bg-white border-gray-300 text-gray-800'}`}
+                                      disabled
+                                    >
+                                      {b.text || b.url || b.phone_number}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Meta-infos */}
+                          <div className="mt-3 text-xs text-gray-500">
+                            Visualização aproximada do WhatsApp. Elementos interativos estão desativados.
+                          </div>
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })()
                   )}
                   <Separator />
                   <div className="grid grid-cols-4 gap-3 text-center">
@@ -285,7 +371,26 @@ export default function WhatsAppTemplatesPage() {
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={()=>setCreateOpen(false)}>Cancelar</Button>
-                <Button onClick={createTemplate} disabled={creating} className="bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white">{creating ? 'Enviando…' : 'Criar'}</Button>
+                <Button onClick={createTemplate} disabled={creating} className="bg-black text-white hover:bg-black/90">{creating ? 'Enviando…' : 'Criar'}</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Delete Confirmation Modal */}
+          <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+            <DialogContent className="sm:max-w-[420px]">
+              <DialogHeader>
+                <DialogTitle>Excluir template</DialogTitle>
+                <DialogDescription>
+                  Esta ação removerá o template "{selected?.name}" do WhatsApp. Não é possível desfazer.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="text-sm text-gray-600">
+                Confirme para prosseguir com a exclusão.
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={()=>setDeleteOpen(false)}>Cancelar</Button>
+                <Button size="sm" onClick={deleteTemplate} disabled={deleting} className="bg-black text-white hover:bg-black/90">{deleting ? 'Excluindo…' : 'Excluir'}</Button>
               </div>
             </DialogContent>
           </Dialog>

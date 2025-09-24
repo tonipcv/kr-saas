@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { decryptSecret } from '@/lib/crypto';
 
+// List WhatsApp templates from connected WABA
 export async function GET(req: NextRequest) {
   try {
     const GRAPH_BASE = process.env.WHATSAPP_GRAPH_BASE || 'https://graph.facebook.com';
@@ -33,7 +34,11 @@ export async function GET(req: NextRequest) {
         const j = await r.json().catch(() => ({} as any));
         wabaId = j?.whatsapp_business_account?.id || null;
         if (wabaId) {
-          await prisma.$executeRawUnsafe(`UPDATE clinic_integrations SET waba_id = $1, updated_at = now() WHERE clinic_id = $2 AND provider = 'WHATSAPP'`, wabaId, clinicId);
+          await prisma.$executeRawUnsafe(
+            `UPDATE clinic_integrations SET waba_id = $1, updated_at = now() WHERE clinic_id = $2 AND provider = 'WHATSAPP'`,
+            wabaId,
+            clinicId
+          );
         }
       } catch {}
     }
@@ -128,6 +133,82 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ success: true, data });
   } catch (e: any) {
+    return NextResponse.json({ error: e.message || 'Internal error' }, { status: 500 });
+  }
+}
+
+// Delete a WhatsApp template from the connected WABA
+export async function DELETE(req: NextRequest) {
+  try {
+    const GRAPH_BASE = process.env.WHATSAPP_GRAPH_BASE || 'https://graph.facebook.com';
+    const GRAPH_VERSION = process.env.WHATSAPP_GRAPH_VERSION || 'v20.0';
+
+    const body = await req.json().catch(() => ({}));
+    const clinicId = body?.clinicId as string | undefined;
+    const name = (body?.name || '').trim();
+    const language = (body?.language || '').trim();
+
+    if (!clinicId) return NextResponse.json({ error: 'clinicId is required' }, { status: 400 });
+    if (!name || !language) return NextResponse.json({ error: 'name and language are required' }, { status: 400 });
+
+    console.log('[WABA DELETE] Incoming request', { clinicId, name, language });
+
+    // Resolve integration
+    const rows = await prisma.$queryRawUnsafe<Array<{ api_key_enc: string; iv: string; waba_id: string | null; instance_id: string | null }>>(
+      `SELECT api_key_enc, iv, waba_id, instance_id FROM clinic_integrations WHERE clinic_id = $1 AND provider = 'WHATSAPP' LIMIT 1`,
+      clinicId,
+    );
+    if (!rows || rows.length === 0) {
+      console.error('[WABA DELETE] No WhatsApp integration found for clinic');
+      return NextResponse.json({ error: 'WhatsApp is not connected for this clinic' }, { status: 400 });
+    }
+
+    const row = rows[0];
+    const token = decryptSecret(row.iv, row.api_key_enc);
+    let wabaId = row.waba_id;
+    const phoneNumberId = row.instance_id;
+
+    // Try to infer missing wabaId from phone number
+    if (!wabaId && phoneNumberId) {
+      try {
+        const inferUrl = `${GRAPH_BASE}/${GRAPH_VERSION}/${encodeURIComponent(phoneNumberId)}?fields=whatsapp_business_account`;
+        const r = await fetch(inferUrl, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+        const j = await r.json().catch(() => ({} as any));
+        wabaId = j?.whatsapp_business_account?.id || null;
+        if (wabaId) {
+          await prisma.$executeRawUnsafe(`UPDATE clinic_integrations SET waba_id = $1, updated_at = now() WHERE clinic_id = $2 AND provider = 'WHATSAPP'`, wabaId, clinicId);
+        }
+      } catch (e) {
+        console.error('[WABA DELETE] Error inferring WABA ID from phone number', e);
+      }
+    }
+
+    if (!wabaId) {
+      console.error('[WABA DELETE] Missing WABA ID after inference');
+      return NextResponse.json({ error: 'Missing waba_id; reconnect WhatsApp to populate it.' }, { status: 400 });
+    }
+
+    // Build Graph API DELETE
+    const url = `${GRAPH_BASE}/${GRAPH_VERSION}/${encodeURIComponent(wabaId)}/message_templates?name=${encodeURIComponent(name)}&language=${encodeURIComponent(language)}`;
+    console.log('[WABA DELETE] Graph URL', url);
+
+    const res = await fetch(url, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    console.log('[WABA DELETE] Response status:', res.status);
+    console.log('[WABA DELETE] Response body:', JSON.stringify(data, null, 2));
+
+    if (!res.ok) {
+      const errMsg = (data?.error?.message || (typeof data?.error === 'string' ? data.error : null) || 'Graph error');
+      console.error('[WABA DELETE] Error:', errMsg);
+      return NextResponse.json({ error: errMsg, details: data }, { status: res.status });
+    }
+
+    return NextResponse.json({ success: true, data });
+  } catch (e: any) {
+    console.error('[WABA DELETE] Exception:', e);
     return NextResponse.json({ error: e.message || 'Internal error' }, { status: 500 });
   }
 }

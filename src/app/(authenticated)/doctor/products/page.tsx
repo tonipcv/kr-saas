@@ -303,9 +303,9 @@ export default function ProductsPage() {
                 <h1 className="text-[20px] font-semibold text-gray-900 tracking-[-0.01em]">Products</h1>
                 <p className="text-sm text-gray-500 mt-1">Manage products recommended in your protocols</p>
               </div>
-              <Button asChild className="bg-gray-900 hover:bg-black text-white shadow-sm rounded-xl h-9 px-4 font-medium">
-                <Link href="/doctor/products/create">
-                  <PlusIcon className="h-4 w-4 mr-2" />
+              <Button asChild size="sm" className="h-8 bg-gray-900 hover:bg-black text-white shadow-sm">
+                <Link href="/doctor/products/create" className="flex items-center">
+                  <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
                   New Product
                 </Link>
               </Button>
@@ -385,11 +385,11 @@ export default function ProductsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
-                  <span className="text-sm">Filters</span>
+                <Button variant="outline" size="sm" className="h-8 text-gray-700 hover:bg-gray-50">
+                  Filters
                 </Button>
-                <Button variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
-                  <span className="text-sm">Sort</span>
+                <Button variant="outline" size="sm" className="h-8 text-gray-700 hover:bg-gray-50">
+                  Sort
                 </Button>
               </div>
             </div>
@@ -454,31 +454,30 @@ export default function ProductsPage() {
                         )}
                       </td>
                       <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon"
+                            className="h-7 w-7 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
                             onClick={() => loadProductDetails(product.id)}
-                            className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg h-8 w-8 p-0"
-                            disabled={isLoadingProduct}
+                            title="View details"
                           >
-                            <EyeIcon className="h-4 w-4" />
+                            <EyeIcon className="h-3.5 w-3.5" />
                           </Button>
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon"
+                            className="h-7 w-7 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
                             onClick={() => duplicateProduct(product.id)}
-                            className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg h-8 w-8 p-0"
-                            disabled={duplicatingId === product.id}
-                            title="Duplicar produto (ficará inativo)"
+                            title="Duplicate product"
                           >
-                            <DocumentDuplicateIcon className="h-4 w-4" />
+                            <DocumentDuplicateIcon className="h-3.5 w-3.5" />
                           </Button>
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon"
                             asChild
-                            className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg h-8 w-8 p-0"
+                            className="h-7 w-7 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
                           >
                             <Link href={`/doctor/products/${product.id}/edit`}>
                               <PencilIcon className="h-3.5 w-3.5" />
@@ -486,11 +485,10 @@ export default function ProductsPage() {
                           </Button>
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon"
+                            className="h-7 w-7 text-red-500 hover:bg-red-50 hover:text-red-600"
                             onClick={() => deleteProduct(product.id)}
-                            className="text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg h-8 w-8 p-0"
-                            disabled={deletingId === product.id}
-                            title="Excluir produto"
+                            title="Delete product"
                           >
                             <TrashIcon className="h-3.5 w-3.5" />
                           </Button>
@@ -514,11 +512,11 @@ export default function ProductsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="h-8 text-gray-700 hover:bg-gray-50"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
                 >
-                  <ChevronLeftIcon className="h-4 w-4" />
+                  <ChevronLeftIcon className="h-3.5 w-3.5" />
                 </Button>
                 <span className="text-sm text-gray-700">
                   Page {currentPage} of {totalPages}
@@ -526,11 +524,11 @@ export default function ProductsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  className="h-8 text-gray-700 hover:bg-gray-50"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
                 >
-                  <ChevronRightIcon className="h-4 w-4" />
+                  <ChevronRightIcon className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>
@@ -608,9 +606,9 @@ export default function ProductsPage() {
                     <div className="rounded-xl border border-gray-200 p-4">
                       <h4 className="text-sm font-semibold text-gray-900 mb-3">Compra</h4>
                       {selectedProduct.purchaseUrl ? (
-                        <Button variant="outline" size="sm" asChild className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-9 px-3 shadow-sm font-medium">
-                          <a href={selectedProduct.purchaseUrl} target="_blank" rel="noopener noreferrer">
-                            <LinkIcon className="h-4 w-4 mr-2" />
+                        <Button variant="outline" size="sm" asChild className="h-8 border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900">
+                          <a href={selectedProduct.purchaseUrl} target="_blank" rel="noopener noreferrer" className="flex items-center">
+                            <LinkIcon className="h-3.5 w-3.5 mr-1.5" />
                             Abrir link
                           </a>
                         </Button>
@@ -627,8 +625,8 @@ export default function ProductsPage() {
                           {(selectedProduct as any).protocolProducts.map((pp: any) => (
                             <div key={pp.protocol.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
                               <span className="text-sm font-medium text-gray-900">{pp.protocol.name}</span>
-                              <Button variant="outline" size="sm" asChild className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-lg h-8 px-3">
-                                <Link href={`/doctor/protocols/${pp.protocol.id}`}>Ver</Link>
+                              <Button variant="outline" size="sm" className="h-7 border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900">
+                                <Link href={`/doctor/protocols/${pp.protocol.id}`} className="text-xs">Ver</Link>
                               </Button>
                             </div>
                           ))}
@@ -661,23 +659,24 @@ export default function ProductsPage() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex gap-3 pt-4">
+                  <div className="flex gap-2 pt-4">
                     <Button 
                       variant="outline" 
-                      className="flex-1 border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-11 shadow-sm font-medium" 
+                      size="sm"
+                      className="h-8 border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900" 
                       asChild
                     >
-                      <Link href={`/doctor/products/${selectedProduct.id}/edit`}>
-                        <PencilIcon className="h-4 w-4 mr-2" />
-                        Editar produto
+                      <Link href={`/doctor/products/${selectedProduct.id}/edit`} className="flex items-center">
+                        <PencilIcon className="h-3.5 w-3.5 mr-1.5" />
+                        Editar
                       </Link>
                     </Button>
                     <Button 
                       variant="outline" 
+                      size="sm"
                       onClick={() => setIsModalOpen(false)}
-                      className="border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl h-11 px-5 shadow-sm font-medium"
+                      className="h-8 border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                     >
-                      <XMarkIcon className="h-4 w-4 mr-2" />
                       Fechar
                     </Button>
                   </div>

@@ -343,21 +343,23 @@ export default function PurchasesPage() {
                 {isFree ? (
                   <Button
                     onClick={openPlansModal}
-                    className="bg-gray-900 hover:bg-black text-white shadow-sm rounded-xl h-9 px-4 font-medium"
+                    size="sm"
+                    className="h-8 bg-gray-900 hover:bg-black text-white"
                   >
-                    <PlusIcon className="h-4 w-4 mr-2" />
+                    <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
                     Record Purchase
                   </Button>
                 ) : (
                   <Button
                     onClick={() => setIsModalOpen(true)}
-                    className="bg-gray-900 hover:bg-black text-white shadow-sm rounded-xl h-9 px-4 font-medium"
+                    size="sm"
+                    className="h-8 bg-gray-900 hover:bg-black text-white"
                   >
-                    <PlusIcon className="h-4 w-4 mr-2" />
+                    <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
                     Record Purchase
                   </Button>
                 )}
-                <Button asChild variant="outline" className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50">
+                <Button asChild variant="outline" size="sm" className="h-8 text-gray-700 hover:bg-gray-50">
                   <Link href="/doctor/products">Manage Products</Link>
                 </Button>
               </div>
@@ -370,7 +372,7 @@ export default function PurchasesPage() {
               <p className="text-sm font-semibold">You're on the Free plan — access to the Purchases page is not included.</p>
               <p className="text-xs mt-1 opacity-95">Upgrade to a paid plan to unlock this feature.</p>
               <div className="mt-3">
-                <Button size="sm" variant="secondary" className="h-8 rounded-lg bg-white text-gray-800 hover:bg-gray-100" onClick={openPlansModal}>
+                <Button size="sm" variant="outline" className="h-8 text-gray-700 hover:bg-gray-50" onClick={openPlansModal}>
                   See plans
                 </Button>
               </div>
@@ -393,7 +395,7 @@ export default function PurchasesPage() {
                   <p className="text-sm font-semibold text-gray-800">Purchases are locked on the Free plan.</p>
                   <p className="text-xs text-gray-600 mt-1">Upgrade to record and view purchases.</p>
                   <div className="mt-3">
-                    <Button size="sm" className="h-8 bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white hover:opacity-90 rounded-lg" onClick={openPlansModal}>
+                    <Button size="sm" className="h-8 bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white hover:opacity-90" onClick={openPlansModal}>
                       See plans
                     </Button>
                   </div>
@@ -401,50 +403,52 @@ export default function PurchasesPage() {
               </div>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white text-sm">
               <table className="min-w-full">
                 <thead className="bg-gray-50/80">
                   <tr className="text-left text-xs text-gray-600">
-                    <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Date & Time</th>
-                    <th className="px-3 py-3.5 font-medium">Client</th>
-                    <th className="px-3 py-3.5 font-medium">Product</th>
-                    <th className="px-3 py-3.5 font-medium">Qty</th>
-                    <th className="px-3 py-3.5 font-medium">Unit</th>
-                    <th className="px-3 py-3.5 font-medium">Total</th>
-                    <th className="px-3 py-3.5 font-medium">Points</th>
-                    <th className="px-3 py-3.5 font-medium">Notes</th>
-                    <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
+                    <th className="py-2 pl-3 pr-2 font-medium sm:pl-4">Date</th>
+                    <th className="px-2 py-2 font-medium">Client</th>
+                    <th className="px-2 py-2 font-medium">Product</th>
+                    <th className="px-2 py-2 font-medium text-right">Qty</th>
+                    <th className="px-2 py-2 font-medium text-right">Unit</th>
+                    <th className="px-2 py-2 font-medium text-right">Total</th>
+                    <th className="px-2 py-2 font-medium text-right">Points</th>
+                    <th className="px-2 py-2 font-medium">Notes</th>
+                    <th className="relative py-2 pl-2 pr-3 sm:pr-4 w-10">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-100 bg-white text-sm">
                   {isLoadingPurchases ? (
                     Array.from({ length: 6 }).map((_, i) => (
                       <tr key={`sk-${i}`}>
-                        <td className="py-3.5 pl-4 pr-3 sm:pl-6">
+                        <td className="py-2 pl-3 pr-2">
                           <div className="h-4 w-28 bg-gray-100 rounded animate-pulse" />
                         </td>
-                        <td className="px-3 py-3.5">
+                        <td className="px-2 py-2">
                           <div className="h-4 w-36 bg-gray-100 rounded animate-pulse" />
                         </td>
-                        <td className="px-3 py-3.5">
+                        <td className="px-2 py-2">
                           <div className="h-4 w-40 bg-gray-100 rounded animate-pulse" />
                         </td>
-                        <td className="px-3 py-3.5">
+                        <td className="px-2 py-2">
                           <div className="h-4 w-10 bg-gray-100 rounded animate-pulse" />
                         </td>
-                        <td className="px-3 py-3.5">
+                        <td className="px-2 py-2">
                           <div className="h-4 w-16 bg-gray-100 rounded animate-pulse" />
                         </td>
-                        <td className="px-3 py-3.5">
+                        <td className="px-2 py-2">
                           <div className="h-4 w-16 bg-gray-100 rounded animate-pulse" />
                         </td>
-                        <td className="px-3 py-3.5">
+                        <td className="px-2 py-2">
                           <div className="h-4 w-12 bg-gray-100 rounded animate-pulse" />
                         </td>
-                        <td className="px-3 py-3.5">
+                        <td className="px-2 py-2">
                           <div className="h-4 w-24 bg-gray-100 rounded animate-pulse" />
                         </td>
-                        <td className="py-3.5 pl-3 pr-4 sm:pr-6 text-right">
+                        <td className="py-2 pl-2 pr-3 sm:pr-4 text-right">
                           <div className="h-8 w-8 bg-gray-100 rounded-lg animate-pulse inline-block" />
                         </td>
                       </tr>
@@ -457,20 +461,22 @@ export default function PurchasesPage() {
                       const fmt = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(d);
                       const toNum = (v: any) => typeof v === 'number' ? v : Number(v);
                       return (
-                        <tr key={p.id} className="hover:bg-gray-50/60">
-                          <td className="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm text-gray-900 sm:pl-6">{fmt}</td>
-                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-700">{p.user?.name || p.user?.email || '-'}</td>
-                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-700">{p.product?.name || '-'}</td>
-                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{p.quantity}</td>
-                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{formatPrice(toNum(p.unitPrice)) || '-'}</td>
-                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{formatPrice(toNum(p.totalPrice)) || '-'}</td>
-                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{toNum(p.pointsAwarded)} pts</td>
-                          <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">{p.notes || '-'}</td>
-                          <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right sm:pr-6">
+                        <tr key={p.id} className="hover:bg-gray-50">
+                          <td className="whitespace-nowrap px-2 py-2 text-gray-500">
+                            {new Date(p.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                          </td>
+                          <td className="whitespace-nowrap px-2 py-2 text-gray-700 truncate max-w-[120px]">{p.user?.name || p.user?.email || '-'}</td>
+                          <td className="whitespace-nowrap px-2 py-2 text-gray-700 truncate max-w-[120px]">{p.product?.name || '-'}</td>
+                          <td className="whitespace-nowrap px-2 py-2 text-gray-900 text-right">{p.quantity}</td>
+                          <td className="whitespace-nowrap px-2 py-2 text-gray-900 text-right">{formatPrice(toNum(p.unitPrice)) || '-'}</td>
+                          <td className="whitespace-nowrap px-2 py-2 text-gray-900 text-right">{formatPrice(toNum(p.totalPrice)) || '-'}</td>
+                          <td className="whitespace-nowrap px-2 py-2 text-gray-900 text-right">{toNum(p.pointsAwarded)}</td>
+                          <td className="whitespace-nowrap px-2 py-2 text-gray-600 truncate max-w-[150px]">{p.notes || '-'}</td>
+                          <td className="relative whitespace-nowrap py-2 pl-2 pr-3 text-right sm:pr-4">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" className="h-8 rounded-lg">
-                                  <EllipsisHorizontalIcon className="h-4 w-4" />
+                                <Button variant="ghost" size="icon" className="h-7 w-7">
+                                  <EllipsisHorizontalIcon className="h-3.5 w-3.5" />
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-40">
@@ -514,10 +520,12 @@ export default function PurchasesPage() {
                 Esta ação apagará a compra e ajustará os pontos do paciente. Deseja continuar?
               </div>
               <div className="flex items-center gap-2 justify-end">
-                <Button type="button" variant="outline" className="h-9 rounded-xl" onClick={() => setConfirmOpen(false)} disabled={!!deletingId}>Cancelar</Button>
+                <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => setConfirmOpen(false)} disabled={!!deletingId}>Cancel</Button>
                 <Button
                   type="button"
-                  className="h-9 rounded-xl bg-red-600 text-white hover:bg-red-700"
+                  variant="destructive"
+                  size="sm"
+                  className="h-8"
                   onClick={async () => {
                     if (!confirmTargetId) return;
                     await deletePurchaseInner(confirmTargetId);
@@ -549,8 +557,8 @@ export default function PurchasesPage() {
                 </div>
                 {editError && <div className="text-sm text-red-600">{editError}</div>}
                 <div className="flex items-center gap-2 justify-end">
-                  <Button type="button" variant="outline" className="h-10 rounded-xl" onClick={() => setEditOpen(false)} disabled={editing}>Cancelar</Button>
-                  <Button type="submit" className="h-10 rounded-xl bg-gray-900 text-white" disabled={editing}>{editing ? 'Salvando…' : 'Salvar'}</Button>
+                  <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => setEditOpen(false)} disabled={editing}>Cancel</Button>
+                  <Button type="submit" size="sm" className="h-8 bg-gray-900 text-white" disabled={editing}>{editing ? 'Saving…' : 'Save'}</Button>
                 </div>
               </form>
             </DialogContent>
@@ -563,20 +571,20 @@ export default function PurchasesPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50"
-                onClick={() => { const t = Math.max(1, page - 1); setPage(t); loadPurchases(t); }}
+                className="h-8 text-gray-700 hover:bg-gray-50"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
               >
-                <PageLeftIcon className="h-4 w-4" />
+                <PageLeftIcon className="h-3.5 w-3.5" />
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 rounded-xl border-gray-200 text-gray-700 hover:bg-gray-50"
-                onClick={() => { const t = Math.min(totalPages, page + 1); setPage(t); loadPurchases(t); }}
-                disabled={page === totalPages}
+                className="h-8 text-gray-700 hover:bg-gray-50"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
               >
-                <PageRightIcon className="h-4 w-4" />
+                <PageRightIcon className="h-3.5 w-3.5" />
               </Button>
             </div>
           </div>
@@ -661,10 +669,29 @@ export default function PurchasesPage() {
                 )}
 
                 <div className="flex items-center gap-2">
-                  <Button type="submit" disabled={isSubmitting || !patientId || !productId} className="bg-gray-900 hover:bg-black text-white shadow-sm rounded-xl h-10 px-4 font-medium">
+                  <Button 
+                    type="submit" 
+                    size="sm"
+                    disabled={isSubmitting || !patientId || !productId} 
+                    className="h-8 bg-gray-900 hover:bg-black text-white"
+                  >
                     {isSubmitting ? 'Saving...' : 'Save Purchase'}
                   </Button>
-                  <Button type="button" variant="outline" disabled={isSubmitting} className="h-10 rounded-xl" onClick={() => { setPatientId(''); setProductId(''); setQuantity('1'); setNotes(''); setMessage(null); setError(null); }}>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm"
+                    disabled={isSubmitting} 
+                    className="h-8" 
+                    onClick={() => { 
+                      setPatientId(''); 
+                      setProductId(''); 
+                      setQuantity('1'); 
+                      setNotes(''); 
+                      setMessage(null); 
+                      setError(null); 
+                    }}
+                  >
                     Clear
                   </Button>
                 </div>
@@ -712,7 +739,10 @@ export default function PurchasesPage() {
                           </div>
                         </div>
                         <div className="p-4">
-                          <Button className="w-full bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white hover:opacity-90">
+                          <Button 
+                            size="sm" 
+                            className="w-full h-8 bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white hover:opacity-90"
+                          >
                             {isCurrent ? 'Current plan' : 'Upgrade'}
                           </Button>
                           <div className="mt-3 space-y-2">

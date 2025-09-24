@@ -330,9 +330,9 @@ export default function Navigation() {
         },
         {
           href: '/doctor/rewards',
-          label: 'Rewards & Approvals',
+          label: 'Rewards',
           icon: GiftIcon,
-          description: 'Configure rewards and approve redemptions'
+          description: 'Configure rewards'
         },
         {
           href: '/doctor/integrations',

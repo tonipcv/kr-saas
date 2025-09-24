@@ -77,6 +77,15 @@ export default function IntegrationsPage() {
 
   // (templates moved to dedicated page)
 
+  // Minimal view toggles
+  const [xaseExpanded, setXaseExpanded] = useState(false);
+  const [emailExpanded, setEmailExpanded] = useState(false);
+  const [waExpanded, setWaExpanded] = useState(false);
+  const [stripeExpanded, setStripeExpanded] = useState(false);
+  
+
+  // (SEO card removed — SEO is automatic and not shown here)
+
   const loadStatus = async () => {
     if (!currentClinic?.id) return;
     try {
@@ -414,8 +423,9 @@ export default function IntegrationsPage() {
             </div>
           )}
 
-          {/* Cards */}
+          {/* Cards (minimal headers; click to view details) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* SEO card removed */}
             {/* WhatsApp (Xase.ai) */}
             <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
               {blocked && (
@@ -428,55 +438,62 @@ export default function IntegrationsPage() {
                   <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                     <CogIcon className="h-5 w-5 text-gray-500" /> WhatsApp (Xase.ai)
                   </CardTitle>
-                  <div className="text-xs">
-                    {statusLoading ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200">Carregando…</span>
-                    ) : status === 'CONNECTED' ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Conectado</span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Desconectado</span>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Xase API Key" />
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button onClick={connect} disabled={connecting || !apiKey.trim()} className="h-9 rounded-lg w-full sm:w-auto">
-                        {connecting ? 'Conectando…' : 'Conectar'}
-                      </Button>
-                      <Button variant="outline" onClick={loadStatus} disabled={statusLoading} className="h-9 rounded-lg w-full sm:w-auto">Atualizar</Button>
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs">
+                      {statusLoading ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200">Carregando…</span>
+                      ) : status === 'CONNECTED' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Conectado</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Desconectado</span>
+                      )}
                     </div>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <div className="text-gray-500">Status</div>
-                      <div className="font-medium text-gray-900">{status}</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-500">Número</div>
-                      <div className="font-medium text-gray-900">{phone || '-'}</div>
-                    </div>
-                    <div className="col-span-2">
-                      <div className="text-gray-500">Instance</div>
-                      <div className="font-mono text-xs text-gray-800 break-all">{instanceId || '-'}</div>
-                    </div>
-                    <div className="col-span-2">
-                      <div className="text-gray-500">Última conexão</div>
-                      <div className="text-gray-900">{lastSeenAt ? new Date(lastSeenAt).toLocaleString() : '-'}</div>
-                    </div>
-                  </div>
-                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <Input value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="Destino (+5511999999999)" />
-                    <Input value={testMsg} onChange={(e) => setTestMsg(e.target.value)} placeholder="Mensagem" />
-                    <Button onClick={sendTest} disabled={testing || status !== 'CONNECTED'} className="h-9 rounded-lg w-full sm:w-auto">
-                      {testing ? 'Enviando…' : 'Enviar teste'}
+                    <Button size="sm" variant="outline" className="h-7" onClick={() => setXaseExpanded(v => !v)}>
+                      {xaseExpanded ? 'Ocultar' : 'Ver detalhes'}
                     </Button>
                   </div>
                 </div>
-              </CardContent>
+              </CardHeader>
+              {xaseExpanded && (
+                <CardContent>
+                  <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Xase API Key" className="h-8 text-sm" />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button onClick={connect} disabled={connecting || !apiKey.trim()} className="h-8 rounded-md w-full sm:w-auto text-xs px-3">
+                          {connecting ? 'Conectando…' : 'Conectar'}
+                        </Button>
+                        <Button variant="outline" onClick={loadStatus} disabled={statusLoading} className="h-8 rounded-md w-full sm:w-auto text-xs px-3">Atualizar</Button>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <div className="text-gray-500">Status</div>
+                        <div className="font-medium text-gray-900">{status}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Número</div>
+                        <div className="font-medium text-gray-900">{phone || '-'}</div>
+                      </div>
+                      <div className="col-span-2">
+                        <div className="text-gray-500">Instance</div>
+                        <div className="font-mono text-xs text-gray-800 break-all">{instanceId || '-'}</div>
+                      </div>
+                      <div className="col-span-2">
+                        <div className="text-gray-500">Última conexão</div>
+                        <div className="text-gray-900">{lastSeenAt ? new Date(lastSeenAt).toLocaleString() : '-'}</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <Input value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="Destino (+5511999999999)" className="h-8 text-sm" />
+                      <Input value={testMsg} onChange={(e) => setTestMsg(e.target.value)} placeholder="Mensagem" className="h-8 text-sm" />
+                      <Button onClick={sendTest} disabled={testing || status !== 'CONNECTED'} className="h-8 rounded-md w-full sm:w-auto text-xs px-3">
+                        {testing ? 'Enviando…' : 'Enviar teste'}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              )}
             </Card>
             {/* Email (SendPulse) – Intermediado pela Zuzz */}
             <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
@@ -490,117 +507,132 @@ export default function IntegrationsPage() {
                   <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                     <CogIcon className="h-5 w-5 text-gray-500" /> Email (SendPulse) — remetente profissional
                   </CardTitle>
-                  <div className="text-xs">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">
-                      {emailStatus}
-                    </span>
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs">
+                      {emailStatus === 'VERIFIED' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Conectado</span>
+                      ) : emailStatus === 'PENDING' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700 ring-1 ring-inset ring-yellow-200">Pendente</span>
+                      ) : emailStatus === 'DISCONNECTED' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Desconectado</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">{emailStatus}</span>
+                      )}
+                    </div>
+                    <Button size="sm" variant="outline" className="h-7" onClick={() => setEmailExpanded(v => !v)}>
+                      {emailExpanded ? 'Ocultar' : 'Ver detalhes'}
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                    <Input value={senderName} onChange={(e) => setSenderName(e.target.value)} placeholder="Nome do remetente (ex.: Clínica Zuzz)" />
-                    <Input value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} placeholder="Email do remetente (ex.: contato@clinica.com)" />
-                    <div className="flex items-center gap-2">
-                      <Button
-                        onClick={async () => {
-                          if (!currentClinic?.id) return toast.error('Selecione uma clínica');
-                          if (!senderEmail.trim()) return toast.error('Informe o email do remetente');
-                          try {
-                            setEmailConnecting(true);
-                            const res = await fetch('/api/integrations/email/senders/request-verification', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ clinicId: currentClinic.id, email: senderEmail.trim(), name: senderName.trim() || undefined })
-                            });
-                            const data = await res.json().catch(() => ({}));
-                            if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
-                            toast.success('Enviamos um email de confirmação para o seu remetente');
-                            setEmailStatus('PENDING');
-                            if (data?.sessionToken) setEmailSession(String(data.sessionToken));
-                            setVerifyMsg('');
-                            setVerifiedEmail('');
-                          } catch (e: any) {
-                            toast.error(e?.message || 'Falha ao solicitar verificação');
-                          } finally {
-                            setEmailConnecting(false);
-                          }
-                        }}
-                        disabled={emailConnecting || !senderEmail.trim()}
-                        className="h-9 rounded-lg w-full md:w-auto"
-                      >
-                        {emailConnecting ? 'Enviando…' : 'Solicitar confirmação'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={loadEmailDbStatus}
-                        disabled={emailStatusLoading}
-                        className="h-9 rounded-lg w-full md:w-auto"
-                      >
-                        {emailStatusLoading ? 'Carregando…' : 'Atualizar'}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="mt-3 grid grid-cols-1 gap-2 text-sm">
-                    <div>
-                      <div className="text-gray-500">Status</div>
-                      <div className="text-gray-900 font-medium">{emailStatus}</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-500">Remetente verificado</div>
-                      <div className="text-gray-900 font-medium break-all">{verifiedEmail || '-'}</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-500">Nome do remetente</div>
-                      <div className="text-gray-900 font-medium break-all">{senderName || '-'}</div>
-                    </div>
-                    {emailStatus === 'PENDING' && (
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
-                        <Input value={verifyCode} onChange={(e) => setVerifyCode(e.target.value)} placeholder="Código de 6 dígitos" />
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="secondary"
-                            onClick={async () => {
-                              if (!emailSession) return toast.error('Sessão não encontrada, solicite novamente');
-                              if (!verifyCode.trim()) return toast.error('Informe o código recebido por email');
-                              try {
-                                setVerifying(true);
-                                setVerifyMsg('');
-                                const res = await fetch('/api/integrations/email/senders/confirm', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ token: emailSession, code: verifyCode.trim() })
-                                });
-                                const data = await res.json().catch(() => ({}));
-                                if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
-                                setEmailStatus('VERIFIED');
-                                setVerifyMsg('Remetente verificado com sucesso.');
-                                // Refresh from DB to retrieve verified email
-                                await loadEmailDbStatus();
-                              } catch (e: any) {
-                                setVerifyMsg(e?.message || 'Erro ao verificar código');
-                              } finally {
-                                setVerifying(false);
-                              }
-                            }}
-                            disabled={verifying || !verifyCode.trim()}
-                            className="h-9 rounded-lg w-full md:w-auto"
-                          >
-                            {verifying ? 'Verificando…' : 'Confirmar código'}
-                          </Button>
-                        </div>
-                        {verifyMsg && <div className="md:col-span-3 text-[12px] text-gray-600">{verifyMsg}</div>}
+              {emailExpanded && (
+                <CardContent>
+                  <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <Input value={senderName} onChange={(e) => setSenderName(e.target.value)} placeholder="Nome do remetente (ex.: Clínica Zuzz)" className="h-8 text-sm" />
+                      <Input value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} placeholder="Email do remetente (ex.: contato@clinica.com)" className="h-8 text-sm" />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          onClick={async () => {
+                            if (!currentClinic?.id) return toast.error('Selecione uma clínica');
+                            if (!senderEmail.trim()) return toast.error('Informe o email do remetente');
+                            try {
+                              setEmailConnecting(true);
+                              const res = await fetch('/api/integrations/email/senders/request-verification', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ clinicId: currentClinic.id, email: senderEmail.trim(), name: senderName.trim() || undefined })
+                              });
+                              const data = await res.json().catch(() => ({}));
+                              if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
+                              toast.success('Enviamos um email de confirmação para o seu remetente');
+                              setEmailStatus('PENDING');
+                              if (data?.sessionToken) setEmailSession(String(data.sessionToken));
+                              setVerifyMsg('');
+                              setVerifiedEmail('');
+                            } catch (e: any) {
+                              toast.error(e?.message || 'Falha ao solicitar verificação');
+                            } finally {
+                              setEmailConnecting(false);
+                            }
+                          }}
+                          disabled={emailConnecting || !senderEmail.trim()}
+                          className="h-8 rounded-md w-full md:w-auto text-xs px-3"
+                        >
+                          {emailConnecting ? 'Enviando…' : 'Solicitar confirmação'}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={loadEmailDbStatus}
+                          disabled={emailStatusLoading}
+                          className="h-8 rounded-md w-full md:w-auto text-xs px-3"
+                        >
+                          {emailStatusLoading ? 'Carregando…' : 'Atualizar'}
+                        </Button>
                       </div>
-                    )}
-                    <div>
-                      <div className="text-gray-500">Webhook (interno)</div>
-                      <div className="font-mono text-xs text-gray-800 break-all">/api/webhooks/sendpulse</div>
                     </div>
-                    <p className="text-[12px] text-gray-500">A Zuzz intermedia a integração. Você só confirma o seu email e usamos as nossas credenciais para enviar. Depois podemos configurar domínio (SPF/DKIM) para melhor entregabilidade.</p>
+                    <div className="mt-3 grid grid-cols-1 gap-2 text-sm">
+                      <div>
+                        <div className="text-gray-500">Status</div>
+                        <div className="text-gray-900 font-medium">
+                          {emailStatus === 'VERIFIED' ? 'Conectado' : emailStatus === 'PENDING' ? 'Pendente' : emailStatus === 'DISCONNECTED' ? 'Desconectado' : emailStatus}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Remetente verificado</div>
+                        <div className="text-gray-900 font-medium break-all">{verifiedEmail || '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Nome do remetente</div>
+                        <div className="text-gray-900 font-medium break-all">{senderName || '-'}</div>
+                      </div>
+                      {emailStatus === 'PENDING' && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                          <Input value={verifyCode} onChange={(e) => setVerifyCode(e.target.value)} placeholder="Código de 6 dígitos" className="h-8 text-sm" />
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="secondary"
+                              onClick={async () => {
+                                if (!emailSession) return toast.error('Sessão não encontrada, solicite novamente');
+                                if (!verifyCode.trim()) return toast.error('Informe o código recebido por email');
+                                try {
+                                  setVerifying(true);
+                                  setVerifyMsg('');
+                                  const res = await fetch('/api/integrations/email/senders/confirm', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ token: emailSession, code: verifyCode.trim() })
+                                  });
+                                  const data = await res.json().catch(() => ({}));
+                                  if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
+                                  setEmailStatus('VERIFIED');
+                                  setVerifyMsg('Remetente verificado com sucesso.');
+                                  // Refresh from DB to retrieve verified email
+                                  await loadEmailDbStatus();
+                                } catch (e: any) {
+                                  setVerifyMsg(e?.message || 'Erro ao verificar código');
+                                } finally {
+                                  setVerifying(false);
+                                }
+                              }}
+                              disabled={verifying || !verifyCode.trim()}
+                              className="h-8 rounded-md w-full md:w-auto text-xs px-3"
+                            >
+                              {verifying ? 'Verificando…' : 'Confirmar código'}
+                            </Button>
+                          </div>
+                          {verifyMsg && <div className="md:col-span-3 text-[12px] text-gray-600">{verifyMsg}</div>}
+                        </div>
+                      )}
+                      <div>
+                        <div className="text-gray-500">Webhook (interno)</div>
+                        <div className="font-mono text-xs text-gray-800 break-all">/api/webhooks/sendpulse</div>
+                      </div>
+                      <p className="text-[12px] text-gray-500">A Zuzz intermedia a integração. Você só confirma o seu email e usamos as nossas credenciais para enviar. Depois podemos configurar domínio (SPF/DKIM) para melhor entregabilidade.</p>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
+                </CardContent>
+              )}
             </Card>
             {/* WhatsApp (Oficial) */}
             <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
@@ -614,74 +646,81 @@ export default function IntegrationsPage() {
                   <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                     <CogIcon className="h-5 w-5 text-gray-500" /> WhatsApp (Oficial)
                   </CardTitle>
-                  <div className="text-xs">
-                    {waStatusLoading ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200">Carregando…</span>
-                    ) : waStatus === 'CONNECTED' ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Conectado</span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Desconectado</span>
-                    )}
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs">
+                      {waStatusLoading ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200">Carregando…</span>
+                      ) : waStatus === 'CONNECTED' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Conectado</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Desconectado</span>
+                      )}
+                    </div>
+                    <Button size="sm" variant="outline" className="h-7" onClick={() => setWaExpanded(v => !v)}>
+                      {waExpanded ? 'Ocultar' : 'Ver detalhes'}
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                    <Input value={waAccessToken} onChange={(e) => setWaAccessToken(e.target.value)} placeholder="Access Token" />
-                    <Input value={waPhoneNumberId} onChange={(e) => setWaPhoneNumberId(e.target.value)} placeholder="Phone Number ID" />
-                    <Input value={waWabaId} onChange={(e) => setWaWabaId(e.target.value)} placeholder="WABA ID (opcional)" />
-                    <div className="flex items-center gap-2">
-                      <Button onClick={connectWa} disabled={connecting || !waAccessToken.trim() || !waPhoneNumberId.trim()} className="h-9 rounded-lg w-full md:w-auto">
-                        {connecting ? 'Conectando…' : 'Conectar'}
+              {waExpanded && (
+                <CardContent>
+                  <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                      <Input value={waAccessToken} onChange={(e) => setWaAccessToken(e.target.value)} placeholder="Access Token" className="h-8 text-sm" />
+                      <Input value={waPhoneNumberId} onChange={(e) => setWaPhoneNumberId(e.target.value)} placeholder="Phone Number ID" className="h-8 text-sm" />
+                      <Input value={waWabaId} onChange={(e) => setWaWabaId(e.target.value)} placeholder="WABA ID (opcional)" className="h-8 text-sm" />
+                      <div className="flex items-center gap-2">
+                        <Button onClick={connectWa} disabled={connecting || !waAccessToken.trim() || !waPhoneNumberId.trim()} className="h-8 rounded-md w-full md:w-auto text-xs px-3">
+                          {connecting ? 'Conectando…' : 'Conectar'}
+                        </Button>
+                        <Button variant="outline" onClick={loadWaStatus} disabled={waStatusLoading} className="h-8 rounded-md w-full md:w-auto text-xs px-3">Atualizar</Button>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="outline"
+                        className="h-9 rounded-lg border-gray-200"
+                        onClick={() => {
+                          if (!currentClinic?.id) return toast.error('Selecione uma clínica');
+                          const returnTo = '/doctor/integrations';
+                          window.location.href = `/api/integrations/whatsapp/oauth/start?clinicId=${encodeURIComponent(currentClinic.id)}&returnTo=${encodeURIComponent(returnTo)}`;
+                        }}
+                      >
+                        Conectar Facebook
                       </Button>
-                      <Button variant="outline" onClick={loadWaStatus} disabled={waStatusLoading} className="h-9 rounded-lg w-full md:w-auto">Atualizar</Button>
+                      <Button variant="secondary" className="h-9 rounded-lg" onClick={openWizard}>Wizard de número</Button>
+                      <Link href="/doctor/integrations/whatsapp/templates">
+                        <Button variant="secondary" className="h-9 rounded-lg" disabled={waStatus !== 'CONNECTED'}>Templates</Button>
+                      </Link>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <div className="text-gray-500">Status</div>
+                        <div className="font-medium text-gray-900">{waStatus}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Número</div>
+                        <div className="font-medium text-gray-900">{waPhone || '-'}</div>
+                      </div>
+                      <div className="col-span-2">
+                        <div className="text-gray-500">Phone Number ID</div>
+                        <div className="font-mono text-xs text-gray-800 break-all">{waPhoneNumberId || '-'}</div>
+                      </div>
+                      <div className="col-span-2">
+                        <div className="text-gray-500">WABA ID</div>
+                        <div className="font-mono text-xs text-gray-800 break-all">{waWabaId || '-'}</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <Input value={waTestTo} onChange={(e) => setWaTestTo(e.target.value)} placeholder="Destino (+5511999999999)" className="h-8 text-sm" />
+                      <Input value={waTestMsg} onChange={(e) => setWaTestMsg(e.target.value)} placeholder="Mensagem" className="h-8 text-sm" />
+                      <Button onClick={sendWaTest} disabled={waTesting || waStatus !== 'CONNECTED'} className="h-8 rounded-md w-full md:w-auto text-xs px-3">
+                        {waTesting ? 'Enviando…' : 'Enviar teste'}
+                      </Button>
                     </div>
                   </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <Button
-                      variant="outline"
-                      className="h-9 rounded-lg border-gray-200"
-                      onClick={() => {
-                        if (!currentClinic?.id) return toast.error('Selecione uma clínica');
-                        const returnTo = '/doctor/integrations';
-                        window.location.href = `/api/integrations/whatsapp/oauth/start?clinicId=${encodeURIComponent(currentClinic.id)}&returnTo=${encodeURIComponent(returnTo)}`;
-                      }}
-                    >
-                      Conectar Facebook
-                    </Button>
-                    <Button variant="secondary" className="h-9 rounded-lg" onClick={openWizard}>Wizard de número</Button>
-                    <Link href="/doctor/integrations/whatsapp/templates">
-                      <Button variant="secondary" className="h-9 rounded-lg" disabled={waStatus !== 'CONNECTED'}>Templates</Button>
-                    </Link>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <div className="text-gray-500">Status</div>
-                      <div className="font-medium text-gray-900">{waStatus}</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-500">Número</div>
-                      <div className="font-medium text-gray-900">{waPhone || '-'}</div>
-                    </div>
-                    <div className="col-span-2">
-                      <div className="text-gray-500">Phone Number ID</div>
-                      <div className="font-mono text-xs text-gray-800 break-all">{waPhoneNumberId || '-'}</div>
-                    </div>
-                    <div className="col-span-2">
-                      <div className="text-gray-500">WABA ID</div>
-                      <div className="font-mono text-xs text-gray-800 break-all">{waWabaId || '-'}</div>
-                    </div>
-                  </div>
-                  <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
-                    <Input value={waTestTo} onChange={(e) => setWaTestTo(e.target.value)} placeholder="Destino (+5511999999999)" />
-                    <Input value={waTestMsg} onChange={(e) => setWaTestMsg(e.target.value)} placeholder="Mensagem" />
-                    <Button onClick={sendWaTest} disabled={waTesting || waStatus !== 'CONNECTED'} className="h-9 rounded-lg w-full md:w-auto">
-                      {waTesting ? 'Enviando…' : 'Enviar teste'}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
+                </CardContent>
+              )}
             </Card>
             {/* Stripe */}
             <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
@@ -691,35 +730,42 @@ export default function IntegrationsPage() {
                 </div>
               )}
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                  <CogIcon className="h-5 w-5 text-gray-500" /> Pagamentos (Stripe)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-sm">
-                  <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
-                    <p className="text-gray-600">Conecte uma conta Stripe para habilitar pagamentos online.</p>
-                    <a href="https://stripe.com/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium mt-2">
-                      <LinkIcon className="h-4 w-4" /> Saiba mais
-                    </a>
-                  </div>
-                  <div className="flex items-center gap-2 mt-3">
-                    {isCreator ? (
-                      <Link href="/doctor/payments">
-                        <Button className="bg-gray-900 hover:bg-black text-white rounded-lg h-9 px-4 font-medium">
-                          Abrir pagamentos
-                        </Button>
-                      </Link>
-                    ) : (
-                      <Link href="/clinic/subscription">
-                        <Button variant="outline" className="border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-lg h-9 px-4">
-                          Upgrade plan
-                        </Button>
-                      </Link>
-                    )}
-                  </div>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                    <CogIcon className="h-5 w-5 text-gray-500" /> Pagamentos (Stripe)
+                  </CardTitle>
+                  <Button size="sm" variant="outline" className="h-7" onClick={() => setStripeExpanded(v => !v)}>
+                    {stripeExpanded ? 'Ocultar' : 'Ver detalhes'}
+                  </Button>
                 </div>
-              </CardContent>
+              </CardHeader>
+              {stripeExpanded && (
+                <CardContent>
+                  <div className="text-sm">
+                    <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
+                      <p className="text-gray-600">Conecte uma conta Stripe para habilitar pagamentos online.</p>
+                      <a href="https://stripe.com/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium mt-2">
+                        <LinkIcon className="h-4 w-4" /> Saiba mais
+                      </a>
+                    </div>
+                    <div className="flex items-center gap-2 mt-3">
+                      {isCreator ? (
+                        <Link href="/doctor/payments">
+                          <Button className="bg-gray-900 hover:bg-black text-white rounded-lg h-9 px-4 font-medium">
+                            Abrir pagamentos
+                          </Button>
+                        </Link>
+                      ) : (
+                        <Link href="/clinic/subscription">
+                          <Button variant="outline" className="border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-lg h-9 px-4">
+                            Upgrade plan
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              )}
             </Card>
           </div>
           {/* WhatsApp Onboarding Wizard */}

@@ -15,14 +15,18 @@ export default function NewAutomationPage() {
   const [triggerType, setTriggerType] = useState("customer_inactive_days");
   const [triggerDays, setTriggerDays] = useState(30);
   // Multi-actions state
-  type ActionItem =
-    | { id: string; type: 'send_campaign'; channel: 'email'|'whatsapp'|'sms'; campaignId: string }
-    | { id: string; type: 'wait'; amount: number; unit: 'minutes'|'hours'|'days' };
+  type EmailMsg = { subject: string; html: string; text?: string };
+  type WhatsAppMsg = { text: string; template?: string|null; templateVariables?: Record<string,string>|null };
+  type SmsMsg = { text: string };
+  type SendCampaign = { id: string; type: 'send_campaign'; channel: 'email'|'whatsapp'|'sms'; campaignId: string; overrides?: { email?: EmailMsg; whatsapp?: WhatsAppMsg; sms?: SmsMsg } };
+  type WaitAction = { id: string; type: 'wait'; amount: number; unit: 'minutes'|'hours'|'days' };
+  type ActionItem = SendCampaign | WaitAction;
   const [actions, setActions] = useState<ActionItem[]>([{
     id: Math.random().toString(36).slice(2),
     type: 'send_campaign',
     channel: 'email',
-    campaignId: ''
+    campaignId: '',
+    overrides: { email: { subject: '', html: '', text: '' } }
   }]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string|null>(null);
@@ -66,10 +70,21 @@ export default function NewAutomationPage() {
         name: name || `Automation ${new Date().toLocaleString('pt-BR')}`,
         trigger_type: triggerType,
         trigger_config: triggerType === 'customer_inactive_days' ? { days: Number(triggerDays)||30 } : {},
-        // If multiple actions present, send actions[] and let API persist as multi
-        actions: actions.map(a => (a.type === 'send_campaign'
-          ? { type: a.type, channel: a.channel, campaignId: a.campaignId }
-          : { type: a.type, amount: a.amount, unit: a.unit })),
+        // Map actions; include overrides when present
+        actions: actions.map(a => (
+          a.type === 'send_campaign'
+            ? (() => {
+                const base: any = { type: 'send_campaign', channel: a.channel, campaignId: a.campaignId };
+                const ov = (a as SendCampaign).overrides || {};
+                const overrides: any = {};
+                if (a.channel === 'email' && ov.email) overrides.email = { subject: ov.email.subject || '', html: ov.email.html || '', ...(ov.email.text ? { text: ov.email.text } : {}) };
+                if (a.channel === 'whatsapp' && ov.whatsapp) overrides.whatsapp = { text: ov.whatsapp.text || '', template: ov.whatsapp.template ?? null, templateVariables: ov.whatsapp.templateVariables ?? null };
+                if (a.channel === 'sms' && ov.sms) overrides.sms = { text: ov.sms.text || '' };
+                if (Object.keys(overrides).length > 0) base.overrides = overrides;
+                return base;
+              })()
+            : { type: 'wait', amount: (a as WaitAction).amount, unit: (a as WaitAction).unit }
+        )),
       };
       const res = await fetch('/api/v2/doctor/automations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const json = await res.json().catch(() => ({}));
@@ -82,7 +97,8 @@ export default function NewAutomationPage() {
   };
 
   const addAction = () => {
-    setActions(prev => [...prev, { id: Math.random().toString(36).slice(2), type: 'send_campaign', channel: 'email', campaignId: '' }]);
+    const newAction: SendCampaign = { id: Math.random().toString(36).slice(2), type: 'send_campaign', channel: 'email', campaignId: '', overrides: { email: { subject: '', html: '', text: '' } } };
+    setActions(prev => [...prev, newAction]);
   };
   const removeAction = (id: string) => {
     setActions(prev => prev.filter(a => a.id !== id));
@@ -170,14 +186,27 @@ export default function NewAutomationPage() {
                         <>
                           <div>
                             <label className="block text-xs text-gray-600 mb-1">Canal</label>
-                            <select value={a.channel} onChange={(e)=>updateAction(a.id, { channel: e.target.value as any })} className="w-full h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm">
+                            <select value={a.channel} onChange={(e)=>{
+                              const ch = e.target.value as 'email'|'whatsapp'|'sms';
+                              const patch: Partial<ActionItem> = { channel: ch } as any;
+                              // ensure overrides object exists for the new channel
+                              const current = a as SendCampaign;
+                              const ov = current.overrides || {};
+                              if (ch === 'email' && !ov.email) (patch as any).overrides = { ...ov, email: { subject: '', html: '', text: '' } };
+                              if (ch === 'whatsapp' && !ov.whatsapp) (patch as any).overrides = { ...ov, whatsapp: { text: '', template: null, templateVariables: null } };
+                              if (ch === 'sms' && !ov.sms) (patch as any).overrides = { ...ov, sms: { text: '' } };
+                              updateAction(a.id, patch);
+                            }} className="w-full h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm">
                               <option value="email">Email</option>
                               <option value="whatsapp">WhatsApp</option>
                               <option value="sms">SMS</option>
                             </select>
                           </div>
                           <div className="md:col-span-2">
-                            <label className="block text-xs text-gray-600 mb-1">Campanha</label>
+                            <div className="flex items-center justify-between">
+                              <label className="block text-xs text-gray-600 mb-1">Campanha</label>
+                              <Link href="/doctor/campaigns" className="text-[11px] text-blue-600 hover:underline">Gerenciar campanhas</Link>
+                            </div>
                             <select
                               value={a.campaignId}
                               onChange={(e)=>updateAction(a.id, { campaignId: e.target.value })}
@@ -191,6 +220,39 @@ export default function NewAutomationPage() {
                                 </option>
                               ))}
                             </select>
+                          </div>
+                          {/* Overrides editor */}
+                          <div className="md:col-span-4 space-y-2">
+                            <div className="text-[11px] text-gray-500">Mensagem da campanha será usada como base. Você pode sobrescrever por canal (opcional).</div>
+                            {a.channel === 'email' && (
+                              <div className="grid md:grid-cols-3 gap-2">
+                                <div>
+                                  <label className="block text-xs text-gray-600 mb-1">Assunto (override)</label>
+                                  <input value={(a as SendCampaign).overrides?.email?.subject || ''} onChange={(e)=> updateAction(a.id, { overrides: { email: { subject: e.target.value } } } as any)} className="w-full h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm" />
+                                </div>
+                                <div className="md:col-span-2">
+                                  <label className="block text-xs text-gray-600 mb-1">Corpo (HTML) (override)</label>
+                                  <textarea value={(a as SendCampaign).overrides?.email?.html || ''} onChange={(e)=> updateAction(a.id, { overrides: { email: { html: e.target.value } } } as any)} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" rows={4} />
+                                </div>
+                                <div className="md:col-span-3">
+                                  <label className="block text-xs text-gray-600 mb-1">Texto (opcional) (override)</label>
+                                  <textarea value={(a as SendCampaign).overrides?.email?.text || ''} onChange={(e)=> updateAction(a.id, { overrides: { email: { text: e.target.value } } } as any)} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" rows={2} />
+                                </div>
+                              </div>
+                            )}
+                            {a.channel === 'whatsapp' && (
+                              <div>
+                                <label className="block text-xs text-gray-600 mb-1">Mensagem (override)</label>
+                                <textarea value={(a as SendCampaign).overrides?.whatsapp?.text || ''} onChange={(e)=> updateAction(a.id, { overrides: { whatsapp: { text: e.target.value } } } as any)} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" rows={3} />
+                              </div>
+                            )}
+                            {a.channel === 'sms' && (
+                              <div>
+                                <label className="block text-xs text-gray-600 mb-1">Mensagem (override) (160 caracteres)</label>
+                                <textarea maxLength={320} value={(a as SendCampaign).overrides?.sms?.text || ''} onChange={(e)=> updateAction(a.id, { overrides: { sms: { text: e.target.value } } } as any)} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" rows={2} />
+                                <div className="text-[11px] text-gray-500 mt-1">{((a as SendCampaign).overrides?.sms?.text || '').length} / 320</div>
+                              </div>
+                            )}
                           </div>
                         </>
                       ) : (

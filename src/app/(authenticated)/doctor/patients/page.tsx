@@ -856,16 +856,17 @@ export default function PatientsPage() {
                 <Link href="/doctor/membership">
                   <Button
                     variant="outline"
-                    className="rounded-xl h-9 px-3 border-gray-200 text-gray-700 hover:bg-gray-50"
+                    size="sm"
+                    className="h-8 text-gray-700 hover:bg-gray-50"
                     title="Configure membership levels"
                   >
-                    <span className="hidden sm:inline">Membership Levels</span>
-                    <SparklesIcon className="h-4 w-4 sm:ml-2" />
+                    Membership Levels
                   </Button>
                 </Link>
                 <Button
                   variant="outline"
-                  className="rounded-xl h-9 px-3 border-gray-200 text-gray-700 hover:bg-gray-50"
+                  size="sm"
+                  className="h-8 text-gray-700 hover:bg-gray-50"
                   onClick={async () => {
                     const res = await checkLimit('patients', currentClinic?.id);
                     if (!res.allowed) {
@@ -878,11 +879,11 @@ export default function PatientsPage() {
                   disabled={isImporting}
                   title="Import clients from CSV"
                 >
-                  <span className="hidden sm:inline">{isImporting ? 'Importing...' : 'Import CSV'}</span>
-                  <ArrowUpTrayIcon className="h-4 w-4 sm:ml-2" />
+                  {isImporting ? 'Importing...' : 'Import CSV'}
                 </Button>
                 <Button
-                  className="bg-gray-900 hover:bg-black text-white shadow-sm rounded-xl h-9 px-4 font-medium"
+                  size="sm"
+                  className="h-8 bg-gray-900 hover:bg-black text-white shadow-sm"
                   onClick={async () => {
                     const res = await checkLimit('patients', currentClinic?.id);
                     if (!res.allowed) {
@@ -894,7 +895,7 @@ export default function PatientsPage() {
                     setShowAddPatient(true);
                   }}
                 >
-                  <UserPlusIcon className="h-4 w-4 mr-2" />
+                  <UserPlusIcon className="h-3.5 w-3.5 mr-1.5" />
                   Add Client
                 </Button>
               </div>

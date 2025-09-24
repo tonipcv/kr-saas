@@ -1171,6 +1171,9 @@ model User {
   // Back-relations for tenant-specific patient profiles
   doctor_profiles              PatientProfile[]            @relation("ProfileDoctor")
   patient_profiles             PatientProfile[]            @relation("ProfilePatient")
+  // Messaging templates and sequences
+  message_templates            MessageTemplate[]          @relation("DoctorMessageTemplates")
+  message_sequences            MessageSequence[]          @relation("DoctorMessageSequences")
 }
 
 // Template options for the public doctor page (slug page)
@@ -1805,4 +1808,117 @@ model CampaignJob {
   @@index([scheduleAt])
   @@index([status])
   @@map("campaign_jobs")
+}
+
+// ==========================
+// Messaging Templates/Flows
+// ==========================
+
+// Communication channels supported: kept here for reference, field uses String in DB
+// enum MessageChannel {
+//   email
+//   whatsapp
+//   sms
+// }
+
+// Time units for delays: kept here for reference, field uses String in DB
+// enum TimeUnit {
+//   minutes
+//   hours
+//   days
+// }
+
+// How to render email body: kept here for reference, field uses String in DB
+// enum RenderStrategy {
+//   raw_html
+//   mjml
+// }
+
+/// Reusable per-channel message template owned by a doctor
+model MessageTemplate {
+  id        String         @id @default(cuid())
+  doctorId  String
+  name      String
+  channel   String @db.VarChar(20)
+  // Email fields (for channel = email)
+  subject   String?
+  html      String?
+  text      String?
+  // Optional MJML source; if set with renderStrategy = mjml, compile to HTML on send
+  mjml      String?
+  renderStrategy String? @default("raw_html") @db.VarChar(20)
+  // Optional sender overrides (if not provided, use doctor's defaults)
+  fromName  String?
+  fromEmail String?
+  replyTo   String?
+  // WhatsApp template (for channel = whatsapp)
+  provider       String?   // e.g., 'meta'
+  waTemplateName String?
+  waLanguage     String?   @default("pt_BR")
+  waCategory     String?   // MARKETING | UTILITY | AUTHENTICATION (livre)
+  waComponents   Json?
+  waStatus       String?   // APPROVED | REJECTED | PENDING
+  waProviderId   String?
+  // Common metadata
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @default(now()) @updatedAt
+  // Variables & validation
+  variablesSchema Json?    // JSON Schema to validate variables passed to this template
+  sampleVariables Json?    // Example variables for preview
+  // Organization
+  tags      String[]       @default([])
+  // SMS helpers
+  smsMaxSegments Int?
+
+  doctor    User           @relation("DoctorMessageTemplates", fields: [doctorId], references: [id], onDelete: Cascade)
+  steps     MessageSequenceStep[]
+
+  @@index([doctorId])
+  @@unique([doctorId, name])
+  // Avoid duplicate WA templates per doctor/language
+  @@unique([doctorId, channel, waTemplateName, waLanguage])
+  @@map("message_templates")
+}
+
+/// A sequence (flow) of messages composed of multiple steps with delays
+model MessageSequence {
+  id          String                 @id @default(cuid())
+  doctorId    String
+  name        String
+  description String?
+  isActive    Boolean                @default(true)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @default(now()) @updatedAt
+
+  doctor      User                   @relation("DoctorMessageSequences", fields: [doctorId], references: [id], onDelete: Cascade)
+  steps       MessageSequenceStep[]
+
+  @@index([doctorId])
+  @@unique([doctorId, name])
+  @@map("message_sequences")
+}
+
+/// An individual scheduled message within a sequence
+model MessageSequenceStep {
+  id          String           @id @default(cuid())
+  sequenceId  String
+  orderIndex  Int              @default(0)
+  // Delay relative to previous step or sequence start
+  delayAmount Int              @default(0)
+  delayUnit   String           @default("hours") @db.VarChar(16)
+
+  // Template to send for this step
+  templateId  String
+
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @default(now()) @updatedAt
+
+  sequence    MessageSequence  @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  template    MessageTemplate  @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  @@index([sequenceId])
+  @@index([templateId])
+  @@unique([sequenceId, orderIndex])
+  @@map("message_sequence_steps")
 }
