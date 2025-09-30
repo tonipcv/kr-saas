@@ -15,7 +15,6 @@ export async function GET(req: Request) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
-
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status');
     const clinicId = searchParams.get('clinicId');
@@ -123,6 +122,81 @@ export async function GET(req: Request) {
 
   } catch (error) {
     console.error('Error in GET /api/referrals/manage:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+// PUT - Atualizar status da indicação (e campos opcionais)
+export async function PUT(req: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const leadId = String(body.leadId || '').trim();
+    const status = String(body.status || '').trim().toUpperCase();
+    const notes = typeof body.notes === 'string' ? body.notes : undefined;
+    const offerAmount = typeof body.offerAmount === 'number' ? body.offerAmount : undefined;
+
+    if (!leadId) {
+      return NextResponse.json({ error: 'leadId é obrigatório' }, { status: 400 });
+    }
+    const allowedStatuses = new Set(['PENDING', 'CONTACTED', 'CONVERTED', 'REJECTED', 'EXPIRED']);
+    if (!status || !allowedStatuses.has(status)) {
+      return NextResponse.json({ error: 'status inválido' }, { status: 400 });
+    }
+
+    // Load lead and verify access
+    const lead = await prisma.referralLead.findUnique({
+      where: { id: leadId },
+      select: { id: true, doctorId: true, clinicId: true, customFields: true },
+    });
+    if (!lead) {
+      return NextResponse.json({ error: 'Lead não encontrado' }, { status: 404 });
+    }
+
+    let hasAccess = lead.doctorId === session.user.id;
+    if (!hasAccess && lead.clinicId) {
+      const clinic = await prisma.clinic.findFirst({
+        where: {
+          id: lead.clinicId,
+          OR: [
+            { ownerId: session.user.id },
+            { members: { some: { userId: session.user.id, isActive: true } } },
+          ],
+        },
+        select: { id: true },
+      });
+      hasAccess = !!clinic;
+    }
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+    }
+
+    // Build update payload, merging customFields
+    const existing = (lead.customFields as any) || {};
+    const mergedCustom: any = { ...existing };
+    if (typeof notes === 'string') {
+      mergedCustom.notes = notes;
+    }
+    if (typeof offerAmount === 'number') {
+      mergedCustom.offer = { ...(existing.offer || {}), amount: offerAmount };
+    }
+
+    const updated = await prisma.referralLead.update({
+      where: { id: leadId },
+      data: {
+        status,
+        ...(Object.keys(mergedCustom).length ? { customFields: mergedCustom } : {}),
+      },
+      select: { id: true, status: true },
+    });
+
+    return NextResponse.json({ success: true, lead: updated });
+  } catch (error) {
+    console.error('Error in PUT /api/referrals/manage:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

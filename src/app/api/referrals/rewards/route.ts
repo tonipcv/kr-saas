@@ -175,7 +175,9 @@ export async function POST(req: Request) {
       data: {
         title,
         description,
+        // Keep both fields in sync; schema requires `value` and we use `costInCredits` in UI
         costInCredits: creditsRequired,
+        value: creditsRequired,
         maxRedemptions: maxRedemptions || null,
         imageUrl: imageUrl || null,
         doctorId: session.user.id,
@@ -277,7 +279,9 @@ export async function PUT(req: Request) {
       data: {
         title,
         description,
+        // Keep both fields in sync on update as well
         costInCredits: creditsRequired,
+        value: creditsRequired,
         maxRedemptions: maxRedemptions || null,
         imageUrl: imageUrl || null,
         isActive: isActive ?? true,

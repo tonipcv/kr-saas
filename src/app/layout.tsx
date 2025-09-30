@@ -94,17 +94,17 @@ export default function RootLayout({
         <Toaster 
           position="top-right"
           theme="light"
-          richColors
-          closeButton
+          closeButton={false}
           toastOptions={{
+            duration: 2000,
             style: {
               background: 'white',
               border: '1px solid #e5e7eb',
               color: '#374151',
               fontSize: '14px',
               fontWeight: '500',
-              borderRadius: '12px',
-              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+              borderRadius: '10px',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.06)',
             },
             className: 'font-medium',
           }}

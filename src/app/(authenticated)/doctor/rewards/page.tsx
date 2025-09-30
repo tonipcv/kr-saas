@@ -465,44 +465,53 @@ export default function DoctorRewardsPage() {
         <div className="lg:ml-64">
           <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
             {/* Header Skeleton */}
-            <div className="flex justify-between items-start mb-8">
-              <div>
-                <div className="h-8 bg-gray-200 rounded-lg w-32 mb-2 animate-pulse"></div>
-                <div className="h-5 bg-gray-100 rounded-lg w-64 animate-pulse"></div>
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-4">
+              <div className="space-y-2">
+                <div className="h-8 bg-gray-200 rounded-lg w-36 animate-pulse" />
+                <div className="h-5 bg-gray-100 rounded-lg w-64 animate-pulse" />
               </div>
-              <div className="h-12 bg-gray-200 rounded-xl w-32 animate-pulse"></div>
+              <div className="h-8 bg-gray-200 rounded-full w-32 animate-pulse" />
             </div>
 
-            {/* Rewards Grid Skeleton */}
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <Card key={i} className="bg-white border-gray-200 shadow-lg rounded-2xl">
-                  <CardHeader className="pb-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="h-6 bg-gray-200 rounded-lg w-3/4 mb-2 animate-pulse"></div>
-                        <div className="h-4 bg-gray-100 rounded-lg w-full animate-pulse"></div>
-                        <div className="h-4 bg-gray-100 rounded-lg w-2/3 mt-1 animate-pulse"></div>
-                      </div>
-                      <div className="h-6 w-12 bg-gray-100 rounded-full animate-pulse"></div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="h-4 bg-gray-100 rounded w-24 animate-pulse"></div>
-                      <div className="h-6 bg-gray-100 rounded-full w-16 animate-pulse"></div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="h-4 bg-gray-100 rounded w-20 animate-pulse"></div>
-                      <div className="h-4 bg-gray-100 rounded w-12 animate-pulse"></div>
-                    </div>
-                    <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
-                      <div className="h-10 bg-gray-100 rounded-xl flex-1 animate-pulse"></div>
-                      <div className="h-10 bg-gray-100 rounded-xl w-10 animate-pulse"></div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+            {/* Table Skeleton (products-style) */}
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white/70 backdrop-blur-sm shadow-sm">
+              <table className="min-w-full">
+                <thead className="bg-gray-50/80">
+                  <tr className="text-left text-xs text-gray-600">
+                    <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Title</th>
+                    <th className="px-3 py-3.5 font-medium">Credits</th>
+                    <th className="px-3 py-3.5 font-medium">Codes</th>
+                    <th className="px-3 py-3.5 font-medium">Status</th>
+                    <th className="px-3 py-3.5 font-medium">Created</th>
+                    <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <tr key={`sk-${i}`}>
+                      <td className="py-3.5 pl-4 pr-3 sm:pl-6">
+                        <div className="h-4 w-48 bg-gray-100 rounded animate-pulse" />
+                        <div className="mt-1 h-3 w-72 bg-gray-100 rounded animate-pulse" />
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <div className="h-4 w-10 bg-gray-100 rounded animate-pulse" />
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <div className="h-4 w-10 bg-gray-100 rounded animate-pulse" />
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <div className="h-5 w-16 bg-gray-100 rounded-full animate-pulse" />
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <div className="h-4 w-24 bg-gray-100 rounded animate-pulse" />
+                      </td>
+                      <td className="py-3.5 pl-3 pr-4 sm:pr-6 text-right">
+                        <div className="h-8 w-20 bg-gray-100 rounded-lg animate-pulse inline-block" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -558,171 +567,72 @@ export default function DoctorRewardsPage() {
             </div>
           )}
 
-          {/* Rewards List */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {rewards.map((reward) => (
-              <Card
-                key={reward.id}
-                className={`relative bg-white border border-gray-200 rounded-xl hover:border-gray-300 transition ${!reward.isActive ? 'opacity-60' : ''}`}
-              >
-                {reward.imageUrl ? (
-                  <div className="relative h-28 w-full overflow-hidden rounded-t-xl">
-                    <Image src={reward.imageUrl} alt={reward.title} fill className="object-cover" />
-                  </div>
-                ) : null}
-                <CardHeader className="pb-4">
-                  <div className="flex justify-between items-start">
-                    <div className="min-w-0">
-                      <CardTitle className="text-base font-semibold text-gray-900 truncate">
-                        {reward.title}
-                      </CardTitle>
-                      <CardDescription className="mt-1 text-sm text-gray-600 line-clamp-2">
-                        {reward.description}
-                      </CardDescription>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500">Active</span>
-                      <Switch
-                        checked={reward.isActive}
-                        onCheckedChange={() => handleToggleActive(reward)}
-                      />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">Credits required</span>
-                      <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-xs font-medium text-gray-700">
-                        {reward.creditsRequired}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">Codes available</span>
-                      <span className="text-xs font-medium text-gray-900">{reward.codesAvailable ?? 0}</span>
-                    </div>
-
-                    {reward.maxRedemptions && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-500">Redemption limit</span>
-                        <span className="text-xs font-medium text-gray-900">
-                          {reward.currentRedemptions} / {reward.maxRedemptions}
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">Total redeemed</span>
-                      <span className="text-xs font-medium text-gray-900">{reward.currentRedemptions}</span>
-                    </div>
-
-                    {reward.maxRedemptions && reward.currentRedemptions >= reward.maxRedemptions && (
-                      <div className="text-gray-700 bg-gray-100 p-2.5 rounded-lg border border-gray-200">
-                        <span className="text-xs">Limit reached</span>
-                      </div>
-                    )}
-
-                    <div className="flex space-x-2 pt-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openEditDialog(reward)}
-                        className="flex-1 border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-lg h-8"
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openCodesDialog(reward.id)}
-                        className="flex-1 border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-lg h-8"
-                      >
-                        Codes
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDelete(reward)}
-                        className="text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50 rounded-lg h-8 px-3"
-                      >
-                        Delete
-                      </Button>
-                    </div>
-
-                    {/* Pending Redemptions */}
-                    {reward.redemptions?.some(r => r.status === 'PENDING') && (
-                      <div className="mt-4 border-t border-gray-200 pt-3">
-                        <div className="text-xs text-gray-500 mb-2">Pending redemptions</div>
-                        <div className="space-y-2">
-                          {reward.redemptions
-                            .filter(r => r.status === 'PENDING')
-                            .map((r) => (
-                              <div key={r.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-2 border border-gray-200">
-                                <div className="min-w-0">
-                                  <div className="text-sm font-medium text-gray-900 truncate">{r.user.name || r.user.email}</div>
-                                  <div className="text-xs text-gray-500">{new Date(r.redeemedAt).toLocaleString()}</div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    size="sm"
-                                    className="bg-gray-900 hover:bg-black text-white rounded-md h-7 px-3"
-                                    onClick={() => handleApproveRedemption(r.id)}
-                                    disabled={actionLoadingId === r.id}
-                                  >
-                                    {actionLoadingId === r.id ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
-                                    Approve
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="border-red-200 text-red-600 hover:bg-red-50 rounded-md h-7 px-3"
-                                    onClick={() => handleRejectRedemption(r.id)}
-                                    disabled={actionLoadingId === r.id}
-                                  >
-                                    {actionLoadingId === r.id ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
-                                    Reject
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
+          {/* Rewards List (products-style table) */}
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white/70 backdrop-blur-sm shadow-sm">
+            <table className="min-w-full">
+              <thead className="bg-gray-50/80">
+                <tr className="text-left text-xs text-gray-600">
+                  <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Title</th>
+                  <th className="px-3 py-3.5 font-medium">Credits</th>
+                  <th className="px-3 py-3.5 font-medium">Codes</th>
+                  <th className="px-3 py-3.5 font-medium">Status</th>
+                  <th className="px-3 py-3.5 font-medium">Created</th>
+                  <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {rewards.map((reward) => (
+                  <tr key={reward.id} className="hover:bg-gray-50/60">
+                    <td className="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                      <div className="flex items-center gap-3">
+                        <div className="flex flex-col min-w-0">
+                          <span className="truncate">{reward.title}</span>
+                          <span className="text-xs text-gray-500 truncate max-w-[480px]">{reward.description}</span>
                         </div>
                       </div>
-                    )}
-
-                    {/* Approved Redemptions */}
-                    {reward.redemptions?.some(r => r.status === 'APPROVED') && (
-                      <div className="mt-4 border-t border-gray-200 pt-3">
-                        <div className="text-xs text-gray-500 mb-2">Approved redemptions</div>
-                        <div className="space-y-2">
-                          {reward.redemptions
-                            .filter(r => r.status === 'APPROVED')
-                            .map((r) => (
-                              <div key={r.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-2 border border-gray-200">
-                                <div className="min-w-0">
-                                  <div className="text-sm font-medium text-gray-900 truncate">{r.user.name || r.user.email}</div>
-                                  <div className="text-xs text-gray-500">{new Date(r.redeemedAt).toLocaleString()}</div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    size="sm"
-                                    className="bg-gray-900 hover:bg-black text-white rounded-md h-7 px-3"
-                                    onClick={() => handleFulfillRequest(r.id)}
-                                    disabled={actionLoadingId === r.id}
-                                  >
-                                    {actionLoadingId === r.id ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
-                                    Solicitar confirmação de uso
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-                        </div>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{reward.creditsRequired}</td>
+                    <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">{reward.codesAvailable ?? 0}</td>
+                    <td className="whitespace-nowrap px-3 py-3.5 text-sm">
+                      {reward.isActive ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Active</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Inactive</span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">{new Date(reward.createdAt).toLocaleDateString()}</td>
+                    <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                          onClick={() => openEditDialog(reward)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                          onClick={() => openCodesDialog(reward.id)}
+                        >
+                          Codes
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-red-600 hover:bg-red-50"
+                          onClick={() => handleDelete(reward)}
+                        >
+                          Delete
+                        </Button>
                       </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           {rewards.length === 0 && (

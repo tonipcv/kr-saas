@@ -82,6 +82,25 @@ export default function IntegrationsPage() {
   const [emailExpanded, setEmailExpanded] = useState(false);
   const [waExpanded, setWaExpanded] = useState(false);
   const [stripeExpanded, setStripeExpanded] = useState(false);
+  // Pagar.me
+  const [pgExpanded, setPgExpanded] = useState(false);
+  const [pgLoading, setPgLoading] = useState(false);
+  const [pgStatus, setPgStatus] = useState<'ACTIVE' | 'PENDING' | 'DISABLED' | 'UNKNOWN'>('UNKNOWN');
+  const [pgRecipientId, setPgRecipientId] = useState<string | null>(null);
+  const [pgSplitPercent, setPgSplitPercent] = useState<number>(100);
+  const [pgPlatformFeeBps, setPgPlatformFeeBps] = useState<number>(0);
+  const [pgLastSyncAt, setPgLastSyncAt] = useState<string | null>(null);
+  const [pgDialogOpen, setPgDialogOpen] = useState(false);
+  // Simple legal/bank form
+  const [pgLegalName, setPgLegalName] = useState('');
+  const [pgDocument, setPgDocument] = useState('');
+  const [pgEmail, setPgEmail] = useState('');
+  const [pgPhone, setPgPhone] = useState('');
+  const [pgBankCode, setPgBankCode] = useState('');
+  const [pgAgency, setPgAgency] = useState('');
+  const [pgAccount, setPgAccount] = useState('');
+  const [pgAccountType, setPgAccountType] = useState<'conta_corrente' | 'conta_poupanca' | ''>('');
+  const [pgSaving, setPgSaving] = useState(false);
   
 
   // (SEO card removed — SEO is automatic and not shown here)
@@ -201,6 +220,32 @@ export default function IntegrationsPage() {
 
   useEffect(() => {
     loadStatus();
+  }, [currentClinic?.id]);
+
+  // Pagar.me status loader
+  const loadPgStatus = async () => {
+    if (!currentClinic?.id) return;
+    try {
+      setPgLoading(true);
+      const res = await fetch(`/api/payments/pagarme/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Erro ao carregar status do Pagar.me');
+      const connected = !!data?.connected;
+      setPgRecipientId(data?.recipientId || null);
+      setPgSplitPercent(Number(data?.splitPercent ?? 100));
+      setPgPlatformFeeBps(Number(data?.platformFeeBps ?? 0));
+      setPgLastSyncAt(data?.lastSyncAt || null);
+      setPgStatus(connected ? 'ACTIVE' : (String(data?.status || 'UNKNOWN').toUpperCase() as any));
+    } catch (e: any) {
+      console.error('Pagar.me status error', e);
+      setPgStatus('UNKNOWN');
+    } finally {
+      setPgLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPgStatus();
   }, [currentClinic?.id]);
 
   // WhatsApp (Official) handlers
@@ -425,6 +470,134 @@ export default function IntegrationsPage() {
 
           {/* Cards (minimal headers; click to view details) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Pagar.me Payments */}
+            <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
+              {blocked && (
+                <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-1 text-xs">
+                  <LockClosedIcon className="h-3.5 w-3.5" /> Locked
+                </div>
+              )}
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                    <CogIcon className="h-5 w-5 text-gray-500" /> Pagamentos (Pagar.me)
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs">
+                      {pgLoading ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200">Carregando…</span>
+                      ) : pgStatus === 'ACTIVE' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Conectado</span>
+                      ) : pgStatus === 'PENDING' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700 ring-1 ring-inset ring-yellow-200">Pendente</span>
+                      ) : pgStatus === 'DISABLED' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Desconectado</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">{pgStatus}</span>
+                      )}
+                    </div>
+                    <Button size="sm" variant="outline" className="h-7" onClick={() => setPgExpanded(v => !v)}>
+                      {pgExpanded ? 'Ocultar' : 'Ver detalhes'}
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              {pgExpanded && (
+                <CardContent>
+                  <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <div className="text-gray-500">Status</div>
+                        <div className="font-medium text-gray-900">{pgStatus}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Recipient</div>
+                        <div className="font-mono text-xs text-gray-800 break-all">{pgRecipientId || '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Split % (clínica)</div>
+                        <div className="font-medium text-gray-900">{pgSplitPercent}%</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Taxa plataforma (bps)</div>
+                        <div className="font-medium text-gray-900">{pgPlatformFeeBps}</div>
+                      </div>
+                      <div className="col-span-2">
+                        <div className="text-gray-500">Última sincronização</div>
+                        <div className="text-gray-900">{pgLastSyncAt ? new Date(pgLastSyncAt).toLocaleString() : '-'}</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Button
+                        onClick={async () => {
+                          if (!currentClinic?.id) return;
+                          try {
+                            const res = await fetch('/api/payments/pagarme/onboard', {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ clinicId: currentClinic.id })
+                            });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
+                            setPgDialogOpen(true);
+                          } catch (e: any) {
+                            toast.error(e?.message || 'Erro ao iniciar onboarding');
+                          }
+                        }}
+                        className="h-8 rounded-md text-xs px-3"
+                      >
+                        {pgRecipientId ? 'Reconfigurar' : 'Conectar'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          if (!currentClinic?.id) return;
+                          try {
+                            const res = await fetch('/api/payments/pagarme/refresh', {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ clinicId: currentClinic.id })
+                            });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
+                            toast.success('Status atualizado');
+                            await loadPgStatus();
+                          } catch (e: any) {
+                            toast.error(e?.message || 'Erro ao atualizar status');
+                          }
+                        }}
+                        className="h-8 rounded-md text-xs px-3"
+                      >
+                        Atualizar
+                      </Button>
+                      {pgRecipientId && (
+                        <Button
+                          variant="outline"
+                          onClick={async () => {
+                            if (!currentClinic?.id) return;
+                            const ok = confirm('Desconectar pagamentos desta clínica?');
+                            if (!ok) return;
+                            try {
+                              const res = await fetch('/api/payments/pagarme/disconnect', {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ clinicId: currentClinic.id })
+                              });
+                              const data = await res.json();
+                              if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
+                              toast.success('Integração desconectada');
+                              await loadPgStatus();
+                            } catch (e: any) {
+                              toast.error(e?.message || 'Erro ao desconectar');
+                            }
+                          }}
+                          className="h-8 rounded-md text-xs px-3"
+                        >
+                          Desconectar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
             {/* SEO card removed */}
             {/* WhatsApp (Xase.ai) */}
             <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
@@ -835,7 +1008,90 @@ export default function IntegrationsPage() {
             </DialogContent>
           </Dialog>
 
-          {/* Templates modal removed; see dedicated page at /doctor/integrations/whatsapp/templates */}
+          {/* Pagar.me Recipient Dialog */}
+          <Dialog open={pgDialogOpen} onOpenChange={setPgDialogOpen}>
+            <DialogContent className="bg-white rounded-2xl">
+              <DialogHeader>
+                <DialogTitle className="text-[18px] font-semibold text-gray-900 tracking-[-0.01em]">
+                  {pgRecipientId ? 'Atualizar dados do recebedor' : 'Conectar pagamentos (Pagar.me)'}
+                </DialogTitle>
+                <DialogDescription>
+                  Informe os dados legais e bancários para receber repasses. Você pode ajustar o split e a taxa de plataforma.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                <Input value={pgLegalName} onChange={(e) => setPgLegalName(e.target.value)} placeholder="Razão social / Nome completo" className="h-9" />
+                <Input value={pgDocument} onChange={(e) => setPgDocument(e.target.value)} placeholder="Documento (CPF/CNPJ)" className="h-9" />
+                <Input value={pgEmail} onChange={(e) => setPgEmail(e.target.value)} placeholder="Email de contato" className="h-9" />
+                <Input value={pgPhone} onChange={(e) => setPgPhone(e.target.value)} placeholder="Telefone (E.164 ex: +5511999999999)" className="h-9" />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
+                <Input value={pgBankCode} onChange={(e) => setPgBankCode(e.target.value)} placeholder="Banco (ex: 001)" className="h-9" />
+                <Input value={pgAgency} onChange={(e) => setPgAgency(e.target.value)} placeholder="Agência" className="h-9" />
+                <Input value={pgAccount} onChange={(e) => setPgAccount(e.target.value)} placeholder="Conta" className="h-9" />
+                <Input value={pgAccountType} onChange={(e) => setPgAccountType(e.target.value as any)} placeholder="Tipo (conta_corrente/conta_poupanca)" className="h-9" />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                <Input type="number" min={1} max={100} value={pgSplitPercent} onChange={(e) => setPgSplitPercent(parseInt(e.target.value || '100', 10))} placeholder="Split % para clínica (1-100)" className="h-9" />
+                <Input type="number" min={0} max={10000} value={pgPlatformFeeBps} onChange={(e) => setPgPlatformFeeBps(parseInt(e.target.value || '0', 10))} placeholder="Taxa plataforma (bps)" className="h-9" />
+              </div>
+
+              <div className="flex justify-end gap-2 mt-4">
+                <Button variant="outline" onClick={() => setPgDialogOpen(false)} className="h-8">Cancelar</Button>
+                <Button
+                  onClick={async () => {
+                    if (!currentClinic?.id) return toast.error('Selecione uma clínica');
+                    // Basic validation
+                    if (!pgLegalName.trim() || !pgDocument.trim()) return toast.error('Informe razão social e documento');
+                    try {
+                      setPgSaving(true);
+                      const legalInfo: any = {
+                        name: pgLegalName.trim(),
+                        document_number: pgDocument.trim(),
+                        email: pgEmail.trim() || undefined,
+                        phone_number: pgPhone.trim() || undefined,
+                      };
+                      const bankAccount: any = pgBankCode && pgAgency && pgAccount && pgAccountType ? {
+                        bank_code: pgBankCode.trim(),
+                        agencia: pgAgency.trim(),
+                        conta: pgAccount.trim(),
+                        type: pgAccountType,
+                      } : {};
+                      const res = await fetch('/api/payments/pagarme/recipient', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          clinicId: currentClinic.id,
+                          legalInfo,
+                          bankAccount,
+                          splitPercent: pgSplitPercent,
+                          platformFeeBps: pgPlatformFeeBps,
+                        })
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
+                      toast.success('Dados salvos. Recipient configurado.');
+                      setPgDialogOpen(false);
+                      // reset sensíveis
+                      setPgLegalName(''); setPgDocument(''); setPgEmail(''); setPgPhone('');
+                      setPgBankCode(''); setPgAgency(''); setPgAccount(''); setPgAccountType('');
+                      await loadPgStatus();
+                    } catch (e: any) {
+                      toast.error(e?.message || 'Falha ao configurar recebedor');
+                    } finally {
+                      setPgSaving(false);
+                    }
+                  }}
+                  disabled={pgSaving}
+                  className="h-8 bg-gray-900 text-white hover:bg-black"
+                >
+                  {pgSaving ? 'Salvando…' : 'Salvar'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     </div>

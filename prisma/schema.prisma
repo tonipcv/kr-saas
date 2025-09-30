@@ -411,10 +411,28 @@ model Clinic {
   referralLeads            ReferralLead[]
   couponTemplates          CouponTemplate[]
   referralRewards          ReferralReward[]
+  merchant                 Merchant?
 
   @@index([ownerId])
   @@index([slug])
   @@map("clinics")
+}
+
+model Merchant {
+  id                String         @id @default(cuid())
+  clinicId          String         @unique @map("clinic_id")
+  status            MerchantStatus @default(PENDING)
+  recipientId       String?        @map("recipient_id")
+  externalAccountId String?        @map("external_account_id")
+  onboardingState   Json?          @map("onboarding_state")
+  splitPercent      Int            @default(100) @map("split_percent")
+  platformFeeBps    Int            @default(0) @map("platform_fee_bps")
+  lastSyncAt        DateTime?      @map("last_sync_at")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @default(now()) @updatedAt @map("updated_at")
+  clinic            Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@map("merchants")
 }
 
 enum ClinicRole {
@@ -427,6 +445,13 @@ enum ClinicRole {
 enum ClinicTheme {
   LIGHT
   DARK
+}
+
+enum MerchantStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  DISABLED
 }
 
 model ClinicMember {

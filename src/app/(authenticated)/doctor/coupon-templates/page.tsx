@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useClinic } from '@/contexts/clinic-context';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 type Template = {
   id: string;
@@ -227,70 +228,99 @@ export default function DoctorCouponTemplatesPage() {
     <div className="lg:ml-64">
       <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 bg-gray-50">
         {/* Header */}
-        <div className="flex flex-col gap-3 mb-4">
+        <div className="mb-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Modelos de cupom</h1>
+            <h1 className="text-[20px] font-semibold text-gray-900 tracking-[-0.01em]">Modelos de cupom</h1>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsCreating(true)}
-                className="inline-flex h-8 items-center rounded-full bg-gray-900 px-3 text-xs font-medium text-white hover:bg-black shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
-              >
-                Novo modelo
-              </button>
+              <Button onClick={() => setIsCreating(true)} size="sm" className="h-8 bg-gray-900 hover:bg-black text-white">Novo modelo</Button>
             </div>
-          </div>
-          {/* Top Pills */}
-          <div className="flex items-center gap-2 overflow-auto">
-            {[{ key: 'all', label: 'Todos' }, { key: 'active', label: 'Ativos' }, { key: 'inactive', label: 'Inativos' }].map(tab => (
-              <span key={tab.key} className="whitespace-nowrap text-xs font-medium rounded-full border px-3 py-1 bg-white border-gray-200 text-gray-900 shadow-sm">
-                {tab.label}
-              </span>
-            ))}
           </div>
         </div>
-
-        {/* KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-2">
-          {[{ title: 'Total', value: kpis.total, note: 'modelos' }, { title: 'Ativos', value: kpis.active, note: 'habilitados' }, { title: 'Inativos', value: kpis.inactive, note: 'desabilitados' }].map(k => (
-            <div key={k.title} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium text-gray-500">{k.title}</span>
-                <span className="text-[10px] text-gray-400">{k.note}</span>
-              </div>
-              <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{k.value}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* List */}
-        <div className="mt-6">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold text-gray-900">Meus modelos</h2>
-            {error && <span className="text-xs text-red-500 font-medium">{error}</span>}
-          </div>
-          {loading ? (
-            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-              <div className="px-3 py-2.5 border-b border-gray-100 rounded-t-2xl">
-                <div className="h-4 w-24 bg-gray-100 rounded animate-pulse" />
-              </div>
-              <div className="p-3 space-y-2">
-                {[...Array(5)].map((_, j) => (
-                  <div key={j} className="h-10 bg-gray-50 border border-gray-100 rounded-lg animate-pulse" />
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-              <div className="hidden md:grid grid-cols-12 gap-2 px-3 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-500">
-                <div className="col-span-4">Nome</div>
-                <div className="col-span-2">Slug</div>
-                <div className="col-span-3">Link</div>
-                <div className="col-span-1">Status</div>
-                <div className="col-span-2 text-right">Atualizado</div>
-              </div>
-              {actionMsg && (
-                <div className="px-3 py-2 text-[11px] text-green-700 bg-green-50 border-b border-green-100">{actionMsg}</div>
+  
+        {/* Table (purchases-like) */}
+        <div className="mt-2 overflow-hidden rounded-2xl border border-gray-200 bg-white text-sm">
+          <table className="min-w-full">
+            <thead className="bg-gray-50/80">
+              <tr className="text-left text-xs text-gray-600">
+                <th className="py-2 pl-3 pr-2 font-medium sm:pl-4">Atualizado</th>
+                <th className="px-2 py-2 font-medium">Nome</th>
+                <th className="px-2 py-2 font-medium">Slug</th>
+                <th className="px-2 py-2 font-medium">Link</th>
+                <th className="px-2 py-2 font-medium">Status</th>
+                <th className="relative py-2 pl-2 pr-3 sm:pr-4 w-10"><span className="sr-only">Ações</span></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 bg-white text-sm">
+              {loading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={`sk-${i}`}>
+                    <td className="py-2 pl-3 pr-2"><div className="h-4 w-28 bg-gray-100 rounded animate-pulse" /></td>
+                    <td className="px-2 py-2"><div className="h-4 w-40 bg-gray-100 rounded animate-pulse" /></td>
+                    <td className="px-2 py-2"><div className="h-4 w-28 bg-gray-100 rounded animate-pulse" /></td>
+                    <td className="px-2 py-2"><div className="h-4 w-64 bg-gray-100 rounded animate-pulse" /></td>
+                    <td className="px-2 py-2"><div className="h-5 w-16 bg-gray-100 rounded-full animate-pulse" /></td>
+                    <td className="py-2 pl-2 pr-3 sm:pr-4 text-right"><div className="h-8 w-8 bg-gray-100 rounded-lg animate-pulse inline-block" /></td>
+                  </tr>
+                ))
+              ) : items.length === 0 ? (
+                <tr><td className="px-6 py-6 text-sm text-gray-500" colSpan={6}>Nenhum modelo</td></tr>
+              ) : (
+                items.map((t) => (
+                  <tr key={t.id} className="hover:bg-gray-50">
+                    <td className="whitespace-nowrap px-2 py-2 text-gray-500">{new Date(t.updated_at).toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' })}</td>
+                    <td className="whitespace-nowrap px-2 py-2 text-gray-700 truncate max-w-[200px]">
+                      <div className="text-sm font-medium text-gray-900 truncate">{t.name}</div>
+                      <div className="text-[11px] text-gray-500 truncate">{t.display_title || 'Sem título de exibição'}</div>
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-2 text-gray-700 truncate max-w-[140px]">{t.slug}</td>
+                    <td className="whitespace-nowrap px-2 py-2 text-gray-700 truncate max-w-[360px]">
+                      {(clinicSlug || doctorSlug) && t.slug ? (
+                        (() => {
+                          const origin = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || '');
+                          const path = `/${clinicSlug || doctorSlug}`;
+                          const href = `${origin}${path}?cupom=${encodeURIComponent(t.slug)}`;
+                          return (
+                            <a href={href} target="_blank" className="text-gray-700 hover:text-gray-900 hover:underline break-all" onClick={(e) => e.stopPropagation()} rel="noreferrer">
+                              {href}
+                            </a>
+                          );
+                        })()
+                      ) : (
+                        <span className="text-[11px] text-gray-400">Link indisponível</span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-2">
+                      <span className="inline-flex items-center rounded-full bg-gray-50 border border-gray-200 px-2 py-0.5 text-[10px] font-medium text-gray-700">
+                        {t.is_active ? 'ATIVO' : 'INATIVO'}
+                      </span>
+                    </td>
+                    <td className="relative whitespace-nowrap py-2 pl-2 pr-3 text-right sm:pr-4">
+                      <button
+                        className="h-7 rounded-full border border-gray-200 px-3 text-xs text-gray-700 hover:bg-gray-50"
+                        onClick={() => {
+                          setEditId(t.id);
+                          setEditError(null);
+                          setEditData({
+                            slug: t.slug || '',
+                            name: t.name || '',
+                            display_title: t.display_title || '',
+                            display_message: t.display_message || '',
+                            is_active: !!t.is_active,
+                            config_text: (() => { try { return JSON.stringify(t.config || {}, null, 2); } catch { return '{\n}'; } })(),
+                          });
+                          if (products.length === 0) { loadProducts(); }
+                          setIsEditing(true);
+                        }}
+                      >
+                        Editar
+                      </button>
+                    </td>
+                  </tr>
+                ))
               )}
+            </tbody>
+          </table>
+        </div>
 
         {/* Edit Drawer */}
         {isEditing && (
@@ -404,119 +434,6 @@ export default function DoctorCouponTemplatesPage() {
             </div>
           </div>
         )}
-              <div className="divide-y divide-gray-100">
-                {items.length === 0 && (
-                  <div className="p-3 text-xs text-gray-500 font-medium">Nenhum modelo</div>
-                )}
-                {items.map((t) => (
-                  <div key={t.id} className="grid grid-cols-12 gap-2 px-3 py-2.5 hover:bg-gray-50 transition-colors">
-                    <div className="col-span-12 md:col-span-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-900 truncate">{t.name}</span>
-                        <button
-                          type="button"
-                          className="shrink-0 text-xs px-2 py-0.5 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50"
-                          title="Editar"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditId(t.id);
-                            setEditError(null);
-                            setEditData({
-                              slug: t.slug || '',
-                              name: t.name || '',
-                              display_title: t.display_title || '',
-                              display_message: t.display_message || '',
-                              is_active: !!t.is_active,
-                              config_text: (() => { try { return JSON.stringify(t.config || {}, null, 2); } catch { return '{\n}'; } })(),
-                            });
-                            // Ensure products list is available when opening edit
-                            if (products.length === 0) { loadProducts(); }
-                            setIsEditing(true);
-                          }}
-                        >
-                          Editar
-                        </button>
-                      </div>
-                      <div className="text-[11px] text-gray-500 truncate">{t.display_title || 'Sem título de exibição'}</div>
-                    </div>
-                    <div className="col-span-12 md:col-span-2 text-[13px] text-gray-700 truncate">{t.slug}</div>
-                    <div className="col-span-12 md:col-span-3 text-[12px] text-gray-700 truncate">
-                      {(clinicSlug || doctorSlug) && t.slug ? (
-                        (() => {
-                          const origin = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || '');
-                          const path = `/${clinicSlug || doctorSlug}`;
-                          const href = `${origin}${path}?cupom=${encodeURIComponent(t.slug)}`;
-                          return (
-                            <a href={href} target="_blank" className="text-gray-700 hover:text-gray-900 hover:underline break-all" onClick={(e) => e.stopPropagation()} rel="noreferrer">
-                              {href}
-                            </a>
-                          );
-                        })()
-                      ) : (
-                        <span className="text-[11px] text-gray-400">Link indisponível</span>
-                      )}
-                    </div>
-                    <div className="col-span-6 md:col-span-1">
-                      <div className="flex items-center justify-between md:justify-start gap-2">
-                        <span className="inline-flex items-center rounded-full bg-gray-50 border border-gray-200 px-2 py-0.5 text-[10px] font-medium text-gray-700">
-                          {t.is_active ? 'ATIVO' : 'INATIVO'}
-                        </span>
-                        <div className="relative">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setOpenMenuId((prev) => prev === t.id ? null : t.id); }}
-                            onBlur={(e) => {
-                              const btn = e.currentTarget;
-                              setTimeout(() => {
-                                if (!btn.parentElement?.contains(document.activeElement)) {
-                                  setOpenMenuId((prev) => prev === t.id ? null : prev);
-                                }
-                              }, 0);
-                            }}
-                            className="h-7 w-7 inline-flex items-center justify-center rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50"
-                            aria-haspopup="menu"
-                            aria-expanded={openMenuId === t.id}
-                            title="Ações"
-                          >
-                            •••
-                          </button>
-                          {openMenuId === t.id && (
-                            <div role="menu" className="absolute right-0 mt-1 w-40 rounded-md border border-gray-200 bg-white shadow-lg z-10 py-1">
-                              <button
-                                role="menuitem"
-                                className="w-full text-left text-[12px] px-3 py-2 hover:bg-gray-50"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => {
-                                  setOpenMenuId(null);
-                                  setEditId(t.id);
-                                  setEditError(null);
-                                  setEditData({
-                                    slug: t.slug || '',
-                                    name: t.name || '',
-                                    display_title: t.display_title || '',
-                                    display_message: t.display_message || '',
-                                    is_active: !!t.is_active,
-                                    config_text: (() => {
-                                      try { return JSON.stringify(t.config || {}, null, 2); } catch { return '{\n}'; }
-                                    })(),
-                                  });
-                                  if (products.length === 0) { loadProducts(); }
-                                  setIsEditing(true);
-                                }}
-                              >
-                                Editar
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-span-6 md:col-span-2 text-right text-[12px] text-gray-500">{new Date(t.updated_at).toLocaleString('pt-BR')}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Create Drawer */}
         {isCreating && (
