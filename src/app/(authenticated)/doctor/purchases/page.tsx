@@ -207,7 +207,7 @@ export default function PurchasesPage() {
         setPurchases([]);
         return;
       }
-      const res = await fetch(`/api/purchases?page=${targetPage}&page_size=10&clinicId=${currentClinic.id}`, { cache: 'no-store' });
+      const res = await fetch(`/api/purchases?page=${targetPage}&page_size=20&clinicId=${currentClinic.id}`, { cache: 'no-store' });
       if (!res.ok) {
         const msg = await res.text();
         throw new Error(`Failed to load purchases (${res.status}): ${msg}`);
@@ -422,7 +422,7 @@ export default function PurchasesPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white text-sm">
                   {isLoadingPurchases ? (
-                    Array.from({ length: 6 }).map((_, i) => (
+                    Array.from({ length: 20 }).map((_, i) => (
                       <tr key={`sk-${i}`}>
                         <td className="py-2 pl-3 pr-2">
                           <div className="h-4 w-28 bg-gray-100 rounded animate-pulse" />

@@ -88,6 +88,7 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
   const meta = (item?.metadata || {}) as any;
   const productName = productData?.name || meta?.name || '';
   const productImage = productData?.imageUrl || productData?.image_url || productData?.image || meta?.imageUrl || '';
+  const productDescription = (productData as any)?.description || (meta as any)?.description || (productData as any)?.subtitle || '';
   const productAmount = (productData?.price != null)
     ? Number(productData.price)
     : (meta?.priceCents ? meta.priceCents / 100 : (typeof item?.amount === 'number' ? item.amount / 100 : 0));
@@ -111,22 +112,26 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
   const primaryFg = clinic.buttonTextColor || '#ffffff';
 
   return (
-    <div className={`min-h-screen bg-gradient-to-b from-gray-50 to-white text-gray-900 flex flex-col`}> 
+    <div className={`min-h-screen bg-[#eff1f3] text-gray-900 flex flex-col`}> 
       <div className="flex-1 w-full p-4 sm:p-6">
         <div className="max-w-xl mx-auto">
-        <div className={`border-gray-200 bg-white rounded-2xl border shadow-sm overflow-hidden`}> 
-          {/* Header */}
-          <div className={`bg-white px-5 sm:px-6 pt-8 pb-6 border-b border-gray-200 text-center`}>
+          {/* Logo acima e fora do box, com espaçamento igual ao checkout */}
+          <div className="text-center mt-6 md:mt-10 mb-16">
             {clinic.logoUrl && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={clinic.logoUrl}
                 alt={clinic.name}
-                className="mx-auto h-12 sm:h-14 max-w-[260px] w-auto object-contain mb-8"
+                className="mx-auto h-12 sm:h-14 max-w-[260px] w-auto object-contain"
                 referrerPolicy="no-referrer"
                 decoding="async"
               />
             )}
+          </div>
+
+          <div className={`border-gray-200 bg-white rounded-2xl border shadow-sm overflow-hidden`}> 
+          {/* Header */}
+          <div className={`bg-white px-5 sm:px-6 pt-8 pb-6 border-b border-gray-200 text-center`}>
             <div className="mt-0 flex items-center justify-center gap-2">
               <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs bg-emerald-50 text-emerald-700 border border-emerald-300`}>✓</div>
               <div className="text-[18px] sm:text-[20px] font-semibold leading-none">
@@ -136,23 +141,25 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
             <div className="mt-2 text-xs text-gray-600">
               Obrigado! Enviamos a confirmação para o seu e-mail.
             </div>
-            <div className={`inline-block mt-3 text-[11px] px-2.5 py-1 rounded-full whitespace-nowrap bg-emerald-50 text-emerald-700 border border-emerald-300`}>Status: {status}</div>
           </div>
 
           {/* Body */}
           <div className="px-5 sm:px-6 py-6">
-            {/* Product header */}
-            <div className="flex items-start gap-3 mb-4">
-              {/* Always show product image - use hardcoded fallback if needed */}
+            {/* Product hero (como no checkout) */}
+            <div className="mb-5">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img 
-                src={productImage || 'https://via.placeholder.com/150'} 
-                alt={productName} 
-                className="h-14 w-14 rounded-md object-cover border border-gray-200" 
+              <img
+                src={productImage || 'https://via.placeholder.com/800x400'}
+                alt={productName}
+                className="w-full h-40 sm:h-48 object-cover rounded-xl border border-gray-200"
               />
-              <div>
-                <div className="text-sm font-semibold">{productName}</div>
-                <div className={`text-xs text-gray-600`}>Valor do produto: {formatBRL(productAmount)}</div>
+              <div className="mt-3">
+                <div className="text-base sm:text-[15px] font-semibold">{productName}</div>
+                <div className="text-sm text-gray-600">Valor do produto: {formatBRL(productAmount)}</div>
+                {/* Descrição, se houver */}
+                {!!productDescription && (
+                  <div className="text-sm text-gray-600 mt-2">{productDescription}</div>
+                )}
               </div>
             </div>
 

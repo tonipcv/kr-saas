@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PhoneInput } from 'react-international-phone';
+import 'react-international-phone/style.css';
 
 type ClinicBranding = {
   theme?: 'LIGHT' | 'DARK';
@@ -38,7 +40,7 @@ export default function BrandedCheckoutPage() {
   const [buyerEmail, setBuyerEmail] = useState('');
   const [buyerPhone, setBuyerPhone] = useState('');
   const [buyerDocument, setBuyerDocument] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | null>('card');
   const [installments, setInstallments] = useState<number>(1);
   // Card fields
   const [cardNumber, setCardNumber] = useState('');
@@ -56,6 +58,7 @@ export default function BrandedCheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<any>(null);
+  const [pricing, setPricing] = useState<any>(null);
   const [cardStatus, setCardStatus] = useState<null | { approved: boolean; status?: string; message?: string; last4?: string; brand?: string }>(null);
   // PIX modal state
   const [pixOpen, setPixOpen] = useState(false);
@@ -210,22 +213,36 @@ export default function BrandedCheckoutPage() {
 
   useEffect(() => {
     async function calc() {
-      if (!priceCents) { setPreview(null); return; }
+      if (!priceCents) { setPreview(null); setPricing(null); return; }
       const res = await fetch(`/api/payments/pricing?amount_cents=${priceCents}`);
       const data = await res.json();
       setPreview(data?.preview || null);
+      setPricing(data?.pricing || null);
     }
     calc();
   }, [priceCents]);
 
   const totalCents = useMemo(() => priceCents || 0, [priceCents]);
-  const perInstallmentCents = useMemo(() => {
-    if (paymentMethod !== 'card') return null;
-    const list = preview?.installments?.per_installment_cents_list as number[] | undefined;
-    if (!list || !Array.isArray(list)) return null;
-    const idx = Math.min(Math.max(installments, 1), (preview?.installments?.n || 1)) - 1;
-    return list[idx] ?? null;
-  }, [paymentMethod, installments, preview]);
+  // Build installment options using Price (APR mensal)
+  const installmentOptions = useMemo(() => {
+    if (!priceCents) return [] as { n: number; perCents: number }[];
+    const apr = typeof pricing?.INSTALLMENT_CUSTOMER_APR_MONTHLY === 'number' ? pricing.INSTALLMENT_CUSTOMER_APR_MONTHLY : 0.029;
+    const maxN = typeof pricing?.INSTALLMENT_MAX_INSTALLMENTS === 'number' ? pricing.INSTALLMENT_MAX_INSTALLMENTS : 12;
+    const out: { n: number; perCents: number }[] = [];
+    const pricePer = (P: number, i: number, n: number) => {
+      if (n <= 1 || i <= 0) return Math.round(P);
+      const factor = Math.pow(1 + i, n);
+      const denom = factor - 1;
+      if (denom <= 0) return Math.ceil(P / n);
+      const A = (P * i * factor) / denom;
+      return Math.round(A);
+    };
+    for (let n = 1; n <= maxN; n++) {
+      const per = pricePer(priceCents, apr, n);
+      out.push({ n, perCents: per });
+    }
+    return out;
+  }, [priceCents, pricing]);
   const formatBRL = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
   const formatCents = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
 
@@ -599,28 +616,51 @@ export default function BrandedCheckoutPage() {
   }
 
   return (
-    <div className={`${theme === 'DARK' ? 'min-h-screen bg-[#0b0b0b] text-gray-100' : 'min-h-screen bg-gradient-to-b from-gray-50 to-white text-gray-900'} font-normal tracking-[-0.02em] flex flex-col`}>
+    <div className={`${theme === 'DARK' ? 'min-h-screen bg-[#0b0b0b] text-gray-100' : 'min-h-screen bg-[#eff1f3] text-gray-900'} font-normal tracking-[-0.02em] flex flex-col`}>
       <div className="flex-1 flex flex-col items-center p-3 md:p-6 pt-8 md:pt-12 w-full">
         {/* Header com branding */}
         <div className={`w-full max-w-7xl ${theme === 'DARK' ? 'bg-transparent' : 'bg-transparent'} rounded-none border-0 p-0 shadow-none`}> 
           {/* Countdown hidden as requested */}
           <div className="mt-6 md:mt-10 mb-16 text-center">
             {branding.logo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={branding.logo}
-                alt={branding.name || 'Clinic'}
-                className="mx-auto h-14 w-auto object-contain mb-4 md:mb-6"
-                referrerPolicy="no-referrer"
-                decoding="async"
-                loading="eager"
-              />
+              <div className={`inline-flex items-center justify-center rounded-md px-4 py-3`}> 
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={branding.logo}
+                  alt={branding.name || 'Clinic'}
+                  className="h-14 w-auto object-contain"
+                  referrerPolicy="no-referrer"
+                  decoding="async"
+                  loading="eager"
+                />
+              </div>
             ) : (
               <div className="mx-auto h-10 w-10" />
             )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Mobile: Order Summary (visible only on small screens) */}
+            <aside className="block lg:hidden">
+              <div className={`rounded-xl ${theme==='DARK' ? 'bg-[#0f0f0f]' : 'bg-white'} p-4 w-full`}>
+                <div className="text-sm font-semibold mb-3">Resumo do pedido</div>
+                {product?.imageUrl && (
+                  <div className="rounded-xl overflow-hidden border border-gray-200 mb-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={product.imageUrl} alt={product.name} className="w-full h-40 object-cover" />
+                  </div>
+                )}
+                <div className="text-[15px] font-medium">{product?.name}</div>
+                {product?.description && (
+                  <div className={`${theme==='DARK'?'text-gray-400':'text-gray-600'} text-sm mt-1`}>{product.description}</div>
+                )}
+                <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between">
+                  <div className={`${theme==='DARK'?'text-gray-400':'text-gray-600'} text-sm`}>Total</div>
+                  <div className="text-base font-semibold">{formatBRL(displayPrice as number)}</div>
+                </div>
+              </div>
+            </aside>
+
             {/* Left: produto e formulário */}
             <div className="lg:col-span-8">
               <div className={`rounded-xl ${theme === 'DARK' ? 'bg-[#0f0f0f]' : 'bg-white'} p-5`}>
@@ -638,7 +678,19 @@ export default function BrandedCheckoutPage() {
                   </div>
                   <div>
                     <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>Telefone</div>
-                    <Input value={buyerPhone} onChange={(e) => setBuyerPhone(e.target.value)} placeholder="+5511999999999" className={`${inputClass} h-11 text-sm`} />
+                    <div className={`rounded-md ${theme==='DARK'?'bg-[#0f0f0f] border border-gray-800':'bg-gray-100 border border-transparent'} h-11 flex items-center px-2`}>
+                      <PhoneInput
+                        defaultCountry="br"
+                        value={buyerPhone}
+                        onChange={(val) => setBuyerPhone(val)}
+                        placeholder="Digite seu telefone"
+                        className="w-full"
+                        inputClassName={`w-full h-10 !bg-transparent !border-0 !shadow-none !outline-none px-2 text-sm ${theme==='DARK'?'text-gray-100 placeholder:text-gray-500':'text-gray-900 placeholder:text-gray-500'}`}
+                        countrySelectorStyleProps={{
+                          buttonClassName: `!bg-transparent !border-0 ${theme==='DARK'?'text-gray-100':'text-gray-900'}`,
+                        }}
+                      />
+                    </div>
                   </div>
                   <div>
                     <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>Documento (CPF/CNPJ)</div>
@@ -649,48 +701,62 @@ export default function BrandedCheckoutPage() {
                 {/* Payment method */}
                 <div className="mt-5">
                   <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-2`}>Forma de pagamento</div>
-                  <div className="flex gap-2 mb-3">
-                    <button type="button" onClick={() => setPaymentMethod('pix')} className={`px-4 h-10 rounded-lg text-base border ${paymentMethod==='pix' ? 'border-blue-500 text-blue-600 shadow-sm bg-white' : (theme==='DARK'?'border-gray-800 text-gray-300 bg-transparent':'border-gray-300 text-gray-700 bg-white')}`}>Pix</button>
-                    <button type="button" onClick={() => setPaymentMethod('card')} className={`px-4 h-10 rounded-lg text-base border ${paymentMethod==='card' ? 'border-blue-500 text-blue-600 shadow-sm bg-white' : (theme==='DARK'?'border-gray-800 text-gray-300 bg-transparent':'border-gray-300 text-gray-700 bg-white')}`}>Cartão</button>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    {/* Cartão */}
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('card')}
+                      className={`relative group rounded-xl border p-3 text-left transition ${paymentMethod==='card' ? (theme==='DARK' ? 'border-blue-500 bg-[#0f0f0f]' : 'border-blue-500 bg-white shadow-sm') : (theme==='DARK' ? 'border-gray-800 bg-transparent hover:border-gray-700' : 'border-gray-300 bg-white hover:border-gray-400')}`}
+                    >
+                      {paymentMethod==='card' && (
+                        <span className="absolute -top-2 -right-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] shadow">✓</span>
+                      )}
+                      <div className="flex items-center gap-2">
+                        {/* Card icon (inline SVG) */}
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={`${theme==='DARK'?'text-gray-200':'text-gray-700'}`}>
+                          <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+                          <rect x="2" y="8" width="20" height="2" fill="currentColor"/>
+                          <rect x="5" y="13" width="5" height="2" rx="1" fill="currentColor"/>
+                        </svg>
+                        <span className={`${paymentMethod==='card' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>Cartão</span>
+                      </div>
+                    </button>
+
+                    {/* Pix */}
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('pix')}
+                      className={`relative group rounded-xl border p-3 text-left transition ${paymentMethod==='pix' ? (theme==='DARK' ? 'border-blue-500 bg-[#0f0f0f]' : 'border-blue-500 bg-white shadow-sm') : (theme==='DARK' ? 'border-gray-800 bg-transparent hover:border-gray-700' : 'border-gray-300 bg-white hover:border-gray-400')}`}
+                    >
+                      {paymentMethod==='pix' && (
+                        <span className="absolute -top-2 -right-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] shadow">✓</span>
+                      )}
+                      <div className="flex items-center gap-2">
+                        {/* Pix icon from public */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/pix.png" alt="Pix" className="h-4 w-4 object-contain" />
+                        <span className={`${paymentMethod==='pix' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>Pix</span>
+                      </div>
+                    </button>
                   </div>
                   {paymentMethod === 'card' && (
-                    <div>
-                      
-                      <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>Parcelas</div>
-                      <select value={installments} onChange={(e) => setInstallments(parseInt(e.target.value, 10))} className={`${selectClass} h-11 w-full rounded-md border px-3 text-sm`}>
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
-                          <option key={n} value={n}>{n}x</option>
-                        ))}
-                      </select>
-                      {!!perInstallmentCents && (
-                        <div className={`mt-1 text-xs ${theme==='DARK'?'text-gray-400':'text-gray-600'}`}>Estimativa: {installments}x de {formatCents(perInstallmentCents)}</div>
-                      )}
-                      {Array.isArray((preview as any)?.installments?.per_installment_cents_list) && (preview as any)?.installments?.n > 0 && (
-                        <div className="mt-3">
-                          <div className={`text-xs ${theme==='DARK'?'text-gray-400':'text-gray-600'} mb-1`}>Opções de parcelamento</div>
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                            {((preview as any).installments.per_installment_cents_list as number[]).slice(0, (preview as any).installments.n).map((cents: number, i: number) => (
-                              <div key={i} className="flex items-center justify-between">
-                                <span className={`${theme==='DARK'?'text-gray-300':'text-gray-700'}`}>{i+1}x</span>
-                                <span className="font-medium">{formatCents(cents)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <div className="mt-4">
-                        <div className={`text-sm ${theme==='DARK'?'text-gray-400':'text-gray-600'} mb-1.5`}>País ou região</div>
-                        <select value={addrCountry} onChange={(e) => setAddrCountry(e.target.value)} className={`${selectClass} h-11 w-full rounded-md border px-3 text-sm`}>
-                          <option value="BR">Brazil</option>
-                        </select>
+                    <div>{/* Parcelas e País serão exibidos após os campos do cartão */}</div>
+                  )}
+                  {paymentMethod === 'pix' && (
+                    <div className="mt-2 text-sm">
+                      <div className={`${theme==='DARK'?'text-gray-300':'text-gray-700'}`}>
+                        <div><strong>Informações sobre o pagamento via pix:</strong></div>
+                        <ul className="list-disc ml-5 mt-1 space-y-1">
+                          <li>Valor à vista: {formatBRL(displayPrice as number)}.</li>
+                          <li>É simples, só usar o aplicativo de seu banco para pagar PIX.</li>
+                          <li>Super seguro. O pagamento PIX foi desenvolvido pelo Banco Central para facilitar pagamentos.</li>
+                        </ul>
                       </div>
                     </div>
                   )}
                 </div>
 
-                
-
-                {paymentMethod === 'card' && (
+                                {paymentMethod === 'card' && (
                   <div className="mt-4 space-y-3">
                     <div className={`text-[12px] ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'}`}>Card information</div>
                     {/* Segmented row: number | MM/YY | CVC */}
@@ -702,30 +768,49 @@ export default function BrandedCheckoutPage() {
                           onChange={(e) => setCardNumber(e.target.value)}
                           placeholder="1234 1234 1234 1234"
                           className={`w-full h-full px-3 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 placeholder:text-gray-500':'text-gray-900 placeholder:text-gray-400'}`}
+                          autoComplete="off"
+                          inputMode="numeric"
+                          autoCorrect="off"
+                          autoCapitalize="off"
+                          spellCheck={false}
                         />
-                        {/* Brand badges */}
-                        <div className="absolute right-2 inset-y-0 flex items-center gap-1">
-                          <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#1a1f71]">VISA</span>
-                          <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#eb001b]">MC</span>
+                        {/* Brand badge (dynamic) */}
+                        <div className="absolute right-2 inset-y-0 flex items-center">
+                          {(() => {
+                            const b = detectBrand(cardNumber);
+                            if (b === 'VISA') {
+                              return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#1a1f71]">VISA</span>;
+                            }
+                            if (b === 'MASTERCARD') {
+                              return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#eb001b]">MC</span>;
+                            }
+                            if (b === 'AMEX') {
+                              return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#0a2540]">AMEX</span>;
+                            }
+                            if (b === 'DISCOVER') {
+                              return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#ff6000]">DISC</span>;
+                            }
+                            return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-gray-500">CARD</span>;
+                          })()}
                         </div>
                       </div>
                       {/* Divider */}
                       <div className={`${theme==='DARK'?'bg-gray-800':'bg-gray-300'} w-px`} />
-                      {/* MM/YY */}
-                      <div className="w-28 flex items-center">
-                        <input
-                          value={`${cardExpMonth}`}
-                          onChange={(e) => setCardExpMonth(e.target.value)}
-                          placeholder="MM"
-                          className={`w-1/2 h-full px-2 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 placeholder:text-gray-500':'text-gray-900 placeholder:text-gray-400'}`}
-                        />
-                        <span className={`${theme==='DARK'?'text-gray-500':'text-gray-400'} text-xs`}>/</span>
-                        <input
-                          value={`${cardExpYear}`}
-                          onChange={(e) => setCardExpYear(e.target.value)}
-                          placeholder="YY"
-                          className={`w-1/2 h-full px-2 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 placeholder:text-gray-500':'text-gray-900 placeholder:text-gray-400'}`}
-                        />
+                      {/* Mês/Ano */}
+                      <div className="w-40 flex items-center gap-2 px-2">
+                        <select value={cardExpMonth} onChange={(e) => setCardExpMonth(e.target.value)} className={`w-1/2 h-8 rounded-md px-2 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 border border-gray-800':'text-gray-900'}`}>
+                          <option value="" disabled>Mês</option>
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                            <option key={m} value={String(m).padStart(2,'0')}>{String(m).padStart(2,'0')}</option>
+                          ))}
+                        </select>
+                        <select value={cardExpYear} onChange={(e) => setCardExpYear(e.target.value)} className={`w-1/2 h-8 rounded-md px-2 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 border border-gray-800':'text-gray-900'}`}>
+                          <option value="" disabled>Ano</option>
+                          {Array.from({ length: 12 }, (_, i) => i).map(delta => {
+                            const year = new Date().getFullYear() % 100 + delta; // two digits
+                            return <option key={year} value={String(year).padStart(2,'0')}>{String(year).padStart(2,'0')}</option>;
+                          })}
+                        </select>
                       </div>
                       {/* Divider */}
                       <div className={`${theme==='DARK'?'bg-gray-800':'bg-gray-300'} w-px`} />
@@ -734,8 +819,12 @@ export default function BrandedCheckoutPage() {
                         <input
                           value={cardCvv}
                           onChange={(e) => setCardCvv(e.target.value)}
-                          placeholder="CVC"
+                          placeholder="Cód. segurança"
                           className={`w-full h-full px-3 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 placeholder:text-gray-500':'text-gray-900 placeholder:text-gray-400'}`}
+                          autoComplete="off"
+                          autoCorrect="off"
+                          autoCapitalize="off"
+                          spellCheck={false}
                         />
                       </div>
                     </div>
@@ -743,7 +832,27 @@ export default function BrandedCheckoutPage() {
                     {/* Cardholder */}
                     <div>
                       <div className={`text-[12px] ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Cardholder name</div>
-                      <Input value={cardHolder} onChange={(e) => setCardHolder(e.target.value)} placeholder="Full name on card" className={`${inputClass} h-12 text-base`} />
+                      <Input value={cardHolder} onChange={(e) => setCardHolder(e.target.value)} placeholder="Full name on card" className={`${inputClass} h-12 text-base`} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
+                    </div>
+
+                    {/* Parcelas abaixo dos inputs do cartão */}
+                    <div>
+                      <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>Parcelas</div>
+                      <select value={installments} onChange={(e) => setInstallments(parseInt(e.target.value, 10))} className={`${selectClass} h-11 w-full rounded-md border px-3 text-sm`}>
+                        {installmentOptions.map(({ n, perCents }) => (
+                          <option key={n} value={n}>
+                            {n === 1 ? `${n}x ${formatCents(priceCents)}` : `${n}x de ${formatCents(perCents)}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* País no final */}
+                    <div>
+                      <div className={`text-sm ${theme==='DARK'?'text-gray-400':'text-gray-600'} mb-1.5`}>País ou região</div>
+                      <select value={addrCountry} onChange={(e) => setAddrCountry(e.target.value)} className={`${selectClass} h-11 w-full rounded-md border px-3 text-sm`}>
+                        <option value="BR">Brazil</option>
+                      </select>
                     </div>
                   </div>
                 )}
@@ -763,16 +872,6 @@ export default function BrandedCheckoutPage() {
                   >
                     {submitting ? 'Processando…' : 'Comprar agora'}
                   </button>
-                  {process.env.NODE_ENV !== 'production' && (
-                    <button
-                      type="button"
-                      onClick={payNowTest}
-                      className={`${theme==='DARK'?'bg-[#0f0f0f] border-gray-800 text-gray-100':'bg-white border-gray-300 text-gray-900'} px-3 h-10 rounded-md text-sm border`}
-                      title="Preencher dados de teste e pagar (sandbox)"
-                    >
-                      Pagar agora (teste)
-                    </button>
-                  )}
                 </div>
               </div>
             </div>
