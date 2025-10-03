@@ -8,6 +8,29 @@ const AUTH_SCHEME = (process.env.PAGARME_AUTH_SCHEME || 'basic').toLowerCase(); 
 const PAGARME_ACCOUNT_ID = process.env.PAGARME_ACCOUNT_ID || '';
 export function isV5() { return IS_V5; }
 
+export async function pagarmeGetOrder(orderId: string) {
+  const res = await fetch(`${PAGARME_BASE_URL}/orders/${encodeURIComponent(orderId)}`, {
+    method: 'GET',
+    headers: authHeaders(),
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    const msgFromArray = Array.isArray(data?.errors)
+      ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
+      : undefined;
+    const msg = msgFromArray || data?.message || data?.error || text || `Pagarme error ${res.status}`;
+    const err: any = new Error(`[Pagarme ${res.status}] ${msg}`);
+    err.status = res.status;
+    err.responseText = text;
+    err.responseJson = data;
+    throw err;
+  }
+  return data;
+}
+
 function authHeaders() {
   if (AUTH_SCHEME === 'bearer') {
     const h: Record<string, string> = {
@@ -49,8 +72,20 @@ export async function pagarmeCreateRecipient(payload: Record<string, any>) {
     body: JSON.stringify(payload),
     cache: 'no-store',
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.errors?.[0]?.message || data?.error || `Pagar.me error ${res.status}`);
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    const msgFromArray = Array.isArray(data?.errors)
+      ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
+      : undefined;
+    const msg = msgFromArray || data?.message || data?.error || text || `Pagarme error ${res.status}`;
+    const err: any = new Error(`[Pagarme ${res.status}] ${msg}`);
+    err.status = res.status;
+    err.responseText = text;
+    err.responseJson = data;
+    throw err;
+  }
   return data;
 }
 
@@ -61,8 +96,16 @@ export async function pagarmeUpdateRecipient(recipientId: string, payload: Recor
     body: JSON.stringify(payload),
     cache: 'no-store',
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.errors?.[0]?.message || data?.error || `Pagar.me error ${res.status}`);
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    const msgFromArray = Array.isArray(data?.errors)
+      ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
+      : undefined;
+    const msg = msgFromArray || data?.message || data?.error || text || `Pagarme error ${res.status}`;
+    throw new Error(`[Pagarme ${res.status}] ${msg}`);
+  }
   return data;
 }
 
@@ -72,8 +115,16 @@ export async function pagarmeGetRecipient(recipientId: string) {
     headers: authHeaders(),
     cache: 'no-store',
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.errors?.[0]?.message || data?.error || `Pagar.me error ${res.status}`);
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    const msgFromArray = Array.isArray(data?.errors)
+      ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
+      : undefined;
+    const msg = msgFromArray || data?.message || data?.error || text || `Pagarme error ${res.status}`;
+    throw new Error(`[Pagarme ${res.status}] ${msg}`);
+  }
   return data;
 }
 
@@ -97,3 +148,27 @@ export type MerchantIntegrationStatus = {
   platformFeeBps: number;
   lastSyncAt: string | null;
 };
+
+export async function pagarmeCreateOrder(payload: Record<string, any>) {
+  const res = await fetch(`${PAGARME_BASE_URL}/orders`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    const msgFromArray = Array.isArray(data?.errors)
+      ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
+      : undefined;
+    const msg = msgFromArray || data?.message || data?.error || text || `Pagarme error ${res.status}`;
+    const err: any = new Error(`[Pagarme ${res.status}] ${msg}`);
+    err.status = res.status;
+    err.responseText = text;
+    err.responseJson = data;
+    throw err;
+  }
+  return data;
+}

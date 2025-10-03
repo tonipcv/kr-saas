@@ -242,47 +242,89 @@ export default function ProductsPage() {
       <div className="min-h-screen bg-white">
         <div className="lg:ml-64">
           <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
-            
-            {/* Header Skeleton */}
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-              <div className="space-y-3">
-                <div className="h-8 bg-gray-200 rounded-lg w-32 animate-pulse"></div>
-                <div className="h-5 bg-gray-100 rounded-lg w-80 animate-pulse"></div>
+
+            {/* Header skeleton (matches title + New Product button) */}
+            <div className="mb-4">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="h-6 w-40 bg-gray-200 rounded animate-pulse" />
+                  <div className="h-4 w-64 bg-gray-100 rounded animate-pulse" />
+                </div>
+                <div className="h-8 w-36 bg-gray-100 rounded-xl animate-pulse" />
               </div>
-              <div className="h-12 bg-gray-100 rounded-xl w-40 animate-pulse"></div>
             </div>
 
-            {/* Search Skeleton */}
-            <div className="bg-white border border-gray-200 shadow-lg rounded-2xl p-6 mb-8">
-              <div className="h-12 bg-gray-100 rounded-xl animate-pulse"></div>
+            {/* Toolbar skeleton (search + filters + sort) */}
+            <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex-1">
+                <div className="h-10 w-full bg-gray-100 rounded-xl animate-pulse" />
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-20 bg-gray-100 rounded-lg animate-pulse" />
+                <div className="h-8 w-20 bg-gray-100 rounded-lg animate-pulse" />
+              </div>
             </div>
 
-            {/* Products Grid Skeleton */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div key={i} className="bg-white border border-gray-200 shadow-lg rounded-2xl p-6">
-                  <div className="space-y-4">
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-2 flex-1">
-                        <div className="h-6 bg-gray-200 rounded w-3/4 animate-pulse"></div>
-                        <div className="h-4 bg-gray-100 rounded w-1/2 animate-pulse"></div>
+            {/* Table skeleton (matches Name, Brand, Price, Points, Status, Actions) */}
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white/70 backdrop-blur-sm shadow-sm">
+              <div className="bg-gray-50/80 border-b border-gray-100">
+                <div className="grid grid-cols-12 gap-2 px-4 py-3 text-xs text-gray-600">
+                  <div className="col-span-3 h-3 bg-gray-100 rounded" />
+                  <div className="col-span-2 h-3 bg-gray-100 rounded" />
+                  <div className="col-span-2 h-3 bg-gray-100 rounded" />
+                  <div className="col-span-2 h-3 bg-gray-100 rounded" />
+                  <div className="col-span-2 h-3 bg-gray-100 rounded" />
+                  <div className="col-span-1 h-3 bg-gray-100 rounded" />
+                </div>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="grid grid-cols-12 gap-2 px-4 py-3 items-center">
+                    {/* Name with avatar */}
+                    <div className="col-span-3 flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-gray-100 border border-gray-200 animate-pulse" />
+                      <div className="flex-1">
+                        <div className="h-4 w-32 bg-gray-100 rounded animate-pulse" />
+                        <div className="mt-1 h-3 w-20 bg-gray-100 rounded animate-pulse" />
                       </div>
-                      <div className="h-6 bg-gray-100 rounded-xl w-16 animate-pulse"></div>
                     </div>
-                    <div className="w-full h-40 bg-gray-100 rounded-xl animate-pulse"></div>
-                    <div className="h-4 bg-gray-100 rounded w-full animate-pulse"></div>
-                    <div className="h-4 bg-gray-100 rounded w-2/3 animate-pulse"></div>
-                    <div className="flex items-center justify-between">
-                      <div className="h-4 bg-gray-100 rounded w-20 animate-pulse"></div>
-                      <div className="h-4 bg-gray-100 rounded w-16 animate-pulse"></div>
+                    {/* Brand */}
+                    <div className="col-span-2">
+                      <div className="h-4 w-20 bg-gray-100 rounded animate-pulse" />
                     </div>
-                    <div className="flex gap-3">
-                      <div className="h-10 bg-gray-100 rounded-xl flex-1 animate-pulse"></div>
-                      <div className="h-10 bg-gray-100 rounded-xl flex-1 animate-pulse"></div>
+                    {/* Price */}
+                    <div className="col-span-2">
+                      <div className="h-4 w-16 bg-gray-100 rounded animate-pulse" />
+                    </div>
+                    {/* Points */}
+                    <div className="col-span-2">
+                      <div className="h-4 w-24 bg-gray-100 rounded animate-pulse" />
+                    </div>
+                    {/* Status */}
+                    <div className="col-span-2">
+                      <div className="h-5 w-16 bg-gray-100 rounded-full animate-pulse" />
+                    </div>
+                    {/* Actions */}
+                    <div className="col-span-1 flex justify-end gap-1">
+                      <div className="h-7 w-7 bg-gray-100 rounded-lg animate-pulse" />
+                      <div className="h-7 w-7 bg-gray-100 rounded-lg animate-pulse" />
+                      <div className="h-7 w-7 bg-gray-100 rounded-lg animate-pulse" />
+                      <div className="h-7 w-7 bg-gray-100 rounded-lg animate-pulse" />
+                      <div className="h-7 w-7 bg-gray-100 rounded-lg animate-pulse" />
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            </div>
+
+            {/* Pagination skeleton */}
+            <div className="mt-4 flex items-center justify-between">
+              <div className="h-4 w-40 bg-gray-100 rounded animate-pulse" />
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 bg-gray-100 rounded-lg animate-pulse" />
+                <div className="h-4 w-24 bg-gray-100 rounded animate-pulse" />
+                <div className="h-8 w-8 bg-gray-100 rounded-lg animate-pulse" />
+              </div>
             </div>
 
           </div>
@@ -468,6 +510,22 @@ export default function ProductsPage() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                            title="Copiar link de checkout"
+                            onClick={async () => {
+                              const href = `${currentClinic?.slug ? `/${currentClinic.slug}` : ''}/checkout/${product.id}`;
+                              try {
+                                await navigator.clipboard.writeText(window.location.origin + href);
+                              } catch {
+                                await navigator.clipboard.writeText(href);
+                              }
+                            }}
+                          >
+                            <LinkIcon className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
                             onClick={() => duplicateProduct(product.id)}
                             title="Duplicate product"
                           >
@@ -606,11 +664,18 @@ export default function ProductsPage() {
                     <div className="rounded-xl border border-gray-200 p-4">
                       <h4 className="text-sm font-semibold text-gray-900 mb-3">Compra</h4>
                       {selectedProduct.purchaseUrl ? (
-                        <Button variant="outline" size="sm" asChild className="h-8 border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900">
-                          <a href={selectedProduct.purchaseUrl} target="_blank" rel="noopener noreferrer" className="flex items-center">
-                            <LinkIcon className="h-3.5 w-3.5 mr-1.5" />
-                            Abrir link
-                          </a>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(selectedProduct.purchaseUrl as string);
+                            } catch {}
+                          }}
+                        >
+                          <LinkIcon className="h-3.5 w-3.5 mr-1.5" />
+                          Copiar link
                         </Button>
                       ) : (
                         <span className="text-sm text-gray-500">Sem link</span>

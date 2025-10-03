@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { pagarmeGetRecipient } from '@/lib/pagarme';
 
 export async function GET(req: Request) {
   try {
@@ -39,6 +40,26 @@ export async function GET(req: Request) {
       });
     }
 
+    let details: any = undefined;
+    if (merchant.recipientId) {
+      try {
+        const r = await pagarmeGetRecipient(merchant.recipientId);
+        details = {
+          name: r?.name || r?.register_information?.name || null,
+          document: r?.document || r?.register_information?.document || null,
+          type: r?.type || r?.register_information?.type || null,
+          transfer_settings: r?.transfer_settings || null,
+          bank_account: r?.default_bank_account || null,
+          status: r?.status || null,
+          payment_mode: r?.payment_mode || null,
+          created_at: r?.created_at || null,
+          updated_at: r?.updated_at || null,
+        };
+      } catch (e) {
+        console.warn('[pagarme][status] recipient fetch failed', e);
+      }
+    }
+
     return NextResponse.json({
       connected: !!merchant.recipientId && merchant.status !== 'DISABLED',
       status: merchant.status,
@@ -46,6 +67,7 @@ export async function GET(req: Request) {
       splitPercent: merchant.splitPercent,
       platformFeeBps: merchant.platformFeeBps,
       lastSyncAt: merchant.lastSyncAt ? merchant.lastSyncAt.toISOString() : null,
+      details,
     });
   } catch (e) {
     console.error('[pagarme][status] error', e);

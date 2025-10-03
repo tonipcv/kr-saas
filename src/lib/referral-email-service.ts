@@ -37,102 +37,12 @@ export async function sendRewardVerificationEmail(params: {
     <div style="font-family: Inter, Arial, sans-serif; line-height: 1.6;">
       <h2 style="margin: 0 0 12px;">Confirm your reward</h2>
       ${doctorName ? `<p style=\"margin: 0 0 8px;\">Doctor: <strong>${doctorName}</strong></p>` : ''}
-
-// Sends a minimal doctor login confirmation email with a black button
-export async function sendDoctorLoginConfirmationEmail(params: {
-  to: string;
-  doctorName?: string | null;
-  confirmUrl: string;
-}): Promise<boolean> {
-  const { to, doctorName, confirmUrl } = params;
-  if (!to) return false;
-
-  const requiredEnv = ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM'];
-  const missing = requiredEnv.filter((k) => !process.env[k]);
-  if (missing.length) {
-    console.error('[email] Missing SMTP env vars:', missing.join(', '));
-    return false;
-  }
-
-  const html = `
-    <div style="font-family: Inter, Arial, sans-serif; line-height: 1.6;">
-      <h2 style="margin: 0 0 12px;">Confirmar login</h2>
-      ${doctorName ? `<p style=\"margin: 0 0 8px;\">Olá, <strong>${doctorName}</strong></p>` : ''}
-      <p style="margin: 0 0 12px;">Para concluir seu login como médico, clique no botão abaixo:</p>
-      <p style="margin:16px 0;">
-        <a href="${confirmUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#111827;color:#fff;text-decoration:none;font-weight:700">Confirmar login</a>
-      </p>
-      <p style="margin: 8px 0 0;color:#475569;font-size:14px;">Se você não solicitou este acesso, ignore este e-mail.</p>
-    </div>
-  `;
-
-  try {
-    const info = await transporter.sendMail({
-      from: {
-        name: 'Zuzz',
-        address: process.env.SMTP_FROM as string,
-      },
-      to,
-      subject: 'Confirme seu login',
-      html,
-    });
-    return Boolean(info?.messageId || info?.response);
-  } catch (err) {
-    console.error('[email] sendDoctorLoginConfirmationEmail failed:', err);
-    return false;
-  }
-}
-
-// Sends a minimal doctor login confirmation email with a black button
-export async function sendDoctorLoginConfirmationEmail(params: {
-  to: string;
-  doctorName?: string | null;
-  confirmUrl: string;
-}): Promise<boolean> {
-  const { to, doctorName, confirmUrl } = params;
-  if (!to) return false;
-
-  const requiredEnv = ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM'];
-  const missing = requiredEnv.filter((k) => !process.env[k]);
-  if (missing.length) {
-    console.error('[email] Missing SMTP env vars:', missing.join(', '));
-    return false;
-  }
-
-  const html = `
-    <div style="font-family: Inter, Arial, sans-serif; line-height: 1.6;">
-      <h2 style="margin: 0 0 12px;">Confirmar login</h2>
-      ${doctorName ? `<p style=\"margin: 0 0 8px;\">Olá, <strong>${doctorName}</strong></p>` : ''}
-      <p style="margin: 0 0 12px;">Para concluir seu login como médico, clique no botão abaixo:</p>
-      <p style="margin:16px 0;">
-        <a href="${confirmUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#111827;color:#fff;text-decoration:none;font-weight:700">Confirmar login</a>
-      </p>
-      <p style="margin: 8px 0 0;color:#475569;font-size:14px;">Se você não solicitou este acesso, ignore este e-mail.</p>
-    </div>
-  `;
-
-  try {
-    const info = await transporter.sendMail({
-      from: {
-        name: 'Zuzz',
-        address: process.env.SMTP_FROM as string,
-      },
-      to,
-      subject: 'Confirme seu login',
-      html,
-    });
-    return Boolean(info?.messageId || info?.response);
-  } catch (err) {
-    console.error('[email] sendDoctorLoginConfirmationEmail failed:', err);
-    return false;
-  }
-}
       ${rewardTitle ? `<p style=\"margin: 0 0 8px;\">Reward: <strong>${rewardTitle}</strong></p>` : ''}
-      <p style="margin: 0 0 12px;">To receive your benefit, please confirm your reward request by clicking the button below:</p>
+      <p style="margin: 0 0 12px;">To confirm your reward, click the button below:</p>
       <p style="margin:16px 0;">
         <a href="${confirmUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#111827;color:#fff;text-decoration:none;font-weight:700">Confirm reward</a>
       </p>
-      <p style="margin: 8px 0 0;color:#475569;font-size:14px;">If you didn't request this, you can ignore this message.</p>
+      <p style="margin: 8px 0 0;color:#475569;font-size:14px;">If you didn't request this, please ignore this email.</p>
     </div>
   `;
 
@@ -140,14 +50,59 @@ export async function sendDoctorLoginConfirmationEmail(params: {
     await transporter.sendMail({
       from: {
         name: 'Zuzz',
-        address: process.env.SMTP_FROM as string
+        address: process.env.SMTP_FROM as string,
       },
       to,
       subject: 'Confirm your reward',
-      html
+      html,
     });
-  } catch (error) {
-    console.error('Erro ao enviar email de verificação de reward:', error);
+  } catch (err) {
+    console.error('[email] sendRewardVerificationEmail failed:', err);
+  }
+}
+
+// Sends a minimal doctor login confirmation email with a black button
+export async function sendDoctorLoginConfirmationEmail(params: {
+  to: string;
+  doctorName?: string | null;
+  confirmUrl: string;
+}): Promise<boolean> {
+  const { to, doctorName, confirmUrl } = params;
+  if (!to) return false;
+
+  const requiredEnv = ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM'];
+  const missing = requiredEnv.filter((k) => !process.env[k]);
+  if (missing.length) {
+    console.error('[email] Missing SMTP env vars:', missing.join(', '));
+    return false;
+  }
+
+  const html = `
+    <div style="font-family: Inter, Arial, sans-serif; line-height: 1.6;">
+      <h2 style="margin: 0 0 12px;">Confirmar login</h2>
+      ${doctorName ? `<p style=\"margin: 0 0 8px;\">Olá, <strong>${doctorName}</strong></p>` : ''}
+      <p style="margin: 0 0 12px;">Para concluir seu login como médico, clique no botão abaixo:</p>
+      <p style="margin:16px 0;">
+        <a href="${confirmUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#111827;color:#fff;text-decoration:none;font-weight:700">Confirmar login</a>
+      </p>
+      <p style="margin: 8px 0 0;color:#475569;font-size:14px;">Se você não solicitou este acesso, ignore este e-mail.</p>
+    </div>
+  `;
+
+  try {
+    const info = await transporter.sendMail({
+      from: {
+        name: 'Zuzz',
+        address: process.env.SMTP_FROM as string,
+      },
+      to,
+      subject: 'Confirme seu login',
+      html,
+    });
+    return Boolean(info?.messageId || info?.response);
+  } catch (err) {
+    console.error('[email] sendDoctorLoginConfirmationEmail failed:', err);
+    return false;
   }
 }
 

@@ -39,28 +39,138 @@ export async function POST(req: Request) {
       }
     }
 
+    // Helper: deep prune undefined, null, empty string and empty objects/arrays
+    const prune = (v: any): any => {
+      if (Array.isArray(v)) {
+        const arr = v.map(prune).filter((x) => !(x === undefined || x === null || (typeof x === 'string' && x.trim() === '') || (typeof x === 'object' && x && Object.keys(x).length === 0)));
+        return arr.length ? arr : undefined;
+      }
+      if (v && typeof v === 'object') {
+        const out: any = {};
+        for (const [k, val] of Object.entries(v)) {
+          const pv = prune(val);
+          if (pv !== undefined) out[k] = pv;
+        }
+        return Object.keys(out).length ? out : undefined;
+      }
+      if (v === undefined || v === null) return undefined;
+      if (typeof v === 'string' && v.trim() === '') return undefined;
+      return v;
+    };
+
     let recipPayload: any;
     if (useV5) {
-      // v5 core payload
-      const doc: string | undefined = legalInfo?.document_number || legalInfo?.document || undefined;
-      const personType = doc && doc.replace(/\D/g, '').length > 11 ? 'company' : 'individual';
-      const defaultBank: any = (bankAccount && Object.keys(bankAccount).length > 0) ? {
+      // v5 core payload (working schema)
+      const doc: string | undefined = (legalInfo?.document_number || legalInfo?.document || '').toString();
+      const digitsDoc = doc.replace(/\D/g, '');
+      const personType = digitsDoc.length > 11 ? 'company' : 'individual';
+
+      // Parse phone to Pagar.me phone_numbers format
+      const rawPhone = (legalInfo?.phone_number || '').toString().trim();
+      let phone_numbers: any[] | undefined = undefined;
+      if (rawPhone) {
+        let digits = rawPhone.replace(/\D/g, '');
+        // Normalize country code without '+' (e.g., 55...)
+        if (!rawPhone.startsWith('+') && digits.startsWith('55') && digits.length >= 12) {
+          digits = digits.slice(2); // drop country code
+        }
+        // Heuristics for BR numbers
+        if (rawPhone.startsWith('+') && digits.length >= 6) {
+          const area_code = digits.slice(2, 4);
+          const number = digits.slice(4);
+          phone_numbers = [{ ddd: area_code, number, type: 'mobile' }];
+        } else if (digits.length >= 10) {
+          // e.g., 11999999999 or 1133334444 (after country code normalization)
+          const area_code = digits.slice(0, 2);
+          const number = digits.slice(2);
+          phone_numbers = [{ ddd: area_code, number, type: 'mobile' }];
+        }
+      }
+
+      const bankTypeMap: Record<string, 'checking' | 'savings'> = {
+        'conta_corrente': 'checking',
+        'conta_poupanca': 'savings',
+      } as const;
+      const normalizedBankType = bankTypeMap[bankAccount?.type] || 'checking';
+
+      const defaultBankRaw: any = (bankAccount && Object.keys(bankAccount).length > 0) ? {
         holder_name: legalInfo?.name || undefined,
         holder_type: personType,
+        holder_document: digitsDoc || undefined,
         bank: bankAccount.bank_code || bankAccount.bank || undefined,
         branch_number: bankAccount.agencia || bankAccount.branch_number || undefined,
+        branch_check_digit: bankAccount.branch_check_digit || undefined,
         account_number: (bankAccount.conta || bankAccount.account_number || '').toString().replace(/[^0-9]/g, ''),
         account_check_digit: bankAccount.account_check_digit || undefined,
-        type: bankAccount.type || 'checking',
+        type: normalizedBankType,
       } : undefined;
-      recipPayload = {
-        name: legalInfo?.name,
-        email: legalInfo?.email,
-        document: doc,
-        type: personType,
-        phone: legalInfo?.phone_number || undefined,
+      const defaultBank = prune(defaultBankRaw);
+
+      // Allow client to send a full register_information block
+      const ri = legalInfo?.register_information || {};
+      // Normalize site_url: must include http/https according to Pagar.me validation
+      const rawSiteUrl: string | undefined = (ri.site_url || legalInfo?.site_url || '').toString().trim() || undefined;
+      const normalizedSiteUrl = rawSiteUrl && !/^https?:\/\//i.test(rawSiteUrl) ? `https://${rawSiteUrl}` : rawSiteUrl;
+      const ts = legalInfo?.transfer_settings || {};
+      const address = ri.address || {};
+      const providedPhones = Array.isArray(ri.phone_numbers) ? ri.phone_numbers : undefined;
+
+      // Build register_information preserving provided values
+      let register_information = prune({
+        name: ri.name ?? legalInfo?.name,
+        email: ri.email ?? legalInfo?.email,
+        document: ri.document ?? (digitsDoc || undefined),
+        type: ri.type ?? personType,
+        site_url: normalizedSiteUrl,
+        mother_name: ri.mother_name,
+        birthdate: ri.birthdate,
+        monthly_income: ri.monthly_income,
+        professional_occupation: ri.professional_occupation,
+        address: prune({
+          street: address.street,
+          complementary: address.complementary,
+          street_number: address.street_number,
+          neighborhood: address.neighborhood,
+          city: address.city,
+          state: address.state,
+          zip_code: address.zip_code,
+          reference_point: address.reference_point,
+        }),
+        phone_numbers: providedPhones || phone_numbers,
+      });
+
+      // Mandatory defaults for individual
+      if ((register_information as any)?.type === 'individual') {
+        const riEnsured: any = { ...(register_information as any) };
+        if (!riEnsured.birthdate) riEnsured.birthdate = '01/01/1990'; // dd/mm/yyyy
+        if (!riEnsured.monthly_income) riEnsured.monthly_income = 120000; // example default
+        if (!riEnsured.professional_occupation) riEnsured.professional_occupation = 'Profissional de Saude';
+        const addr = riEnsured.address || {};
+        riEnsured.address = {
+          street: addr.street || 'Rua Desconhecida',
+          complementary: addr.complementary,
+          street_number: addr.street_number || 'S/N',
+          neighborhood: addr.neighborhood || 'Centro',
+          city: addr.city || 'Sao Paulo',
+          state: addr.state || 'SP',
+          zip_code: addr.zip_code || '01000000',
+          reference_point: addr.reference_point,
+        };
+        register_information = prune(riEnsured);
+      }
+
+      const transfer_settings = prune({
+        transfer_enabled: ts.transfer_enabled ?? 'false',
+        transfer_interval: ts.transfer_interval ?? 'Daily',
+        transfer_day: typeof ts.transfer_day === 'number' ? ts.transfer_day : 0,
+      });
+
+      recipPayload = prune({
+        code: legalInfo?.code || `clinic-${clinicId}`,
+        register_information,
+        transfer_settings,
         default_bank_account: defaultBank,
-      };
+      });
     } else {
       // v1 payload
       recipPayload = {
@@ -94,7 +204,20 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, merchant: updated, hint: externalAccountId ? undefined : 'Conta bancária não vinculada. Verifique versão da API (PAGARME_BASE_URL) e payload.' });
   } catch (e: any) {
-    console.error('[pagarme][recipient] error', e);
-    return NextResponse.json({ error: e?.message || 'Erro interno do servidor' }, { status: 500 });
+    // Log full diagnostic when available
+    const diag = {
+      message: e?.message,
+      status: e?.status,
+      responseJson: e?.responseJson,
+      responseText: e?.responseText,
+      stack: e?.stack,
+    };
+    console.error('[pagarme][recipient] error', diag);
+    return NextResponse.json({
+      error: e?.message || 'Erro interno do servidor',
+      status: e?.status || 500,
+      pagarme: e?.responseJson || undefined,
+      raw: !e?.responseJson ? e?.responseText : undefined,
+    }, { status: 500 });
   }
 }

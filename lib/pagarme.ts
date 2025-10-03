@@ -71,6 +71,30 @@ export function verifyPagarmeWebhookSignature(rawBody: string, signatureHeader: 
   return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(received));
 }
 
+export async function pagarmeGetOrder(orderId: string) {
+  console.log(`[pagarme] Getting order ${orderId}`);
+  const res = await fetch(`${PAGARME_BASE_URL}/orders/${encodeURIComponent(orderId)}`, {
+    method: 'GET',
+    headers: authHeaders(),
+    cache: 'no-store',
+  });
+  
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    console.error(`[pagarme] Error getting order ${orderId}:`, errorData);
+    throw new Error(errorData?.errors?.[0]?.message || errorData?.error || `Pagar.me error ${res.status}`);
+  }
+  
+  const data = await res.json().catch(() => ({}));
+  console.log(`[pagarme] Order ${orderId} data:`, JSON.stringify(data));
+  return data;
+}
+
+export function isV5() {
+  // Check if we're using Pagar.me API v5 (core)
+  return PAGARME_BASE_URL?.includes('api.pagar.me/core');
+}
+
 export type MerchantStatus = 'PENDING' | 'ACTIVE' | 'REJECTED' | 'DISABLED';
 
 export type MerchantIntegrationStatus = {

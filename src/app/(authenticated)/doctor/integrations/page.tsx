@@ -81,7 +81,6 @@ export default function IntegrationsPage() {
   const [xaseExpanded, setXaseExpanded] = useState(false);
   const [emailExpanded, setEmailExpanded] = useState(false);
   const [waExpanded, setWaExpanded] = useState(false);
-  const [stripeExpanded, setStripeExpanded] = useState(false);
   // Pagar.me
   const [pgExpanded, setPgExpanded] = useState(false);
   const [pgLoading, setPgLoading] = useState(false);
@@ -91,6 +90,7 @@ export default function IntegrationsPage() {
   const [pgPlatformFeeBps, setPgPlatformFeeBps] = useState<number>(0);
   const [pgLastSyncAt, setPgLastSyncAt] = useState<string | null>(null);
   const [pgDialogOpen, setPgDialogOpen] = useState(false);
+  const [pgDetails, setPgDetails] = useState<any>(null);
   // Simple legal/bank form
   const [pgLegalName, setPgLegalName] = useState('');
   const [pgDocument, setPgDocument] = useState('');
@@ -99,6 +99,8 @@ export default function IntegrationsPage() {
   const [pgBankCode, setPgBankCode] = useState('');
   const [pgAgency, setPgAgency] = useState('');
   const [pgAccount, setPgAccount] = useState('');
+  const [pgAgencyDigit, setPgAgencyDigit] = useState('');
+  const [pgAccountDigit, setPgAccountDigit] = useState('');
   const [pgAccountType, setPgAccountType] = useState<'conta_corrente' | 'conta_poupanca' | ''>('');
   const [pgSaving, setPgSaving] = useState(false);
   
@@ -236,6 +238,7 @@ export default function IntegrationsPage() {
       setPgPlatformFeeBps(Number(data?.platformFeeBps ?? 0));
       setPgLastSyncAt(data?.lastSyncAt || null);
       setPgStatus(connected ? 'ACTIVE' : (String(data?.status || 'UNKNOWN').toUpperCase() as any));
+      setPgDetails(data?.details || null);
     } catch (e: any) {
       console.error('Pagar.me status error', e);
       setPgStatus('UNKNOWN');
@@ -480,7 +483,7 @@ export default function IntegrationsPage() {
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    <CogIcon className="h-5 w-5 text-gray-500" /> Pagamentos (Pagar.me)
+                    <CogIcon className="h-5 w-5 text-gray-500" /> Pagamentos
                   </CardTitle>
                   <div className="flex items-center gap-2">
                     <div className="text-xs">
@@ -528,6 +531,43 @@ export default function IntegrationsPage() {
                       </div>
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
+                      {pgDetails && (
+                        <div className="w-full mt-1 rounded-lg border border-gray-200 p-3">
+                          <div className="text-xs font-semibold text-gray-700 mb-2">Recebedor</div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-500">Nome</span>
+                              <span className="font-medium text-gray-900">{pgDetails.name || '-'}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-500">Documento</span>
+                              <span className="font-medium text-gray-900">{pgDetails.document || '-'}</span>
+                            </div>
+                            <div className="md:col-span-2 flex items-center justify-between">
+                              <span className="text-gray-500">Conta bancária</span>
+                              <span className="text-gray-900">
+                                {pgDetails.bank_account ? (
+                                  <>
+                                    {pgDetails.bank_account.bank || '—'} · ag {pgDetails.bank_account.branch_number || '—'}{pgDetails.bank_account.branch_check_digit ? `-${pgDetails.bank_account.branch_check_digit}` : ''}
+                                    {' '}· conta {pgDetails.bank_account.account_number || '—'}{pgDetails.bank_account.account_check_digit ? `-${pgDetails.bank_account.account_check_digit}` : ''}
+                                    {' '}· {pgDetails.bank_account.type || '—'}
+                                  </>
+                                ) : '—'}
+                              </span>
+                            </div>
+                            <div className="md:col-span-2 flex items-center justify-between">
+                              <span className="text-gray-500">Transferências</span>
+                              <span className="text-gray-900">
+                                {pgDetails.transfer_settings ? (
+                                  <>
+                                    {pgDetails.transfer_settings.transfer_enabled ? 'Ativadas' : 'Desativadas'} · {pgDetails.transfer_settings.transfer_interval || '-'}{typeof pgDetails.transfer_settings.transfer_day === 'number' ? ` · dia ${pgDetails.transfer_settings.transfer_day}` : ''}
+                                  </>
+                                ) : '—'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       <Button
                         onClick={async () => {
                           if (!currentClinic?.id) return;
@@ -538,7 +578,7 @@ export default function IntegrationsPage() {
                             });
                             const data = await res.json();
                             if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
-                            setPgDialogOpen(true);
+                            router.push('/doctor/integrations/pagarme/setup');
                           } catch (e: any) {
                             toast.error(e?.message || 'Erro ao iniciar onboarding');
                           }
@@ -678,7 +718,7 @@ export default function IntegrationsPage() {
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    <CogIcon className="h-5 w-5 text-gray-500" /> Email (SendPulse) — remetente profissional
+                    <CogIcon className="h-5 w-5 text-gray-500" /> E-mail
                   </CardTitle>
                   <div className="flex items-center gap-2">
                     <div className="text-xs">
@@ -895,51 +935,6 @@ export default function IntegrationsPage() {
                 </CardContent>
               )}
             </Card>
-            {/* Stripe */}
-            <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
-              {blocked && (
-                <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-1 text-xs">
-                  <LockClosedIcon className="h-3.5 w-3.5" /> Locked
-                </div>
-              )}
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    <CogIcon className="h-5 w-5 text-gray-500" /> Pagamentos (Stripe)
-                  </CardTitle>
-                  <Button size="sm" variant="outline" className="h-7" onClick={() => setStripeExpanded(v => !v)}>
-                    {stripeExpanded ? 'Ocultar' : 'Ver detalhes'}
-                  </Button>
-                </div>
-              </CardHeader>
-              {stripeExpanded && (
-                <CardContent>
-                  <div className="text-sm">
-                    <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
-                      <p className="text-gray-600">Conecte uma conta Stripe para habilitar pagamentos online.</p>
-                      <a href="https://stripe.com/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium mt-2">
-                        <LinkIcon className="h-4 w-4" /> Saiba mais
-                      </a>
-                    </div>
-                    <div className="flex items-center gap-2 mt-3">
-                      {isCreator ? (
-                        <Link href="/doctor/payments">
-                          <Button className="bg-gray-900 hover:bg-black text-white rounded-lg h-9 px-4 font-medium">
-                            Abrir pagamentos
-                          </Button>
-                        </Link>
-                      ) : (
-                        <Link href="/clinic/subscription">
-                          <Button variant="outline" className="border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-lg h-9 px-4">
-                            Upgrade plan
-                          </Button>
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              )}
-            </Card>
           </div>
           {/* WhatsApp Onboarding Wizard */}
           <Dialog open={waWizardOpen} onOpenChange={setWaWizardOpen}>
@@ -1010,36 +1005,109 @@ export default function IntegrationsPage() {
 
           {/* Pagar.me Recipient Dialog */}
           <Dialog open={pgDialogOpen} onOpenChange={setPgDialogOpen}>
-            <DialogContent className="bg-white rounded-2xl">
-              <DialogHeader>
-                <DialogTitle className="text-[18px] font-semibold text-gray-900 tracking-[-0.01em]">
-                  {pgRecipientId ? 'Atualizar dados do recebedor' : 'Conectar pagamentos (Pagar.me)'}
-                </DialogTitle>
-                <DialogDescription>
-                  Informe os dados legais e bancários para receber repasses. Você pode ajustar o split e a taxa de plataforma.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                <Input value={pgLegalName} onChange={(e) => setPgLegalName(e.target.value)} placeholder="Razão social / Nome completo" className="h-9" />
-                <Input value={pgDocument} onChange={(e) => setPgDocument(e.target.value)} placeholder="Documento (CPF/CNPJ)" className="h-9" />
-                <Input value={pgEmail} onChange={(e) => setPgEmail(e.target.value)} placeholder="Email de contato" className="h-9" />
-                <Input value={pgPhone} onChange={(e) => setPgPhone(e.target.value)} placeholder="Telefone (E.164 ex: +5511999999999)" className="h-9" />
+            <DialogContent className="bg-white rounded-none max-w-none w-screen h-[92vh] p-0">
+              {/* Header */}
+              <div className="px-6 pt-5 pb-3 border-b border-gray-200">
+                <DialogHeader>
+                  <DialogTitle className="text-[20px] font-semibold text-gray-900 tracking-[-0.01em]">
+                    {pgRecipientId ? 'Atualizar dados do recebedor' : 'Conectar pagamentos (Pagar.me)'}
+                  </DialogTitle>
+                  <DialogDescription>
+                    Informe os dados legais e bancários para receber repasses. Você pode ajustar o split e a taxa de plataforma.
+                  </DialogDescription>
+                </DialogHeader>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
-                <Input value={pgBankCode} onChange={(e) => setPgBankCode(e.target.value)} placeholder="Banco (ex: 001)" className="h-9" />
-                <Input value={pgAgency} onChange={(e) => setPgAgency(e.target.value)} placeholder="Agência" className="h-9" />
-                <Input value={pgAccount} onChange={(e) => setPgAccount(e.target.value)} placeholder="Conta" className="h-9" />
-                <Input value={pgAccountType} onChange={(e) => setPgAccountType(e.target.value as any)} placeholder="Tipo (conta_corrente/conta_poupanca)" className="h-9" />
+              {/* Body */}
+              <div className="px-6 py-5 overflow-auto h-[calc(92vh-56px-72px)]">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Left: form */}
+                  <div>
+                    <div className="text-xs font-semibold text-gray-700 mb-2">Dados legais</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Razão social / Nome completo</div>
+                        <Input value={pgLegalName} onChange={(e) => setPgLegalName(e.target.value)} placeholder="Ex.: Clínica Exemplo LTDA" className="h-10" />
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Documento (CPF/CNPJ)</div>
+                        <Input value={pgDocument} onChange={(e) => setPgDocument(e.target.value)} placeholder="Somente números" className="h-10" />
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Email de contato</div>
+                        <Input value={pgEmail} onChange={(e) => setPgEmail(e.target.value)} placeholder="email@dominio.com" className="h-10" />
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Telefone (E.164)</div>
+                        <Input value={pgPhone} onChange={(e) => setPgPhone(e.target.value)} placeholder="+5511999999999" className="h-10" />
+                      </div>
+                    </div>
+
+                    <div className="mt-5 text-xs font-semibold text-gray-700 mb-2">Dados bancários</div>
+                    <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Banco</div>
+                        <Input value={pgBankCode} onChange={(e) => setPgBankCode(e.target.value)} placeholder="341" className="h-10" />
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Agência</div>
+                        <Input value={pgAgency} onChange={(e) => setPgAgency(e.target.value)} placeholder="1234" className="h-10" />
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Dígito ag.</div>
+                        <Input value={pgAgencyDigit} onChange={(e) => setPgAgencyDigit(e.target.value)} placeholder="6 (opcional)" className="h-10" />
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Conta</div>
+                        <Input value={pgAccount} onChange={(e) => setPgAccount(e.target.value)} placeholder="12345" className="h-10" />
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Dígito conta</div>
+                        <Input value={pgAccountDigit} onChange={(e) => setPgAccountDigit(e.target.value)} placeholder="6 (opcional)" className="h-10" />
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Tipo</div>
+                        <Input value={pgAccountType} onChange={(e) => setPgAccountType(e.target.value as any)} placeholder="conta_corrente / conta_poupanca" className="h-10" />
+                      </div>
+                    </div>
+
+                    <div className="mt-5 text-xs font-semibold text-gray-700 mb-2">Split & Taxa</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Split % (clínica)</div>
+                        <Input type="number" min={1} max={100} value={pgSplitPercent} onChange={(e) => setPgSplitPercent(parseInt(e.target.value || '100', 10))} placeholder="1-100" className="h-10" />
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Taxa plataforma (bps)</div>
+                        <Input type="number" min={0} max={10000} value={pgPlatformFeeBps} onChange={(e) => setPgPlatformFeeBps(parseInt(e.target.value || '0', 10))} placeholder="ex.: 150 = 1,5%" className="h-10" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: summary */}
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 h-full">
+                    <div className="text-sm font-semibold text-gray-800">Resumo</div>
+                    <div className="mt-3 space-y-2 text-sm">
+                      <div className="flex justify-between"><span className="text-gray-600">Nome</span><span className="font-medium text-gray-900 truncate max-w-[60%] text-right">{pgLegalName || '-'}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">Documento</span><span className="font-medium text-gray-900">{pgDocument || '-'}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">Email</span><span className="font-medium text-gray-900 truncate max-w-[60%] text-right">{pgEmail || '-'}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">Telefone</span><span className="font-medium text-gray-900">{pgPhone || '-'}</span></div>
+                      <div className="h-px bg-gray-200 my-2" />
+                      <div className="flex justify-between"><span className="text-gray-600">Banco</span><span className="font-medium text-gray-900">{pgBankCode || '-'}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">Agência</span><span className="font-medium text-gray-900">{pgAgency}{pgAgencyDigit ? `-${pgAgencyDigit}` : ''}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">Conta</span><span className="font-medium text-gray-900">{pgAccount}{pgAccountDigit ? `-${pgAccountDigit}` : ''}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">Tipo</span><span className="font-medium text-gray-900">{pgAccountType || '-'}</span></div>
+                      <div className="h-px bg-gray-200 my-2" />
+                      <div className="flex justify-between"><span className="text-gray-600">Split (clínica)</span><span className="font-medium text-gray-900">{pgSplitPercent}%</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">Taxa plataforma</span><span className="font-medium text-gray-900">{pgPlatformFeeBps} bps</span></div>
+                      <div className="text-xs text-gray-500 mt-3">Dica: você pode ajustar esses valores depois em Integrações.</div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                <Input type="number" min={1} max={100} value={pgSplitPercent} onChange={(e) => setPgSplitPercent(parseInt(e.target.value || '100', 10))} placeholder="Split % para clínica (1-100)" className="h-9" />
-                <Input type="number" min={0} max={10000} value={pgPlatformFeeBps} onChange={(e) => setPgPlatformFeeBps(parseInt(e.target.value || '0', 10))} placeholder="Taxa plataforma (bps)" className="h-9" />
-              </div>
-
-              <div className="flex justify-end gap-2 mt-4">
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2 sticky bottom-0 bg-white">
                 <Button variant="outline" onClick={() => setPgDialogOpen(false)} className="h-8">Cancelar</Button>
                 <Button
                   onClick={async () => {
@@ -1057,7 +1125,9 @@ export default function IntegrationsPage() {
                       const bankAccount: any = pgBankCode && pgAgency && pgAccount && pgAccountType ? {
                         bank_code: pgBankCode.trim(),
                         agencia: pgAgency.trim(),
+                        branch_check_digit: pgAgencyDigit.trim() || undefined,
                         conta: pgAccount.trim(),
+                        account_check_digit: pgAccountDigit.trim() || undefined,
                         type: pgAccountType,
                       } : {};
                       const res = await fetch('/api/payments/pagarme/recipient', {

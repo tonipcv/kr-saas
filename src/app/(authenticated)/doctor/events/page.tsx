@@ -5,6 +5,7 @@ import { formatISO, subDays } from "date-fns";
 import { useClinic } from "@/contexts/clinic-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+ 
 
 interface MetricBucket {
   date: string;
@@ -95,6 +96,8 @@ export default function DoctorEventsPage() {
     run();
     return () => { mounted = false; };
   }, [clinicId, recentLimit]);
+
+  
 
   const topTypes = useMemo(() => {
     const map = data?.summary?.byType || {};
@@ -276,6 +279,7 @@ export default function DoctorEventsPage() {
 
         </div>
       </div>
+      
     </div>
   );
 }
