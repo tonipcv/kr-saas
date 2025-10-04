@@ -192,7 +192,7 @@ export default function Navigation() {
     const parts = pathname.split('/').filter(Boolean);
     if (parts.length === 0) return null;
     const first = parts[0];
-    const excluded = new Set(['auth', 'api', 'assets', 'public', '_next', 'doctor', 'admin', 'clinic', 'patient']);
+    const excluded = new Set(['auth', 'api', 'assets', 'public', '_next', 'doctor', 'admin', 'clinic', 'patient', 'business']);
     return excluded.has(first) ? null : first;
   })();
   const { data: session } = useSession();
@@ -287,73 +287,73 @@ export default function Navigation() {
       title: "",
       items: [
         {
-          href: '/doctor/dashboard',
+          href: '/business/dashboard',
           label: 'Dashboard',
           icon: PresentationChartBarIcon,
           description: 'Overview'
         },
         {
-          href: '/doctor/patients',
+          href: '/business/clients',
           label: 'Clients',
           icon: UsersIcon,
           description: 'Manage clients'
         },
         {
-          href: '/doctor/clinic',
+          href: '/business/clinic',
           label: 'Team',
           icon: BuildingOfficeIcon,
           description: 'Manage clinics and team'
         },
         {
-          href: '/doctor/products',
+          href: '/business/products',
           label: 'Products',
           icon: DocumentTextIcon,
           description: 'Manage products & services'
         },
         {
-          href: '/doctor/purchases',
+          href: '/business/purchases',
           label: 'Purchases',
           icon: CreditCardIcon,
           description: 'Record patient purchases'
         },
         {
-          href: '/doctor/referrals',
+          href: '/business/referrals',
           label: 'Referrals',
           icon: UserPlusIcon,
           description: 'Manage received referrals'
         },
         {
-          href: '/doctor/coupon-templates',
+          href: '/business/coupon-templates',
           label: 'Cupons',
           icon: TagIcon,
           description: 'Gerenciar modelos de cupons'
         },
         {
-          href: '/doctor/rewards',
+          href: '/business/rewards',
           label: 'Rewards',
           icon: GiftIcon,
           description: 'Configure rewards'
         },
         {
-          href: '/doctor/integrations',
+          href: '/business/integrations',
           label: 'Integrations',
           icon: CogIcon,
           description: 'Connect external tools'
         },
         {
-          href: '/doctor/events',
+          href: '/business/events',
           label: 'Events',
           icon: PresentationChartBarIcon,
           description: 'Metrics & timelines'
         },
         {
-          href: '/doctor/broadcast',
+          href: '/business/broadcast',
           label: 'Broadcast',
           icon: ChatBubbleLeftRightIcon,
           description: 'Send WhatsApp and campaigns'
         },
         {
-          href: '/doctor/automation',
+          href: '/business/automation',
           label: 'Automation',
           icon: SparklesIcon,
           description: 'Triggers & actions'
@@ -408,7 +408,7 @@ export default function Navigation() {
   ], []);
 
   // Detectar se está em páginas específicas
-  const isDoctorPage = pathname?.startsWith('/doctor') || pathname?.startsWith('/clinic');
+  const isDoctorPage = pathname?.startsWith('/doctor') || pathname?.startsWith('/clinic') || pathname?.startsWith('/business');
   const isAdminPage = pathname?.startsWith('/admin');
   const isProtocolsPage = pathname === '/patient/protocols';
   const isChecklistPage = pathname?.includes('/patient/checklist/');
@@ -460,7 +460,7 @@ export default function Navigation() {
 
   // Profile URL - memoizada
   const profileUrl = useMemo(() => {
-    if (effectiveRole === 'DOCTOR' || effectiveRole === 'SUPER_ADMIN') return '/doctor/profile';
+    if (effectiveRole === 'DOCTOR' || effectiveRole === 'SUPER_ADMIN') return '/business/profile';
     // Patient
     return currentSlug ? `/${currentSlug}/profile` : '/patient/profile';
   }, [effectiveRole, currentSlug]);
@@ -487,6 +487,7 @@ export default function Navigation() {
     '/patient',
     '/doctor-info',
     '/doctor',
+    '/business',
     '/admin',
     '/clinic'
   ];

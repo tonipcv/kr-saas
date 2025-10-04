@@ -100,6 +100,62 @@ export default async function middleware(request: NextRequestWithAuth) {
     return NextResponse.next()
   }
 
+  // Temporary route transition: redirect legacy doctor products to business products
+  if (pathname.startsWith('/doctor/products')) {
+    const destPath = pathname.replace(/^\/doctor\/(products.*)$/i, '/business/$1')
+    return NextResponse.redirect(new URL(destPath + url.search, request.url))
+  }
+
+  // Temporary route transition: dashboard and patients
+  if (pathname.startsWith('/doctor/dashboard')) {
+    const destPath = pathname.replace(/^\/doctor\/dashboard(.*)$/i, '/business/dashboard$1')
+    return NextResponse.redirect(new URL(destPath + url.search, request.url))
+  }
+  if (pathname.startsWith('/doctor/patients')) {
+    const destPath = pathname.replace(/^\/doctor\/patients(.*)$/i, '/business/clients$1')
+    return NextResponse.redirect(new URL(destPath + url.search, request.url))
+  }
+  if (pathname.startsWith('/doctor/clinic')) {
+    const destPath = pathname.replace(/^\/doctor\/clinic(.*)$/i, '/business/clinic$1')
+    return NextResponse.redirect(new URL(destPath + url.search, request.url))
+  }
+  if (pathname.startsWith('/doctor/purchases')) {
+    const destPath = pathname.replace(/^\/doctor\/purchases(.*)$/i, '/business/purchases$1')
+    return NextResponse.redirect(new URL(destPath + url.search, request.url))
+  }
+  if (pathname.startsWith('/doctor/referrals')) {
+    const destPath = pathname.replace(/^\/doctor\/referrals(.*)$/i, '/business/referrals$1')
+    return NextResponse.redirect(new URL(destPath + url.search, request.url))
+  }
+  if (pathname.startsWith('/doctor/coupon-templates')) {
+    const destPath = pathname.replace(/^\/doctor\/coupon-templates(.*)$/i, '/business/coupon-templates$1')
+    return NextResponse.redirect(new URL(destPath + url.search, request.url))
+  }
+  if (pathname.startsWith('/doctor/rewards')) {
+    const destPath = pathname.replace(/^\/doctor\/rewards(.*)$/i, '/business/rewards$1')
+    return NextResponse.redirect(new URL(destPath + url.search, request.url))
+  }
+  if (pathname.startsWith('/doctor/integrations')) {
+    const destPath = pathname.replace(/^\/doctor\/integrations(.*)$/i, '/business/integrations$1')
+    return NextResponse.redirect(new URL(destPath + url.search, request.url))
+  }
+  if (pathname.startsWith('/doctor/events')) {
+    const destPath = pathname.replace(/^\/doctor\/events(.*)$/i, '/business/events$1')
+    return NextResponse.redirect(new URL(destPath + url.search, request.url))
+  }
+  if (pathname.startsWith('/doctor/broadcast')) {
+    const destPath = pathname.replace(/^\/doctor\/broadcast(.*)$/i, '/business/broadcast$1')
+    return NextResponse.redirect(new URL(destPath + url.search, request.url))
+  }
+  if (pathname.startsWith('/doctor/automation')) {
+    const destPath = pathname.replace(/^\/doctor\/automation(.*)$/i, '/business/automation$1')
+    return NextResponse.redirect(new URL(destPath + url.search, request.url))
+  }
+  if (pathname.startsWith('/doctor/profile')) {
+    const destPath = pathname.replace(/^\/doctor\/profile(.*)$/i, '/business/profile$1')
+    return NextResponse.redirect(new URL(destPath + url.search, request.url))
+  }
+
   // Lista de rotas protegidas para pacientes
   const patientRoutes = [
     '/patient/protocols',
@@ -120,7 +176,8 @@ export default async function middleware(request: NextRequestWithAuth) {
   // Lista de rotas protegidas para médicos
   const doctorRoutes = [
     '/doctor',
-    '/clinic'
+    '/clinic',
+    '/business'
   ]
 
   // Lista de rotas protegidas para administradores
@@ -187,6 +244,7 @@ export const config = {
     '/timeblocking/:path*',
     '/profile/:path*',
     '/doctor/:path*',
+    '/business/:path*',
     '/admin/:path*',
     '/auth/:path*',
     '/patient/:path*',

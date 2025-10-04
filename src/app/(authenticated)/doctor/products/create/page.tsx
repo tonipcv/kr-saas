@@ -119,7 +119,7 @@ export default function CreateProductPage() {
       });
 
       if (response.ok) {
-        router.push('/doctor/products');
+        router.push('/business/products');
       } else {
         const error = await response.json();
         alert(error.error || 'Error creating product');
@@ -166,7 +166,7 @@ export default function CreateProductPage() {
           {/* Header */}
           <div className="flex items-center gap-4 mb-4">
             <Button variant="ghost" size="sm" asChild className="h-9 rounded-xl px-3 border border-gray-200 text-gray-700 hover:bg-gray-50">
-              <Link href="/doctor/products">
+              <Link href="/business/products">
                 <ArrowLeftIcon className="h-4 w-4 mr-2" />
                 Back
               </Link>
@@ -495,7 +495,7 @@ export default function CreateProductPage() {
                     )}
                   </Button>
                   <Button type="button" variant="outline" asChild className="border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-xl h-10 px-4 shadow-sm font-medium">
-                    <Link href="/doctor/products">
+                    <Link href="/business/products">
                       <XMarkIcon className="h-4 w-4 mr-2" />
                       Cancel
                     </Link>

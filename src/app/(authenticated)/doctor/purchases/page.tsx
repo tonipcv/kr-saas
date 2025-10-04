@@ -360,7 +360,7 @@ export default function PurchasesPage() {
                   </Button>
                 )}
                 <Button asChild variant="outline" size="sm" className="h-8 text-gray-700 hover:bg-gray-50">
-                  <Link href="/doctor/products">Manage Products</Link>
+                  <Link href="/business/products">Manage Products</Link>
                 </Button>
               </div>
             </div>
