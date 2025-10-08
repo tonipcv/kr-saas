@@ -226,9 +226,17 @@ export default function PatientsPage() {
       console.log('📦 API Response data:', data);
 
       if (response.ok) {
-        // Transform patients data to match expected format
-        const transformedPatients = Array.isArray(data) ? data.map((patient: any) => ({
-          id: patient.id,
+        // Transform patients data to match expected format (support multiple payload shapes)
+        const list = Array.isArray(data)
+          ? data
+          : (Array.isArray(data?.data)
+              ? data.data
+              : (Array.isArray(data?.patients)
+                  ? data.patients
+                  : (Array.isArray(data?.data?.items) ? data.data.items : [])));
+
+        const transformedPatients = list.map((patient: any) => ({
+          id: patient.id || patient.userId,
           name: patient.name,
           email: patient.email,
           phone: patient.phone,
@@ -241,8 +249,8 @@ export default function PatientsPage() {
           allergies: patient.allergies,
           medications: patient.medications,
           notes: patient.notes,
-          is_active: true,
-          created_at: patient.createdAt,
+          is_active: patient.is_active ?? true,
+          created_at: patient.createdAt || patient.updatedAt,
           assigned_protocols: patient.assignedProtocols?.map((protocol: any) => ({
             id: protocol.id,
             protocol: protocol.protocol,
@@ -250,7 +258,7 @@ export default function PatientsPage() {
             end_date: protocol.endDate,
             is_active: protocol.isActive
           })) || []
-        })) : [];
+        }));
 
         setPatients(transformedPatients);
         console.log('✅ Patients loaded:', transformedPatients.length);

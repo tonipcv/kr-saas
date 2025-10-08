@@ -401,10 +401,21 @@ export default function ProductsPage() {
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-500 hover:bg-gray-100 hover:text-gray-900" onClick={() => loadProductDetails(product.id)} title="View details">
                               <EyeIcon className="h-3.5 w-3.5" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-500 hover:bg-gray-100 hover:text-gray-900" title="Copiar link de checkout" onClick={async () => {
-                              const href = `/checkout/${product.id}`;
-                              try { await navigator.clipboard.writeText(window.location.origin + href); } catch { await navigator.clipboard.writeText(href); }
-                            }}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                              title="Copiar link de checkout"
+                              onClick={async () => {
+                                const slug = currentClinic?.slug;
+                                const href = slug ? `/${slug}/checkout/${product.id}` : `/checkout/${product.id}`;
+                                try {
+                                  await navigator.clipboard.writeText(window.location.origin + href);
+                                } catch {
+                                  await navigator.clipboard.writeText(href);
+                                }
+                              }}
+                            >
                               <LinkIcon className="h-3.5 w-3.5" />
                             </Button>
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-500 hover:bg-gray-100 hover:text-gray-900" onClick={() => duplicateProduct(product.id)} title="Duplicate product">

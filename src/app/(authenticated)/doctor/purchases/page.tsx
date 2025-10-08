@@ -362,6 +362,9 @@ export default function PurchasesPage() {
                 <Button asChild variant="outline" size="sm" className="h-8 text-gray-700 hover:bg-gray-50">
                   <Link href="/business/products">Manage Products</Link>
                 </Button>
+                <Button asChild variant="outline" size="sm" className="h-8 text-gray-700 hover:bg-gray-50">
+                  <Link href="/business/payments">Payments Data</Link>
+                </Button>
               </div>
             </div>
           </div>

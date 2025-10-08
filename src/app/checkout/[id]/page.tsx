@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,11 +13,13 @@ type Product = {
   imageUrl?: string;
   originalPrice?: number;
   discountPrice?: number;
+  clinic?: { slug?: string | null } | null;
 };
 
 export default function CheckoutPage({ params }: { params: { id: string } }) {
   const productId = params.id;
   const sp = useSearchParams();
+  const router = useRouter();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [qty, setQty] = useState<number>(Number(sp.get('qty') || 1));
@@ -37,10 +39,20 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
     async function load() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/products/${productId}`, { cache: 'no-store' });
+        // Use public endpoint to also get clinic slug for redirection to branded checkout
+        const res = await fetch(`/api/products/public/${productId}`, { cache: 'no-store' });
         if (!res.ok) throw new Error('Produto não encontrado');
         const data = await res.json();
         setProduct(data);
+        // If this product belongs to a clinic with slug, redirect to branded checkout preserving query params
+        const slug = data?.clinic?.slug;
+        if (slug) {
+          const qs = typeof window !== 'undefined' ? window.location.search : '';
+          const to = `/${slug}/checkout/${productId}${qs}`;
+          // Use replace to avoid back navigation to unbranded route
+          window.location.replace(to);
+          return;
+        }
       } catch (e: any) {
         setError(e?.message || 'Erro ao carregar produto');
       } finally {

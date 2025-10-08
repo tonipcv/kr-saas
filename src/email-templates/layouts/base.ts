@@ -15,7 +15,7 @@ export function baseTemplate({
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>${clinicName}</title>
     </head>
-    <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #ffffff; line-height: 1.6;">
+    <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #ffffff; line-height: 1.6; text-transform: uppercase;">
       <div style="max-width: 600px; margin: 40px auto; padding: 0 20px; background-color: #ffffff;">
         <!-- Main Content -->
         ${content}
@@ -23,7 +23,7 @@ export function baseTemplate({
         <!-- Footer -->
         <div style="margin-top: 32px; padding-top: 32px; border-top: 1px solid #eee; color: #666;">
           <p style="margin: 0; font-size: 12px; color: #666;">
-            Sent by Zuzz
+            Enviado por ${clinicName}
           </p>
         </div>
       </div>

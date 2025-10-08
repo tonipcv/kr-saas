@@ -1,0 +1,69 @@
+-- Create payment tables for Pagar.me v5 tokenization and transactions
+-- Non-breaking: no changes to existing tables; all new tables are independent
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS payment_customers (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL DEFAULT 'pagarme',
+  provider_customer_id TEXT NOT NULL,
+  doctor_id TEXT NOT NULL,
+  patient_profile_id TEXT NOT NULL,
+  clinic_id TEXT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS payment_customers_unique_doctor_profile_provider
+  ON payment_customers(doctor_id, patient_profile_id, provider);
+CREATE INDEX IF NOT EXISTS payment_customers_doctor_idx ON payment_customers(doctor_id);
+CREATE INDEX IF NOT EXISTS payment_customers_profile_idx ON payment_customers(patient_profile_id);
+CREATE INDEX IF NOT EXISTS payment_customers_clinic_idx ON payment_customers(clinic_id);
+
+CREATE TABLE IF NOT EXISTS payment_methods (
+  id TEXT PRIMARY KEY,
+  payment_customer_id TEXT NOT NULL,
+  provider_card_id TEXT NOT NULL,
+  brand TEXT NULL,
+  last4 TEXT NULL,
+  exp_month INT NULL,
+  exp_year INT NULL,
+  is_default BOOLEAN NOT NULL DEFAULT FALSE,
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS payment_methods_customer_card_unique
+  ON payment_methods(payment_customer_id, provider_card_id);
+CREATE INDEX IF NOT EXISTS payment_methods_customer_idx ON payment_methods(payment_customer_id);
+
+CREATE TABLE IF NOT EXISTS payment_transactions (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL DEFAULT 'pagarme',
+  provider_order_id TEXT NULL,
+  provider_charge_id TEXT NULL,
+  doctor_id TEXT NOT NULL,
+  patient_profile_id TEXT NOT NULL,
+  clinic_id TEXT NULL,
+  product_id TEXT NULL,
+  purchase_id TEXT NULL,
+  amount_cents INT NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'BRL',
+  installments INT NOT NULL DEFAULT 1,
+  payment_method_type TEXT NOT NULL,
+  payment_method_id TEXT NULL,
+  status TEXT NOT NULL DEFAULT 'processing',
+  raw_payload JSONB NULL,
+  raw_webhook JSONB NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS payment_transactions_order_idx ON payment_transactions(provider_order_id);
+CREATE INDEX IF NOT EXISTS payment_transactions_charge_idx ON payment_transactions(provider_charge_id);
+CREATE INDEX IF NOT EXISTS payment_transactions_doctor_idx ON payment_transactions(doctor_id);
+CREATE INDEX IF NOT EXISTS payment_transactions_profile_idx ON payment_transactions(patient_profile_id);
+CREATE INDEX IF NOT EXISTS payment_transactions_status_idx ON payment_transactions(status);
+
+COMMIT;

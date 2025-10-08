@@ -8,6 +8,56 @@ const AUTH_SCHEME = (process.env.PAGARME_AUTH_SCHEME || 'basic').toLowerCase(); 
 const PAGARME_ACCOUNT_ID = process.env.PAGARME_ACCOUNT_ID || '';
 export function isV5() { return IS_V5; }
 
+// ===== v5 Customers & Cards helpers =====
+
+export async function pagarmeCreateCustomer(payload: Record<string, any>) {
+  const res = await fetch(`${PAGARME_BASE_URL}/customers`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    const msgFromArray = Array.isArray(data?.errors)
+      ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
+      : undefined;
+    const msg = msgFromArray || data?.message || data?.error || text || `Pagarme error ${res.status}`;
+    const err: any = new Error(`[Pagarme ${res.status}] ${msg}`);
+    err.status = res.status;
+    err.responseText = text;
+    err.responseJson = data;
+    throw err;
+  }
+  return data;
+}
+
+export async function pagarmeCreateCustomerCard(customerId: string, payload: Record<string, any>) {
+  const res = await fetch(`${PAGARME_BASE_URL}/customers/${encodeURIComponent(customerId)}/cards`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    const msgFromArray = Array.isArray(data?.errors)
+      ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
+      : undefined;
+    const msg = msgFromArray || data?.message || data?.error || text || `Pagarme error ${res.status}`;
+    const err: any = new Error(`[Pagarme ${res.status}] ${msg}`);
+    err.status = res.status;
+    err.responseText = text;
+    err.responseJson = data;
+    throw err;
+  }
+  return data;
+}
+
 export async function pagarmeGetOrder(orderId: string) {
   const res = await fetch(`${PAGARME_BASE_URL}/orders/${encodeURIComponent(orderId)}`, {
     method: 'GET',

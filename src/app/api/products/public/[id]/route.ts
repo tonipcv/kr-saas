@@ -18,6 +18,16 @@ export async function GET(
         price: true,
         imageUrl: true,
         clinicId: true,
+        clinic: {
+          select: {
+            slug: true,
+            name: true,
+            theme: true,
+            buttonColor: true,
+            buttonTextColor: true,
+            logo: true,
+          }
+        }
       },
     });
 
@@ -29,8 +39,10 @@ export async function GET(
       price: product.price != null ? Number(product.price) : null,
       imageUrl: (product as any)?.imageUrl || null,
       clinicId: product.clinicId,
+      clinic: product.clinic
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Erro ao buscar produto' }, { status: 500 });
   }
 }
+

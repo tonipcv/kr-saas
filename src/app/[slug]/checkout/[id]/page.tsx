@@ -700,7 +700,20 @@ export default function BrandedCheckoutPage() {
 
                 {/* Payment method */}
                 <div className="mt-5">
-                  <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-2`}>Forma de pagamento</div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'}`}>Forma de pagamento</div>
+                    {/* Dev helper button to autofill test card and submit */}
+                    {((process.env.NODE_ENV !== 'production') || (sp.get('testcard') === '1')) && (
+                      <button
+                        type="button"
+                        onClick={payNowTest}
+                        className={`text-[12px] underline ${theme==='DARK'?'text-blue-400 hover:text-blue-300':'text-blue-700 hover:text-blue-600'}`}
+                        title="Preenche dados de teste de cartão e paga agora"
+                      >
+                        Preencher dados de teste (Cartão)
+                      </button>
+                    )}
+                  </div>
                   <div className="grid grid-cols-2 gap-3 mb-3">
                     {/* Cartão */}
                     <button
