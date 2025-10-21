@@ -518,7 +518,7 @@ export default function IntegrationsPage() {
                         <div className="font-mono text-xs text-gray-800 break-all">{pgRecipientId || '-'}</div>
                       </div>
                       <div>
-                        <div className="text-gray-500">Split % (clínica)</div>
+                        <div className="text-gray-500">Split % (negócio)</div>
                         <div className="font-medium text-gray-900">{pgSplitPercent}%</div>
                       </div>
                       <div>
@@ -578,7 +578,7 @@ export default function IntegrationsPage() {
                             });
                             const data = await res.json();
                             if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
-                            router.push('/doctor/integrations/pagarme/setup');
+                            router.push('/doctor/integrations/payments/setup');
                           } catch (e: any) {
                             toast.error(e?.message || 'Erro ao iniciar onboarding');
                           }
@@ -613,7 +613,7 @@ export default function IntegrationsPage() {
                           variant="outline"
                           onClick={async () => {
                             if (!currentClinic?.id) return;
-                            const ok = confirm('Desconectar pagamentos desta clínica?');
+                            const ok = confirm('Desconectar pagamentos deste negócio?');
                             if (!ok) return;
                             try {
                               const res = await fetch('/api/payments/pagarme/disconnect', {
@@ -742,12 +742,12 @@ export default function IntegrationsPage() {
                 <CardContent>
                   <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                      <Input value={senderName} onChange={(e) => setSenderName(e.target.value)} placeholder="Nome do remetente (ex.: Clínica Zuzz)" className="h-8 text-sm" />
-                      <Input value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} placeholder="Email do remetente (ex.: contato@clinica.com)" className="h-8 text-sm" />
+                      <Input value={senderName} onChange={(e) => setSenderName(e.target.value)} placeholder="Nome do remetente (ex.: Negócio Zuzz)" className="h-8 text-sm" />
+                      <Input value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} placeholder="Email do remetente (ex.: contato@negocio.com)" className="h-8 text-sm" />
                       <div className="flex items-center gap-2">
                         <Button
                           onClick={async () => {
-                            if (!currentClinic?.id) return toast.error('Selecione uma clínica');
+                            if (!currentClinic?.id) return toast.error('Selecione um negócio');
                             if (!senderEmail.trim()) return toast.error('Informe o email do remetente');
                             try {
                               setEmailConnecting(true);

@@ -47,24 +47,26 @@ async function getClinic(slug: string) {
 
 async function getOrder(orderId: string) {
   try {
-    const res = await fetch(`/api/checkout/status?id=${encodeURIComponent(orderId)}`, { cache: 'no-store' });
+    const res = await fetch(`${getBaseUrl()}/api/checkout/status?id=${encodeURIComponent(orderId)}`, { cache: 'no-store' });
     const js = await res.json();
     if (!res.ok) throw new Error(js?.error || 'Erro');
     return js;
   } catch (e) {
+    try { console.warn('[checkout][success] getOrder failed', (e as any)?.message || e); } catch {}
     return { error: true };
   }
 }
 
-export default async function SuccessPage({ params, searchParams }: { params: Promise<{ slug: string }>, searchParams: Promise<{ order_id?: string, method?: string, product_id?: string }> }) {
+export default async function SuccessPage({ params, searchParams }: { params: Promise<{ slug: string }>, searchParams: Promise<{ order_id?: string, method?: string, product_id?: string, installments?: string }> }) {
   const { slug } = await params;
   const sp = await searchParams;
   const orderId = sp?.order_id || '';
-  const method = (sp?.method || '').toLowerCase();
+  const urlMethod = (sp?.method || '').toLowerCase(); // URL hint, not source of truth
   const urlProductId = sp?.product_id || '';
+  const urlInstallments = (() => { try { const n = Number(sp?.installments); return Number.isFinite(n) && n > 0 ? n : null; } catch { return null; } })();
   
   // Log all inputs
-  console.log('[checkout][success] input params', { slug, orderId, method, urlProductId });
+  console.log('[checkout][success] input params', { slug, orderId, urlMethod, urlProductId });
   
   // Determine product ID and fetch clinic + product in parallel (server-side absolute URLs)
   const productIdToUse = urlProductId;
@@ -76,43 +78,177 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
 
   // Force LIGHT look as requested
   const theme: 'LIGHT' | 'DARK' = 'LIGHT';
-  const pay = (orderInfo as any)?.order?.payments?.[0] || null;
-  const ch = (orderInfo as any)?.order?.charges?.[0] || null;
-  const status = ((orderInfo as any)?.payment_status || (orderInfo as any)?.order_status || ch?.status || 'paid').toString();
-  const tx = ch?.last_transaction || pay?.last_transaction || null;
-  const cardBrand = tx?.card?.brand || null;
-  const cardLast4 = tx?.card?.last_four_digits || tx?.card?.last4 || null;
-
-  // Product display: use fetched productData as source of truth
-  const item = (orderInfo as any)?.order?.items?.[0] || {};
-  const meta = (item?.metadata || {}) as any;
-  const productName = productData?.name || meta?.name || '';
-  const productImage = productData?.imageUrl || productData?.image_url || productData?.image || meta?.imageUrl || '';
-  const productDescription = (productData as any)?.description || (meta as any)?.description || (productData as any)?.subtitle || '';
-  const productAmount = (productData?.price != null)
-    ? Number(productData.price)
-    : (meta?.priceCents ? meta.priceCents / 100 : (typeof item?.amount === 'number' ? item.amount / 100 : 0));
-
-  console.log('[checkout][success] final product data', {
-    productName,
-    productImage,
-    productAmount,
-    fromDirectFetch: !!productData,
-    fromMetadata: !!meta?.name
-  });
-
+  // Helper to coerce numbers that may be strings in provider payloads
+  const num = (v: any): number | null => {
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v === 'string') {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
   const orderObj = (orderInfo as any)?.order || null;
-  let amountCents = (ch?.paid_amount ?? pay?.paid_amount ?? ch?.amount ?? pay?.amount ?? orderObj?.amount_paid ?? orderObj?.amount ?? 0);
-  if (status.toLowerCase() === 'paid' && !amountCents) {
-    amountCents = Math.round((productAmount || 0) * 100);
+  // Infer product data from order first; then fall back to product fetch
+  const order = (orderInfo as any)?.order || null;
+  const ch = Array.isArray(order?.charges) ? order.charges[0] : null;
+  const pay = Array.isArray(order?.payments) ? order.payments[0] : null;
+  const tx = ch?.last_transaction || pay?.last_transaction || null;
+  const status = (tx?.status || ch?.status || order?.status || '').toString();
+  const statusLower = status.toLowerCase();
+  const isPaid = statusLower === 'paid';
+  // CRITICAL: derive actual payment method from order data, NOT from URL param
+  const actualMethodRaw = (tx?.payment_method || ch?.payment_method || pay?.payment_method || '').toString().toLowerCase();
+  const normalizedActualMethod = actualMethodRaw === 'credit_card' ? 'card' : actualMethodRaw;
+  const method = normalizedActualMethod || urlMethod; // fallback to URL only if order has no method
+  try {
+    console.log('[checkout][success] payment method', { actualMethod: normalizedActualMethod || actualMethodRaw, urlMethod, using: method });
+  } catch {}
+  const item = Array.isArray(order?.items) ? order.items[0] : null;
+  // IMPORTANT: Pagar.me doesn't preserve item.metadata (returns null), use order.metadata instead
+  const meta = order?.metadata || null;
+  const cardBrand = (
+    (tx as any)?.card?.brand || (tx as any)?.credit_card?.brand ||
+    (pay as any)?.card?.brand || (pay as any)?.credit_card?.brand || null
+  );
+  const cardLast4 = (
+    (tx as any)?.card?.last_four_digits || (tx as any)?.card?.last4 || (tx as any)?.credit_card?.last4 ||
+    (pay as any)?.card?.last_four_digits || (pay as any)?.card?.last4 || (pay as any)?.credit_card?.last4 || null
+  );
+  // Display data: prefer item.metadata (source of truth sent in checkout.create)
+  let productName = ((meta as any)?.name || item?.description || '').trim() || (productData as any)?.name || '';
+  let productImage = ((meta as any)?.imageUrl || (productData as any)?.imageUrl || (productData as any)?.image || '');
+  // Base offer amount (posted value) should come from metadata.priceCents
+  const offerAmountCents: number | null = (() => {
+    const fromMeta = (meta as any)?.priceCents;
+    if (typeof fromMeta === 'number' && Number.isFinite(fromMeta) && fromMeta > 0) return Number(fromMeta);
+    if (typeof fromMeta === 'string' && Number(fromMeta) > 0) return Math.round(Number(fromMeta));
+    // fallback to productData when metadata is missing
+    const pd = (productData as any)?.priceCents;
+    if (typeof pd === 'number' && Number.isFinite(pd) && pd > 0) return Number(pd);
+    if (typeof pd === 'string' && Number(pd) > 0) return Math.round(Number(pd));
+    return null;
+  })();
+  // Amount charged should come from charge/pay/order totals, not the offer amount
+  const paidOrOrderAmountCents: number | null = (() => {
+    const fromCharge = Number.isFinite(ch?.paid_amount) ? Number(ch?.paid_amount) : (Number.isFinite(ch?.amount) ? Number(ch?.amount) : null);
+    if (fromCharge && fromCharge > 0) return fromCharge;
+    if (Number.isFinite(item?.amount) && Number(item?.amount) > 0) return Number(item?.amount);
+    return null;
+  })();
+  const productDescription = (meta as any)?.description || (productData as any)?.description || (productData as any)?.subtitle || '';
+  // Valor da oferta: strictly from offerAmountCents when available; else fallback to product data prices (display only)
+  let productAmountCents: number | null = offerAmountCents;
+  let productAmount = (productAmountCents != null)
+    ? (productAmountCents / 100)
+    : (
+        (productData?.discountPrice != null) ? Number(productData.discountPrice) :
+        (productData?.originalPrice != null) ? Number(productData.originalPrice) :
+        (productData as any)?.price != null ? Number((productData as any).price) : 0
+      );
+
+  // Log mismatches and final resolved data
+  try {
+    if (item?.code && urlProductId && item.code !== urlProductId) {
+      console.warn('[checkout][success] URL product_id differs from order item code', { urlProductId, itemCode: item.code });
+    }
+  } catch {}
+  console.log('[checkout][success] final product data', { productName, productImage, productAmount, fromDirectFetch: !!productData, fromMetadata: !!meta });
+
+  let amountCents = (
+    num(ch?.paid_amount) ??
+    num(tx?.paid_amount) ??
+    num(ch?.amount) ??
+    num(tx?.amount) ??
+    num(pay?.paid_amount) ??
+    num(pay?.amount) ??
+    num(orderObj?.amount_paid) ??
+    num(orderObj?.amount) ??
+    paidOrOrderAmountCents ??
+    null
+  );
+  if ((status.toLowerCase() === 'paid' || status.toLowerCase() === 'approved' || status.toLowerCase() === 'captured') && (amountCents == null || amountCents === 0)) {
+    // if provider did not return an amount, fall back to paidOrOrderAmountCents, else keep offer value separate
+    amountCents = paidOrOrderAmountCents != null ? paidOrOrderAmountCents : Math.round((productAmount || 0) * 100);
   }
   const amount = (amountCents || 0) / 100;
+  // Never override offer value with paid value; keep them distinct
+
+  // Derivar parcelas (apenas cartão)
+  // Preferir metadado definido no checkout.create (fonte de verdade)
+  const metaEffInst = num((meta as any)?.effectiveInstallments);
+  const installmentsCount = (
+    (urlInstallments != null ? urlInstallments : null) ??
+    metaEffInst ??
+    num((tx as any)?.credit_card?.installments) ??
+    num((tx as any)?.credit_card?.installment_count) ??
+    num((tx as any)?.card?.installments) ??
+    num((tx as any)?.card?.installment_count) ??
+    num((tx as any)?.installments) ??
+    num((tx as any)?.installment_count) ??
+    num((pay as any)?.credit_card?.installments) ??
+    num((pay as any)?.credit_card?.installment_count) ??
+    num((pay as any)?.installments) ??
+    num((pay as any)?.installment_count) ??
+    num((ch as any)?.installments) ??
+    num((ch as any)?.installment_count) ??
+    null
+  ) || 1;
+  const providerPerInstallment = (
+    num((tx as any)?.credit_card?.installment_amount) ??
+    num((tx as any)?.card?.installment_amount) ??
+    num((tx as any)?.installment_amount) ??
+    num((tx as any)?.installment_value) ??
+    num((pay as any)?.credit_card?.installment_amount) ??
+    num((pay as any)?.installment_amount) ??
+    num((pay as any)?.installment_value) ??
+    null
+  );
+  const perInstallmentCents = installmentsCount > 1
+    ? (providerPerInstallment != null
+        ? providerPerInstallment
+        : (amountCents ? Math.round(amountCents / installmentsCount) : null))
+    : null;
 
   const primaryBg = clinic.buttonColor || '#111827';
   const primaryFg = clinic.buttonTextColor || '#ffffff';
 
+  // Recalcular parcelas com a mesma regra do checkout (APR mensal do endpoint de pricing)
+  const DEFAULT_APR = 0.029; // mesmo fallback do checkout
+  let aprMonthly = DEFAULT_APR;
+  let recomputedPerInstallmentCents: number | null = null;
+  try {
+    if (amountCents && installmentsCount > 1) {
+      // Base principal deve ser o valor da oferta, não o total pago em cents
+      const principalCents = (productAmountCents != null) ? productAmountCents : Number(amountCents);
+      const pr = await fetch(`${getBaseUrl()}/api/payments/pricing?amount_cents=${principalCents}`, { cache: 'no-store' });
+      if (pr.ok) {
+        const pj = await pr.json().catch(() => ({} as any));
+        aprMonthly = typeof pj?.pricing?.INSTALLMENT_CUSTOMER_APR_MONTHLY === 'number' ? pj.pricing.INSTALLMENT_CUSTOMER_APR_MONTHLY : DEFAULT_APR;
+        const pricePer = (P: number, i: number, n: number) => {
+          if (n <= 1 || i <= 0) return Math.round(P);
+          const factor = Math.pow(1 + i, n);
+          const denom = factor - 1;
+          if (denom <= 0) return Math.ceil(P / n);
+          const A = (P * i * factor) / denom;
+          return Math.round(A);
+        };
+        recomputedPerInstallmentCents = pricePer(Number(principalCents), aprMonthly, Number(installmentsCount));
+      }
+    }
+  } catch {}
+
+  // Valor final por parcela a exibir
+  const displayedPerInstallmentCents = (() => {
+    if (installmentsCount <= 1) return null;
+    if (recomputedPerInstallmentCents != null) return recomputedPerInstallmentCents;
+    if (providerPerInstallment != null) return providerPerInstallment;
+    if (productAmountCents != null) return Math.round(productAmountCents / installmentsCount);
+    if (amountCents) return Math.round(amountCents / installmentsCount);
+    return null;
+  })();
+
   return (
-    <div className={`min-h-screen bg-[#eff1f3] text-gray-900 flex flex-col`}> 
+    <div className={`min-h-screen bg-[#eff1f3] text-gray-900 flex flex-col`}>
       <div className="flex-1 w-full p-4 sm:p-6">
         <div className="max-w-xl mx-auto">
           {/* Logo acima e fora do box, com espaçamento igual ao checkout */}
@@ -129,75 +265,86 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
             )}
           </div>
 
-          <div className={`border-gray-200 bg-white rounded-2xl border shadow-sm overflow-hidden`}> 
-          {/* Header */}
-          <div className={`bg-white px-5 sm:px-6 pt-8 pb-6 border-b border-gray-200 text-center`}>
-            <div className="mt-0 flex items-center justify-center gap-2">
-              <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs bg-emerald-50 text-emerald-700 border border-emerald-300`}>✓</div>
-              <div className="text-[18px] sm:text-[20px] font-semibold leading-none">
-                {method === 'card' ? 'Cartão aprovado' : 'Pix confirmado'}
+          <div className={`border-gray-200 bg-white rounded-2xl border shadow-sm overflow-hidden`}>
+            {/* Header */}
+            <div className={`bg-white px-5 sm:px-6 pt-8 pb-6 border-b border-gray-200 text-center`}>
+              <div className="mt-0 flex items-center justify-center gap-2">
+                <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs ${isPaid ? 'bg-emerald-50 text-emerald-700 border border-emerald-300' : 'bg-amber-50 text-amber-700 border border-amber-300'}`}>{isPaid ? '✓' : '•'}</div>
+                <div className="text-[18px] sm:text-[20px] font-semibold leading-none">
+                  {method === 'card'
+                    ? (isPaid ? 'Cartão aprovado' : 'Pagamento em processamento')
+                    : (isPaid ? 'Pix confirmado' : 'Pix gerado — aguardando pagamento')}
+                </div>
+              </div>
+              <div className="mt-2 text-xs text-gray-600">
+                {isPaid
+                  ? 'Obrigado! Enviamos a confirmação para o seu e-mail.'
+                  : (method === 'pix'
+                      ? 'Finalize o pagamento via PIX. Assim que o provedor confirmar, enviaremos a confirmação por e-mail.'
+                      : 'Seu pagamento está sendo processado. Assim que for confirmado, você receberá um e-mail.')}
               </div>
             </div>
-            <div className="mt-2 text-xs text-gray-600">
-              Obrigado! Enviamos a confirmação para o seu e-mail.
-            </div>
-          </div>
 
-          {/* Body */}
-          <div className="px-5 sm:px-6 py-6">
-            {/* Product hero (como no checkout) */}
-            <div className="mb-5">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={productImage || 'https://via.placeholder.com/800x400'}
-                alt={productName}
-                className="w-full h-40 sm:h-48 object-cover rounded-xl border border-gray-200"
-              />
-              <div className="mt-3">
-                <div className="text-base sm:text-[15px] font-semibold">{productName}</div>
-                <div className="text-sm text-gray-600">Valor do produto: {formatBRL(productAmount)}</div>
-                {/* Descrição, se houver */}
-                {!!productDescription && (
-                  <div className="text-sm text-gray-600 mt-2">{productDescription}</div>
+            {/* Body */}
+            <div className="px-5 sm:px-6 py-6">
+              {/* Product hero (como no checkout) */}
+              <div className="mb-5">
+                {productImage && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={productImage}
+                    alt={productName || 'Produto'}
+                    className="w-full h-40 sm:h-48 object-cover rounded-xl border border-gray-200"
+                  />
+                )}
+                <div className="mt-3">
+                  <div className="text-base sm:text-[15px] font-semibold">{productName || 'Produto'}</div>
+                  <div className="text-sm text-gray-600">Valor da oferta: {formatBRL(productAmount)}</div>
+                  {!!productDescription && (
+                    <div className="text-sm text-gray-600 mt-2">{productDescription}</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border`}>
+                  <div className={`text-xs text-gray-600`}>Pedido</div>
+                  <div className="text-sm font-medium break-all">{orderId || '-'}</div>
+                </div>
+                <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border`}>
+                  <div className={`text-xs text-gray-600`}>Método</div>
+                  <div className="text-sm font-medium capitalize">{method === 'card' ? 'Cartão de crédito' : 'Pix'}</div>
+                </div>
+                <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border`}>
+                  <div className={`text-xs text-gray-600`}>Valor da oferta</div>
+                  <div className="text-sm font-medium">{formatBRL(productAmount)}</div>
+                </div>
+                <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border`}>
+                  <div className={`text-xs text-gray-600`}>Valor pago</div>
+                  <div className="text-sm font-semibold">{formatBRL(amount)}</div>
+                </div>
+                {method === 'card' && (
+                  <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border`}>
+                    <div className={`text-xs text-gray-600`}>Parcelamento</div>
+                    <div className="text-sm font-medium">
+                      {installmentsCount > 1 && displayedPerInstallmentCents != null
+                        ? `${installmentsCount}x de ${formatBRL(displayedPerInstallmentCents / 100)}`
+                        : 'À vista'}
+                    </div>
+                  </div>
+                )}
+                {method === 'card' && (cardBrand || cardLast4) && (
+                  <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border sm:col-span-2`}>
+                    <div className={`text-xs text-gray-600`}>Cartão</div>
+                    <div className="text-sm font-medium">{cardBrand || ''} {cardLast4 ? `(**** **** **** ${cardLast4})` : ''}</div>
+                  </div>
                 )}
               </div>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border`}>
-                <div className={`text-xs text-gray-600`}>Pedido</div>
-                <div className="text-sm font-medium break-all">{orderId || '-'}</div>
-              </div>
-              <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border`}>
-                <div className={`text-xs text-gray-600`}>Método</div>
-                <div className="text-sm font-medium capitalize">{method === 'card' ? 'Cartão de crédito' : 'Pix'}</div>
-              </div>
-              <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border`}>
-                <div className={`text-xs text-gray-600`}>Valor do produto</div>
-                <div className="text-sm font-medium">{formatBRL(productAmount)}</div>
-              </div>
-              <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border`}>
-                <div className={`text-xs text-gray-600`}>Valor pago</div>
-                <div className="text-sm font-semibold">{formatBRL(amount)}</div>
-              </div>
-              <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border`}>
-                <div className={`text-xs text-gray-600`}>Clínica</div>
-                <div className="text-sm font-medium">{clinic.name}</div>
-              </div>
-              {method === 'card' && (cardBrand || cardLast4) && (
-                <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border sm:col-span-2`}>
-                  <div className={`text-xs text-gray-600`}>Cartão</div>
-                  <div className="text-sm font-medium">{cardBrand || ''} {cardLast4 ? `(**** **** **** ${cardLast4})` : ''}</div>
-                </div>
-              )}
-            </div>
-
-            {/* Action buttons removed as requested */}
           </div>
+
         </div>
       </div>
-      </div>
-      {/* Footer */}
       <footer className="mt-4 mb-4">
         <div className="flex items-center justify-center gap-2 text-gray-400">
           <span className="text-[10px]">Powered by</span>

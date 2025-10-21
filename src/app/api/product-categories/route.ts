@@ -20,7 +20,10 @@ export async function GET() {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { id: true, role: true }
+    });
     if (!user || user.role !== 'DOCTOR') {
       return NextResponse.json({ error: 'Acesso negado. Apenas médicos.' }, { status: 403 });
     }
@@ -32,8 +35,8 @@ export async function GET() {
     });
 
     return NextResponse.json(categories);
-  } catch (error) {
-    console.error('Error listing categories:', error);
+  } catch (error: any) {
+    console.error('Error listing categories:', { message: error?.message, code: error?.code, stack: error?.stack });
     return NextResponse.json({ error: 'Erro ao listar categorias' }, { status: 500 });
   }
 }
@@ -46,7 +49,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { id: true, role: true }
+    });
     if (!user || user.role !== 'DOCTOR') {
       return NextResponse.json({ error: 'Acesso negado. Apenas médicos.' }, { status: 403 });
     }
@@ -77,8 +83,8 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(created, { status: 201 });
-  } catch (error) {
-    console.error('Error creating category:', error);
+  } catch (error: any) {
+    console.error('Error creating category:', { message: error?.message, code: error?.code, stack: error?.stack });
     return NextResponse.json({ error: 'Erro ao criar categoria' }, { status: 500 });
   }
 }

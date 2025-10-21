@@ -70,8 +70,12 @@ export async function POST(req: Request) {
       // Buscar o usuário no banco de dados
       const user = await prisma.user.findUnique({
         where: { email: normalizedEmail },
-        include: {
-          owned_clinics: true // Usando o nome correto da relação conforme o schema
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          owned_clinics: { select: { id: true } },
         }
       });
 

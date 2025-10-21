@@ -33,41 +33,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const normalizedSub = (subdomain as string).toLowerCase().trim();
-
-    // Verificar se o subdomínio já está em uso (ou conflita com slug existente)
-    let existingClinic: any = null;
-    try {
-      existingClinic = await prisma.clinic.findFirst({
-        where: {
-          OR: [
-            { subdomain: normalizedSub },
-            { slug: normalizedSub },
-          ]
-        }
-      });
-    } catch (e: any) {
-      // Fallback para SQL cru se o client não estiver atualizado ainda
-      const rows = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT id FROM clinics WHERE subdomain = $1 OR slug = $1 LIMIT 1`,
-        normalizedSub
-      );
-      existingClinic = rows && rows[0] ? rows[0] : null;
-    }
-
-    if (existingClinic) {
-      return NextResponse.json(
-        { message: "Este subdomínio já está em uso" },
-        { status: 400 }
-      );
-    }
-
     // Armazenar temporariamente clinicName e subdomain para etapa final
     const registrationToken = sign(
       { 
         email,
         clinicName,
-        subdomain: normalizedSub,
+        subdomain,
         verified: true,
         exp: Math.floor(Date.now() / 1000) + 60 * 30 // 30 minutos
       },

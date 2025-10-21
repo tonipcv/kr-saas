@@ -1,6 +1,0 @@
--- Add sender_name to email_sender_verification for display name persistence
-ALTER TABLE email_sender_verification
-  ADD COLUMN IF NOT EXISTS sender_name TEXT;
-
--- Optional helpful index if we start querying by (clinic_id, status)
-CREATE INDEX IF NOT EXISTS idx_esv_clinic_status ON email_sender_verification (clinic_id, status);

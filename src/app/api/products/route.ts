@@ -16,7 +16,8 @@ export async function GET(request: Request) {
       console.log('📧 Using userEmail parameter:', userEmail);
       // Buscar usuário pelo email para casos especiais
       const user = await prisma.user.findUnique({
-        where: { email: userEmail }
+        where: { email: userEmail },
+        select: { id: true }
       });
       if (user) {
         session = { user: { id: user.id } };
@@ -39,7 +40,8 @@ export async function GET(request: Request) {
 
     // Verificar se é médico
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id }
+      where: { id: session.user.id },
+      select: { id: true, email: true, role: true }
     });
 
     console.log('👤 User found:', user ? { id: user.id, email: user.email, role: user.role } : 'null');
@@ -85,13 +87,17 @@ export async function GET(request: Request) {
       const products = await prisma.products.findMany({
         where: {
           doctorId: session.user.id,
-          ...(clinicId && { clinicId: clinicId })
+          ...(clinicId
+            ? { OR: [ { clinicId }, { clinicId: null } ] }
+            : {})
         },
         include: {
           _count: {
             select: {
-              protocol_products: true
-            }
+              purchases: true,
+              categories: true,
+              coupons: true,
+            },
           },
           // Usar a relação correta definida no schema
           categories: { 
@@ -141,7 +147,9 @@ export async function GET(request: Request) {
           categories,
           categoryIds: categories.map((c: any) => c.id),
           _count: {
-            protocolProducts: product._count?.protocol_products || 0
+            purchases: product._count?.purchases || 0,
+            categories: product._count?.categories || 0,
+            coupons: product._count?.coupons || 0,
           }
         };
       });
@@ -166,9 +174,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    // Verificar se é médico
+    // Verificar se é médico (selecionar apenas campos necessários)
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id }
+      where: { id: session.user.id },
+      select: { id: true, role: true }
     });
 
     if (!user || user.role !== 'DOCTOR') {
@@ -187,7 +196,13 @@ export async function POST(request: Request) {
       imageUrl,
       categoryIds,
       priority,
-      clinicId
+      clinicId,
+      // Subscription-related (optional)
+      type,
+      interval,
+      intervalCount,
+      trialDays,
+      autoRenew,
     } = body;
 
     // Verificar acesso à clínica
@@ -240,7 +255,24 @@ export async function POST(request: Request) {
     };
 
     // Attach creditsPerUnit initially
-    const dataWithCredits = { ...baseData, creditsPerUnit: normalizedCredits };
+    let dataWithCredits: any = { ...baseData, creditsPerUnit: normalizedCredits };
+
+    // If creating a subscription product, attach subscription fields
+    if (type === 'SUBSCRIPTION') {
+      dataWithCredits = {
+        ...dataWithCredits,
+        type: 'SUBSCRIPTION',
+        interval: interval ?? 'MONTH',
+        intervalCount: typeof intervalCount === 'number' ? intervalCount : (intervalCount != null ? Number(intervalCount) : 1),
+        trialDays: typeof trialDays === 'number' ? trialDays : (trialDays != null ? Number(trialDays) : null),
+        autoRenew: typeof autoRenew === 'boolean' ? autoRenew : true,
+      };
+    } else {
+      // Ensure explicit PRODUCT type if provided
+      if (type === 'PRODUCT') {
+        dataWithCredits.type = 'PRODUCT';
+      }
+    }
     console.log('📦 [POST /api/products] Prepared data (with creditsPerUnit):', dataWithCredits);
 
     let product;

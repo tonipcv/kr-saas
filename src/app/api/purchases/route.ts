@@ -73,17 +73,29 @@ export async function GET(req: NextRequest) {
     let where: any = {};
 
     if (me.role === 'DOCTOR') {
-      where = { 
-        doctorId: userId,
-        ...(clinicId && { product: { clinicId } })
-      };
-      if (patientId) where.userId = patientId;
+      // If clinicId provided (and access already verified), show all purchases for that clinic
+      if (clinicId) {
+        where = {
+          OR: [
+            { product: { clinicId } },
+            // Also include purchases from doctors who own this clinic (for products without clinicId)
+            { doctor: { owned_clinics: { some: { id: clinicId } } } },
+          ],
+          ...(patientId && { userId: patientId }),
+        };
+      } else {
+        // Default: doctor-scoped
+        where = {
+          doctorId: userId,
+          ...(patientId && { userId: patientId }),
+        };
+      }
     } else {
       // patient can only see their own purchases
       where = { userId };
     }
 
-    const [items, total] = await Promise.all([
+    let [items, total] = await Promise.all([
       prisma.purchase.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -97,6 +109,38 @@ export async function GET(req: NextRequest) {
       }),
       prisma.purchase.count({ where }),
     ]);
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[purchases][GET] where=', JSON.stringify(where), 'returned=', items.length, 'total=', total);
+    }
+
+    // Fallback: if clinicId provided and nothing returned, try broader OR filter
+    if (me.role === 'DOCTOR' && clinicId && items.length === 0) {
+      const fallbackWhere = {
+        OR: [
+          { product: { clinicId } },
+          { doctor: { owned_clinics: { some: { id: clinicId } } } },
+        ],
+        ...(patientId && { userId: patientId }),
+      } as const;
+      [items, total] = await Promise.all([
+        prisma.purchase.findMany({
+          where: fallbackWhere as any,
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take,
+          include: {
+            product: { select: { id: true, name: true, price: true, creditsPerUnit: true } },
+            user: { select: { id: true, name: true, email: true } },
+            doctor: { select: { id: true, name: true, email: true } },
+          },
+        }),
+        prisma.purchase.count({ where: fallbackWhere as any }),
+      ]);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[purchases][GET][fallback] where=', JSON.stringify(fallbackWhere), 'returned=', items.length, 'total=', total);
+      }
+    }
 
     return ok({
       items,

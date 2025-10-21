@@ -51,35 +51,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Query patients directly, scoped by relationship to this doctor (and clinic when provided).
-    // This avoids including potentially missing related rows that can cause Prisma's
-    // "Field patient is required to return data, got null" when orphaned relationships exist.
-    const users = await prisma.user.findMany({
-      where: {
-        patient_relationships: {
-          some: clinicId
-            ? {
-                doctorId: doctor.id,
-                isActive: true,
-                OR: [
-                  { clinicId: clinicId },
-                  { clinicId: null },
-                ],
-              }
-            : {
-                doctorId: doctor.id,
-                isActive: true,
-              },
-        },
-      },
+    // Query doctor-scoped patient profiles, join base user to provide email/createdAt
+    const profiles = await prisma.patientProfile.findMany({
+      where: { doctorId: doctor.id, isActive: true },
+      orderBy: { createdAt: 'desc' },
       select: {
-        id: true,
+        doctorId: true,
+        userId: true,
         name: true,
-        email: true,
         phone: true,
-        created_at: true,
-        birth_date: true,
-        gender: true,
         address: true,
         emergency_contact: true,
         emergency_phone: true,
@@ -87,68 +67,45 @@ export async function GET(request: NextRequest) {
         allergies: true,
         medications: true,
         notes: true,
-        is_active: true,
-        // Active prescriptions for context
-        patient_prescriptions: {
-          where: { status: 'ACTIVE' },
-          select: {
-            id: true,
-            protocol: { select: { id: true, name: true, duration: true } },
-            planned_start_date: true,
-            planned_end_date: true,
-            status: true,
-          },
-        },
-        // Bring tenant-scoped profile (0..1) for this doctor
-        patient_profiles: {
-          where: { doctorId: doctor.id },
-          take: 1,
-          select: {
-            name: true,
-            phone: true,
-            address: true,
-            emergency_contact: true,
-            emergency_phone: true,
-            medical_history: true,
-            allergies: true,
-            medications: true,
-            notes: true,
-            isActive: true,
-          },
-        },
+        isActive: true,
+        createdAt: true,
       },
-      orderBy: { created_at: 'desc' },
     });
 
-    // Transform to legacy format
-    const patients = users.map((u) => {
-      const profile = u.patient_profiles?.[0];
-      return {
-        id: u.id,
-        name: profile?.name ?? u.name,
-        email: u.email,
-        phone: profile?.phone ?? u.phone,
-        createdAt: u.created_at,
-        birthDate: u.birth_date,
-        gender: u.gender,
-        address: profile?.address ?? u.address,
-        emergencyContact: profile?.emergency_contact ?? u.emergency_contact,
-        emergencyPhone: profile?.emergency_phone ?? u.emergency_phone,
-        medicalHistory: profile?.medical_history ?? u.medical_history,
-        allergies: profile?.allergies ?? u.allergies,
-        medications: profile?.medications ?? u.medications,
-        notes: profile?.notes ?? u.notes,
-        isActive: profile?.isActive ?? u.is_active,
-        assignedProtocols:
-          u.patient_prescriptions?.map((p) => ({
-            id: p.id,
-            protocol: p.protocol,
-            startDate: p.planned_start_date,
-            endDate: p.planned_end_date,
-            isActive: p.status === 'ACTIVE',
-          })) || [],
-      };
-    });
+    // Load base users for the profiles, skipping any orphaned profile rows
+    const userIds = Array.from(new Set(profiles.map(p => p.userId)));
+    const users = userIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, email: true, created_at: true, birth_date: true, gender: true },
+        })
+      : [];
+    const userMap = new Map(users.map(u => [u.id, u]));
+
+    const patients = profiles
+      .map((p) => {
+        const u = userMap.get(p.userId);
+        if (!u) return null; // skip orphaned
+        return {
+          id: u.id,
+          name: p.name || null,
+          email: u.email,
+          phone: p.phone || null,
+          createdAt: u.created_at,
+          birthDate: u.birth_date,
+          gender: u.gender,
+          address: p.address || null,
+          emergencyContact: p.emergency_contact || null,
+          emergencyPhone: p.emergency_phone || null,
+          medicalHistory: p.medical_history || null,
+          allergies: p.allergies || null,
+          medications: p.medications || null,
+          notes: p.notes || null,
+          isActive: p.isActive,
+          assignedProtocols: [],
+        };
+      })
+      .filter(Boolean);
 
     return NextResponse.json(patients);
 
@@ -229,85 +186,7 @@ export async function POST(request: NextRequest) {
     };
 
     if (existingUser) {
-      // If user exists, link/reactivate and upsert a PatientProfile scoped to this doctor
-      const existingRel = await prisma.doctorPatientRelationship.findUnique({
-        where: {
-          patientId_doctorId: {
-            patientId: existingUser.id,
-            doctorId: doctor.id,
-          },
-        },
-        select: { id: true, isActive: true, clinicId: true },
-      });
-
-      let createdRel = false;
-      if (!existingRel) {
-        // Resolve clinic to persist on the relationship so dashboard counts match
-        const resolvedClinicId = await (async () => {
-          if (clinicIdParam) {
-            // Validate access before trusting param
-            const owns = await prisma.clinic.findFirst({ where: { id: clinicIdParam, ownerId: doctor.id }, select: { id: true } });
-            if (owns?.id) return owns.id;
-            const access = await prisma.clinicMember.findFirst({ where: { userId: doctor.id, clinicId: clinicIdParam, isActive: true }, select: { clinicId: true } });
-            if (access?.clinicId) return access.clinicId;
-          }
-          const owned = await prisma.clinic.findFirst({ where: { ownerId: doctor.id }, select: { id: true } });
-          if (owned?.id) return owned.id;
-          const membership = await prisma.clinicMember.findFirst({ where: { userId: doctor.id, isActive: true }, select: { clinicId: true } });
-          return membership?.clinicId || null;
-        })();
-
-        await prisma.doctorPatientRelationship.create({
-          data: {
-            doctorId: doctor.id,
-            patientId: existingUser.id,
-            isActive: true,
-            isPrimary: false,
-            clinicId: resolvedClinicId || undefined,
-          },
-        });
-        createdRel = true;
-      } else if (!existingRel.isActive) {
-        // Reactivate and attach clinic when available for consistency
-        const resolvedClinicId = await (async () => {
-          if (clinicIdParam) {
-            const owns = await prisma.clinic.findFirst({ where: { id: clinicIdParam, ownerId: doctor.id }, select: { id: true } });
-            if (owns?.id) return owns.id;
-            const access = await prisma.clinicMember.findFirst({ where: { userId: doctor.id, clinicId: clinicIdParam, isActive: true }, select: { clinicId: true } });
-            if (access?.clinicId) return access.clinicId;
-          }
-          const owned = await prisma.clinic.findFirst({ where: { ownerId: doctor.id }, select: { id: true } });
-          if (owned?.id) return owned.id;
-          const membership = await prisma.clinicMember.findFirst({ where: { userId: doctor.id, isActive: true }, select: { clinicId: true } });
-          return membership?.clinicId || null;
-        })();
-
-        await prisma.doctorPatientRelationship.update({
-          where: { id: existingRel.id },
-          data: { isActive: true, clinicId: existingRel.clinicId ?? resolvedClinicId ?? undefined },
-        });
-        createdRel = true;
-      } else if (!existingRel.clinicId && clinicIdParam) {
-        // Relationship is active but missing clinicId; if doctor has access to the provided clinic, backfill
-        const access = await prisma.clinic.findFirst({
-          where: {
-            id: clinicIdParam,
-            OR: [
-              { ownerId: doctor.id },
-              { members: { some: { userId: doctor.id, isActive: true } } },
-            ],
-          },
-          select: { id: true },
-        });
-        if (access?.id) {
-          await prisma.doctorPatientRelationship.update({
-            where: { id: existingRel.id },
-            data: { clinicId: access.id },
-          });
-        }
-      }
-
-      // Upsert the per-doctor profile with the provided fields
+      // Upsert the per-doctor profile with the provided fields (acts as the association)
       await prisma.patientProfile.upsert({
         where: {
           doctorId_userId: { doctorId: doctor.id, userId: existingUser.id },
@@ -344,18 +223,16 @@ export async function POST(request: NextRequest) {
       try {
         const clinicId = await resolveClinicIdForDoctor(doctor.id);
         if (clinicId) {
-          console.log('[events] patient link emit', { clinicId, doctorId: doctor.id, userId: existingUser.id, createdRel, eventType: createdRel ? 'customer_created' : 'customer_updated' });
-          // If relationship was newly created/reactivated, treat as customer_created for this doctor; else customer_updated
-          const eventType = createdRel ? EventType.customer_created : EventType.customer_updated;
+          console.log('[events] patient link emit', { clinicId, doctorId: doctor.id, userId: existingUser.id, eventType: EventType.customer_updated });
+          // With patient profiles, treat as customer_updated for linking/updating
+          const eventType = EventType.customer_updated;
           await emitEvent({
             eventId: `${eventType}_clinic_${clinicId}_doctor_${doctor.id}_user_${existingUser.id}`,
             eventType,
             actor: EventActor.clinic,
             clinicId,
             customerId: existingUser.id,
-            metadata: createdRel
-              ? { nome: name || existingUser.name || email }
-              : { changes: { name, phone, address, emergencyContact, emergencyPhone } },
+            metadata: { changes: { name, phone, address, emergencyContact, emergencyPhone } },
           });
         }
       } catch (e) {
@@ -390,37 +267,6 @@ export async function POST(request: NextRequest) {
           notes,
           role: 'PATIENT',
           is_active: true
-        }
-      });
-
-      // Create doctor-patient relationship
-      // Try to attach clinicId for consistency with dashboard counts
-      let resolvedClinicId: string | null = null;
-      if (clinicIdParam) {
-        const owns = await prisma.clinic.findFirst({ where: { id: clinicIdParam, ownerId: doctor.id }, select: { id: true } });
-        if (owns?.id) {
-          resolvedClinicId = owns.id;
-        } else {
-          const access = await prisma.clinicMember.findFirst({ where: { userId: doctor.id, clinicId: clinicIdParam, isActive: true }, select: { clinicId: true } });
-          if (access?.clinicId) resolvedClinicId = access.clinicId;
-        }
-      }
-      if (!resolvedClinicId) {
-        const owned = await prisma.clinic.findFirst({ where: { ownerId: doctor.id }, select: { id: true } });
-        resolvedClinicId = owned?.id || null;
-        if (!resolvedClinicId) {
-          const membership = await prisma.clinicMember.findFirst({ where: { userId: doctor.id, isActive: true }, select: { clinicId: true } });
-          resolvedClinicId = membership?.clinicId || null;
-        }
-      }
-
-      await tx.doctorPatientRelationship.create({
-        data: {
-          doctorId: doctor.id,
-          patientId: patient.id,
-          isActive: true,
-          isPrimary: false,
-          clinicId: resolvedClinicId || undefined,
         }
       });
 

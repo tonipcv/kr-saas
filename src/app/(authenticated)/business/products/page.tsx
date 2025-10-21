@@ -12,13 +12,14 @@ import {
   ShoppingBagIcon,
   PencilIcon,
   EyeIcon,
-  LinkIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   DocumentDuplicateIcon,
-  TrashIcon
+  TrashIcon,
+  EllipsisVerticalIcon
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 interface Product {
   id: string;
@@ -37,6 +38,12 @@ interface Product {
   doctorId?: string;
   category?: string;
   creditsPerUnit?: number;
+  // Selling type
+  type?: 'PRODUCT' | 'SUBSCRIPTION';
+  interval?: 'DAY' | 'WEEK' | 'MONTH' | 'YEAR' | null;
+  intervalCount?: number | null;
+  providerPlanId?: string | null;
+  autoRenew?: boolean | null;
   _count: {
     protocolProducts: number;
   };
@@ -49,6 +56,7 @@ interface Product {
 }
 
 export default function ProductsPage() {
+  const router = useRouter();
   const { currentClinic } = useClinic();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,6 +72,7 @@ export default function ProductsPage() {
   const [availablePlans, setAvailablePlans] = useState<any[]>([]);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     const checkPlanAndLoad = async () => {
@@ -351,44 +360,53 @@ export default function ProductsPage() {
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white/70 backdrop-blur-sm shadow-sm">
+              <div className="overflow-visible rounded-2xl border border-gray-200 bg-white/70 backdrop-blur-sm shadow-sm">
                 <table className="min-w-full">
                   <thead className="bg-gray-50/80">
                     <tr className="text-left text-xs text-gray-600">
                       <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Name</th>
-                      <th className="px-3 py-3.5 font-medium">Brand</th>
-                      <th className="px-3 py-3.5 font-medium">Price</th>
-                      <th className="px-3 py-3.5 font-medium">Points per purchase</th>
+                      <th className="px-3 py-3.5 font-medium">Type</th>
+                      <th className="px-3 py-3.5 font-medium">ID</th>
                       <th className="px-3 py-3.5 font-medium">Status</th>
                       <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {currentProducts.map((product) => (
-                      <tr key={product.id} className="hover:bg-gray-50/60">
+                      <tr
+                        key={product.id}
+                        className="hover:bg-gray-50/60 cursor-pointer"
+                        onClick={() => router.push(`/business/products/${product.id}`)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            router.push(`/business/products/${product.id}`);
+                          }
+                        }}
+                      >
                         <td className="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 flex items-center justify-center">
-                              {product.imageUrl ? (
-                                <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-                              ) : (
-                                <ShoppingBagIcon className="h-5 w-5 text-gray-400" />
-                              )}
-                            </div>
-                            <div className="flex flex-col">
-                              <span>{product.name}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-600">{product.brand || '-'}</td>
-                        <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
-                          {product.discountPrice && product.originalPrice ? `${formatPrice(product.discountPrice)} ` : formatPrice(product.originalPrice || product.discountPrice) || '-'}
+                          <Link
+                            href={`/business/products/${product.id}`}
+                            title={product.name}
+                            className="hover:underline cursor-pointer select-none"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {product.name}
+                          </Link>
                         </td>
                         <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
-                          {product.creditsPerUnit !== undefined && product.creditsPerUnit !== null ? (
-                            <span>{Number(product.creditsPerUnit)} pts/unit</span>
-                          ) : '-'}
+                          {product.type === 'SUBSCRIPTION' ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-900 text-white">Subscription</span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-800 text-white/90">Product</span>
+                          )}
                         </td>
+                        <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
+                          <span title={product.id}>{product.id}</span>
+                        </td>
+                        
                         <td className="whitespace-nowrap px-3 py-3.5 text-sm">
                           {product.isActive ? (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Active</span>
@@ -397,38 +415,52 @@ export default function ProductsPage() {
                           )}
                         </td>
                         <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-500 hover:bg-gray-100 hover:text-gray-900" onClick={() => loadProductDetails(product.id)} title="View details">
-                              <EyeIcon className="h-3.5 w-3.5" />
-                            </Button>
+                          <div className="relative inline-block text-left">
                             <Button
+                              type="button"
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-                              title="Copiar link de checkout"
-                              onClick={async () => {
-                                const slug = currentClinic?.slug;
-                                const href = slug ? `/${slug}/checkout/${product.id}` : `/checkout/${product.id}`;
-                                try {
-                                  await navigator.clipboard.writeText(window.location.origin + href);
-                                } catch {
-                                  await navigator.clipboard.writeText(href);
-                                }
-                              }}
+                              className="h-7 w-7 text-gray-600 hover:bg-gray-100"
+                              onClick={(e) => { e.stopPropagation(); setMenuOpenId(prev => prev === product.id ? null : product.id); }}
+                              aria-haspopup="menu"
+                              aria-expanded={menuOpenId === product.id}
                             >
-                              <LinkIcon className="h-3.5 w-3.5" />
+                              <EllipsisVerticalIcon className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-500 hover:bg-gray-100 hover:text-gray-900" onClick={() => duplicateProduct(product.id)} title="Duplicate product">
-                              <DocumentDuplicateIcon className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" asChild className="h-7 w-7 text-gray-500 hover:bg-gray-100 hover:text-gray-900">
-                              <Link href={`/business/products/${product.id}/edit`}>
-                                <PencilIcon className="h-3.5 w-3.5" />
-                              </Link>
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:bg-red-50 hover:text-red-600" onClick={() => deleteProduct(product.id)} title="Delete product">
-                              <TrashIcon className="h-3.5 w-3.5" />
-                            </Button>
+                            {menuOpenId === product.id && (
+                              <div className="origin-top-right absolute right-0 z-50 mt-2 w-44 rounded-xl bg-white border border-gray-200 shadow-lg focus:outline-none">
+                                <div className="py-1">
+                                  <Link
+                                    href={`/business/products/${product.id}`}
+                                    className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                    onClick={(e) => { e.stopPropagation(); setMenuOpenId(null); }}
+                                  >
+                                    <EyeIcon className="h-4 w-4" /> View details
+                                  </Link>
+                                  <Link
+                                    href={`/business/products/${product.id}/edit`}
+                                    className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                    onClick={(e) => { e.stopPropagation(); setMenuOpenId(null); }}
+                                  >
+                                    <PencilIcon className="h-4 w-4" /> Edit
+                                  </Link>
+                                  <button
+                                    type="button"
+                                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                    onClick={(e) => { e.stopPropagation(); setMenuOpenId(null); duplicateProduct(product.id); }}
+                                  >
+                                    <DocumentDuplicateIcon className="h-4 w-4" /> Duplicate
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                    onClick={(e) => { e.stopPropagation(); setMenuOpenId(null); deleteProduct(product.id); }}
+                                  >
+                                    <TrashIcon className="h-4 w-4" /> Delete
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -473,7 +505,15 @@ export default function ProductsPage() {
                     <div className="md:col-span-2 flex flex-col justify-between">
                       <div>
                         <h3 className="text-[18px] font-semibold text-gray-900">{selectedProduct.name}</h3>
-                        {selectedProduct.brand && (<p className="text-sm text-[#5154e7] font-semibold mt-1">{selectedProduct.brand}</p>)}
+                        {selectedProduct.type && (
+                          <div className="mt-1">
+                            {selectedProduct.type === 'SUBSCRIPTION' ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-900 text-white">Subscription</span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-700 text-white/90">Product</span>
+                            )}
+                          </div>
+                        )}
                         {selectedProduct.description && (<p className="text-sm text-gray-600 mt-2">{selectedProduct.description}</p>)}
                       </div>
                       <div className="mt-3">
@@ -490,16 +530,30 @@ export default function ProductsPage() {
                     <div className="rounded-xl border border-gray-200 p-4">
                       <h4 className="text-sm font-semibold text-gray-900 mb-3">Pricing</h4>
                       <div className="text-sm text-gray-700">
-                        {selectedProduct.discountPrice && selectedProduct.originalPrice ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-base font-semibold text-[#5154e7]">{formatPrice(selectedProduct.discountPrice)}</span>
-                            <span className="text-sm text-gray-400 line-through">{formatPrice(selectedProduct.originalPrice)}</span>
-                            {selectedProduct.discountPercentage && (
-                              <Badge className="bg-[#5154e7] text-white border-[#5154e7] font-semibold">-{selectedProduct.discountPercentage}%</Badge>
+                        {selectedProduct.type === 'SUBSCRIPTION' ? (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-base font-semibold text-gray-900">{formatPrice(selectedProduct.originalPrice || selectedProduct.discountPrice) || '-'}</span>
+                              <span className="text-xs text-gray-600">per {String(selectedProduct.interval || 'MONTH').toLowerCase()}{selectedProduct.intervalCount && selectedProduct.intervalCount > 1 ? ` x${selectedProduct.intervalCount}` : ''}</span>
+                            </div>
+                            {selectedProduct.discountPrice && selectedProduct.originalPrice && (
+                              <span className="text-xs text-gray-500">Discounted from {formatPrice(selectedProduct.originalPrice)}</span>
                             )}
                           </div>
                         ) : (
-                          <span className="text-base font-semibold text-gray-900">{formatPrice(selectedProduct.originalPrice || selectedProduct.discountPrice) || '-'}</span>
+                          <>
+                            {selectedProduct.discountPrice && selectedProduct.originalPrice ? (
+                              <div className="flex items-center gap-2">
+                                <span className="text-base font-semibold text-[#5154e7]">{formatPrice(selectedProduct.discountPrice)}</span>
+                                <span className="text-sm text-gray-400 line-through">{formatPrice(selectedProduct.originalPrice)}</span>
+                                {selectedProduct.discountPercentage && (
+                                  <Badge className="bg-[#5154e7] text-white border-[#5154e7] font-semibold">-{selectedProduct.discountPercentage}%</Badge>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-base font-semibold text-gray-900">{formatPrice(selectedProduct.originalPrice || selectedProduct.discountPrice) || '-'}</span>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -509,71 +563,19 @@ export default function ProductsPage() {
                       <p className="text-sm text-gray-900">{selectedProduct.creditsPerUnit !== undefined && selectedProduct.creditsPerUnit !== null ? `${Number(selectedProduct.creditsPerUnit)} pts/unit` : '-'}</p>
                     </div>
 
-                    <div className="rounded-xl border border-gray-200 p-4">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Categoria</h4>
-                      <p className="text-sm text-gray-700">{(selectedProduct as any).category || '-'}</p>
-                    </div>
-
-                    <div className="rounded-xl border border-gray-200 p-4">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Compra</h4>
-                      {selectedProduct.purchaseUrl ? (
-                        <Button variant="outline" size="sm" className="h-8 border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900" onClick={async () => {
-                          try { await navigator.clipboard.writeText(selectedProduct.purchaseUrl as string); } catch {}
-                        }}>
-                          <LinkIcon className="h-3.5 w-3.5 mr-1.5" />
-                          Copiar link
-                        </Button>
-                      ) : (
-                        <span className="text-sm text-gray-500">Sem link</span>
-                      )}
-                    </div>
-
-                    <div className="rounded-xl border border-gray-200 p-4 md:col-span-2">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Protocolos associados</h4>
-                      <p className="text-sm text-gray-700 mb-3">{selectedProduct._count?.protocolProducts || 0} protocolos</p>
-                      {(selectedProduct as any).protocolProducts && (selectedProduct as any).protocolProducts.length > 0 && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {(selectedProduct as any).protocolProducts.map((pp: any) => (
-                            <div key={pp.protocol.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
-                              <span className="text-sm font-medium text-gray-900">{pp.protocol.name}</span>
-                              <Button variant="outline" size="sm" className="h-7 border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900">
-                                <Link href={`/doctor/protocols/${pp.protocol.id}`} className="text-xs">Ver</Link>
-                              </Button>
-                            </div>
-                          ))}
+                    {selectedProduct.type === 'SUBSCRIPTION' && (
+                      <div className="rounded-xl border border-gray-200 p-4">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-3">Subscription</h4>
+                        <div className="text-sm text-gray-700 space-y-1">
+                          <p>Interval: {String(selectedProduct.interval || 'MONTH').toLowerCase()}</p>
+                          <p>Interval count: {selectedProduct.intervalCount ?? 1}</p>
+                          <p>Auto renew: {String(selectedProduct.autoRenew ?? true)}</p>
+                          <p>Plan ID: {selectedProduct.providerPlanId || '-'}</p>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
-                    <div className="rounded-xl border border-gray-200 p-4">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Criado em</h4>
-                      <p className="text-sm text-gray-700">{formatDate(selectedProduct.createdAt)}</p>
-                    </div>
-                    <div className="rounded-xl border border-gray-200 p-4">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Atualizado em</h4>
-                      <p className="text-sm text-gray-700">{selectedProduct.updatedAt ? formatDate(selectedProduct.updatedAt as unknown as Date) : '-'}</p>
-                    </div>
-
-                    <div className="rounded-xl border border-gray-200 p-4">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-1">ID</h4>
-                      <p className="text-xs text-gray-600 break-all">{selectedProduct.id}</p>
-                    </div>
-                    <div className="rounded-xl border border-gray-200 p-4">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-1">Doctor ID</h4>
-                      <p className="text-xs text-gray-600 break-all">{(selectedProduct as any).doctorId || '-'}</p>
-                    </div>
-
-                    <div className="rounded-xl border border-gray-200 p-4">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-1">Ações</h4>
-                      {selectedProduct && (
-                        <Button variant="outline" size="sm" className="h-8 border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900" asChild>
-                          <Link href={`/business/products/${selectedProduct.id}/edit`} className="flex items-center">
-                            <PencilIcon className="h-3.5 w-3.5 mr-1.5" />
-                            Editar
-                          </Link>
-                        </Button>
-                      )}
-                    </div>
+                    {/* Checkout link removed: links are per-offer and managed on the Edit page under Offers */}
                   </div>
                 </div>
               )}

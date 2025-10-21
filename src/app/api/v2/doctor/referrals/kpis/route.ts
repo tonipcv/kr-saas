@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
       ? await prisma.$queryRawUnsafe<any[]>(
           `SELECT COALESCE(SUM(COALESCE(("customFields"->'offer'->>'amount')::numeric, 0)), 0) as total
            FROM referral_leads
-           WHERE "clinicId" = $1 AND status = 'CONVERTED'`,
+           WHERE clinic_id = $1 AND status = 'CONVERTED'`,
            clinicId
         )
       : await prisma.$queryRawUnsafe<any[]>(

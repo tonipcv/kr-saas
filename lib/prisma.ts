@@ -1,17 +1,28 @@
 import { PrismaClient } from '@prisma/client';
 
-// Ensure global singleton in dev to avoid exhausting connection pool on hot reloads
-const globalForPrisma = global as unknown as { prisma: PrismaClient | undefined };
+// Global singleton (all environments) to prevent exhausting DB connections
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
-export const prisma =
-  globalForPrisma.prisma ||
-  new PrismaClient({
-    // Read URL from env to avoid hardcoded schema URL at runtime
+function createClient() {
+  const client = new PrismaClient({
     datasources: {
       db: { url: process.env.DATABASE_URL },
     },
+    log: [
+      { level: 'error', emit: 'event' },
+      { level: 'warn', emit: 'event' },
+    ],
+    errorFormat: 'colorless',
   });
-
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
+  // Basic listeners to help diagnose pool pressure/timeouts
+  client.$on('warn', (e) => {
+    try { console.warn('[prisma][warn]', e.message); } catch {}
+  });
+  client.$on('error', (e) => {
+    try { console.error('[prisma][error]', e.message); } catch {}
+  });
+  return client;
 }
+
+export const prisma = globalForPrisma.prisma ?? createClient();
+globalForPrisma.prisma = prisma;

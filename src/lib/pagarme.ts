@@ -8,6 +8,100 @@ const AUTH_SCHEME = (process.env.PAGARME_AUTH_SCHEME || 'basic').toLowerCase(); 
 const PAGARME_ACCOUNT_ID = process.env.PAGARME_ACCOUNT_ID || '';
 export function isV5() { return IS_V5; }
 
+export async function pagarmeListSubscriptions(params: Record<string, any> = {}) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v == null) continue;
+    qs.append(k, String(v));
+  }
+  const url = `${PAGARME_BASE_URL}/subscriptions${qs.toString() ? `?${qs.toString()}` : ''}`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: authHeaders(),
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    const msgFromArray = Array.isArray(data?.errors)
+      ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
+      : undefined;
+    const msg = msgFromArray || data?.message || data?.error || text || `Pagarme error ${res.status}`;
+    const err: any = new Error(`[Pagarme ${res.status}] ${msg}`);
+    err.status = res.status;
+    err.responseText = text;
+    err.responseJson = data;
+    throw err;
+  }
+  return data;
+}
+
+// ===== Subscriptions (v5) =====
+export async function pagarmeCreatePlan(payload: Record<string, any>) {
+  // Typical payload:
+  // {
+  //   name: 'Plano X',
+  //   amount: 1000, // cents
+  //   interval: 'month',
+  //   interval_count: 1,
+  //   trial_period_days: 0
+  // }
+  const res = await fetch(`${PAGARME_BASE_URL}/plans`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    const msgFromArray = Array.isArray(data?.errors)
+      ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
+      : undefined;
+    const msg = msgFromArray || data?.message || data?.error || text || `Pagarme error ${res.status}`;
+    const err: any = new Error(`[Pagarme ${res.status}] ${msg}`);
+    err.status = res.status;
+    err.responseText = text;
+    err.responseJson = data;
+    throw err;
+  }
+  return data;
+}
+
+export async function pagarmeCreateSubscription(payload: Record<string, any>) {
+  // Typical payload:
+  // {
+  //   plan_id: 'pln_xxx',
+  //   customer: {...}, // or customer_id
+  //   payment_method: 'credit_card',
+  //   card_id: 'card_xxx' | card: {...},
+  //   metadata: { productId, clinicId, buyerEmail }
+  // }
+  const res = await fetch(`${PAGARME_BASE_URL}/subscriptions`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    const msgFromArray = Array.isArray(data?.errors)
+      ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
+      : undefined;
+    const msg = msgFromArray || data?.message || data?.error || text || `Pagarme error ${res.status}`;
+    const err: any = new Error(`[Pagarme ${res.status}] ${msg}`);
+    err.status = res.status;
+    err.responseText = text;
+    err.responseJson = data;
+    throw err;
+  }
+  return data;
+}
+
 // ===== v5 Customers & Cards helpers =====
 
 export async function pagarmeCreateCustomer(payload: Record<string, any>) {
@@ -185,7 +279,10 @@ export function verifyPagarmeWebhookSignature(rawBody: string, signatureHeader: 
   const computed = crypto.createHmac('sha256', PAGARME_WEBHOOK_SECRET).update(rawBody, 'utf8').digest('hex');
   // Signature header may be like: sha256=xxx
   const received = signatureHeader.split('=')[1] || signatureHeader;
-  return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(received));
+  const a = Buffer.from(computed);
+  const b = Buffer.from(received);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
 }
 
 export type MerchantStatus = 'PENDING' | 'ACTIVE' | 'REJECTED' | 'DISABLED';
@@ -219,6 +316,53 @@ export async function pagarmeCreateOrder(payload: Record<string, any>) {
     err.responseText = text;
     err.responseJson = data;
     throw err;
+  }
+  return data;
+}
+
+export async function pagarmeCancelCharge(chargeId: string) {
+  // Core v5 cancel/refund: DELETE /charges/{charge_id}
+  const url = `${PAGARME_BASE_URL}/charges/${encodeURIComponent(chargeId)}`;
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: authHeaders(),
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    try { console.error('[pagarme][cancel] error', { status: res.status, data }); } catch {}
+    const msgFromArray = Array.isArray(data?.errors)
+      ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
+      : undefined;
+    const msg = msgFromArray || data?.message || data?.error || text || `Pagarme cancel error ${res.status}`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+export async function pagarmeRefundCharge(chargeId: string, amountCents?: number) {
+  // Core v5 refunds: POST /charges/{charge_id}/refunds
+  const url = `${PAGARME_BASE_URL}/charges/${encodeURIComponent(chargeId)}/refunds`;
+  const body: any = {};
+  if (Number.isFinite(Number(amountCents)) && Number(amountCents) > 0) body.amount = Math.floor(Number(amountCents));
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    try { console.error('[pagarme][refund] error', { status: res.status, data }); } catch {}
+    const msgFromArray = Array.isArray(data?.errors)
+      ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
+      : undefined;
+    const msg = msgFromArray || data?.message || data?.error || text || `Pagarme refund error ${res.status}`;
+    throw new Error(msg);
   }
   return data;
 }

@@ -9,14 +9,43 @@ import { pagarmeCreateBankAccount, pagarmeCreateRecipient, pagarmeGetRecipient, 
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
+    const isDev = process.env.NODE_ENV !== 'production';
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+      if (isDev) {
+        console.warn('[pagarme][recipient] 401 - no session');
+      }
+      return NextResponse.json({ error: 'Não autorizado', ...(isDev ? { details: { reason: 'no_session' } } : {}) }, { status: 401 });
     }
     const { clinicId, legalInfo, bankAccount, splitPercent, platformFeeBps } = await req.json();
     if (!clinicId) return NextResponse.json({ error: 'clinicId é obrigatório' }, { status: 400 });
 
-    const clinicMember = await prisma.clinicMember.findFirst({ where: { clinicId, userId: session.user.id, isActive: true } });
-    if (!clinicMember) return NextResponse.json({ error: 'Não autorizado para esta clínica' }, { status: 403 });
+    // Ensure the user is authorized for the clinic. If the user owns the clinic but
+    // doesn't yet have a ClinicMember row, create it automatically (root-cause fix).
+    let clinicMember = await prisma.clinicMember.findFirst({ where: { clinicId, userId: session.user.id } });
+    if (!clinicMember) {
+      const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { id: true, ownerId: true } });
+      if (clinic?.ownerId === session.user.id) {
+        // Auto-create membership for owner
+        try {
+          clinicMember = await prisma.clinicMember.upsert({
+            where: { clinicId_userId: { clinicId, userId: session.user.id } },
+            create: { clinicId, userId: session.user.id, role: 'OWNER' },
+            update: {},
+          });
+          if (isDev) {
+            console.warn('[pagarme][recipient] Auto-created ClinicMember for owner', { userId: session.user.id, clinicId });
+          }
+        } catch (err) {
+          if (isDev) console.warn('[pagarme][recipient] Failed to auto-create owner membership', err);
+        }
+      }
+    }
+    if (!clinicMember) {
+      if (isDev) {
+        console.warn('[pagarme][recipient] 403 - user is not member of clinic', { userId: session.user.id, clinicId });
+      }
+      return NextResponse.json({ error: 'Não autorizado para esta clínica', ...(isDev ? { details: { userId: session.user.id, clinicId } } : {}) }, { status: 403 });
+    }
 
     // Ensure Merchant row exists
     const merchant = await prisma.merchant.upsert({
@@ -61,8 +90,11 @@ export async function POST(req: Request) {
     let recipPayload: any;
     if (useV5) {
       // v5 core payload (working schema)
-      const doc: string | undefined = (legalInfo?.document_number || legalInfo?.document || '').toString();
-      const digitsDoc = doc.replace(/\D/g, '');
+      const docStr: string = String(legalInfo?.document_number ?? legalInfo?.document ?? '');
+      const digitsDoc = docStr.replace(/\D/g, '');
+      if (!(digitsDoc.length === 11 || digitsDoc.length === 14)) {
+        throw new Error('Documento inválido: informe CPF (11 dígitos) ou CNPJ (14 dígitos)');
+      }
       const personType = digitsDoc.length > 11 ? 'company' : 'individual';
 
       // Parse phone to Pagar.me phone_numbers format
@@ -115,12 +147,13 @@ export async function POST(req: Request) {
       const address = ri.address || {};
       const providedPhones = Array.isArray(ri.phone_numbers) ? ri.phone_numbers : undefined;
 
-      // Build register_information preserving provided values
+      // Build register_information. Force type to personType and normalize document fields.
       let register_information = prune({
         name: ri.name ?? legalInfo?.name,
         email: ri.email ?? legalInfo?.email,
-        document: ri.document ?? (digitsDoc || undefined),
-        type: ri.type ?? personType,
+        document: digitsDoc || undefined,
+        document_number: digitsDoc || undefined,
+        type: personType,
         site_url: normalizedSiteUrl,
         mother_name: ri.mother_name,
         birthdate: ri.birthdate,
@@ -160,7 +193,7 @@ export async function POST(req: Request) {
       }
 
       const transfer_settings = prune({
-        transfer_enabled: ts.transfer_enabled ?? 'false',
+        transfer_enabled: typeof ts.transfer_enabled === 'boolean' ? ts.transfer_enabled : false,
         transfer_interval: ts.transfer_interval ?? 'Daily',
         transfer_day: typeof ts.transfer_day === 'number' ? ts.transfer_day : 0,
       });
@@ -182,6 +215,9 @@ export async function POST(req: Request) {
     }
 
     let recipientId = merchant.recipientId || null;
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[pagarme][recipient] Payload (v5:', useV5, ')', JSON.stringify(recipPayload));
+    }
     if (recipientId) {
       const upd = await pagarmeUpdateRecipient(recipientId, recipPayload);
       recipientId = upd?.id || upd?.recipient_id || recipientId;

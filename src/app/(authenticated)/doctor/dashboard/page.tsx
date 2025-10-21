@@ -66,6 +66,8 @@ interface DashboardStats {
   revenueCollected: number;
   referralsCount: number;
   usersCount: number;
+  purchasesCount?: number;
+  aov?: number;
 }
 
 export default function DoctorDashboard() {
@@ -81,7 +83,9 @@ export default function DoctorDashboard() {
     completedToday: 0,
     revenueCollected: 0,
     referralsCount: 0,
-    usersCount: 0
+    usersCount: 0,
+    purchasesCount: 0,
+    aov: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [planName, setPlanName] = useState<string | null>(null);
@@ -91,6 +95,21 @@ export default function DoctorDashboard() {
   const [showLinksPanel, setShowLinksPanel] = useState(false);
   const [showRegisterQr, setShowRegisterQr] = useState(false);
   const [showQrPanel, setShowQrPanel] = useState(false);
+  const [purchases, setPurchases] = useState<any[]>([]);
+  const [dateFrom, setDateFrom] = useState<string>(() => {
+    const d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  });
+  const [dateTo, setDateTo] = useState<string>(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  });
 
   // Simple skeleton helpers
   const SkeletonLine = ({ className = '' }: { className?: string }) => (
@@ -109,19 +128,23 @@ export default function DoctorDashboard() {
         // Kick off all core requests in parallel to avoid waterfall
         const dashboardPromise = fetch(`/api/v2/doctor/dashboard-summary?clinicId=${currentClinic.id}`);
         const patientsPromise = fetch(`/api/patients?clinicId=${currentClinic.id}`);
-        const protocolsPromise = fetch(`/api/protocols?clinicId=${currentClinic.id}`);
+        const disableProtocols = process.env.NEXT_PUBLIC_DISABLE_PROTOCOLS === '1';
+        const protocolsPromise = disableProtocols ? null : fetch(`/api/protocols?clinicId=${currentClinic.id}`);
         const managePromise = fetch(`/api/referrals/manage?page=1&limit=1&clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+        // New: purchases for table/aux only; revenue will use server aggregation
+        const purchasesPromise = fetch(`/api/purchases?clinicId=${encodeURIComponent(currentClinic.id)}&page_size=100`, { cache: 'no-store' });
 
         // Non-critical (deferred) requests in parallel, will be processed after first paint
         const kpisPromise = fetch(`/api/v2/doctor/referrals/kpis?clinicId=${currentClinic.id}`, { cache: 'no-store' }).catch(() => null);
         const rewardsPromise = fetch('/api/referrals/rewards').catch(() => null);
 
         // Await only the core requests for first render
-        const [dashboardResponse, patientsResponse, protocolsResponse, manageResponse] = await Promise.all([
+        const [dashboardResponse, patientsResponse, protocolsResponse, manageResponse, purchasesResponse] = await Promise.all([
           dashboardPromise,
           patientsPromise,
-          protocolsPromise,
+          protocolsPromise || Promise.resolve(null as any),
           managePromise,
+          purchasesPromise,
         ]);
 
         let dashboardData: any = { success: false };
@@ -139,10 +162,10 @@ export default function DoctorDashboard() {
         }
 
         let protocolsData: any[] = [];
-        if (protocolsResponse?.ok) {
-          protocolsData = await protocolsResponse.json();
+        if (protocolsResponse && (protocolsResponse as Response).ok) {
+          protocolsData = await (protocolsResponse as Response).json();
         } else if (protocolsResponse) {
-          console.error('Error loading protocols:', protocolsResponse.status);
+          console.error('Error loading protocols:', (protocolsResponse as Response).status);
         }
 
         // Transform patients data to match expected format
@@ -186,12 +209,33 @@ export default function DoctorDashboard() {
             setStats((prev) => ({
               ...prev,
               referralsCount: totalLeads,
-              revenueCollected: obtainedValue,
+              // Do not overwrite revenueCollected here; authoritative value comes from /api/business/revenue
             }));
           } catch (e) {
             console.error('Failed parsing manage totals', e);
           }
         }
+
+        // Populate recent purchases list (independent from revenue)
+        try {
+          if (purchasesResponse?.ok) {
+            const pr = await purchasesResponse.json();
+            const items = Array.isArray(pr?.data?.items) ? pr.data.items : (Array.isArray(pr?.items) ? pr.items : []);
+            const fromD = new Date(dateFrom + 'T00:00:00');
+            const toD = new Date(dateTo + 'T23:59:59');
+            const filtered = items.filter((it: any) => {
+              const raw = it?.createdAt || it?.created_at || it?.date;
+              const d = new Date(raw);
+              return d >= fromD && d <= toD;
+            });
+            setPurchases(filtered.slice(0, 100));
+          }
+        } catch (e) {
+          console.error('Failed loading purchases list', e);
+        }
+
+        // Authoritative revenue aggregation (sum of all sales) via API
+        // Note: revenue aggregation is fetched in the date-range effect below to avoid duplicate calls on mount
 
         // Set dashboard statistics from the dashboard endpoint
         if (dashboardData.success && dashboardData.data) {
@@ -241,7 +285,7 @@ export default function DoctorDashboard() {
                 setStats((prev) => ({
                   ...prev,
                   referralsCount: Number.isFinite(leadsRecebidosNum) ? leadsRecebidosNum : prev.referralsCount,
-                  revenueCollected: Number.isFinite(valorGeradoNum) ? valorGeradoNum : prev.revenueCollected,
+                  // Do not overwrite revenueCollected with KPIs; keep aggregated revenue
                 }));
               }
             }
@@ -283,7 +327,8 @@ export default function DoctorDashboard() {
                   setStats((prev) => ({
                     ...prev,
                     referralsCount: prev.referralsCount || totalLeads,
-                    revenueCollected: prev.revenueCollected || obtainedValue,
+                    // Only set revenue if still zero (e.g., revenue API failed)
+                    revenueCollected: prev.revenueCollected && prev.revenueCollected > 0 ? prev.revenueCollected : obtainedValue,
                   }));
                 }
               }
@@ -410,6 +455,83 @@ export default function DoctorDashboard() {
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(amount || 0);
+
+  // Build daily revenue series from purchases for the selected date range (use local calendar days)
+  const buildDailyRevenue = () => {
+    try {
+      const fromD = new Date(dateFrom + 'T00:00:00');
+      const toD = new Date(dateTo + 'T23:59:59');
+      const dayMs = 24 * 60 * 60 * 1000;
+      // Build buckets for each day (start-of-day local time in ms)
+      const times: number[] = [];
+      const totals: number[] = [];
+      for (let t = new Date(fromD.getFullYear(), fromD.getMonth(), fromD.getDate()).getTime(); t <= new Date(toD.getFullYear(), toD.getMonth(), toD.getDate()).getTime(); t += dayMs) {
+        times.push(t);
+        totals.push(0);
+      }
+      const idxMap = new Map(times.map((t, i) => [t, i]));
+      for (const it of purchases) {
+        const raw = String(it?.createdAt || it?.created_at || it?.date || '');
+        let keyTime: number | null = null;
+        const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) {
+          const yy = Number(m[1]);
+          const mm = Number(m[2]);
+          const dd = Number(m[3]);
+          keyTime = new Date(yy, mm - 1, dd).getTime();
+        } else {
+          const d = new Date(raw || Date.now());
+          keyTime = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        }
+        if (keyTime == null) continue;
+        const idx = idxMap.get(keyTime);
+        if (idx == null) continue;
+        const val = Number(it?.totalPrice ?? it?.total_price ?? 0);
+        if (Number.isFinite(val)) totals[idx] += val;
+      }
+      return { times, totals };
+    } catch {
+      return { times: [], totals: [] };
+    }
+  };
+
+  // Recompute revenue KPIs and refresh purchases when date range changes
+  useEffect(() => {
+    const refetchRevenue = async () => {
+      if (!currentClinic) return;
+      try {
+        const qs = new URLSearchParams({ clinicId: currentClinic.id, from: dateFrom, to: dateTo });
+        const revRes = await fetch(`/api/business/revenue?${qs.toString()}`, { cache: 'no-store' });
+        if (revRes.ok) {
+          const rjson = await revRes.json();
+          const total = Number(rjson?.data?.total ?? 0);
+          const purchasesCount = Number(rjson?.data?.purchasesCount ?? 0);
+          const aov = Number(rjson?.data?.aov ?? 0);
+          setStats((prev) => ({ ...prev, revenueCollected: total, purchasesCount, aov }));
+        }
+      } catch {}
+    };
+    const refetchPurchases = async () => {
+      if (!currentClinic) return;
+      try {
+        const prRes = await fetch(`/api/purchases?clinicId=${encodeURIComponent(currentClinic.id)}&page_size=100`, { cache: 'no-store' });
+        if (prRes.ok) {
+          const pr = await prRes.json();
+          const items = Array.isArray(pr?.data?.items) ? pr.data.items : (Array.isArray(pr?.items) ? pr.items : []);
+          const fromD = new Date(dateFrom + 'T00:00:00');
+          const toD = new Date(dateTo + 'T23:59:59');
+          const filtered = items.filter((it: any) => {
+            const raw = it?.createdAt || it?.created_at || it?.date;
+            const d = new Date(raw);
+            return d >= fromD && d <= toD;
+          });
+          setPurchases(filtered.slice(0, 100));
+        }
+      } catch {}
+    };
+    refetchRevenue();
+    refetchPurchases();
+  }, [dateFrom, dateTo, currentClinic]);
 
   // Simple sparkline data (replace with real API data when available)
   const referralsTrend = [5, 9, 7, 14, 10, 12, 15];
@@ -692,245 +814,112 @@ export default function DoctorDashboard() {
             </div>
           )}
 
-          
+          {/* Revenue date range picker (last 30 days default) */}
+          <div className="mb-4 bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h2 className="text-[15px] font-semibold text-gray-900">Receita</h2>
+                <p className="text-[12px] text-gray-500">Período selecionado em BRL</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <label className="text-[12px] text-gray-600">De</label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="h-8 rounded-lg border border-gray-300 px-2 text-[12px]"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[12px] text-gray-600">Até</label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="h-8 rounded-lg border border-gray-300 px-2 text-[12px]"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
 
-          {/* Stats (pill cards like KPIs) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-2">
+          {/* Stripe-like KPIs: Revenue, Purchases, AOV */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+              <p className="text-[11px] text-gray-500 font-medium">Receita</p>
+              {isLoading ? (
+                <SkeletonLine className="mt-2 h-6 w-24" />
+              ) : (
+                <p className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrency(stats.revenueCollected)}</p>
+              )}
+            </div>
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+              <p className="text-[11px] text-gray-500 font-medium">Pedidos</p>
+              {isLoading ? (
+                <SkeletonLine className="mt-2 h-6 w-16" />
+              ) : (
+                <p className="mt-1 text-2xl font-semibold text-gray-900">{stats.purchasesCount || 0}</p>
+              )}
+            </div>
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+              <p className="text-[11px] text-gray-500 font-medium">Ticket médio (AOV)</p>
+              {isLoading ? (
+                <SkeletonLine className="mt-2 h-6 w-20" />
+              ) : (
+                <p className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrency(Math.round(stats.aov || 0))}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Revenue trend (daily sales) */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[13px] font-semibold text-gray-900">Vendas por dia</p>
+              <p className="text-[12px] text-gray-500">
+                {format(new Date(dateFrom + 'T00:00:00'), 'd MMM', { locale: ptBR })}
+                {' — '}
+                {format(new Date(dateTo + 'T00:00:00'), 'd MMM', { locale: ptBR })}
+              </p>
+            </div>
             {isLoading ? (
-              <>
-                <SkeletonBox className="h-16" />
-                <SkeletonBox className="h-16" />
-                <SkeletonBox className="h-16" />
-              </>
-            ) : (
-              [{
-                title: 'Revenue collected',
-                value: formatCurrency(stats.revenueCollected),
-                note: 'total'
-              }, {
-                title: 'Referrals',
-                value: stats.referralsCount,
-                note: 'total'
-              }, {
-                title: 'Users',
-                value: stats.usersCount,
-                note: 'total'
-              }].map((kpi) => (
-                <div key={String(kpi.title)} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-medium text-gray-500">{kpi.title}</span>
-                    <span className="text-[10px] text-gray-400">{kpi.note}</span>
+              <SkeletonBox className="h-[220px] w-full" />
+            ) : (() => {
+              const { times, totals } = buildDailyRevenue();
+              const hasData = totals.some((v) => Number(v) > 0);
+              if (!hasData) {
+                return (
+                  <div className="h-[220px] w-full flex items-center justify-center text-[12px] text-gray-500">
+                    Sem dados no período selecionado
                   </div>
-                  <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{kpi.value as any}</div>
+                );
+              }
+              const pts = times.map((t, i) => [t + 12 * 60 * 60 * 1000, Number(totals[i] || 0)]) as SeriesPoint[];
+              const max = Math.max(1, ...totals.map(Number));
+              return (
+                <div className="w-full">
+                  <ProjectionLineChart
+                    past={pts}
+                    title={undefined}
+                    height={220}
+                    pastName="Vendas"
+                    colors={["#86efac"]}
+                    yFormatter={(v) => formatCurrency(Math.round(v || 0))}
+                  />
+                  <div className="text-[11px] text-gray-500 mt-1">Máximo no período: {formatCurrency(max)}</div>
                 </div>
-              ))
-            )}
+              );
+            })()}
           </div>
- 
-          <div className="grid md:grid-cols-2 gap-3">
-            {/* Rewards (top, spans 2 cols) */}
-            <Card className="bg-white border border-gray-200 rounded-2xl md:col-span-2 shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between px-4 py-3">
-                <CardTitle className="text-sm font-semibold text-gray-900">Rewards</CardTitle>
-                <div className="flex gap-2">
-                  <Button asChild variant="outline" size="sm" className="h-8 border-gray-300 text-gray-800">
-                    <Link href="/doctor/rewards">Manage Rewards</Link>
-                  </Button>
-                  <Button asChild variant="outline" size="sm" className="h-8 border-gray-300 text-gray-800">
-                    <Link href="/doctor/rewards/approvals">Approvals</Link>
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="px-4 pb-4 pt-0">
-                <div className="grid grid-cols-3 gap-3">
-                  {isLoading ? (
-                    <>
-                      <SkeletonBox className="h-16" />
-                      <SkeletonBox className="h-16" />
-                      <SkeletonBox className="h-16" />
-                    </>
-                  ) : (
-                    [
-                      {label:'Configured',value:rewardsSummary.configured},
-                      {label:'Pending',value:rewardsSummary.pending},
-                      {label:'Redeemed',value:rewardsSummary.redeemed}
-                    ].map((m) => (
-                      <div key={m.label} className="px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 shadow-sm">
-                        <p className="text-[11px] text-gray-600 font-medium">{m.label}</p>
-                        <p className="text-[22px] leading-7 font-semibold text-gray-900">{m.value}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
 
           
 
-            {/* Referral projections (above Active Clients and Track Progress) */}
-            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl md:col-span-2 overflow-hidden">
-              <CardHeader className="px-4 py-3 border-b border-gray-100">
-                <CardTitle className="text-sm font-semibold text-gray-900">Referral projections</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                {isLoading ? (
-                  <div className="p-4">
-                    <SkeletonBox className="h-80 w-full" />
-                  </div>
-                ) : (
-                  <div className="overflow-x-hidden md:overflow-x-auto">
-                    <div className="w-full md:min-w-[600px]">
-                      <ProjectionLineChart 
-                        title=""
-                        past={pastSeries}
-                        height={280}
-                      />
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+          {/* KPI cards removed as requested */}
 
-            {/* Chart removed in favor of professional projection chart above */}
 
-            {/* Active Clients (minimal) */}
-            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
-              <CardHeader className="flex flex-row items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
-                <CardTitle className="text-sm font-semibold text-gray-900">Active Clients</CardTitle>
-                <Button variant="ghost" size="sm" asChild className="h-8 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-full font-medium">
-                  <Link href="/doctor/patients">View all</Link>
-                </Button>
-              </CardHeader>
-              <CardContent className="px-2 pb-2 pt-0">
-                {isLoading ? (
-                  <div className="divide-y divide-gray-200">
-                    {[...Array(5)].map((_, i) => (
-                      <div key={i} className="flex items-center justify-between py-3 px-2">
-                        <div className="flex items-center gap-3 min-w-0 w-full">
-                          <SkeletonLine className="h-8 w-8 rounded-lg" />
-                          <div className="min-w-0 flex-1">
-                            <SkeletonLine className="h-4 w-32 mb-2" />
-                            <SkeletonLine className="h-3 w-48" />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : patients.length === 0 ? (
-                  <div className="text-center py-10">
-                    <UsersIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500 mb-4 font-medium">No clients registered</p>
-                    <Button className="h-8 text-white rounded-full shadow-sm text-xs font-medium bg-gradient-to-r from-[#5893ec] to-[#9bcef7] hover:opacity-90" size="sm" asChild>
-                      <Link href="/doctor/patients/smart-add">Add first client</Link>
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-200">
-                    {patients.slice(0, 5).map((patient) => (
-                      <div key={patient.id} className="flex flex-row items-center justify-between gap-2 py-3 px-2">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center text-[11px] font-semibold text-gray-600 flex-shrink-0">
-                            {getPatientInitials(patient.name)}
-                          </div>
-                          <div className="min-w-0 flex-1 overflow-hidden">
-                            <p className="text-sm font-medium text-gray-900 truncate">{patient.name || 'No name'}</p>
-                            <p className="text-xs text-gray-500 truncate">{patient.email}</p>
-                          </div>
-                        </div>
-                        <div className="flex-shrink-0">
-                          <Button asChild variant="ghost" size="sm" className="h-8 px-3 text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-full text-xs">
-                            <Link href={`/doctor/patients/${patient.id}`}>View</Link>
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+          {/* Quick Actions removed as requested */}
 
-            {/* Track Progress */}
-            <Card className="hidden md:block bg-white border border-gray-200 shadow-sm rounded-2xl">
-              <CardHeader className="flex flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
-                <CardTitle className="text-sm font-semibold text-gray-900">Track Progress</CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-4 pt-3">
-                <p className="text-xs text-gray-600 mb-4 text-center">Monitor KPIs and review clients.</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button asChild variant="outline" className="h-9 border-gray-300 text-gray-800 rounded-full text-xs font-medium px-3">
-                    <Link href="/doctor/referrals/kpis">View KPIs</Link>
-                  </Button>
-                  <Button asChild variant="outline" className="h-9 border-gray-300 text-gray-800 rounded-full text-xs font-medium px-3">
-                    <Link href="/doctor/patients">View Clients</Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Quick Actions */}
-          <Card className="mt-6 bg-white border border-gray-200 shadow-sm rounded-2xl">
-            <CardHeader className="px-4 py-3">
-              <CardTitle className="text-sm font-semibold text-gray-900">Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4 pt-0">
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                <Button 
-                  variant="outline" 
-                  className="h-20 flex-col gap-2 border-gray-300 bg-white text-gray-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 rounded-2xl shadow-sm font-medium"
-                  onClick={() => router.push('/doctor/patients/smart-add')}
-                >
-                  <UserPlusIcon className="h-7 w-7" />
-                  <span className="text-xs">Add Client</span>
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="h-20 flex-col gap-2 border-gray-300 bg-white text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300 rounded-2xl shadow-sm font-medium"
-                  asChild
-                >
-                  <Link href="/doctor/rewards">
-                    <DocumentTextIcon className="h-7 w-7" />
-                    <span className="text-xs">Manage Rewards</span>
-                  </Link>
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="h-20 flex-col gap-2 border-gray-300 bg-white text-gray-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 rounded-2xl shadow-sm font-medium"
-                  asChild
-                >
-                  <Link href="/doctor/patients">
-                    <UsersIcon className="h-7 w-7" />
-                    <span className="text-xs">View Clients</span>
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Public company link (domain + slug) - bottom */}
-          <div className="mt-6 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-            {doctorSlug ? (
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] text-gray-500 font-medium">Your public link</p>
-                  <code className="block text-sm text-gray-900 truncate">{publicUrl}</code>
-                </div>
-                <Button onClick={copyPublicUrl} variant="outline" size="sm" className="h-8 border-gray-300 text-gray-800 shrink-0">
-                  {copied ? 'Copied' : 'Copy'}
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] text-gray-500 font-medium">Set your public link</p>
-                  <p className="text-sm text-gray-900">Define your slug in Profile to get a public link.</p>
-                </div>
-                <Button asChild variant="outline" size="sm" className="h-8 border-gray-300 text-gray-800 shrink-0">
-                  <Link href="/doctor/profile">Open Profile</Link>
-                </Button>
-              </div>
-            )}
-          </div>
+          
         </div>
       </div>
 

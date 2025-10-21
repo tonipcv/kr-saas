@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,9 @@ type Product = {
   imageUrl?: string;
   originalPrice?: number;
   discountPrice?: number;
+  // subscription support
+  type?: 'SUBSCRIPTION' | 'ONE_TIME' | string;
+  providerPlanId?: string | null;
 };
 
 export default function BrandedCheckoutPage() {
@@ -30,9 +33,12 @@ export default function BrandedCheckoutPage() {
   const slug = params.slug;
   const productId = params.id;
   const sp = useSearchParams();
+  const offerParam = useMemo(() => sp?.get('offer') || null, [sp]);
 
   const [branding, setBranding] = useState<ClinicBranding>({});
   const [product, setProduct] = useState<Product | null>(null);
+  type Offer = { id: string; name?: string; description?: string | null; priceCents: number; currency?: string; isSubscription?: boolean; intervalCount?: number|null; intervalUnit?: 'DAY'|'WEEK'|'MONTH'|'YEAR'|null; trialDays?: number|null; maxInstallments?: number|null; paymentMethods?: Array<{ method: 'PIX'|'CARD'; active: boolean }>; active?: boolean };
+  const [offer, setOffer] = useState<Offer | null>(null);
   const [loading, setLoading] = useState(true);
   // Quantity fixed to 1 as requested
   const qty = 1;
@@ -41,6 +47,9 @@ export default function BrandedCheckoutPage() {
   const [buyerPhone, setBuyerPhone] = useState('');
   const [buyerDocument, setBuyerDocument] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | null>('card');
+  const [hasRedirected, setHasRedirected] = useState(false);
+  const LOCAL_REDIRECT_KEY = 'checkout_pending_redirect_to';
+  const [showEmergency, setShowEmergency] = useState(false);
   const [installments, setInstallments] = useState<number>(1);
   // Card fields
   const [cardNumber, setCardNumber] = useState('');
@@ -71,7 +80,18 @@ export default function BrandedCheckoutPage() {
   const [paid, setPaid] = useState(false);
   const qrFallbackUrl = useMemo(() => pixQrCode ? `https://api.qrserver.com/v1/create-qr-code/?size=224x224&data=${encodeURIComponent(pixQrCode)}` : null, [pixQrCode]);
   const [success, setSuccess] = useState(false);
+  const redirectingRef = useRef<boolean>(false);
   const [cardPolling, setCardPolling] = useState<{ active: boolean; startedAt: number } | null>(null);
+  // Allowed methods derived from offer
+  const pixAllowed = useMemo(() => (offer?.paymentMethods || []).some(x => x.method === 'PIX' && x.active), [offer?.paymentMethods]);
+  const cardAllowed = useMemo(() => (offer?.paymentMethods || []).some(x => x.method === 'CARD' && x.active), [offer?.paymentMethods]);
+
+  // Ensure selected method is allowed whenever offer changes
+  useEffect(() => {
+    if (cardAllowed) setPaymentMethod('card');
+    else if (pixAllowed) setPaymentMethod('pix');
+    else setPaymentMethod(null);
+  }, [cardAllowed, pixAllowed]);
   // Checkout countdown (10 minutes)
   const [checkoutRemaining, setCheckoutRemaining] = useState<number>(600);
   // Minimalist approval modal
@@ -162,8 +182,13 @@ export default function BrandedCheckoutPage() {
     ? 'bg-[#0f0f0f] border-gray-800 text-gray-100'
     : 'bg-gray-100 border-transparent text-gray-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
 
-  const displayPrice = useMemo(() => (product?.discountPrice ?? product?.originalPrice ?? 0), [product]);
-  const priceCents = useMemo(() => Math.round((displayPrice || 0) * 100), [displayPrice]);
+  const displayPrice = useMemo(() => (
+    offer?.priceCents != null ? (offer.priceCents / 100) : (product?.discountPrice ?? product?.originalPrice ?? 0)
+  ), [offer?.priceCents, product]);
+  const priceCents = useMemo(() => {
+    if (offer?.priceCents != null) return offer.priceCents;
+    return Math.round((displayPrice || 0) * 100);
+  }, [offer?.priceCents, displayPrice]);
 
   useEffect(() => {
     async function loadBranding() {
@@ -202,6 +227,35 @@ export default function BrandedCheckoutPage() {
           fullData: data
         });
         setProduct(data);
+        // Load offers and select the first active one (source of truth)
+        try {
+          const ores = await fetch(`/api/products/${productId}/offers`, { cache: 'no-store' });
+          if (ores.ok) {
+            const oj = await ores.json();
+            const list: Offer[] = Array.isArray(oj?.offers) ? oj.offers : [];
+            console.log('[checkout][offers] loaded offers', { offerParam, count: list.length, offerIds: list.map(o => o.id) });
+            const chosen = offerParam ? (list.find(o => o.id === offerParam) || null) : null;
+            if (offerParam && !chosen) {
+              console.warn('[checkout][offers] URL offer not found in list', { offerParam, available: list.map(o => o.id) });
+            }
+            const active = chosen || list.find(o => o.active) || list[0] || null;
+            console.log('[checkout][offers] selected offer', { 
+              offerId: active?.id, 
+              priceCents: active?.priceCents, 
+              isChosen: !!chosen, 
+              isFallback: !chosen 
+            });
+            if (active) {
+              setOffer(active);
+              // Default payment method from offer
+              const pixOn = (active.paymentMethods || []).some(x => x.method === 'PIX' && x.active);
+              const cardOn = (active.paymentMethods || []).some(x => x.method === 'CARD' && x.active);
+              setPaymentMethod(cardOn ? 'card' : (pixOn ? 'pix' : null));
+            }
+          }
+        } catch (e) {
+          console.error('[checkout][offers] failed to load', e);
+        }
       } catch (e: any) {
         setError(e?.message || 'Erro ao carregar produto');
       } finally {
@@ -209,7 +263,7 @@ export default function BrandedCheckoutPage() {
       }
     }
     if (productId) loadProduct();
-  }, [productId]);
+  }, [productId, offerParam]);
 
   useEffect(() => {
     async function calc() {
@@ -223,11 +277,39 @@ export default function BrandedCheckoutPage() {
   }, [priceCents]);
 
   const totalCents = useMemo(() => priceCents || 0, [priceCents]);
+  // Subscription descriptors
+  const isSubOffer = !!offer?.isSubscription;
+  const subMonthsInfo = useMemo(() => {
+    if (!isSubOffer) return { months: 0, label: null as string | null };
+    const unit = (offer?.intervalUnit || 'MONTH').toString().toUpperCase();
+    const count = Number(offer?.intervalCount || 1);
+    const months = unit === 'YEAR' ? count * 12 : (unit === 'MONTH' ? count : (unit === 'WEEK' ? Math.ceil(count / 4) : 1));
+    let label = 'Mensal';
+    if (months >= 12) label = 'Anual'; else if (months >= 6) label = 'Semestral'; else if (months >= 3) label = 'Trimestral'; else label = 'Mensal';
+    return { months, label };
+  }, [isSubOffer, offer?.intervalUnit, offer?.intervalCount]);
+  const summaryDescription = useMemo(() => {
+    return (offer?.description && offer.description.trim()) ? offer.description : (product?.description || '');
+  }, [offer?.description, product?.description]);
   // Build installment options using Price (APR mensal)
   const installmentOptions = useMemo(() => {
     if (!priceCents) return [] as { n: number; perCents: number }[];
     const apr = typeof pricing?.INSTALLMENT_CUSTOMER_APR_MONTHLY === 'number' ? pricing.INSTALLMENT_CUSTOMER_APR_MONTHLY : 0.029;
-    const maxN = typeof pricing?.INSTALLMENT_MAX_INSTALLMENTS === 'number' ? pricing.INSTALLMENT_MAX_INSTALLMENTS : 12;
+    const maxPricingN = typeof pricing?.INSTALLMENT_MAX_INSTALLMENTS === 'number' ? pricing.INSTALLMENT_MAX_INSTALLMENTS : 12;
+    const maxOfferN = offer?.maxInstallments != null ? offer.maxInstallments : undefined;
+    const isSub = !!offer?.isSubscription;
+    // Business rule: products under R$97 cannot be split (one-time only). For subscriptions, ignore R$97 rule.
+    const businessMax = isSub ? maxPricingN : (priceCents >= 9700 ? maxPricingN : 1);
+    let intervalCap = undefined as number | undefined;
+    if (isSub) {
+      const unit = (offer?.intervalUnit || 'MONTH').toString().toUpperCase();
+      const count = Number(offer?.intervalCount || 1);
+      const months = unit === 'YEAR' ? (count * 12) : (unit === 'MONTH' ? count : (unit === 'WEEK' ? Math.ceil(count / 4) : 1));
+      // Normalize to 1,3,6,12 caps
+      if (months >= 12) intervalCap = 12; else if (months >= 6) intervalCap = 6; else if (months >= 3) intervalCap = 3; else intervalCap = 1;
+    }
+    const capBase = intervalCap || businessMax;
+    const maxN = Math.max(1, Math.min(capBase, maxOfferN || capBase));
     const out: { n: number; perCents: number }[] = [];
     const pricePer = (P: number, i: number, n: number) => {
       if (n <= 1 || i <= 0) return Math.round(P);
@@ -237,12 +319,34 @@ export default function BrandedCheckoutPage() {
       const A = (P * i * factor) / denom;
       return Math.round(A);
     };
+
+  // Build success URL helper
+  function buildSuccessUrl(ordId: string, meth: 'card'|'pix'): string {
+    const s = slug; // slug from useParams
+    const params = new URLSearchParams();
+    params.set('order_id', ordId);
+    params.set('method', meth);
+    params.set('product_id', productId);
+    return `/${s}/checkout/success?${params.toString()}`;
+  }
     for (let n = 1; n <= maxN; n++) {
       const per = pricePer(priceCents, apr, n);
       out.push({ n, perCents: per });
     }
     return out;
-  }, [priceCents, pricing]);
+  }, [priceCents, pricing, offer?.maxInstallments, offer?.isSubscription, offer?.intervalUnit, offer?.intervalCount]);
+
+  // Derived from installmentOptions (must be after its declaration)
+  const maxInstallmentsCap = useMemo(() => (installmentOptions.length ? installmentOptions[installmentOptions.length - 1]?.n : 1), [installmentOptions]);
+  const selectedInstallment = useMemo(() => installmentOptions.find(o => o.n === installments) || null, [installmentOptions, installments]);
+
+  // Clamp selected installments whenever options shrink due to business/subscription rules
+  useEffect(() => {
+    if (!installmentOptions?.length) { if (installments !== 1) setInstallments(1); return; }
+    const maxN = installmentOptions[installmentOptions.length - 1]?.n || 1;
+    if (installments > maxN) setInstallments(maxN);
+    if (installments < 1) setInstallments(1);
+  }, [installmentOptions.length, offer?.id, offer?.isSubscription, offer?.intervalUnit, offer?.intervalCount]);
   const formatBRL = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
   const formatCents = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
 
@@ -294,47 +398,135 @@ export default function BrandedCheckoutPage() {
     }
     try {
       setSubmitting(true);
-      const res = await fetch('/api/checkout/create', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productId: product.id,
-          productName: product.name,
-          amountCents: priceCents,
-          buyer: {
-            name: buyerName,
-            email: buyerEmail,
-            phone: buyerPhone,
-            document: buyerDocument,
-            address: {
-              street: addrStreet,
-              number: addrNumber,
-              zip_code: addrZip,
-              city: addrCity,
-              state: addrState,
-              country: addrCountry || 'BR',
-            }
-          },
-          slug,
-          payment: paymentMethod === 'pix'
-            ? { method: 'pix' }
-            : {
-                method: 'card',
-                installments,
-                card: {
-                  number: cardNumber,
-                  holder_name: cardHolder,
-                  exp_month: cardExpMonth,
-                  exp_year: cardExpYear,
-                  cvv: cardCvv,
-                }
+      const isSubscription = !!offer?.isSubscription;
+      // Determine subscription months (for installment decision)
+      const subUnit = (offer?.intervalUnit || 'MONTH').toString().toUpperCase();
+      const subCount = Number(offer?.intervalCount || 1);
+      const subMonths = isSubscription ? (subUnit === 'YEAR' ? subCount * 12 : (subUnit === 'MONTH' ? subCount : (subUnit === 'WEEK' ? Math.ceil(subCount / 4) : 1))) : 0;
+      // Decide endpoint: if subscription with months > 1, use one-time create with installments=subMonths; else standard subscribe
+      const endpoint = (isSubscription && subMonths > 1) ? '/api/checkout/create' : (isSubscription ? '/api/checkout/subscribe' : '/api/checkout/create');
+      const body = (isSubscription && subMonths > 1) ? {
+        productId: product.id,
+        productName: product.name,
+        amountCents: priceCents, // base amount; backend embeds interest
+        offerId: offer?.id || null,
+        buyer: {
+          name: buyerName,
+          email: buyerEmail,
+          phone: buyerPhone,
+          document: buyerDocument,
+          address: {
+            street: addrStreet,
+            number: addrNumber,
+            zip_code: addrZip,
+            city: addrCity,
+            state: addrState,
+            country: addrCountry || 'BR',
+          }
+        },
+        slug,
+        subscriptionPeriodMonths: subMonths,
+        payment: paymentMethod === 'pix'
+          ? { method: 'pix' }
+          : {
+              method: 'card',
+              // IMPORTANT: respect user's selection; clamp to subscription months, offer cap and platform cap
+              installments: Math.max(1, Math.min(
+                Number(installments || 1),
+                Number(subMonths || 1),
+                Number(offer?.maxInstallments || 12),
+                12
+              )),
+              card: {
+                number: cardNumber,
+                holder_name: cardHolder,
+                exp_month: cardExpMonth,
+                exp_year: cardExpYear,
+                cvv: cardCvv,
               }
-        })
+            }
+      } : (isSubscription ? {
+        productId: product.id,
+        slug,
+        offerId: offer?.id || null,
+        buyer: {
+          name: buyerName,
+          email: buyerEmail,
+          phone: buyerPhone,
+          document: buyerDocument,
+          address: {
+            street: addrStreet,
+            number: addrNumber,
+            zip_code: addrZip,
+            city: addrCity,
+            state: addrState,
+            country: addrCountry || 'BR',
+          }
+        },
+        payment: paymentMethod === 'pix'
+          ? { method: 'pix' }
+          : {
+              method: 'card',
+              card: {
+                number: cardNumber,
+                holder_name: cardHolder,
+                exp_month: cardExpMonth,
+                exp_year: cardExpYear,
+                cvv: cardCvv,
+              }
+            }
+      } : {
+        productId: product.id,
+        productName: product.name,
+        amountCents: priceCents,
+        offerId: offer?.id || null,
+        buyer: {
+          name: buyerName,
+          email: buyerEmail,
+          phone: buyerPhone,
+          document: buyerDocument,
+          address: {
+            street: addrStreet,
+            number: addrNumber,
+            zip_code: addrZip,
+            city: addrCity,
+            state: addrState,
+            country: addrCountry || 'BR',
+          }
+        },
+        slug,
+        payment: paymentMethod === 'pix'
+          ? { method: 'pix' }
+          : {
+              method: 'card',
+              installments,
+              card: {
+                number: cardNumber,
+                holder_name: cardHolder,
+                exp_month: cardExpMonth,
+                exp_year: cardExpYear,
+                cvv: cardCvv,
+              }
+            }
       });
+      // Debug the outgoing payload
+      try { 
+        console.log('[checkout][submit] sending checkout', { 
+          offerId: (body as any)?.offerId, 
+          amountCents: (body as any)?.amountCents,
+          priceCents,
+          isSubscription, 
+          subMonths, 
+          selectedInstallments: installments, 
+          sentInstallments: (body as any)?.payment?.installments 
+        }); 
+      } catch {}
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
       // Reset card UI status before handling
       setCardStatus(null);
-      // Handle PIX modal
+      // Handle PIX modal (only for one-time flow)
       if (paymentMethod === 'pix' && data?.order) {
         setOrderId(data.order?.id || null);
         const pix = data?.pix || {};
@@ -357,17 +549,29 @@ export default function BrandedCheckoutPage() {
         const c = data.card;
         const friendly = mapDeclineMessage({ status: c?.status, acquirer_message: c?.acquirer_message, status_reason: c?.status_reason, return_code: c?.acquirer_return_code }) || c?.acquirer_message || c?.soft_descriptor || c?.status || '';
         const msg = friendly;
-        setCardStatus({ approved: !!c?.approved, status: c?.status, message: msg, last4: c?.last4 || undefined, brand: c?.brand || undefined });
+        // Strict: only treat as approved when truly paid
+        const stLower = (c?.status || '').toLowerCase();
+        const approvedStrict = stLower === 'paid';
+        const isTerminalFail = stLower === 'failed' || stLower === 'canceled' || stLower === 'cancelled' || stLower === 'refused';
+        setCardStatus({ approved: approvedStrict, status: c?.status, message: msg, last4: c?.last4 || undefined, brand: c?.brand || undefined });
         if (data?.order_id) setOrderId(String(data.order_id));
-        // Start short polling if processing
-        const st = (c?.status || '').toLowerCase();
-        if (st === 'processing' && data?.order_id) {
+        // Start short polling for any non-paid status that is not a terminal failure
+        const st = stLower;
+        if (data?.order_id && !approvedStrict && !isTerminalFail) {
           setCardPolling({ active: true, startedAt: Date.now() });
           // show loading modal while processing
           setApproveModal({ open: true, stage: 'loading' });
+        } else {
+          // Terminal non-approved response: ensure modal is closed
+          setApproveModal({ open: false, stage: 'loading' });
         }
-        if (!c?.approved) {
-          setError(msg || 'Pagamento não aprovado');
+        if (!approvedStrict) {
+          // Only show error for terminal failures; for approved/authorized/captured keep UI clean and let polling redirect
+          if (isTerminalFail) {
+            setError(msg || 'Pagamento não aprovado');
+          } else {
+            setError(null);
+          }
           const dbg = c?.debug || {};
           try {
             const lines: string[] = [];
@@ -385,13 +589,18 @@ export default function BrandedCheckoutPage() {
           } catch {}
         } else {
           setError(null);
-          console.log('[checkout][card] approved', { status: c?.status, last4: c?.last4, brand: c?.brand });
-          if (data?.order_id) {
-            setSuccess(true);
-            const to = `/${slug}/checkout/success?order_id=${data.order_id}&method=card&product_id=${productId}`;
-            showApprovedAndRedirect(to);
-          }
+          setSuccess(true);
+          const to = `/${slug}/checkout/success?order_id=${data.order_id}&method=card&product_id=${productId}&installments=${installments}`;
+          showApprovedAndRedirect(to);
+          return;
         }
+      }
+      // Subscription flow success: redirect to success page with subscription_id
+      if (isSubscription && data?.subscription_id) {
+        setSuccess(true);
+        const to = `/${slug}/checkout/success?order_id=${encodeURIComponent(String(data.subscription_id))}&method=card&product_id=${productId}&installments=${installments}`;
+        showApprovedAndRedirect(to);
+        return;
       }
     } catch (e: any) {
       setError(e?.message || 'Erro ao criar checkout');
@@ -409,7 +618,7 @@ export default function BrandedCheckoutPage() {
       params.set('method', method);
       params.set('product_id', productId);
       const to = `/${slug}/checkout/success?${params.toString()}`;
-      const t = setTimeout(() => { window.location.href = to; }, 2000);
+      const t = setTimeout(() => { showApprovedAndRedirect(to); }, 200);
       return () => clearTimeout(t);
     }
   }, [success, cardStatus?.approved, slug]);
@@ -456,22 +665,35 @@ export default function BrandedCheckoutPage() {
           const ch = Array.isArray(js?.order?.charges) ? js.order.charges[0] : null;
           const tx = ch?.last_transaction || pay?.last_transaction || null;
           const status = (tx?.status || pay?.status || ch?.status || js?.payment_status || js?.order_status || '').toString().toLowerCase();
-          if (status && status !== 'processing') {
-            const approved = ['paid','approved','authorized'].includes(status);
-            setCardStatus((prev) => ({ approved, status, message: prev?.message, last4: prev?.last4, brand: prev?.brand }));
+          const isTerminalFail = status === 'failed' || status === 'canceled' || status === 'cancelled' || status === 'refused';
+          if (status) {
+            const approved = status === 'paid' || status === 'captured';
+            setCardStatus((prev) => ({ approved: approved || prev?.approved || false, status, message: prev?.message, last4: prev?.last4, brand: prev?.brand }));
             if (approved) {
               setApproveModal({ open: true, stage: 'success' });
               setSuccess(true);
+              if (orderId) {
+                const to = `/${slug}/checkout/success?order_id=${orderId}&method=card&product_id=${productId}`;
+                showApprovedAndRedirect(to);
+                return;
+              }
             }
-            setCardPolling(null);
-            return;
+            if (isTerminalFail) {
+              // Terminal non-approved: stop polling and close modal
+              setCardPolling(null);
+              setApproveModal({ open: false, stage: 'loading' });
+              return;
+            }
+            // For intermediary statuses (approved/authorized/captured not yet paid), keep polling
           }
         }
       } catch {}
       if (Date.now() < endAt) {
         setTimeout(tick, 3000);
       } else {
+        // Timeout: stop polling and close modal to avoid infinite loader
         setCardPolling(null);
+        setApproveModal({ open: false, stage: 'loading' });
       }
     };
     tick();
@@ -484,16 +706,49 @@ export default function BrandedCheckoutPage() {
     return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
   };
 
-  // Show approval modal, then redirect
+  // Show approval modal, then redirect (resilient to dev reload)
   function showApprovedAndRedirect(to: string) {
     try {
+      if (hasRedirected || redirectingRef.current) return;
+      redirectingRef.current = true;
+      try { localStorage.setItem(LOCAL_REDIRECT_KEY, to); } catch {}
       setApproveModal({ open: true, stage: 'loading' });
-      setTimeout(() => setApproveModal({ open: true, stage: 'success' }), 700);
-      setTimeout(() => { window.location.href = to; }, 1600);
+      setTimeout(() => setApproveModal({ open: true, stage: 'success' }), 500);
+      setTimeout(() => {
+        try {
+          setHasRedirected(true);
+          // Prefer replace to avoid history back to checkout
+          window.location.replace(to);
+        } catch {
+          window.location.href = to;
+        }
+        // Last-resort: if still not navigated, force after extra delay
+        setTimeout(() => {
+          try {
+            if (!document.hidden) {
+              window.location.href = to;
+            }
+          } catch {}
+        }, 1800);
+      }, 1200);
     } catch {
       window.location.href = to;
     }
   }
+
+  // Resume pending redirect if a dev reload interrupted the flow
+  useEffect(() => {
+    // On entering checkout, clear any stale pending redirect to avoid jumping to an old order
+    try { localStorage.removeItem(LOCAL_REDIRECT_KEY); } catch {}
+    try {
+      const to = localStorage.getItem(LOCAL_REDIRECT_KEY);
+      if (to && !hasRedirected) {
+        // clear and resume
+        localStorage.removeItem(LOCAL_REDIRECT_KEY);
+        showApprovedAndRedirect(to);
+      }
+    } catch {}
+  }, []);
 
   async function checkPaymentStatus() {
     if (!orderId) return;
@@ -617,11 +872,11 @@ export default function BrandedCheckoutPage() {
 
   return (
     <div className={`${theme === 'DARK' ? 'min-h-screen bg-[#0b0b0b] text-gray-100' : 'min-h-screen bg-[#eff1f3] text-gray-900'} font-normal tracking-[-0.02em] flex flex-col`}>
-      <div className="flex-1 flex flex-col items-center p-3 md:p-6 pt-8 md:pt-12 w-full">
+      <div className="flex-1 flex flex-col items-center p-3 md:p-6 pt-4 md:pt-6 w-full">
         {/* Header com branding */}
         <div className={`w-full max-w-7xl ${theme === 'DARK' ? 'bg-transparent' : 'bg-transparent'} rounded-none border-0 p-0 shadow-none`}> 
           {/* Countdown hidden as requested */}
-          <div className="mt-6 md:mt-10 mb-16 text-center">
+          <div className="mt-2 md:mt-4 mb-6 text-center">
             {branding.logo ? (
               <div className={`inline-flex items-center justify-center rounded-md px-4 py-3`}> 
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -635,7 +890,7 @@ export default function BrandedCheckoutPage() {
                 />
               </div>
             ) : (
-              <div className="mx-auto h-10 w-10" />
+              <div className="mx-auto h-2 w-10" />
             )}
           </div>
 
@@ -651,12 +906,22 @@ export default function BrandedCheckoutPage() {
                   </div>
                 )}
                 <div className="text-[15px] font-medium">{product?.name}</div>
-                {product?.description && (
-                  <div className={`${theme==='DARK'?'text-gray-400':'text-gray-600'} text-sm mt-1`}>{product.description}</div>
+                {summaryDescription && (
+                  <div className={`${theme==='DARK'?'text-gray-400':'text-gray-600'} text-sm mt-1`}>{summaryDescription}</div>
                 )}
+                {/* Subscription/Installments info removed per request */}
                 <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between">
                   <div className={`${theme==='DARK'?'text-gray-400':'text-gray-600'} text-sm`}>Total</div>
-                  <div className="text-base font-semibold">{formatBRL(displayPrice as number)}</div>
+                  <div className="text-right">
+                    {installmentOptions.length > 1 ? (
+                      <>
+                        <div className="text-base font-semibold">{`${installmentOptions[installmentOptions.length-1].n}x ${formatCents(installmentOptions[installmentOptions.length-1].perCents)}`}</div>
+                        <div className={`text-[12px] ${theme==='DARK'?'text-gray-400':'text-gray-500'}`}>{`ou ${formatBRL(displayPrice as number)}`}</div>
+                      </>
+                    ) : (
+                      <div className="text-base font-semibold">{formatBRL(displayPrice as number)}</div>
+                    )}
+                  </div>
                 </div>
               </div>
             </aside>
@@ -714,45 +979,49 @@ export default function BrandedCheckoutPage() {
                       </button>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div className={`grid ${pixAllowed && cardAllowed ? 'grid-cols-2' : 'grid-cols-1'} gap-3 mb-3`}>
                     {/* Cartão */}
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod('card')}
-                      className={`relative group rounded-xl border p-3 text-left transition ${paymentMethod==='card' ? (theme==='DARK' ? 'border-blue-500 bg-[#0f0f0f]' : 'border-blue-500 bg-white shadow-sm') : (theme==='DARK' ? 'border-gray-800 bg-transparent hover:border-gray-700' : 'border-gray-300 bg-white hover:border-gray-400')}`}
-                    >
-                      {paymentMethod==='card' && (
-                        <span className="absolute -top-2 -right-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] shadow">✓</span>
-                      )}
-                      <div className="flex items-center gap-2">
-                        {/* Card icon (inline SVG) */}
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={`${theme==='DARK'?'text-gray-200':'text-gray-700'}`}>
-                          <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/>
-                          <rect x="2" y="8" width="20" height="2" fill="currentColor"/>
-                          <rect x="5" y="13" width="5" height="2" rx="1" fill="currentColor"/>
-                        </svg>
-                        <span className={`${paymentMethod==='card' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>Cartão</span>
-                      </div>
-                    </button>
+                    {cardAllowed && (
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('card')}
+                        className={`relative group rounded-xl border p-3 text-left transition ${paymentMethod==='card' ? (theme==='DARK' ? 'border-blue-500 bg-[#0f0f0f]' : 'border-blue-500 bg-white shadow-sm') : (theme==='DARK' ? 'border-gray-800 bg-transparent hover:border-gray-700' : 'border-gray-300 bg-white hover:border-gray-400')}`}
+                      >
+                        {paymentMethod==='card' && (
+                          <span className="absolute -top-2 -right-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] shadow">✓</span>
+                        )}
+                        <div className="flex items-center gap-2">
+                          {/* Card icon (inline SVG) */}
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={`${theme==='DARK'?'text-gray-200':'text-gray-700'}`}>
+                            <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+                            <rect x="2" y="8" width="20" height="2" fill="currentColor"/>
+                            <rect x="5" y="13" width="5" height="2" rx="1" fill="currentColor"/>
+                          </svg>
+                          <span className={`${paymentMethod==='card' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>Cartão</span>
+                        </div>
+                      </button>
+                    )}
 
                     {/* Pix */}
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod('pix')}
-                      className={`relative group rounded-xl border p-3 text-left transition ${paymentMethod==='pix' ? (theme==='DARK' ? 'border-blue-500 bg-[#0f0f0f]' : 'border-blue-500 bg-white shadow-sm') : (theme==='DARK' ? 'border-gray-800 bg-transparent hover:border-gray-700' : 'border-gray-300 bg-white hover:border-gray-400')}`}
-                    >
-                      {paymentMethod==='pix' && (
-                        <span className="absolute -top-2 -right-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] shadow">✓</span>
-                      )}
-                      <div className="flex items-center gap-2">
-                        {/* Pix icon from public */}
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/pix.png" alt="Pix" className="h-4 w-4 object-contain" />
-                        <span className={`${paymentMethod==='pix' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>Pix</span>
-                      </div>
-                    </button>
+                    {pixAllowed && (
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('pix')}
+                        className={`relative group rounded-xl border p-3 text-left transition ${paymentMethod==='pix' ? (theme==='DARK' ? 'border-blue-500 bg-[#0f0f0f]' : 'border-blue-500 bg-white shadow-sm') : (theme==='DARK' ? 'border-gray-800 bg-transparent hover:border-gray-700' : 'border-gray-300 bg-white hover:border-gray-400')}`}
+                      >
+                        {paymentMethod==='pix' && (
+                          <span className="absolute -top-2 -right-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] shadow">✓</span>
+                        )}
+                        <div className="flex items-center gap-2">
+                          {/* Pix icon from public */}
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src="/pix.png" alt="Pix" className="h-4 w-4 object-contain" />
+                          <span className={`${paymentMethod==='pix' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>Pix</span>
+                        </div>
+                      </button>
+                    )}
                   </div>
-                  {paymentMethod === 'card' && (
+                  {paymentMethod === 'card' && cardAllowed && (
                     <div>{/* Parcelas e País serão exibidos após os campos do cartão */}</div>
                   )}
                   {paymentMethod === 'pix' && (
@@ -769,7 +1038,7 @@ export default function BrandedCheckoutPage() {
                   )}
                 </div>
 
-                                {paymentMethod === 'card' && (
+                                {paymentMethod === 'card' && cardAllowed && (
                   <div className="mt-4 space-y-3">
                     <div className={`text-[12px] ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'}`}>Card information</div>
                     {/* Segmented row: number | MM/YY | CVC */}
@@ -858,6 +1127,7 @@ export default function BrandedCheckoutPage() {
                           </option>
                         ))}
                       </select>
+                      {/* Per-installment preview removed per request */}
                     </div>
 
                     {/* País no final */}
@@ -879,6 +1149,7 @@ export default function BrandedCheckoutPage() {
                     <div className={`text-sm ${theme === 'DARK' ? 'text-red-400' : 'text-red-600'} mr-auto`}>{error}</div>
                   )}
                   <button
+                    type="button"
                     disabled={submitting}
                     onClick={onSubmit}
                     className="w-full h-12 rounded-md text-base font-medium transition-colors focus:outline-none bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-60"
@@ -899,13 +1170,25 @@ export default function BrandedCheckoutPage() {
                     <img src={product.imageUrl} alt={product.name} className="w-full h-32 object-cover" />
                   </div>
                 )}
-                <div className="text-[15px] font-medium">{product?.name || 'Massagem Modeladore'}</div>
-                <div className={`${theme==='DARK'?'text-gray-400':'text-gray-600'} text-sm mt-1`}>
-                  {product?.description || 'A massagem modeladora utiliza movimentos rápidos e firmes para estimular a circulação sanguínea, quebrar as células de gordura e eliminar toxinas. Ajuda a reduzir a celulite, melhorar o contorno corporal e diminuir o inchaço. É um tratamento que requer sessões regulares para manter os resultados.'}
-                </div>
+                <div className="text-[15px] font-medium">{product?.name}</div>
+                {summaryDescription && (
+                  <div className={`${theme==='DARK'?'text-gray-400':'text-gray-600'} text-sm mt-1`}>
+                    {summaryDescription}
+                  </div>
+                )}
+                {/* Subscription/Installments info removed per request */}
                 <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between">
                   <div className={`${theme==='DARK'?'text-gray-400':'text-gray-600'} text-sm`}>Total</div>
-                  <div className="text-base font-semibold">{formatBRL(displayPrice as number)}</div>
+                  <div className="text-right">
+                    {installmentOptions.length > 1 ? (
+                      <>
+                        <div className="text-base font-semibold">{`${installmentOptions[installmentOptions.length-1].n}x ${formatCents(installmentOptions[installmentOptions.length-1].perCents)}`}</div>
+                        <div className={`text-[12px] ${theme==='DARK'?'text-gray-400':'text-gray-500'}`}>{`ou ${formatBRL(displayPrice as number)}`}</div>
+                      </>
+                    ) : (
+                      <div className="text-base font-semibold">{formatBRL(displayPrice as number)}</div>
+                    )}
+                  </div>
                 </div>
               </div>
             </aside>

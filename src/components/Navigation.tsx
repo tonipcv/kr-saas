@@ -317,6 +317,12 @@ export default function Navigation() {
           description: 'Record patient purchases'
         },
         {
+          href: '/business/subscriptions',
+          label: 'Subscriptions',
+          icon: ShieldCheckIcon,
+          description: 'Manage recurring subscriptions'
+        },
+        {
           href: '/business/referrals',
           label: 'Referrals',
           icon: UserPlusIcon,
@@ -498,10 +504,7 @@ export default function Navigation() {
     return null;
   }
 
-  // Se não há role detectado após muito tempo, não mostrar navegação
-  if (!isLoadingRole && !userRole) {
-    return null;
-  }
+  // Permitir renderizar a navegação mesmo se a API de role ainda não retornou (usamos hint da URL em getEffectiveRole)
 
   const getProfileUrl = () => {
     console.log('Navigation: Profile URL for role', effectiveRole, ':', profileUrl);

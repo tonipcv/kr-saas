@@ -37,10 +37,11 @@ export async function GET(req: NextRequest) {
 
     if (amountCents !== undefined) {
       const platformFeeCents = calcPlatformFeeCents(amountCents);
-      body.preview = { amount_cents: amountCents, platform_fee_cents: platformFeeCents };
+      const businessMax = amountCents >= 9700 ? PRICING.INSTALLMENT_MAX_INSTALLMENTS : 1;
+      body.preview = { amount_cents: amountCents, platform_fee_cents: platformFeeCents, business_max_installments: businessMax };
 
       if (installments !== undefined) {
-        if (installments < 1 || installments > PRICING.INSTALLMENT_MAX_INSTALLMENTS) {
+        if (installments < 1 || installments > businessMax) {
           return NextResponse.json({ error: 'installments out of range' }, { status: 400 });
         }
         const apr = PRICING.INSTALLMENT_CUSTOMER_APR_MONTHLY;
@@ -59,6 +60,20 @@ export async function GET(req: NextRequest) {
           per_installment_cents_list: parcels,
           customer_total_cents: totalRounded,
         };
+      } else {
+        // When no explicit installments requested, return a compact options array (n, perCents, totalCents)
+        const apr = PRICING.INSTALLMENT_CUSTOMER_APR_MONTHLY;
+        const maxN = businessMax;
+        const options: Array<{ n: number; perCents: number; totalCents: number }> = [];
+        for (let n = 1; n <= maxN; n++) {
+          const perRaw = pricePerInstallment(amountCents, apr, n);
+          const totalRounded = Math.round(perRaw * n);
+          const perFloor = Math.floor(perRaw);
+          const remainder = totalRounded - perFloor * (n - 1);
+          // Use last installment adjusted value as representative perCents for display
+          options.push({ n, perCents: remainder, totalCents: totalRounded });
+        }
+        body.preview.options = options;
       }
     }
 

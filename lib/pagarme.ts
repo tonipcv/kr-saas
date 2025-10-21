@@ -14,6 +14,41 @@ function authHeaders() {
   } as Record<string, string>;
 }
 
+export async function pagarmeCancelCharge(chargeId: string) {
+  // Core v5 cancel/refund: DELETE /charges/{charge_id}
+  const url = `${PAGARME_BASE_URL}/charges/${encodeURIComponent(chargeId)}`;
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: authHeaders(),
+    cache: 'no-store',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    try { console.error('[pagarme][cancel] error', { status: res.status, data }); } catch {}
+    throw new Error(data?.errors?.[0]?.message || data?.error || `Pagar.me cancel error ${res.status}`);
+  }
+  return data;
+}
+
+export async function pagarmeRefundCharge(chargeId: string, amountCents?: number) {
+  // Core v5 refunds: POST /charges/{charge_id}/refunds
+  const url = `${PAGARME_BASE_URL}/charges/${encodeURIComponent(chargeId)}/refunds`;
+  const body: any = {};
+  if (Number.isFinite(Number(amountCents)) && Number(amountCents) > 0) body.amount = Math.floor(Number(amountCents));
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    try { console.error('[pagarme][refund] error', { status: res.status, data }); } catch {}
+    throw new Error(data?.errors?.[0]?.message || data?.error || `Pagar.me refund error ${res.status}`);
+  }
+  return data;
+}
+
 export async function pagarmeCreateBankAccount(payload: Record<string, any>) {
   const res = await fetch(`${PAGARME_BASE_URL}/bank_accounts`, {
     method: 'POST',

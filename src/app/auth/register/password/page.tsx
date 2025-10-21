@@ -87,8 +87,9 @@ function RegisterPasswordInner() {
       }
 
       setIsSuccess(true);
-      
-      // Try to automatically sign the user in and then create a draft clinic
+      const createdClinicId: string | undefined = data?.clinicId;
+
+      // Try to automatically sign the user in and then navigate to plans for the created clinic
       try {
         const result = await signIn('credentials', {
           email: emailParam || '',
@@ -97,27 +98,9 @@ function RegisterPasswordInner() {
         });
 
         if (result?.ok) {
-          // Create draft clinic using info forwarded from previous step
-          const clinicName = searchParams.get('clinicName') || '';
-          const subdomain = searchParams.get('subdomain') || '';
-          let target = '/clinic/planos-trial';
-          try {
-            if (clinicName) {
-              const resp = await fetch('/api/clinic/create', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: clinicName, subdomain }),
-              });
-              if (resp.ok) {
-                const data2 = await resp.json();
-                const cid = data2?.clinic?.id as string | undefined;
-                if (cid) {
-                  target = `/clinic/planos-trial?clinicId=${encodeURIComponent(cid)}&newClinic=1`;
-                }
-              }
-            }
-          } catch {}
-
+          const target = createdClinicId
+            ? `/clinic/planos-trial?clinicId=${encodeURIComponent(createdClinicId)}&newClinic=1`
+            : '/clinic/planos-trial';
           router.push(target);
           router.refresh();
         } else {

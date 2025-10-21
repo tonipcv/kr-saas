@@ -10,21 +10,25 @@ const ReactApexChart: any = dynamic(() => import("react-apexcharts"), { ssr: fal
 export type SeriesPoint = [number, number]; // [timestamp(ms), value]
 
 export interface ProjectionLineChartProps {
-  past: SeriesPoint[]; // historical series (Referrals)
-  projection?: SeriesPoint[]; // optional projected series (Projection)
-  title?: string;
+  past: SeriesPoint[]; // historical series
+  projection?: SeriesPoint[]; // optional projected series
+  title?: string; // when omitted or falsy, no header is shown
   height?: number;
+  pastName?: string; // default: 'Referrals'
+  projectionName?: string; // default: 'Projection'
+  colors?: string[]; // override series colors
+  yFormatter?: (v: number) => string; // tooltip y formatter
 }
 
-const ProjectionLineChart: React.FC<ProjectionLineChartProps> = ({ past, projection, title = "Referral performance", height = 320 }) => {
+const ProjectionLineChart: React.FC<ProjectionLineChartProps> = ({ past, projection, title, height = 320, pastName = 'Referrals', projectionName = 'Projection', colors, yFormatter }) => {
   const hasProjection = !!(projection && projection.length);
   const series = hasProjection
     ? [
-        { name: "Referrals", data: past },
-        { name: "Projection", data: projection as SeriesPoint[] },
+        { name: pastName, data: past },
+        { name: projectionName, data: projection as SeriesPoint[] },
       ]
     : [
-        { name: "Referrals", data: past },
+        { name: pastName, data: past },
       ];
 
   const options: ApexOptions = {
@@ -45,7 +49,7 @@ const ProjectionLineChart: React.FC<ProjectionLineChartProps> = ({ past, project
       strokeWidth: 0,
       hover: { size: 6 },
     },
-    colors: hasProjection ? ["#059669", "#0ea5e9"] : ["#059669"], // darker green for visibility
+    colors: colors && colors.length ? colors : (hasProjection ? ["#059669", "#0ea5e9"] : ["#059669"]),
     dataLabels: { enabled: false },
     legend: {
       show: hasProjection,
@@ -53,7 +57,6 @@ const ProjectionLineChart: React.FC<ProjectionLineChartProps> = ({ past, project
       horizontalAlign: "right",
       fontSize: "11px",
       labels: { colors: "#374151" },
-      markers: { width: 8, height: 8 },
     },
     grid: {
       borderColor: "#e5e7eb",
@@ -90,7 +93,7 @@ const ProjectionLineChart: React.FC<ProjectionLineChartProps> = ({ past, project
     tooltip: {
       followCursor: true,
       x: { format: "dd MMM" },
-      y: { formatter: (v: number) => `${v}` },
+      y: { formatter: (v: number) => (yFormatter ? yFormatter(v) : `${v}`) },
       theme: "light",
     },
   };

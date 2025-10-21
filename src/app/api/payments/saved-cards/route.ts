@@ -23,6 +23,18 @@ export async function GET(req: NextRequest) {
     if (!profiles.length) return NextResponse.json({ ok: true, data: [] });
     const profileIds = profiles.map(p => p.id);
 
+    // Short-circuit if payment tables are not present in this environment
+    const existsRows = await prisma.$queryRaw<any[]>`
+      SELECT 
+        to_regclass('public.payment_customers') IS NOT NULL as has_pc,
+        to_regclass('public.payment_methods') IS NOT NULL as has_pm
+    `;
+    const hasPc = !!existsRows?.[0]?.has_pc;
+    const hasPm = !!existsRows?.[0]?.has_pm;
+    if (!hasPc || !hasPm) {
+      return NextResponse.json({ ok: true, data: [] });
+    }
+
     // List payment customers for these profiles, restricted to this clinic
     let customers = await prisma.$queryRawUnsafe<any[]>(
       `SELECT id, provider, provider_customer_id, created_at

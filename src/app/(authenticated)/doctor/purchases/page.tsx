@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useClinic } from '@/contexts/clinic-context';
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ interface Product {
 }
 
 export default function PurchasesPage() {
+  const pathname = usePathname();
   const { currentClinic } = useClinic();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -52,6 +54,7 @@ export default function PurchasesPage() {
     unitPrice: number | string;
     totalPrice: number | string;
     pointsAwarded: number | string;
+    status?: string | null;
     notes?: string | null;
     product?: { id: string; name: string } | null;
     user?: { id: string; name?: string | null; email?: string | null } | null;
@@ -72,9 +75,17 @@ export default function PurchasesPage() {
   const [editNotes, setEditNotes] = useState<string>('');
   const [editing, setEditing] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  // Details modal
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsPurchase, setDetailsPurchase] = useState<PurchaseItem | null>(null);
 
   // Derived flags
   const isFree = (planName || '').toLowerCase() === 'free';
+  // When accessed under Business context, do not show Free plan blocks
+  const isBusinessContext = pathname?.startsWith('/business');
+  const showFreeUI = isFree && !isBusinessContext;
+  // Hide Notes column in Business context as requested
+  const showNotesColumn = !isBusinessContext;
 
   // Plans modal loader
   const openPlansModal = async () => {
@@ -104,6 +115,11 @@ export default function PurchasesPage() {
     setEditQuantity(String(p.quantity ?? '1'));
     setEditNotes(p.notes || '');
     setEditOpen(true);
+  };
+
+  const openDetails = (p: PurchaseItem) => {
+    setDetailsPurchase(p);
+    setDetailsOpen(true);
   };
 
   const submitEdit = async (e: React.FormEvent) => {
@@ -340,37 +356,35 @@ export default function PurchasesPage() {
                 <p className="text-sm text-gray-500 mt-1">Record a client purchase and automatically award points</p>
               </div>
               <div className="flex items-center gap-2">
-                {isFree ? (
+                {showFreeUI ? (
                   <Button
                     onClick={openPlansModal}
                     size="sm"
-                    className="h-8 bg-gray-900 hover:bg-black text-white"
+                    className="h-8 bg-gradient-to-r from-[#5893ec] to-[#9bcef7] text-white hover:opacity-90"
                   >
-                    <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
-                    Record Purchase
+                    See plans
                   </Button>
                 ) : (
-                  <Button
-                    onClick={() => setIsModalOpen(true)}
-                    size="sm"
-                    className="h-8 bg-gray-900 hover:bg-black text-white"
-                  >
-                    <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
-                    Record Purchase
-                  </Button>
+                  <>
+                    <Button asChild size="sm" variant="outline" className="h-8 text-gray-700 hover:bg-gray-50">
+                      <Link href="/business/payments" className="flex items-center">
+                        Transactions
+                      </Link>
+                    </Button>
+                    <Button asChild size="sm" className="h-8 bg-gray-900 hover:bg-black text-white shadow-sm">
+                      <Link href="/business/products/create" className="flex items-center">
+                        <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
+                        New Product
+                      </Link>
+                    </Button>
+                  </>
                 )}
-                <Button asChild variant="outline" size="sm" className="h-8 text-gray-700 hover:bg-gray-50">
-                  <Link href="/business/products">Manage Products</Link>
-                </Button>
-                <Button asChild variant="outline" size="sm" className="h-8 text-gray-700 hover:bg-gray-50">
-                  <Link href="/business/payments">Payments Data</Link>
-                </Button>
               </div>
             </div>
           </div>
 
-          {/* Free plan banner */}
-          {planName && planName.toLowerCase() === 'free' && (
+          {/* Free plan banner (hidden in Business context) */}
+          {showFreeUI && (
             <div className="mb-4 rounded-2xl px-4 py-4 text-white bg-gradient-to-r from-[#5893ec] to-[#9bcef7] shadow-sm">
               <p className="text-sm font-semibold">You're on the Free plan — access to the Purchases page is not included.</p>
               <p className="text-xs mt-1 opacity-95">Upgrade to a paid plan to unlock this feature.</p>
@@ -389,8 +403,8 @@ export default function PurchasesPage() {
             </div>
           )}
 
-          {/* Purchases Table */}
-          {isFree ? (
+          {/* Purchases Table (locked only outside Business context) */}
+          {showFreeUI ? (
             <div className="relative">
               <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white/50 backdrop-blur-md shadow-sm min-h-56" />
               <div className="absolute inset-0 flex items-center justify-center">
@@ -412,12 +426,14 @@ export default function PurchasesPage() {
                   <tr className="text-left text-xs text-gray-600">
                     <th className="py-2 pl-3 pr-2 font-medium sm:pl-4">Date</th>
                     <th className="px-2 py-2 font-medium">Client</th>
+                    <th className="px-2 py-2 font-medium">Email</th>
                     <th className="px-2 py-2 font-medium">Product</th>
+                    <th className="px-2 py-2 font-medium">Purchase ID</th>
                     <th className="px-2 py-2 font-medium text-right">Qty</th>
                     <th className="px-2 py-2 font-medium text-right">Unit</th>
                     <th className="px-2 py-2 font-medium text-right">Total</th>
-                    <th className="px-2 py-2 font-medium text-right">Points</th>
-                    <th className="px-2 py-2 font-medium">Notes</th>
+                    <th className="px-2 py-2 font-medium">Status</th>
+                    {showNotesColumn && (<th className="px-2 py-2 font-medium">Notes</th>)}
                     <th className="relative py-2 pl-2 pr-3 sm:pr-4 w-10">
                       <span className="sr-only">Actions</span>
                     </th>
@@ -437,6 +453,12 @@ export default function PurchasesPage() {
                           <div className="h-4 w-40 bg-gray-100 rounded animate-pulse" />
                         </td>
                         <td className="px-2 py-2">
+                          <div className="h-4 w-40 bg-gray-100 rounded animate-pulse" />
+                        </td>
+                        <td className="px-2 py-2">
+                          <div className="h-4 w-40 bg-gray-100 rounded animate-pulse" />
+                        </td>
+                        <td className="px-2 py-2">
                           <div className="h-4 w-10 bg-gray-100 rounded animate-pulse" />
                         </td>
                         <td className="px-2 py-2">
@@ -445,40 +467,69 @@ export default function PurchasesPage() {
                         <td className="px-2 py-2">
                           <div className="h-4 w-16 bg-gray-100 rounded animate-pulse" />
                         </td>
-                        <td className="px-2 py-2">
-                          <div className="h-4 w-12 bg-gray-100 rounded animate-pulse" />
-                        </td>
-                        <td className="px-2 py-2">
-                          <div className="h-4 w-24 bg-gray-100 rounded animate-pulse" />
-                        </td>
+                        {showNotesColumn && (
+                          <td className="px-2 py-2">
+                            <div className="h-4 w-24 bg-gray-100 rounded animate-pulse" />
+                          </td>
+                        )}
                         <td className="py-2 pl-2 pr-3 sm:pr-4 text-right">
                           <div className="h-8 w-8 bg-gray-100 rounded-lg animate-pulse inline-block" />
                         </td>
                       </tr>
                     ))
                   ) : purchases.length === 0 ? (
-                    <tr><td className="px-6 py-6 text-sm text-gray-500" colSpan={8}>No purchases yet.</td></tr>
+                    <tr><td className="px-6 py-6 text-sm text-gray-500" colSpan={showNotesColumn ? 11 : 10}>No purchases yet.</td></tr>
                   ) : (
                     purchases.map((p) => {
                       const d = new Date(p.createdAt);
                       const fmt = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(d);
                       const toNum = (v: any) => typeof v === 'number' ? v : Number(v);
+                      const status = (p.status || '').toString().toUpperCase();
+                      const badge = (() => {
+                        const base = 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium';
+                        switch (status) {
+                          case 'COMPLETED':
+                            return <span className={`${base} bg-green-50 text-green-700 border border-green-200`}>Completed</span>;
+                          case 'PENDING':
+                            return <span className={`${base} bg-amber-50 text-amber-700 border border-amber-200`}>Pending</span>;
+                          case 'CANCELED':
+                          case 'CANCELLED':
+                            return <span className={`${base} bg-red-50 text-red-700 border border-red-200`}>Canceled</span>;
+                          case 'REFUNDED':
+                            return <span className={`${base} bg-blue-50 text-blue-700 border border-blue-200`}>Refunded</span>;
+                          default:
+                            return status ? <span className={`${base} bg-gray-100 text-gray-700 border border-gray-200`}>{status}</span>
+                                           : <span className={`${base} bg-gray-100 text-gray-500 border border-gray-200`}>—</span>;
+                        }
+                      })();
                       return (
-                        <tr key={p.id} className="hover:bg-gray-50">
+                        <tr
+                          key={p.id}
+                          className="hover:bg-gray-50 cursor-pointer"
+                          onClick={() => openDetails(p)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => { if (e.key === 'Enter') openDetails(p); }}
+                          title="Click to view details"
+                        >
                           <td className="whitespace-nowrap px-2 py-2 text-gray-500">
                             {new Date(p.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                           </td>
                           <td className="whitespace-nowrap px-2 py-2 text-gray-700 truncate max-w-[120px]">{p.user?.name || p.user?.email || '-'}</td>
+                          <td className="whitespace-nowrap px-2 py-2 text-gray-500 truncate max-w-[160px]">{p.user?.email || '—'}</td>
                           <td className="whitespace-nowrap px-2 py-2 text-gray-700 truncate max-w-[120px]">{p.product?.name || '-'}</td>
+                          <td className="whitespace-nowrap px-2 py-2 font-mono text-gray-600 truncate max-w-[140px]" title={p.id}>{p.id?.slice(0, 8)}…</td>
                           <td className="whitespace-nowrap px-2 py-2 text-gray-900 text-right">{p.quantity}</td>
                           <td className="whitespace-nowrap px-2 py-2 text-gray-900 text-right">{formatPrice(toNum(p.unitPrice)) || '-'}</td>
                           <td className="whitespace-nowrap px-2 py-2 text-gray-900 text-right">{formatPrice(toNum(p.totalPrice)) || '-'}</td>
-                          <td className="whitespace-nowrap px-2 py-2 text-gray-900 text-right">{toNum(p.pointsAwarded)}</td>
-                          <td className="whitespace-nowrap px-2 py-2 text-gray-600 truncate max-w-[150px]">{p.notes || '-'}</td>
+                          <td className="whitespace-nowrap px-2 py-2">{badge}</td>
+                          {showNotesColumn && (
+                            <td className="whitespace-nowrap px-2 py-2 text-gray-600 truncate max-w-[150px]">{p.notes || '-'}</td>
+                          )}
                           <td className="relative whitespace-nowrap py-2 pl-2 pr-3 text-right sm:pr-4">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7">
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => e.stopPropagation()}>
                                   <EllipsisHorizontalIcon className="h-3.5 w-3.5" />
                                 </Button>
                               </DropdownMenuTrigger>
@@ -540,6 +591,59 @@ export default function PurchasesPage() {
                   {deletingId ? 'Apagando…' : 'Apagar'}
                 </Button>
               </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Details Modal */}
+          <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+            <DialogContent className="max-w-lg bg-white border border-gray-200 rounded-2xl">
+              <DialogHeader>
+                <DialogTitle className="text-[18px] font-semibold text-gray-900">Purchase details</DialogTitle>
+              </DialogHeader>
+              {detailsPurchase && (
+                <div className="space-y-3 text-sm text-gray-800">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-gray-500">ID</div>
+                    <div className="col-span-2 font-mono break-all">{detailsPurchase.id}</div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-gray-500">Date</div>
+                    <div className="col-span-2">{new Date(detailsPurchase.createdAt).toLocaleString()}</div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-gray-500">Status</div>
+                    <div className="col-span-2">{(detailsPurchase.status || '').toString() || '—'}</div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-gray-500">Client</div>
+                    <div className="col-span-2">{detailsPurchase.user?.name || detailsPurchase.user?.email || '-'}</div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-gray-500">Product</div>
+                    <div className="col-span-2">{detailsPurchase.product?.name || detailsPurchase.product?.id || '-'}</div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-gray-500">Quantity</div>
+                    <div className="col-span-2">{detailsPurchase.quantity}</div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-gray-500">Unit price</div>
+                    <div className="col-span-2">{formatPrice(typeof detailsPurchase.unitPrice === 'number' ? detailsPurchase.unitPrice : Number(detailsPurchase.unitPrice)) || '-'}</div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-gray-500">Total</div>
+                    <div className="col-span-2">{formatPrice(typeof detailsPurchase.totalPrice === 'number' ? detailsPurchase.totalPrice : Number(detailsPurchase.totalPrice)) || '-'}</div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-gray-500">Points</div>
+                    <div className="col-span-2">{typeof detailsPurchase.pointsAwarded === 'number' ? detailsPurchase.pointsAwarded : Number(detailsPurchase.pointsAwarded)}</div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-gray-500">Notes</div>
+                    <div className="col-span-2 whitespace-pre-wrap break-words">{detailsPurchase.notes || '-'}</div>
+                  </div>
+                </div>
+              )}
             </DialogContent>
           </Dialog>
 

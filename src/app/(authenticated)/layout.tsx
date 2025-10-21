@@ -35,6 +35,13 @@ function EnforceSubscription({ children }: { children: React.ReactNode }) {
     // Allow subscription management and trial pages
     if (isSubscriptionPage) return;
 
+    // 1) If user has no clinics yet, force them to the clinic creation/management page
+    if (!availableClinics || availableClinics.length === 0) {
+      router.replace('/business/clinic');
+      setShowBlocker(false);
+      return;
+    }
+
     const sub = currentClinic?.subscription;
     const planName = sub?.plan?.name?.toLowerCase();
     const isFree = planName === 'free';
@@ -58,9 +65,29 @@ function EnforceSubscription({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Show blocker modal when the current clinic is not active paid (doctor/clinic area only).
-    setShowBlocker(!hasActive);
-  }, [currentClinic?.id, currentClinic?.subscription, availableClinics, isLoading, pathname, router, switchClinic, isDoctorArea, isSubscriptionPage]);
+    // 2) If there is a clinic but no active paid plan, force redirect to subscription instead of blocker
+    if (!hasActive) {
+      const id = currentClinic?.id;
+      const base = shouldOfferTrial ? '/clinic/planos-trial' : '/clinic/subscription';
+      const url = id ? `${base}?clinicId=${encodeURIComponent(id)}#plans` : `${base}#plans`;
+      router.replace(url);
+      setShowBlocker(false);
+      return;
+    }
+
+    // Otherwise, allow normal rendering
+    setShowBlocker(false);
+  }, [
+    currentClinic?.id,
+    currentClinic?.subscription,
+    availableClinics,
+    isLoading,
+    pathname,
+    router,
+    switchClinic,
+    isDoctorArea,
+    isSubscriptionPage,
+  ]);
 
   const activePaidClinics = useMemo(() => {
     return (availableClinics || []).filter((c: any) => {

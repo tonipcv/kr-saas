@@ -56,10 +56,19 @@ export const authOptions: AuthOptions = {
           throw new Error("Invalid credentials");
         }
 
+        const email = credentials.email.toLowerCase().trim();
         const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email
-          }
+          where: { email },
+          // Select only needed fields to avoid fetching legacy/problematic columns
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            image: true,
+            role: true,
+            password: true,
+            doctor_slug: true,
+          },
         });
 
         if (!user) {
@@ -73,7 +82,8 @@ export const authOptions: AuthOptions = {
           
           try {
             // Verificar o token JWT
-            const secret = process.env.NEXTAUTH_SECRET || 'default-secret-key';
+            // Keep in sync with src/app/api/auth/register/verify/route.ts
+            const secret = process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET || 'your-secret-key';
             const decoded = require('jsonwebtoken').verify(token, secret);
             
             // Verificar se o token pertence ao usuário correto

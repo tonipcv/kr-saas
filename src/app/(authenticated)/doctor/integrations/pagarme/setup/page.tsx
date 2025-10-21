@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useClinic } from '@/contexts/clinic-context';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { toast } from 'react-hot-toast';
 
 export default function PagarmeSetupPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const { currentClinic } = useClinic();
 
   const [name, setName] = useState('');
@@ -93,8 +94,40 @@ export default function PagarmeSetupPage() {
     return errs;
   }
 
+  function fillWithTestData() {
+    // Legal
+    setName('Clinica Exemplo LTDA');
+    // Use um CPF válido para testes (11 dígitos). Ex.: 11144477735
+    setDocumentNumber('11144477735');
+    setEmail('teste+pagarme@example.com');
+    setPhone('+5511999999999');
+    setSiteUrl('https://clinicaexemplo.com');
+    setMotherName('Maria Exemplo');
+    setBirthdate('10/10/1990');
+    setMonthlyIncome('120000'); // em centavos (R$ 1.200,00)
+    setOccupation('Dentista');
+
+    // Bank
+    setBank('341');
+    setAgency('1234');
+    setAgencyDigit('6');
+    setAccount('123456');
+    setAccountDigit('7');
+    setAccountType('conta_corrente');
+
+    // Address
+    setAddrStreet('Av. Paulista');
+    setAddrStreetNumber('1000');
+    setAddrComplementary('Sala 101');
+    setAddrNeighborhood('Bela Vista');
+    setAddrCity('São Paulo');
+    setAddrState('SP');
+    setAddrZip('01310000');
+    setAddrRef('Próximo ao MASP');
+  }
+
   async function onSubmit() {
-    if (!currentClinic?.id) return toast.error('Selecione uma clínica');
+    if (!currentClinic?.id) return toast.error('Selecione um negócio');
     const errors = validateForm();
     if (errors.length) {
       toast.error(errors[0]);
@@ -145,11 +178,31 @@ export default function PagarmeSetupPage() {
           bankAccount,
         })
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
+      const data = await res.json().catch(() => undefined);
+      if (!res.ok) {
+        if (process.env.NODE_ENV !== 'production') {
+          // Detailed diagnostics to help identify 4xx/5xx causes in dev
+          console.error('[Pagarme Recipient][HTTP Error]', {
+            status: res.status,
+            statusText: res.statusText,
+            response: data,
+            request: {
+              clinicId: currentClinic.id,
+              // Mindful of PII: these are sent to the backend anyway; keep logs only in dev
+              legalInfo,
+              bankAccount,
+            },
+          });
+        }
+        const apiMsg = data?.error || data?.message || data?.details || data?.errors?.[0]?.message;
+        throw new Error(`HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''} - ${apiMsg || 'Falha ao configurar recebedor'}`);
+      }
       toast.success('Dados salvos. Recipient configurado.');
       router.push('/doctor/integrations');
     } catch (e: any) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('[Pagarme Recipient][Exception]', e);
+      }
       toast.error(e?.message || 'Falha ao configurar recebedor');
     } finally {
       setSaving(false);
@@ -162,11 +215,29 @@ export default function PagarmeSetupPage() {
         <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4">
           <div className="mb-6 flex items-center justify-between">
             <div>
-              <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Configurar Pagamentos (Pagar.me)</h1>
+              <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Configurar Pagamentos</h1>
               <p className="text-sm text-gray-500">Preencha os dados abaixo para receber repasses. Você pode ajustar o split e a taxa de plataforma.</p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => router.push('/doctor/integrations')}>Cancelar</Button>
+              {process.env.NODE_ENV !== 'production' && (
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={fillWithTestData}
+                  className="border border-gray-300"
+                >
+                  Preencher teste
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const isBusiness = pathname?.startsWith('/business');
+                  router.push(isBusiness ? '/business/integrations' : '/doctor/integrations');
+                }}
+              >
+                Cancelar
+              </Button>
               <Button onClick={onSubmit} disabled={saving} className="bg-gray-900 text-white hover:bg-black">{saving ? 'Salvando…' : 'Salvar'}</Button>
             </div>
           </div>
@@ -179,7 +250,7 @@ export default function PagarmeSetupPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <div className="text-[12px] text-gray-600 mb-1">Razão social / Nome completo</div>
-                    <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Clínica Exemplo LTDA" className="h-10" />
+                    <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Negócio Exemplo LTDA" className="h-10" />
                   </div>
                   <div>
                     <div className="text-[12px] text-gray-600 mb-1">Documento (CPF/CNPJ)</div>
@@ -195,7 +266,7 @@ export default function PagarmeSetupPage() {
                   </div>
                   <div>
                     <div className="text-[12px] text-gray-600 mb-1">Site (URL)</div>
-                    <Input value={siteUrl} onChange={(e) => setSiteUrl(e.target.value)} placeholder="https://clinica.com" className="h-10" />
+                    <Input value={siteUrl} onChange={(e) => setSiteUrl(e.target.value)} placeholder="https://negocio.com" className="h-10" />
                   </div>
                   <div>
                     <div className="text-[12px] text-gray-600 mb-1">Nome da mãe</div>

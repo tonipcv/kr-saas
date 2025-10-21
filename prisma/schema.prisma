@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = "postgres://postgres:d6d0d5fc7c0c4d8a3615@dpbdp1.easypanel.host:67/zzz?sslmode=disable"
+  url      = env("DATABASE_URL")
 }
 
 model Account {
@@ -33,248 +33,12 @@ model Session {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model Protocol {
-  id                     String                  @id @default(cuid())
-  name                   String
-  description            String?
-  doctor_id              String
-  is_active              Boolean                 @default(true)
-  created_at             DateTime                @default(now())
-  updated_at             DateTime                @default(now()) @updatedAt
-  duration               Int?                    @default(30)
-  modal_title            String?
-  modal_video_url        String?
-  modal_description      String?
-  modal_button_text      String?                 @default("Saber mais")
-  modal_button_url       String?
-  show_doctor_info       Boolean?                @default(false)
-  is_template            Boolean?                @default(false)
-  cover_image            String?
-  consultation_date      DateTime?               @db.Timestamp(6)
-  onboarding_template_id String?
-  schedule               Json?                   @default("{}")
-  last_schedule_update   DateTime?               @default(now()) @db.Timestamptz(6)
-  checkin_questions      DailyCheckinQuestion[]
-  checkin_responses      DailyCheckinResponse[]
-  days                   ProtocolDay[]
-  symptom_reports        SymptomReport[]
-  default_for            DoctorDefaultProtocol[]
-  courses                ProtocolCourse[]
-  protocol_faqs          ProtocolFAQ[]
-  prescriptions          ProtocolPrescription[]
-  protocol_products      protocol_products[]
-  doctor                 User                    @relation("DoctorProtocols", fields: [doctor_id], references: [id])
-  onboarding_template    OnboardingTemplate?     @relation(fields: [onboarding_template_id], references: [id])
-  referrals              referrals[]
-
-  @@index([doctor_id])
-  @@index([onboarding_template_id])
-  @@map("protocols")
-}
-
-model ProtocolDay {
-  id          String            @id @default(cuid())
-  protocolId  String
-  dayNumber   Int
-  title       String
-  description String?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @default(now()) @updatedAt
-  protocol    Protocol          @relation(fields: [protocolId], references: [id], onDelete: Cascade)
-  sessions    ProtocolSession[]
-}
-
-model ProtocolSession {
-  id            String         @id @default(cuid())
-  protocolDayId String
-  sessionNumber Int
-  title         String
-  description   String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @default(now()) @updatedAt
-  protocolDay   ProtocolDay    @relation(fields: [protocolDayId], references: [id], onDelete: Cascade)
-  tasks         ProtocolTask[]
-}
-
-model ProtocolTask {
-  id                String                 @id @default(cuid())
-  protocolSessionId String
-  title             String
-  description       String?
-  type              String                 @default("task")
-  duration          Int?
-  orderIndex        Int                    @default(0)
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @default(now()) @updatedAt
-  hasMoreInfo       Boolean?               @default(false)
-  videoUrl          String?
-  fullExplanation   String?
-  productId         String?
-  modalTitle        String?
-  modalButtonText   String?
-  modalButtonUrl    String?
-  ProtocolContent   ProtocolContent[]
-  protocolSession   ProtocolSession        @relation(fields: [protocolSessionId], references: [id], onDelete: Cascade)
-  progress          ProtocolTaskProgress[]
-}
-
-model ProtocolContent {
-  id             String       @id @default(cuid())
-  protocolTaskId String
-  type           String
-  content        String
-  orderIndex     Int          @default(0)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @default(now()) @updatedAt
-  ProtocolTask   ProtocolTask @relation(fields: [protocolTaskId], references: [id], onDelete: Cascade)
-}
-
-model ProtocolPrescription {
-  id                           String                 @id @default(cuid())
-  protocol_id                  String
-  user_id                      String
-  prescribed_by                String
-  prescribed_at                DateTime               @default(now())
-  planned_start_date           DateTime
-  actual_start_date            DateTime?
-  planned_end_date             DateTime
-  actual_end_date              DateTime?
-  status                       PrescriptionStatus     @default(PRESCRIBED)
-  current_day                  Int                    @default(1)
-  adherence_rate               Float?
-  last_progress_date           DateTime?
-  paused_at                    DateTime?
-  pause_reason                 String?
-  abandoned_at                 DateTime?
-  abandon_reason               String?
-  consultation_date            DateTime?              @db.Timestamptz(6)
-  onboarding_link              String?                @unique
-  pre_consultation_template_id String?
-  pre_consultation_status      String?
-  created_at                   DateTime               @default(now())
-  updated_at                   DateTime               @default(now()) @updatedAt
-  doctor                       User                   @relation("DoctorPrescriptions", fields: [prescribed_by], references: [id], onUpdate: NoAction)
-  protocol                     Protocol               @relation(fields: [protocol_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  patient                      User                   @relation("PatientPrescriptions", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  progress                     ProtocolTaskProgress[]
-
-  @@unique([user_id, protocol_id])
-  @@index([user_id])
-  @@index([prescribed_by])
-  @@index([status])
-  @@map("protocol_prescriptions")
-}
-
-model ProtocolTaskProgress {
-  id             String               @id @default(cuid())
-  prescriptionId String
-  dayNumber      Int
-  scheduledDate  DateTime
-  completedAt    DateTime?
-  status         DayStatus            @default(PENDING)
-  notes          String?
-  protocolTaskId String?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @default(now()) @updatedAt
-  prescription   ProtocolPrescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  protocolTask   ProtocolTask?        @relation(fields: [protocolTaskId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@unique([prescriptionId, protocolTaskId, scheduledDate], map: "protocol_task_progress_unique")
-  @@index([prescriptionId])
-  @@index([status])
-  @@index([scheduledDate])
-  @@map("protocol_task_progress")
-}
-
 model VerificationToken {
   identifier String
   token      String   @unique
   expires    DateTime
 
   @@unique([identifier, token])
-}
-
-model Course {
-  id               String           @id(map: "Course_pkey") @default(cuid())
-  title            String
-  description      String?
-  thumbnail        String?
-  isPublished      Boolean          @default(false)
-  price            Decimal?         @db.Decimal(10, 2)
-  doctorId         String
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @default(now()) @updatedAt
-  coverImage       String?
-  modalTitle       String?
-  modalVideoUrl    String?
-  modalDescription String?
-  modalButtonText  String?          @default("Saber mais")
-  modalButtonUrl   String?
-  doctor           User             @relation("DoctorCourses", fields: [doctorId], references: [id], onDelete: Cascade, map: "Course_doctorId_fkey")
-  modules          Module[]
-  protocols        ProtocolCourse[]
-  assignments      UserCourse[]
-
-  @@map("courses")
-}
-
-model Module {
-  id          String   @id(map: "Module_pkey") @default(cuid())
-  title       String
-  description String?
-  orderIndex  Int
-  courseId    String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
-  lessons     Lesson[]
-  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade, map: "Module_courseId_fkey")
-
-  @@map("modules")
-}
-
-model Lesson {
-  id          String       @id(map: "Lesson_pkey") @default(cuid())
-  title       String
-  description String?
-  content     String?
-  videoUrl    String?
-  duration    Int?
-  orderIndex  Int
-  moduleId    String
-  isPublished Boolean      @default(false)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @default(now()) @updatedAt
-  module      Module       @relation(fields: [moduleId], references: [id], onDelete: Cascade, map: "Lesson_moduleId_fkey")
-  progress    UserLesson[]
-
-  @@map("lessons")
-}
-
-model UserCourse {
-  id          String    @id(map: "UserCourse_pkey") @default(cuid())
-  userId      String
-  courseId    String
-  enrolledAt  DateTime  @default(now())
-  completedAt DateTime?
-  progress    Int       @default(0)
-  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade, map: "UserCourse_courseId_fkey")
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "UserCourse_userId_fkey")
-
-  @@unique([userId, courseId], map: "UserCourse_userId_courseId_key")
-  @@map("user_courses")
-}
-
-model UserLesson {
-  id          String    @id(map: "UserLesson_pkey") @default(cuid())
-  userId      String
-  lessonId    String
-  completedAt DateTime?
-  watchTime   Int       @default(0)
-  lesson      Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade, map: "UserLesson_lessonId_fkey")
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "UserLesson_userId_fkey")
-
-  @@unique([userId, lessonId], map: "UserLesson_userId_lessonId_key")
-  @@map("user_lessons")
 }
 
 model ProductCategory {
@@ -297,35 +61,45 @@ model ProductCategory {
 }
 
 model products {
-  id                String                 @id
-  name              String
-  subtitle          String?
-  description       String?
-  price             Decimal                @db.Decimal(10, 2)
-  creditsPerUnit    Decimal                @default(0) @db.Decimal(10, 2)
-  category          String
-  isActive          Boolean                @default(true)
-  priority          Int                    @default(0)
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @default(now())
-  doctorId          String?
-  clinicId          String?                @map("clinic_id")
-  imageUrl          String?
-  confirmationUrl   String?
-  categoryId        String?
-  doctor            User?                  @relation("DoctorProducts", fields: [doctorId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  clinic            Clinic?                @relation(fields: [clinicId], references: [id])
-  productCategory   ProductCategory?       @relation(fields: [categoryId], references: [id])
-  protocol_products protocol_products[]
-  purchases         Purchase[]
+  id              String                 @id
+  name            String
+  subtitle        String?
+  description     String?
+  price           Decimal                @db.Decimal(10, 2)
+  creditsPerUnit  Decimal                @default(0) @db.Decimal(10, 2)
+  category        String
+  isActive        Boolean                @default(true)
+  priority        Int                    @default(0)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @default(now())
+  doctorId        String?
+  clinicId        String?                @map("clinic_id")
+  imageUrl        String?
+  confirmationUrl String?
+  categoryId      String?
+  // Selling type and subscription fields
+  type            ProductType            @default(PRODUCT)
+  interval        SubscriptionInterval?
+  intervalCount   Int?                   @default(1) @map("intervalcount")
+  trialDays       Int?                   @map("trialdays")
+  providerPlanId   String?               @map("providerplanid")
+  providerPlanData Json?                 @map("providerplandata")
+  autoRenew       Boolean?               @default(true) @map("autorenew")
+  doctor          User?                  @relation("DoctorProducts", fields: [doctorId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  clinic          Clinic?                @relation(fields: [clinicId], references: [id])
+  productCategory ProductCategory?       @relation(fields: [categoryId], references: [id])
+  purchases       Purchase[]
   // New N:N relation through pivot table
-  categories        CategoriesOnProducts[]
+  categories      CategoriesOnProducts[]
   // Back-relation for coupons
-  coupons           Coupon[]               @relation("ProductCoupons")
+  coupons         Coupon[]               @relation("ProductCoupons")
+  // New: Offers associated with this product (how it's sold)
+  offers          Offer[]
 
   @@index([doctorId])
   @@index([categoryId])
   @@index([clinicId])
+  @@index([type])
 }
 
 // Pivot table for many-to-many between products and ProductCategory
@@ -341,77 +115,45 @@ model CategoriesOnProducts {
   @@map("categories_on_products")
 }
 
-model protocol_products {
-  id           String   @id
-  protocolId   String
-  productId    String
-  quantity     Int      @default(1)
-  instructions String?
-  createdAt    DateTime @default(now())
-  products     products @relation(fields: [productId], references: [id], onDelete: Cascade)
-  protocols    Protocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+// protocol_products removed due to Protocol removal
 
-  @@unique([protocolId, productId])
-}
-
-model SystemMetrics {
-  id                  String   @id(map: "SystemMetrics_pkey") @default(cuid())
-  date                DateTime @unique(map: "SystemMetrics_date_key")
-  totalUsers          Int      @default(0)
-  activeUsers         Int      @default(0)
-  totalDoctors        Int      @default(0)
-  totalPatients       Int      @default(0)
-  totalReferrals      Int      @default(0)
-  totalRevenue        Decimal  @default(0) @db.Decimal(10, 2)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @default(now()) @updatedAt
-  totalProtocols      Int?     @default(0)
-  totalCourses        Int?     @default(0)
-  activeSubscriptions Int?     @default(0)
-  trialSubscriptions  Int?     @default(0)
-
-  @@map("system_metrics")
-}
+// SystemMetrics removed
 
 model Clinic {
-  id                         String                      @id @default(cuid())
-  name                       String
-  description                String?
-  ownerId                    String
-  isActive                   Boolean                     @default(true)
-  createdAt                  DateTime                    @default(now())
-  updatedAt                  DateTime                    @default(now()) @updatedAt
-  email                      String?
-  phone                      String?
-  address                    String?
-  city                       String?
-  state                      String?
-  zipCode                    String?
-  country                    String?
-  website                    String?
-  logo                       String?
-  slug                       String?                     @unique @db.VarChar(255)
-  subdomain                  String?                     @unique @db.VarChar(255)
-  
+  id              String      @id @default(cuid())
+  name            String
+  description     String?
+  ownerId         String
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @default(now()) @updatedAt
+  email           String?
+  phone           String?
+  address         String?
+  city            String?
+  state           String?
+  zipCode         String?
+  country         String?
+  website         String?
+  logo            String?
+  slug            String?     @unique @db.VarChar(255)
+  subdomain       String?     @unique @db.VarChar(255)
   // Branding / Theming
-  theme                      ClinicTheme                 @default(LIGHT)
-  buttonColor                String?
-  buttonTextColor            String?
-  
+  theme           ClinicTheme @default(LIGHT)
+  buttonColor     String?
+  buttonTextColor String?
+
   // Relações
-  onboardingTemplates        OnboardingTemplate[]
-  members                    ClinicMember[]
-  owner                      User                        @relation("ClinicOwner", fields: [ownerId], references: [id])
-  doctorPatientRelationships DoctorPatientRelationship[]
-  membershipLevels           MembershipLevel[]
-  
+  members ClinicMember[]
+  owner   User           @relation("ClinicOwner", fields: [ownerId], references: [id])
+
   // Nova estrutura de subscrição
-  subscriptions             ClinicSubscription[]
-  products                  products[]
-  referralLeads            ReferralLead[]
-  couponTemplates          CouponTemplate[]
-  referralRewards          ReferralReward[]
-  merchant                 Merchant?
+  subscriptions   ClinicSubscription[]
+  products        products[]
+  referralLeads   ReferralLead[]
+  couponTemplates CouponTemplate[]
+  referralRewards ReferralReward[]
+  merchant        Merchant?
 
   @@index([ownerId])
   @@index([slug])
@@ -436,10 +178,10 @@ model Merchant {
 }
 
 enum ClinicRole {
-  OWNER       // Dono do negócio
-  MANAGER     // Gerente com acesso administrativo
-  PROVIDER    // Profissional que presta serviço (médico, dentista, cabeleireiro, etc)
-  STAFF       // Equipe de apoio (recepcionista, assistente, etc)
+  OWNER // Dono do negócio
+  MANAGER // Gerente com acesso administrativo
+  PROVIDER // Profissional que presta serviço (médico, dentista, cabeleireiro, etc)
+  STAFF // Equipe de apoio (recepcionista, assistente, etc)
 }
 
 enum ClinicTheme {
@@ -500,12 +242,11 @@ model ReferralLead {
   clinic                               Clinic?          @relation(fields: [clinicId], references: [id])
   User_referral_leads_referrerIdToUser User?            @relation("referral_leads_referrerIdToUser", fields: [referrerId], references: [id], map: "ReferralLead_referrerId_fkey")
 
+  @@unique([email, doctorId], map: "ReferralLead_email_doctorId_key")
   @@index([clinicId])
   @@index([doctorId])
   @@index([referrerId])
   @@index([status])
-
-  @@unique([email, doctorId], map: "ReferralLead_email_doctorId_key")
   @@index([doctorId], map: "ReferralLead_doctorId_idx")
   @@index([referrerId], map: "ReferralLead_referrerId_idx")
   @@index([status], map: "ReferralLead_status_idx")
@@ -617,52 +358,9 @@ model ReferralFormSettings {
   @@map("referral_form_settings")
 }
 
-model ConsultationForm {
-  id                 String                   @id(map: "ConsultationForm_pkey") @default(cuid())
-  doctorId           String                   @unique(map: "ConsultationForm_doctorId_key")
-  title              String                   @default("Formulário de Consulta")
-  description        String?
-  fields             Json                     @default("[]")
-  isActive           Boolean                  @default(true)
-  allowAnonymous     Boolean                  @default(false)
-  requireAuth        Boolean                  @default(false)
-  autoCreatePatient  Boolean                  @default(true)
-  emailNotifications Boolean                  @default(true)
-  smsNotifications   Boolean                  @default(false)
-  thankYouMessage    String?
-  redirectUrl        String?
-  customCss          String?
-  createdAt          DateTime                 @default(now())
-  updatedAt          DateTime                 @default(now()) @updatedAt
-  doctor             User                     @relation("DoctorConsultationForms", fields: [doctorId], references: [id], onDelete: Cascade, map: "ConsultationForm_doctorId_fkey")
-  submissions        ConsultationSubmission[]
+// ConsultationForm removed
 
-  @@map("consultation_forms")
-}
-
-model ConsultationSubmission {
-  id                                           String           @id(map: "ConsultationSubmission_pkey") @default(cuid())
-  formId                                       String
-  patientId                                    String?
-  doctorId                                     String
-  submissionData                               Json
-  status                                       String           @default("NEW")
-  priority                                     String           @default("MEDIUM")
-  notes                                        String?
-  followUpDate                                 DateTime?
-  lastContactDate                              DateTime?
-  convertedToPatient                           Boolean          @default(false)
-  convertedAt                                  DateTime?
-  createdAt                                    DateTime         @default(now())
-  updatedAt                                    DateTime         @default(now()) @updatedAt
-  User_consultation_submissions_doctorIdToUser User             @relation("consultation_submissions_doctorIdToUser", fields: [doctorId], references: [id], onDelete: Cascade, map: "ConsultationSubmission_doctorId_fkey")
-  form                                         ConsultationForm @relation(fields: [formId], references: [id], onDelete: Cascade, map: "ConsultationSubmission_formId_fkey")
-  patient                                      User?            @relation("ConvertedConsultations", fields: [patientId], references: [id], map: "ConsultationSubmission_patientId_fkey")
-
-  @@index([doctorId], map: "ConsultationSubmission_doctorId_idx")
-  @@index([formId], map: "ConsultationSubmission_formId_idx")
-  @@map("consultation_submissions")
-}
+// ConsultationSubmission removed
 
 model leads {
   id         String   @id
@@ -682,7 +380,6 @@ model referrals {
   id                             String    @id @default(cuid())
   patientId                      String
   doctorId                       String
-  protocolId                     String?
   status                         String    @default("PENDING")
   notes                          String?
   createdAt                      DateTime  @default(now())
@@ -694,520 +391,92 @@ model referrals {
   completed_at                   DateTime? @db.Timestamp(6)
   User_referrals_doctorIdToUser  User      @relation("referrals_doctorIdToUser", fields: [doctorId], references: [id])
   User_referrals_patientIdToUser User      @relation("referrals_patientIdToUser", fields: [patientId], references: [id])
-  protocol                       Protocol? @relation(fields: [protocolId], references: [id])
 
   @@index([referral_type], map: "idx_referrals_referral_type")
   @@index([status], map: "idx_referrals_status")
   @@map("referrals")
 }
 
-model ClinicReferral {
-  id             String    @id @default(dbgenerated("(gen_random_uuid())::text")) @db.VarChar(255)
-  clinic_name    String    @db.VarChar(255)
-  contact_name   String    @db.VarChar(255)
-  contact_email  String    @db.VarChar(255)
-  contact_phone  String?   @db.VarChar(255)
-  clinic_address String?
-  specialties    String?
-  notes          String?
-  status         String?   @default("PENDING") @db.VarChar(50)
-  reward_status  String?   @default("PENDING") @db.VarChar(50)
-  reward_months  Int?      @default(1)
-  referred_by_id String    @db.VarChar(255)
-  created_at     DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at     DateTime? @default(now()) @db.Timestamptz(6)
-  User           User      @relation(fields: [referred_by_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_clinic_referrals_referred_by")
+// ClinicReferral removed
 
-  @@unique([referred_by_id, contact_email], map: "unique_referral_per_doctor_email")
-  @@index([created_at], map: "idx_clinic_referrals_created_at")
-  @@index([referred_by_id], map: "idx_clinic_referrals_referred_by_id")
-  @@index([reward_status], map: "idx_clinic_referrals_reward_status")
-  @@index([status], map: "idx_clinic_referrals_status")
-  @@map("clinic_referrals")
-}
-
-model DoctorFAQ {
-  id        String             @id @default(dbgenerated("(gen_random_uuid())::text"))
-  doctorId  String
-  question  String
-  answer    String
-  category  String?            @default("general")
-  isActive  Boolean            @default(true)
-  priority  Int                @default(0)
-  tags      String?
-  createdAt DateTime           @default(now()) @db.Timestamp(6)
-  updatedAt DateTime           @default(now()) @updatedAt @db.Timestamp(6)
-  doctor    User               @relation("DoctorFAQs", fields: [doctorId], references: [id], onDelete: Cascade)
-  messages  PatientAIMessage[]
-
-  @@index([doctorId, isActive])
-  @@index([category])
-}
-
-model PatientAIConversation {
-  id        String             @id @default(dbgenerated("(gen_random_uuid())::text"))
-  patientId String
-  doctorId  String
-  title     String?            @default("Nova Conversa")
-  isActive  Boolean            @default(true)
-  createdAt DateTime           @default(now()) @db.Timestamp(6)
-  updatedAt DateTime           @default(now()) @updatedAt @db.Timestamp(6)
-  doctor    User               @relation("DoctorConversations", fields: [doctorId], references: [id], onDelete: Cascade)
-  patient   User               @relation("PatientConversations", fields: [patientId], references: [id], onDelete: Cascade)
-  messages  PatientAIMessage[]
-
-  @@index([patientId, doctorId])
-  @@index([isActive])
-  @@index([doctorId])
-  @@index([patientId])
-}
-
-model PatientAIMessage {
-  id             String                @id @default(dbgenerated("(gen_random_uuid())::text"))
-  conversationId String
-  role           String
-  content        String
-  isFromFAQ      Boolean               @default(false)
-  faqId          String?
-  confidence     Float?                @db.Real
-  needsReview    Boolean               @default(false)
-  reviewedAt     DateTime?             @db.Timestamp(6)
-  reviewedBy     String?
-  createdAt      DateTime              @default(now()) @db.Timestamp(6)
-  conversation   PatientAIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  faq            DoctorFAQ?            @relation(fields: [faqId], references: [id])
-  reviewer       User?                 @relation("MessageReviewer", fields: [reviewedBy], references: [id])
-
-  @@index([conversationId])
-  @@index([needsReview])
-  @@index([role])
-}
-
-model AIAssistantSettings {
-  id                  String   @id @default(dbgenerated("(gen_random_uuid())::text"))
-  doctorId            String   @unique
-  isEnabled           Boolean  @default(true)
-  autoReplyEnabled    Boolean  @default(true)
-  confidenceThreshold Float    @default(0.8) @db.Real
-  businessHoursOnly   Boolean  @default(false)
-  businessHoursStart  String?  @default("09:00")
-  businessHoursEnd    String?  @default("18:00")
-  welcomeMessage      String?  @default("Olá! Sou o assistente de IA do Dr. {doctorName}. Como posso ajudá-lo hoje?")
-  fallbackMessage     String?  @default("Desculpe, não consegui encontrar uma resposta adequada. Sua pergunta foi encaminhada para o médico.")
-  maxDailyMessages    Int?     @default(50)
-  createdAt           DateTime @default(now()) @db.Timestamp(6)
-  updatedAt           DateTime @default(now()) @updatedAt @db.Timestamp(6)
-  doctor              User     @relation("DoctorAISettings", fields: [doctorId], references: [id], onDelete: Cascade)
-}
-
-model DailyCheckinQuestion {
-  id         String                   @id @default(cuid())
-  protocolId String
-  question   String
-  type       DailyCheckinQuestionType
-  options    String?
-  isRequired Boolean                  @default(true)
-  order      Int                      @default(0)
-  isActive   Boolean                  @default(true)
-  createdAt  DateTime                 @default(now())
-  updatedAt  DateTime                 @default(now()) @updatedAt
-  protocol   Protocol                 @relation(fields: [protocolId], references: [id], onDelete: Cascade)
-  responses  DailyCheckinResponse[]
-}
-
-model DailyCheckinResponse {
-  id         String               @id @default(cuid())
-  userId     String
-  questionId String
-  protocolId String
-  date       DateTime             @db.Date
-  answer     String
-  createdAt  DateTime             @default(now())
-  updatedAt  DateTime             @default(now()) @updatedAt
-  protocol   Protocol             @relation(fields: [protocolId], references: [id], onDelete: Cascade)
-  question   DailyCheckinQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, questionId, date])
-}
-
-model SymptomReport {
-  id          String                    @id @default(cuid())
-  userId      String
-  protocolId  String
-  dayNumber   Int
-  title       String                    @default("Relatório de Sintomas")
-  description String?
-  symptoms    String
-  severity    Int?                      @default(1)
-  reportTime  DateTime
-  isNow       Boolean                   @default(true)
-  status      SymptomReportStatus       @default(PENDING)
-  doctorNotes String?
-  reviewedAt  DateTime?
-  reviewedBy  String?
-  createdAt   DateTime                  @default(now())
-  updatedAt   DateTime                  @default(now()) @updatedAt
-  protocol    Protocol                  @relation(fields: [protocolId], references: [id], onDelete: Cascade)
-  reviewer    User?                     @relation("SymptomReportReviewer", fields: [reviewedBy], references: [id])
-  user        User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  attachments SymptomReportAttachment[]
-
-  @@index([userId, protocolId])
-  @@index([status])
-  @@index([reportTime])
-  @@index([dayNumber])
-}
-
-model SymptomReportAttachment {
-  id              String        @id @default(cuid())
-  symptomReportId String
-  fileName        String
-  originalName    String
-  fileSize        Int
-  mimeType        String
-  fileUrl         String
-  uploadedAt      DateTime      @default(now())
-  symptomReport   SymptomReport @relation(fields: [symptomReportId], references: [id], onDelete: Cascade)
-
-  @@index([symptomReportId])
-}
-
-model OnboardingTemplate {
-  id                 String               @id @default(cuid())
-  name               String
-  description        String?
-  doctorId           String
-  clinicId           String?
-  isActive           Boolean              @default(true)
-  isPublic           Boolean              @default(false)
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  welcomeTitle       String?
-  welcomeDescription String?
-  welcomeVideoUrl    String?
-  welcomeButtonText  String?
-  successTitle       String?
-  successDescription String?
-  successVideoUrl    String?
-  successButtonText  String?
-  successButtonUrl   String?
-  welcomeItems       String[]
-  estimatedTime      Int?
-  nextSteps          String[]
-  contactEmail       String?
-  contactPhone       String?
-  responses          OnboardingResponse[]
-  steps              OnboardingStep[]
-  clinic             Clinic?              @relation(fields: [clinicId], references: [id])
-  doctor             User                 @relation("DoctorTemplates", fields: [doctorId], references: [id])
-  protocols          Protocol[]
-
-  @@index([doctorId])
-  @@index([clinicId])
-}
-model OnboardingStep {
-  id           String             @id @default(cuid())
-  templateId   String
-  question     String
-  description  String?
-  type         String
-  options      String[]           @default([])
-  required     Boolean            @default(true)
-  showToDoctor Boolean            @default(true)
-  order        Int
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  answers      OnboardingAnswer[]
-  template     OnboardingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-
-  @@index([templateId])
-}
-
-model OnboardingResponse {
-  id          String             @id @default(cuid())
-  templateId  String
-  userId      String?
-  email       String
-  token       String             @unique
-  status      String             @default("PENDING")
-  completedAt DateTime?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  answers     OnboardingAnswer[]
-  template    OnboardingTemplate @relation(fields: [templateId], references: [id])
-  user        User?              @relation(fields: [userId], references: [id])
-
-  @@index([templateId])
-  @@index([userId])
-  @@index([token])
-}
-
-model OnboardingAnswer {
-  id         String             @id @default(cuid())
-  responseId String
-  stepId     String
-  answer     String
-  createdAt  DateTime           @default(now())
-  updatedAt  DateTime           @updatedAt
-  response   OnboardingResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
-  step       OnboardingStep     @relation(fields: [stepId], references: [id])
-
-  @@index([responseId])
-  @@index([stepId])
-}
-
-model DoctorDefaultProtocol {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  doctorId   String
-  protocolId String
-  doctor     User     @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  protocol   Protocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
-
-  @@unique([doctorId, protocolId])
-  @@index([doctorId])
-  @@index([protocolId])
-  @@map("doctor_default_protocols")
-}
-
-model DoctorPatientRelationship {
-  id         String    @id @default(cuid())
-  patientId  String    @map("patient_id")
-  doctorId   String    @map("doctor_id")
-  clinicId   String?   @map("clinic_id")
-  isActive   Boolean   @default(true) @map("is_active")
-  isPrimary  Boolean   @default(false) @map("is_primary")
-  speciality String?
-  notes      String?
-  startDate  DateTime  @default(now()) @map("start_date")
-  endDate    DateTime? @map("end_date")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
-  clinic     Clinic?   @relation(fields: [clinicId], references: [id])
-  doctor     User      @relation("DoctorPatients", fields: [doctorId], references: [id], onDelete: Cascade)
-  patient    User      @relation("PatientDoctors", fields: [patientId], references: [id], onDelete: Cascade)
-
-  @@unique([patientId, doctorId])
-  @@index([patientId])
-  @@index([doctorId])
-  @@index([clinicId])
-  @@map("doctor_patient_relationships")
-}
-
-model ProtocolCourse {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.VarChar(255)
-  protocolId String    @db.VarChar(255)
-  courseId   String    @db.VarChar(255)
-  orderIndex Int?      @default(0)
-  isRequired Boolean?  @default(true)
-  createdAt  DateTime? @default(now()) @db.Timestamp(6)
-  updatedAt  DateTime? @default(now()) @updatedAt @db.Timestamp(6)
-  course     Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  protocol   Protocol  @relation(fields: [protocolId], references: [id], onDelete: Cascade)
-
-  @@unique([protocolId, courseId], map: "unique_protocol_course")
-  @@index([protocolId])
-  @@index([courseId])
-  @@index([courseId], map: "idx_protocol_courses_course_id")
-  @@index([protocolId], map: "idx_protocol_courses_protocol_id")
-  @@map("protocol_courses")
-}
-
-model ProtocolFAQ {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.VarChar(255)
-  protocol_id String    @db.VarChar(255)
-  question    String
-  answer      String
-  category    String?   @default("general") @db.VarChar(50)
-  is_active   Boolean?  @default(true)
-  priority    Int?      @default(0)
-  tags        String[]  @default([])
-  ai_context  String?
-  created_at  DateTime? @default(now()) @db.Timestamp(6)
-  updated_at  DateTime? @default(now()) @db.Timestamp(6)
-  protocols   Protocol  @relation(fields: [protocol_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_protocol_faqs_protocol")
-
-  @@index([category], map: "idx_protocol_faqs_category")
-  @@index([is_active], map: "idx_protocol_faqs_is_active")
-  @@index([protocol_id], map: "idx_protocol_faqs_protocol_id")
-  @@index([tags], map: "idx_protocol_faqs_tags", type: Gin)
-  @@map("protocol_faqs")
-}
-
-model VoiceNote {
-  id            String              @id @default(uuid())
-  patientId     String
-  doctorId      String
-  audioUrl      String
-  duration      Int
-  status        VoiceNoteStatus     @default(PROCESSING)
-  transcription String?
-  summary       String?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @default(now()) @updatedAt
-  checklist     VoiceNoteChecklist?
-  doctor        User                @relation("DoctorVoiceNotes", fields: [doctorId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  patient       User                @relation("PatientVoiceNotes", fields: [patientId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([patientId])
-  @@index([doctorId])
-  @@index([status])
-  @@map("voice_notes")
-}
-
-model VoiceNoteChecklist {
-  id          String    @id @default(uuid())
-  voiceNoteId String    @unique
-  items       Json
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @default(now()) @updatedAt
-  voiceNote   VoiceNote @relation(fields: [voiceNoteId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@map("voice_note_checklists")
-}
-
-model Habit {
-  id        String          @id @default(cuid())
-  userId    String
-  title     String
-  category  String          @default("personal")
-  isActive  Boolean         @default(true)
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @default(now()) @updatedAt
-  progress  HabitProgress[]
-  user      User            @relation("UserHabits", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([category])
-  @@index([isActive])
-  @@map("habits")
-}
-
-model HabitProgress {
-  id        String   @id @default(cuid())
-  habitId   String
-  date      DateTime @db.Date
-  isChecked Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
-  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
-
-  @@unique([habitId, date])
-  @@index([habitId])
-  @@index([date])
-  @@map("habit_progress")
-}
+// DoctorPatientRelationship removed
 
 model User {
-  id                           String                      @id
-  email                        String                      @unique
-  name                         String?
-  image                        String?
-  public_cover_image_url       String?
-  public_page_template         PublicPageTemplate          @default(DEFAULT)
-  doctor_slug                  String?                     @unique
-  role                         String                      @default("PATIENT")
-  is_active                    Boolean                     @default(true)
-  created_at                   DateTime                    @default(now())
-  updated_at                   DateTime                    @default(now()) @updatedAt
-  email_verified               DateTime?
-  password                     String?
-  reset_token                  String?
-  reset_token_expiry           DateTime?
-  verification_code            String?
-  verification_code_expiry     DateTime?
-  doctor_id                    String?
-  referral_code                String?                     @unique
-  phone                        String?
-  birth_date                   DateTime?                   @db.Date
-  gender                       String?
-  address                      String?
-  emergency_contact            String?
-  emergency_phone              String?
-  medical_history              String?
-  allergies                    String?
-  medications                  String?
-  notes                        String?
-  google_review_link           String?
-  stripe_connect_id            String?
-  ai_assistant_settings        AIAssistantSettings?        @relation("DoctorAISettings")
-  accounts                     Account[]
-  doctor_appointments          Appointment[]               @relation("DoctorAppointments")
-  patient_appointments         Appointment[]               @relation("PatientAppointments")
-  checkin_responses            DailyCheckinResponse[]
-  doctor_faqs                  DoctorFAQ[]                 @relation("DoctorFAQs")
-  google_calendar              GoogleCalendarCredentials?  @relation("DoctorGoogleCalendar")
-  onboarding_responses         OnboardingResponse[]
-  doctor_templates             OnboardingTemplate[]        @relation("DoctorTemplates")
-  doctor_conversations         PatientAIConversation[]     @relation("DoctorConversations")
-  patient_conversations        PatientAIConversation[]     @relation("PatientConversations")
-  reviewed_messages            PatientAIMessage[]          @relation("MessageReviewer")
-  sessions                     Session[]
-  reviewed_symptom_reports     SymptomReport[]             @relation("SymptomReportReviewer")
-  symptom_reports              SymptomReport[]
-  User                         User?                       @relation("UserToUser", fields: [doctor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  other_users                  User[]                      @relation("UserToUser")
-  clinic_memberships           ClinicMember[]
-  clinic_referrals             ClinicReferral[]
-  owned_clinics                Clinic[]                    @relation("ClinicOwner")
-  consultation_form            ConsultationForm?           @relation("DoctorConsultationForms")
-  consultation_submissions     ConsultationSubmission[]    @relation("consultation_submissions_doctorIdToUser")
-  converted_consultations      ConsultationSubmission[]    @relation("ConvertedConsultations")
-  created_courses              Course[]                    @relation("DoctorCourses")
-  default_protocols            DoctorDefaultProtocol[]
-  doctor_relationships         DoctorPatientRelationship[] @relation("DoctorPatients")
-  patient_relationships        DoctorPatientRelationship[] @relation("PatientDoctors")
-  services                     DoctorService[]             @relation("DoctorServices")
-  habits                       Habit[]                     @relation("UserHabits")
-  leads                        leads[]
-  patient_documents_doctor     patient_documents[]         @relation("patient_documents_doctor_idToUser")
-  patient_documents_patient    patient_documents[]         @relation("patient_documents_patient_idToUser")
-  created_products             products[]                  @relation("DoctorProducts")
-  created_categories           ProductCategory[]           @relation("DoctorCategories")
-  prescribed_protocols         ProtocolPrescription[]      @relation("DoctorPrescriptions")
-  patient_prescriptions        ProtocolPrescription[]      @relation("PatientPrescriptions")
-  created_protocols            Protocol[]                  @relation("DoctorProtocols")
-  credits                      ReferralCredit[]            @relation("UserCredits")
-  form_settings                ReferralFormSettings?       @relation("DoctorFormSettings")
-  converted_from_lead          ReferralLead[]              @relation("ConvertedFromLead")
-  leads_received               ReferralLead[]              @relation("DoctorLeads")
-  referral_leads               ReferralLead[]              @relation("referral_leads_referrerIdToUser")
-  offered_rewards              ReferralReward[]            @relation("DoctorRewards")
-  referrals_doctor             referrals[]                 @relation("referrals_doctorIdToUser")
-  referrals_patient            referrals[]                 @relation("referrals_patientIdToUser")
-  redemptions                  RewardRedemption[]          @relation("UserRedemptions")
-  assigned_courses             UserCourse[]
-  lesson_progress              UserLesson[]
-  doctor_voice_notes           VoiceNote[]                 @relation("DoctorVoiceNotes")
-  patient_voice_notes          VoiceNote[]                 @relation("PatientVoiceNotes")
-  user_verification_codes      VerificationCode[]          @relation("UserVerificationCodes")
-  doctor_verification_codes    VerificationCode[]          @relation("DoctorVerificationCodes")
-  purchases                    Purchase[]                  @relation("UserPurchases")
-  doctorPurchases              Purchase[]                  @relation("DoctorPurchases")
-  pointsLedger                 PointsLedger[]              @relation("UserPointsLedger")
-  coupon_templates             CouponTemplate[]            @relation("DoctorCouponTemplates")
-  coupons_as_doctor            Coupon[]                    @relation("CouponDoctor")
-  coupons_as_patient           Coupon[]                    @relation("CouponPatient")
-  coupons_as_referrer          Coupon[]                    @relation("CouponReferrer")
-  coupon_redemptions_as_doctor CouponRedemption[]          @relation("CouponRedemptionDoctor")
-  coupon_redemptions_redeemed  CouponRedemption[]          @relation("CouponRedeemer")
+  id                       String    @id
+  email                    String    @unique
+  name                     String?
+  image                    String?
+  public_cover_image_url   String?
+  public_page_template     String?   @default("DEFAULT")
+  doctor_slug              String?   @unique
+  role                     String    @default("PATIENT")
+  is_active                Boolean   @default(true)
+  created_at               DateTime  @default(now())
+  updated_at               DateTime  @default(now()) @updatedAt
+  email_verified           DateTime?
+  password                 String?
+  reset_token              String?
+  reset_token_expiry       DateTime?
+  verification_code        String?
+  verification_code_expiry DateTime?
+  doctor_id                String?
+  referral_code            String?   @unique
+  phone                    String?
+  birth_date               DateTime? @db.Date
+  gender                   String?
+  address                  String?
+  emergency_contact        String?
+  emergency_phone          String?
+  medical_history          String?
+  allergies                String?
+  medications              String?
+  notes                    String?
+  google_review_link       String?
+  stripe_connect_id        String?
+  accounts                 Account[]
+
+  sessions Session[]
+
+  User               User?          @relation("UserToUser", fields: [doctor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  other_users        User[]         @relation("UserToUser")
+  clinic_memberships ClinicMember[]
+
+  owned_clinics Clinic[] @relation("ClinicOwner")
+
+  leads              leads[]
+  created_products   products[]        @relation("DoctorProducts")
+  created_categories ProductCategory[] @relation("DoctorCategories")
+
+  credits             ReferralCredit[]      @relation("UserCredits")
+  form_settings       ReferralFormSettings? @relation("DoctorFormSettings")
+  converted_from_lead ReferralLead[]        @relation("ConvertedFromLead")
+  leads_received      ReferralLead[]        @relation("DoctorLeads")
+  referral_leads      ReferralLead[]        @relation("referral_leads_referrerIdToUser")
+  offered_rewards     ReferralReward[]      @relation("DoctorRewards")
+  referrals_doctor    referrals[]           @relation("referrals_doctorIdToUser")
+  referrals_patient   referrals[]           @relation("referrals_patientIdToUser")
+  redemptions         RewardRedemption[]    @relation("UserRedemptions")
+
+  user_verification_codes      VerificationCode[] @relation("UserVerificationCodes")
+  doctor_verification_codes    VerificationCode[] @relation("DoctorVerificationCodes")
+  purchases                    Purchase[]         @relation("UserPurchases")
+  doctorPurchases              Purchase[]         @relation("DoctorPurchases")
+  pointsLedger                 PointsLedger[]     @relation("UserPointsLedger")
+  coupon_templates             CouponTemplate[]   @relation("DoctorCouponTemplates")
+  coupons_as_doctor            Coupon[]           @relation("CouponDoctor")
+  coupons_as_patient           Coupon[]           @relation("CouponPatient")
+  coupons_as_referrer          Coupon[]           @relation("CouponReferrer")
+  coupon_redemptions_as_doctor CouponRedemption[] @relation("CouponRedemptionDoctor")
+  coupon_redemptions_redeemed  CouponRedemption[] @relation("CouponRedeemer")
   // Back-relations for tenant-specific patient profiles
-  doctor_profiles              PatientProfile[]            @relation("ProfileDoctor")
-  patient_profiles             PatientProfile[]            @relation("ProfilePatient")
+  doctor_profiles              PatientProfile[]   @relation("ProfileDoctor")
+  patient_profiles             PatientProfile[]   @relation("ProfilePatient")
   // Messaging templates and sequences
-  message_templates            MessageTemplate[]          @relation("DoctorMessageTemplates")
-  message_sequences            MessageSequence[]          @relation("DoctorMessageSequences")
+  message_templates            MessageTemplate[]  @relation("DoctorMessageTemplates")
+  message_sequences            MessageSequence[]  @relation("DoctorMessageSequences")
 }
 
-// Template options for the public doctor page (slug page)
-enum PublicPageTemplate {
-  DEFAULT
-  MINIMAL
-  HERO_CENTER
-  HERO_LEFT
-}
+// PublicPageTemplate removed (User field now String)
 
 model PatientProfile {
   id                String   @id @default(cuid())
@@ -1228,119 +497,54 @@ model PatientProfile {
   updatedAt         DateTime @updatedAt @map("updated_at")
 
   // Membership snapshots per clinic (doctor)
-  totalPoints       Int      @default(0) @map("total_points")
-  currentPoints     Int      @default(0) @map("current_points")
-  membershipLevelId String?  @map("membership_level_id")
-
-  // Relations to user/doctor and membership
-  membershipLevel   MembershipLevel? @relation(fields: [membershipLevelId], references: [id])
+  totalPoints   Int @default(0) @map("total_points")
+  currentPoints Int @default(0) @map("current_points")
 
   // Relations
-  doctor  User @relation("ProfileDoctor", fields: [doctorId], references: [id], onDelete: Cascade)
-  patient User @relation("ProfilePatient", fields: [userId], references: [id], onDelete: Cascade)
+  doctor       User           @relation("ProfileDoctor", fields: [doctorId], references: [id], onDelete: Cascade)
+  patient      User           @relation("ProfilePatient", fields: [userId], references: [id], onDelete: Cascade)
   // Back-relation for points ledger entries scoped to this profile
-  pointsLedger     PointsLedger[]
+  pointsLedger PointsLedger[]
 
   @@unique([doctorId, userId])
   @@index([doctorId])
   @@index([userId])
-  @@index([membershipLevelId])
   @@map("patient_profiles")
 }
 
-// Default membership level templates
-model MembershipLevelTemplate {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String?  @unique
-  minPoints Int      @default(0) @map("min_points")
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+// MembershipLevelTemplate removed
 
-  @@map("membership_level_templates")
-}
+// MembershipLevel removed
 
-// Clinic-specific membership levels
-model MembershipLevel {
-  id        String   @id @default(cuid())
-  clinic_id String
-  name      String
-  slug      String?
-  minPoints Int      @default(0) @map("min_points")
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
-  // Back-relation to patient profiles
-  patientProfiles PatientProfile[]
-  // Relation to clinic
-  clinic     Clinic   @relation(fields: [clinic_id], references: [id], onDelete: Cascade)
-
-  @@unique([clinic_id, slug])
-  @@index([clinic_id])
-  @@map("membership_levels")
-}
-
-model patient_document_metadata {
-  id                String            @id @default(dbgenerated("(gen_random_uuid())::text"))
-  document_id       String            @unique
-  title             String            @db.VarChar(255)
-  keywords          String[]          @default([])
-  categories        String[]          @default([])
-  importance        String?           @default("MEDIUM") @db.VarChar(50)
-  created_at        DateTime?         @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime?         @default(now()) @db.Timestamptz(6)
-  patient_documents patient_documents @relation(fields: [document_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([document_id], map: "idx_patient_document_metadata_document_id")
-}
-
-model patient_documents {
-  id                                      String                     @id @default(dbgenerated("(gen_random_uuid())::text"))
-  patient_id                              String
-  doctor_id                               String
-  file_name                               String                     @db.VarChar(255)
-  file_url                                String                     @db.VarChar(255)
-  file_type                               String                     @db.VarChar(50)
-  content_summary                         String?
-  status                                  String?                    @default("ACTIVE") @db.VarChar(50)
-  created_at                              DateTime?                  @default(now()) @db.Timestamptz(6)
-  updated_at                              DateTime?                  @default(now()) @db.Timestamptz(6)
-  patient_document_metadata               patient_document_metadata?
-  User_patient_documents_doctor_idToUser  User                       @relation("patient_documents_doctor_idToUser", fields: [doctor_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  User_patient_documents_patient_idToUser User                       @relation("patient_documents_patient_idToUser", fields: [patient_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([doctor_id], map: "idx_patient_documents_doctor_id")
-  @@index([patient_id], map: "idx_patient_documents_patient_id")
-}
+// patient_document_metadata and patient_documents removed
 
 model ClinicPlan {
-  id            String    @id @default(cuid())
-  name          String
-  tier          PlanTier
-  description   String?
-  monthlyPrice  Decimal   @map("monthly_price") @db.Decimal(10, 2)
-  
+  id           String   @id @default(cuid())
+  name         String
+  tier         PlanTier
+  description  String?
+  monthlyPrice Decimal  @map("monthly_price") @db.Decimal(10, 2)
+
   // Limites base incluídos
-  baseDoctors   Int       @map("base_doctors")
-  basePatients  Int       @map("base_patients")
-  
+  baseDoctors  Int @map("base_doctors")
+  basePatients Int @map("base_patients")
+
   // Features incluídas no plano
-  features      Json      @default("{}")
-  
+  features Json @default("{}")
+
   // Trial
-  trialDays     Int       @default(30) @map("trial_days")
-  requireCard   Boolean   @default(false) @map("require_card")
-  
+  trialDays   Int     @default(30) @map("trial_days")
+  requireCard Boolean @default(false) @map("require_card")
+
   // Controle
-  isActive      Boolean   @default(true) @map("is_active")
-  isPublic      Boolean   @default(true) @map("is_public")
-  
+  isActive Boolean @default(true) @map("is_active")
+  isPublic Boolean @default(true) @map("is_public")
+
   // Relações
   subscriptions ClinicSubscription[]
-  
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([tier])
   @@index([isActive])
@@ -1348,22 +552,22 @@ model ClinicPlan {
 }
 
 model ClinicAddOn {
-  id            String    @id @default(cuid())
-  type          AddOnType
-  name          String
-  description   String?
-  monthlyPrice  Decimal   @map("monthly_price") @db.Decimal(10, 2)
-  
+  id           String    @id @default(cuid())
+  type         AddOnType
+  name         String
+  description  String?
+  monthlyPrice Decimal   @map("monthly_price") @db.Decimal(10, 2)
+
   // Quantidade que o add-on oferece
-  quantity      Int      
-  
-  isActive      Boolean   @default(true)
-  
+  quantity Int
+
+  isActive Boolean @default(true)
+
   // Relações
   subscriptions ClinicAddOnSubscription[]
-  
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([type])
   @@index([isActive])
@@ -1371,36 +575,36 @@ model ClinicAddOn {
 }
 
 model ClinicSubscription {
-  id                    String            @id @default(cuid()) @map("id")
-  clinicId              String    @map("clinic_id")
-  planId                String    @map("plan_id")
-  status                SubscriptionStatus @default(TRIAL) @map("status")
-  
+  id       String             @id @default(cuid()) @map("id")
+  clinicId String             @map("clinic_id")
+  planId   String             @map("plan_id")
+  status   SubscriptionStatus @default(TRIAL) @map("status")
+
   // Datas importantes
-  startDate             DateTime          @default(now()) @map("start_date")
-  trialEndsAt           DateTime          @map("trial_ends_at")
-  currentPeriodStart    DateTime          @default(now()) @map("current_period_start")
-  currentPeriodEnd      DateTime          @map("current_period_end")
-  
+  startDate          DateTime @default(now()) @map("start_date")
+  trialEndsAt        DateTime @map("trial_ends_at")
+  currentPeriodStart DateTime @default(now()) @map("current_period_start")
+  currentPeriodEnd   DateTime @map("current_period_end")
+
   // Controle de pagamento
-  stripeCustomerId      String?           @map("stripe_customer_id")
-  stripeSubscriptionId  String?           @map("stripe_subscription_id")
-  
+  stripeCustomerId     String? @map("stripe_customer_id")
+  stripeSubscriptionId String? @map("stripe_subscription_id")
+
   // Cancelamento
-  canceledAt            DateTime?         @map("canceled_at")
-  cancelReason          String?           @map("cancel_reason")
-  
+  canceledAt   DateTime? @map("canceled_at")
+  cancelReason String?   @map("cancel_reason")
+
   // Uso atual
-  currentDoctorsCount   Int               @default(0) @map("current_doctors_count")
-  currentPatientsCount  Int               @default(0) @map("current_patients_count")
-  
+  currentDoctorsCount  Int @default(0) @map("current_doctors_count")
+  currentPatientsCount Int @default(0) @map("current_patients_count")
+
   // Relações
-  clinic                Clinic            @relation(fields: [clinicId], references: [id])
-  plan                  ClinicPlan        @relation(fields: [planId], references: [id])
-  addOns                ClinicAddOnSubscription[]
-  
-  createdAt             DateTime          @default(now()) @map("created_at")
-  updatedAt             DateTime          @updatedAt @map("updated_at")
+  clinic Clinic                    @relation(fields: [clinicId], references: [id])
+  plan   ClinicPlan                @relation(fields: [planId], references: [id])
+  addOns ClinicAddOnSubscription[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([clinicId])
   @@index([status])
@@ -1408,146 +612,39 @@ model ClinicSubscription {
 }
 
 model ClinicAddOnSubscription {
-  id              String    @id @default(cuid())
-  subscriptionId  String
-  addOnId         String
-  quantity        Int
-  startDate       DateTime  @default(now())
-  endDate         DateTime?
-  
+  id             String    @id @default(cuid())
+  subscriptionId String
+  addOnId        String
+  quantity       Int
+  startDate      DateTime  @default(now())
+  endDate        DateTime?
+
   // Relações
-  subscription    ClinicSubscription @relation(fields: [subscriptionId], references: [id])
-  addOn          ClinicAddOn        @relation(fields: [addOnId], references: [id])
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  subscription ClinicSubscription @relation(fields: [subscriptionId], references: [id])
+  addOn        ClinicAddOn        @relation(fields: [addOnId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([subscriptionId])
   @@index([addOnId])
   @@map("clinic_add_on_subscriptions")
 }
 
+// SubscriptionMigrationLog removed
 
-model SubscriptionMigrationLog {
-  id                String    @id @default(cuid())
-  oldSubscriptionId String?
-  clinicId          String
-  migrationCase     String    // DIRECT_MATCH, UPGRADE_NEEDED, MANUAL_REVIEW
-  details           Json
-  needsReview       Boolean   @default(false)
-  reviewedAt        DateTime?
-  createdAt         DateTime  @default(now())
+// GoogleCalendarCredentials removed
 
-  @@index([clinicId])
-  @@index([needsReview])
-  @@index([migrationCase])
-  @@map("subscription_migration_logs")
-}
+// Appointment removed
 
-model GoogleCalendarCredentials {
-  id           String   @id @default(cuid())
-  doctorId     String   @unique
-  accessToken  String
-  refreshToken String
-  expiresAt    DateTime
-  calendarId   String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @default(now()) @updatedAt
-  doctor       User     @relation("DoctorGoogleCalendar", fields: [doctorId], references: [id], onDelete: Cascade)
-}
-
-model Appointment {
-  id            String            @id @default(cuid())
-  patientId     String
-  doctorId      String
-  serviceId     String?
-  startTime     DateTime
-  endTime       DateTime
-  status        AppointmentStatus
-  title         String
-  notes         String?
-  googleEventId String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @default(now()) @updatedAt
-  doctor        User              @relation("DoctorAppointments", fields: [doctorId], references: [id], onDelete: Cascade)
-  patient       User              @relation("PatientAppointments", fields: [patientId], references: [id], onDelete: Cascade)
-  service       DoctorService?    @relation(fields: [serviceId], references: [id])
-
-  @@index([patientId])
-  @@index([doctorId])
-  @@index([serviceId])
-  @@index([status])
-  @@index([startTime])
-}
-
-model DoctorService {
-  id                 String                @id @default(cuid())
-  doctor_id          String
-  name               String
-  description        String?
-  duration           Int                   @default(30)
-  fee_type           FeeType               @default(FIXED)
-  fee                Float?
-  fee_visibility     FeeVisibility         @default(DISPLAY_FEE)
-  availability       ServiceAvailability[]
-  button_label       String                @default("Book Appointment")
-  confirmation_label String                @default("Appointment Confirmed")
-  redirect_url       String?
-  is_active          Boolean               @default(true)
-  stripe_product_id  String?
-  stripe_price_id    String?
-  created_at         DateTime              @default(now())
-  updated_at         DateTime              @default(now()) @updatedAt
-  appointments       Appointment[]
-  doctor             User                  @relation("DoctorServices", fields: [doctor_id], references: [id], onDelete: Cascade)
-
-  @@index([doctor_id])
-  @@index([is_active])
-  @@map("doctor_services")
-}
-
-enum PrescriptionStatus {
-  PRESCRIBED
-  ACTIVE
-  PAUSED
-  COMPLETED
-  ABANDONED
-}
-
-enum DayStatus {
-  PENDING
-  COMPLETED
-  MISSED
-  POSTPONED
-}
-
-enum DailyCheckinQuestionType {
-  MULTIPLE_CHOICE
-  SCALE
-  TEXT
-  YES_NO
-}
-
-enum SymptomReportStatus {
-  PENDING
-  REVIEWED
-  URGENT
-  RESOLVED
-}
-
-enum VoiceNoteStatus {
-  PROCESSING
-  TRANSCRIBED
-  ANALYZED
-  ERROR
-}
-
+// DoctorService removed
 enum SubscriptionStatus {
   TRIAL
   ACTIVE
   PAST_DUE
   CANCELED
   EXPIRED
+
   @@map("subscription_status")
 }
 
@@ -1566,30 +663,99 @@ enum AddOnType {
   API_ACCESS
 }
 
-enum AppointmentStatus {
-  SCHEDULED
-  CONFIRMED
-  COMPLETED
-  CANCELLED
-  NO_SHOW
+// Product selling modes
+enum ProductType {
+  PRODUCT
+  SUBSCRIPTION
 }
 
-enum ServiceAvailability {
-  IN_PERSON
-  PHONE
-  VIDEO
+// Subscription recurrence options
+enum SubscriptionInterval {
+  DAY
+  WEEK
+  MONTH
+  YEAR
 }
 
-enum FeeType {
-  FIXED
-  ONGOING
+// Sales/checkout currencies
+enum Currency {
+  BRL
+  USD
+  EUR
 }
 
-enum FeeVisibility {
-  REQUIRE_PAYMENT
-  HIDE_FEE
-  DISPLAY_FEE
+// Supported payment methods per offer
+enum PaymentMethod {
+  CARD
+  PIX
+  BOLETO
+  PAYPAL
 }
+
+model Offer {
+  id                   String         @id @default(cuid())
+  productId            String         @map("productid")
+  name                 String
+  description          String?
+  currency             Currency       @default(BRL)
+  priceCents           Int            @map("pricecents")
+  maxInstallments      Int?           @default(1) @map("maxinstallments")
+  installmentMinCents  Int?           @map("installmentmincents")
+  active               Boolean        @default(true)
+  isSubscription       Boolean        @default(false) @map("issubscription")
+  intervalCount        Int?           @map("intervalcount")
+  intervalUnit         SubscriptionInterval? @map("intervalunit")
+  trialDays            Int?           @map("trialdays")
+  checkoutUrl          String?        @map("checkouturl")
+  createdAt            DateTime       @default(now()) @map("createdat")
+  updatedAt            DateTime       @updatedAt @map("updatedat")
+
+  // Relations
+  product              products       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  paymentMethods       OfferPaymentMethod[]
+
+  @@index([productId])
+  @@index([isSubscription])
+  @@map("offers")
+}
+
+model OfferPaymentMethod {
+  id          String         @id @default(cuid())
+  offerId     String         @map("offerid")
+  method      PaymentMethod
+  active      Boolean        @default(true)
+  feePercent  Float?         @map("feepercent")
+
+  offer       Offer          @relation(fields: [offerId], references: [id])
+
+  @@unique([offerId, method])
+  @@map("offer_payment_methods")
+}
+
+model PaymentTransaction {
+  id                 String   @id
+  provider           String
+  providerOrderId    String?  @map("provider_order_id")
+  doctorId           String?  @map("doctor_id")
+  patientProfileId   String?  @map("patient_profile_id")
+  clinicId           String?  @map("clinic_id")
+  productId          String?  @map("product_id")
+  amountCents        Int      @default(0) @map("amount_cents")
+  currency           String   @default("BRL")
+  installments       Int?
+  paymentMethodType  String?  @map("payment_method_type")
+  status             String   @default("processing")
+  rawPayload         Json?    @map("raw_payload")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([doctorId])
+  @@index([productId])
+  @@index([createdAt])
+  @@index([providerOrderId])
+  @@map("payment_transactions")
+}
+
+// Removed enums: AppointmentStatus, ServiceAvailability, FeeType, FeeVisibility
 
 model VerificationCode {
   id         String    @id @default(cuid())
@@ -1633,16 +799,16 @@ model Purchase {
 }
 
 model PointsLedger {
-  id          String   @id @default(cuid())
-  userId      String
-  patientProfileId String? @map("patient_profile_id")
-  sourceType  String
-  sourceId    String
-  amount      Decimal  @db.Decimal(10, 2)
-  description String?
-  createdAt   DateTime @default(now())
+  id               String   @id @default(cuid())
+  userId           String
+  patientProfileId String?  @map("patient_profile_id")
+  sourceType       String
+  sourceId         String
+  amount           Decimal  @db.Decimal(10, 2)
+  description      String?
+  createdAt        DateTime @default(now())
 
-  user User @relation("UserPointsLedger", fields: [userId], references: [id], onDelete: Cascade)
+  user           User            @relation("UserPointsLedger", fields: [userId], references: [id], onDelete: Cascade)
   patientProfile PatientProfile? @relation(fields: [patientProfileId], references: [id])
 
   @@index([userId])
@@ -1676,7 +842,7 @@ model Coupon {
   patient     User?              @relation("CouponPatient", fields: [patientId], references: [id], onDelete: SetNull)
   referrer    User?              @relation("CouponReferrer", fields: [referrerId], references: [id], onDelete: SetNull)
   product     products?          @relation("ProductCoupons", fields: [productId], references: [id], onDelete: SetNull)
-  template    CouponTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  template    CouponTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
   redemptions CouponRedemption[]
 
   @@unique([doctorId, patientId, objective])
@@ -1705,8 +871,8 @@ model CouponTemplate {
   updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
 
   // Relations
-  doctor User    @relation("DoctorCouponTemplates", fields: [doctorId], references: [id], onDelete: Cascade)
-  clinic Clinic? @relation(fields: [clinicId], references: [id])
+  doctor  User     @relation("DoctorCouponTemplates", fields: [doctorId], references: [id], onDelete: Cascade)
+  clinic  Clinic?  @relation(fields: [clinicId], references: [id])
   coupons Coupon[]
 
   @@unique([doctorId, slug])
@@ -1735,18 +901,17 @@ model CouponRedemption {
   @@map("coupon_redemptions")
 }
 
-
 /// Unified events store for analytics and auditing
 model Event {
-  id         String   @id @default(cuid())
-  eventId    String?  @unique @map("event_id")
-  eventType  EventType @map("event_type")
-  customerId String?  @map("customer_id")
-  clinicId   String   @map("clinic_id")
+  id         String     @id @default(cuid())
+  eventId    String?    @unique @map("event_id")
+  eventType  EventType  @map("event_type")
+  customerId String?    @map("customer_id")
+  clinicId   String     @map("clinic_id")
   actor      EventActor
-  timestamp  DateTime @default(now())
-  metadata   Json     @default("{}")
-  createdAt  DateTime @default(now()) @map("created_at")
+  timestamp  DateTime   @default(now())
+  metadata   Json       @default("{}")
+  createdAt  DateTime   @default(now()) @map("created_at")
 
   @@index([clinicId, timestamp], map: "idx_events_clinic_ts")
   @@index([eventType, timestamp], map: "idx_events_type_ts")
@@ -1814,6 +979,7 @@ enum EventActor {
   clinic
   system
   ai
+
   @@map("event_actor_enum")
 }
 
@@ -1822,11 +988,11 @@ model CampaignJob {
   id         String   @id
   doctorId   String   @map("doctor_id")
   campaignId String   @map("campaign_id")
-  channel    String   // 'whatsapp' | 'sms' | 'email'
+  channel    String // 'whatsapp' | 'sms' | 'email'
   trigger    String?
   scheduleAt DateTime @map("schedule_at") @db.Timestamptz(6)
   createdAt  DateTime @default(now()) @map("created_at")
-  status     String   // 'scheduled' | 'running' | 'done' | 'failed' | 'cancelled'
+  status     String // 'scheduled' | 'running' | 'done' | 'failed' | 'cancelled'
   lastError  String?  @map("last_error")
 
   @@index([doctorId])
@@ -1835,115 +1001,93 @@ model CampaignJob {
   @@map("campaign_jobs")
 }
 
-// ==========================
-// Messaging Templates/Flows
-// ==========================
 
-// Communication channels supported: kept here for reference, field uses String in DB
-// enum MessageChannel {
-//   email
-//   whatsapp
-//   sms
-// }
-
-// Time units for delays: kept here for reference, field uses String in DB
-// enum TimeUnit {
-//   minutes
-//   hours
-//   days
-// }
-
-// How to render email body: kept here for reference, field uses String in DB
-// enum RenderStrategy {
-//   raw_html
-//   mjml
-// }
 
 /// Reusable per-channel message template owned by a doctor
 model MessageTemplate {
-  id        String         @id @default(cuid())
-  doctorId  String
-  name      String
-  channel   String @db.VarChar(20)
+  id              String   @id @default(cuid())
+  doctorId        String
+  name            String
+  channel         String   @db.VarChar(20)
   // Email fields (for channel = email)
-  subject   String?
-  html      String?
-  text      String?
+  subject         String?
+  html            String?
+  text            String?
   // Optional MJML source; if set with renderStrategy = mjml, compile to HTML on send
-  mjml      String?
-  renderStrategy String? @default("raw_html") @db.VarChar(20)
+  mjml            String?
+  renderStrategy  String?  @default("raw_html") @db.VarChar(20)
   // Optional sender overrides (if not provided, use doctor's defaults)
-  fromName  String?
-  fromEmail String?
-  replyTo   String?
+  fromName        String?
+  fromEmail       String?
+  replyTo         String?
   // WhatsApp template (for channel = whatsapp)
-  provider       String?   // e.g., 'meta'
-  waTemplateName String?
-  waLanguage     String?   @default("pt_BR")
-  waCategory     String?   // MARKETING | UTILITY | AUTHENTICATION (livre)
-  waComponents   Json?
-  waStatus       String?   // APPROVED | REJECTED | PENDING
-  waProviderId   String?
+  provider        String? // e.g., 'meta'
+  waTemplateName  String?
+  waLanguage      String?  @default("pt_BR")
+  waCategory      String? // MARKETING | UTILITY | AUTHENTICATION (livre)
+  waComponents    Json?
+  waStatus        String? // APPROVED | REJECTED | PENDING
+  waProviderId    String?
   // Common metadata
-  isActive  Boolean        @default(true)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @default(now()) @updatedAt
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
   // Variables & validation
-  variablesSchema Json?    // JSON Schema to validate variables passed to this template
-  sampleVariables Json?    // Example variables for preview
+  variablesSchema Json? // JSON Schema to validate variables passed to this template
+  sampleVariables Json? // Example variables for preview
   // Organization
-  tags      String[]       @default([])
+  tags            String[] @default([])
   // SMS helpers
-  smsMaxSegments Int?
+  smsMaxSegments  Int?
 
-  doctor    User           @relation("DoctorMessageTemplates", fields: [doctorId], references: [id], onDelete: Cascade)
-  steps     MessageSequenceStep[]
+  doctor User                  @relation("DoctorMessageTemplates", fields: [doctorId], references: [id], onDelete: Cascade)
+  steps  MessageSequenceStep[]
 
-  @@index([doctorId])
   @@unique([doctorId, name])
   // Avoid duplicate WA templates per doctor/language
   @@unique([doctorId, channel, waTemplateName, waLanguage])
+  @@index([doctorId])
   @@map("message_templates")
 }
 
 /// A sequence (flow) of messages composed of multiple steps with delays
 model MessageSequence {
-  id          String                 @id @default(cuid())
+  id          String   @id @default(cuid())
   doctorId    String
   name        String
   description String?
-  isActive    Boolean                @default(true)
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @default(now()) @updatedAt
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
 
-  doctor      User                   @relation("DoctorMessageSequences", fields: [doctorId], references: [id], onDelete: Cascade)
-  steps       MessageSequenceStep[]
+  doctor User                  @relation("DoctorMessageSequences", fields: [doctorId], references: [id], onDelete: Cascade)
+  steps  MessageSequenceStep[]
 
-  @@index([doctorId])
   @@unique([doctorId, name])
+  @@index([doctorId])
   @@map("message_sequences")
 }
 
 /// An individual scheduled message within a sequence
 model MessageSequenceStep {
-  id          String           @id @default(cuid())
+  id          String @id @default(cuid())
   sequenceId  String
-  orderIndex  Int              @default(0)
+  orderIndex  Int    @default(0)
   // Delay relative to previous step or sequence start
-  delayAmount Int              @default(0)
-  delayUnit   String           @default("hours") @db.VarChar(16)
+  delayAmount Int    @default(0)
+  delayUnit   String @default("hours") @db.VarChar(16)
 
   // Template to send for this step
-  templateId  String
+  templateId String
 
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @default(now()) @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
-  sequence    MessageSequence  @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
-  template    MessageTemplate  @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  sequence MessageSequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  template MessageTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
 
+  @@unique([sequenceId, orderIndex])
   @@index([sequenceId])
   @@index([templateId])
-  @@unique([sequenceId, orderIndex])
   @@map("message_sequence_steps")
 }

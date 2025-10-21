@@ -61,9 +61,15 @@ export async function POST(req: Request) {
       throw lastErr;
     };
 
+    // Feature flags for email behavior
+    const emailDisabled = process.env.SMTP_DISABLED === 'true';
+    const fallbackAllowed = process.env.RETURN_VERIFICATION_CODE === 'true' || process.env.NODE_ENV !== 'production';
+
     // Check if email already exists (with retry)
+    // Limit selection to avoid fetching fields with incompatible DB types (e.g., legacy enums)
     const existingUser = await withRetry(() => prisma.user.findUnique({
       where: { email: normalizedEmail },
+      select: { id: true },
     }));
 
     if (existingUser) {
@@ -80,7 +86,27 @@ export async function POST(req: Request) {
         }
       }));
 
-      // Send verification code email
+      // Send verification code email (or fallback)
+      if (emailDisabled) {
+        console.warn('SMTP_DISABLED=true, skipping email send.');
+        if (fallbackAllowed) {
+          return NextResponse.json(
+            {
+              message: 'Email sending disabled. Use the code returned for testing.',
+              email: normalizedEmail,
+              existingUser: true,
+              code: verificationCode,
+            },
+            { status: 200 }
+          );
+        } else {
+          return NextResponse.json(
+            { message: 'Email sending is currently disabled.' },
+            { status: 503 }
+          );
+        }
+      }
+
       try {
         await transporter.verify();
         console.log('SMTP connection verified');
@@ -104,15 +130,26 @@ export async function POST(req: Request) {
         console.log('Verification email sent successfully');
       } catch (emailError) {
         console.error('Email sending error:', emailError);
-        
-        // Clean up token if email fails
+        if (fallbackAllowed) {
+          console.warn('FALLBACK: Returning code in response (token preserved)');
+          return NextResponse.json(
+            {
+              message: 'Email sending failed. Use the code returned for testing.',
+              email: normalizedEmail,
+              existingUser: true,
+              code: verificationCode,
+            },
+            { status: 200 }
+          );
+        }
+
+        // Clean up token if email fails and no fallback allowed
         await withRetry(() => prisma.verificationToken.deleteMany({
           where: { 
             identifier: normalizedEmail,
             token: verificationCode
           }
         }));
-        
         throw emailError;
       }
 
@@ -139,7 +176,26 @@ export async function POST(req: Request) {
       }
     }));
 
-    // Send verification code email
+    // Send verification code email (or fallback)
+    if (emailDisabled) {
+      console.warn('SMTP_DISABLED=true, skipping email send.');
+      if (fallbackAllowed) {
+        return NextResponse.json(
+          {
+            message: 'Email sending disabled. Use the code returned for testing.',
+            email: normalizedEmail,
+            code: verificationCode,
+          },
+          { status: 200 }
+        );
+      } else {
+        return NextResponse.json(
+          { message: 'Email sending is currently disabled.' },
+          { status: 503 }
+        );
+      }
+    }
+
     try {
       await transporter.verify();
       console.log('SMTP connection verified');
@@ -163,15 +219,25 @@ export async function POST(req: Request) {
       console.log('Verification email sent successfully');
     } catch (emailError) {
       console.error('Email sending error:', emailError);
-      
-      // Clean up token if email fails
+      if (fallbackAllowed) {
+        console.warn('FALLBACK: Returning code in response (token preserved)');
+        return NextResponse.json(
+          {
+            message: 'Email sending failed. Use the code returned for testing.',
+            email: normalizedEmail,
+            code: verificationCode,
+          },
+          { status: 200 }
+        );
+      }
+
+      // Clean up token if email fails and no fallback allowed
       await withRetry(() => prisma.verificationToken.deleteMany({
         where: { 
           identifier: normalizedEmail,
           token: verificationCode
         }
       }));
-      
       throw emailError;
     }
 

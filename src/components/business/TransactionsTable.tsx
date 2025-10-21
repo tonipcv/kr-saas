@@ -1,0 +1,244 @@
+"use client";
+
+import React, { useMemo, useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+type TxRow = {
+  id: string;
+  provider_order_id: string | null;
+  provider_charge_id: string | null;
+  doctor_id: string | null;
+  doctor_name?: string | null;
+  patient_profile_id: string | null;
+  patient_name?: string | null;
+  patient_email?: string | null;
+  clinic_id: string | null;
+  clinic_name?: string | null;
+  product_id: string | null;
+  amount_cents: number | null;
+  currency: string | null;
+  installments: number | null;
+  payment_method_type: string | null;
+  status: string | null;
+  created_at: string | Date | null;
+  raw_payload?: any;
+};
+
+function formatAmount(amountCents?: number | string | null, currency?: string | null) {
+  if (amountCents == null) return "-";
+  const cents = typeof amountCents === 'number' ? amountCents : Number(amountCents);
+  const value = cents / 100;
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'USD' }).format(value);
+  } catch {
+    return `${value} ${currency || ''}`.trim();
+  }
+}
+
+function formatDate(v: any) {
+  try {
+    const d = new Date(v);
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(d);
+  } catch {
+    return String(v ?? '');
+  }
+}
+
+export default function TransactionsTable({ transactions }: { transactions: TxRow[] }) {
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<TxRow | null>(null);
+  const [showPayload, setShowPayload] = useState(false);
+  const [refunding, setRefunding] = useState(false);
+  const [refundError, setRefundError] = useState<string | null>(null);
+
+  const onRowDoubleClick = (t: TxRow) => {
+    setSelected(t);
+    setOpen(true);
+  };
+
+  const canRefund = useMemo(() => {
+    const s = String(selected?.status || '').toUpperCase();
+    return s === 'PAID' && !!selected?.provider_charge_id;
+  }, [selected]);
+
+  const onRefund = async () => {
+    if (!selected?.provider_charge_id) return;
+    // Confirmation dialog
+    const confirmed = window.confirm(
+      'Confirmar estorno desta cobrança?\n\n' +
+      `Order: ${selected.provider_order_id || 'N/A'}\n` +
+      `Charge: ${selected.provider_charge_id}\n` +
+      `Valor: ${formatAmount(selected.amount_cents as any, selected.currency)}\n\n` +
+      'Esta ação não pode ser desfeita.'
+    );
+    if (!confirmed) return;
+
+    setRefunding(true);
+    setRefundError(null);
+    try {
+      const res = await fetch('/api/payments/pagarme/refund', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chargeId: selected.provider_charge_id }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'Falha ao solicitar estorno');
+      // Sucesso: fechar modal e recarregar para ver webhooks aplicarem o status
+      setOpen(false);
+      try { window.location.reload(); } catch {}
+    } catch (e: any) {
+      setRefundError(e?.message || 'Falha ao solicitar estorno');
+    } finally {
+      setRefunding(false);
+    }
+  };
+
+  const badgeFor = (statusValue?: string | null) => {
+    const status = String(statusValue || '').toUpperCase();
+    const base = 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium';
+    switch (status) {
+      case 'PAID':
+        return <span className={`${base} bg-green-50 text-green-700 border border-green-200`}>Paid</span>;
+      case 'PROCESSING':
+        return <span className={`${base} bg-amber-50 text-amber-700 border border-amber-200`}>Processing</span>;
+      case 'PENDING':
+        return <span className={`${base} bg-amber-50 text-amber-700 border border-amber-200`}>Pending</span>;
+      case 'ACTIVE':
+        return <span className={`${base} bg-amber-50 text-amber-700 border border-amber-200`}>Pending</span>;
+      case 'FAILED':
+      case 'REFUSED':
+        return <span className={`${base} bg-red-50 text-red-700 border border-red-200`}>Failed</span>;
+      case 'CANCELED':
+      case 'CANCELLED':
+        return <span className={`${base} bg-red-50 text-red-700 border border-red-200`}>Canceled</span>;
+      case 'REFUNDED':
+        // Show interim "Refund" until provider completes cancel flow (webhook will later set Canceled)
+        return <span className={`${base} bg-blue-50 text-blue-700 border border-blue-200`}>Refund</span>;
+      default:
+        return status ? <span className={`${base} bg-gray-100 text-gray-700 border border-gray-200`}>{status}</span>
+                       : <span className={`${base} bg-gray-100 text-gray-500 border border-gray-200`}>—</span>;
+    }
+  };
+
+  const payloadPretty = useMemo(() => {
+    if (!selected?.raw_payload) return null;
+    try { return JSON.stringify(selected.raw_payload, null, 2); } catch { return String(selected.raw_payload); }
+  }, [selected]);
+
+  const statusPt = (statusValue?: string | null) => {
+    const s = String(statusValue || '').toUpperCase();
+    switch (s) {
+      case 'PAID': return 'Pago';
+      case 'PENDING': return 'Aguardando pagamento';
+      case 'PROCESSING': return 'Processando';
+      case 'CANCELED':
+      case 'CANCELLED': return 'Canceled';
+      case 'REFUNDED': return 'Refund';
+      case 'FAILED':
+      case 'REFUSED': return 'Falhou';
+      default: return s || '—';
+    }
+  };
+
+  return (
+    <>
+      <div className="overflow-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50/80 text-xs text-gray-600">
+            <tr>
+              <th className="px-2 py-2 text-left">Client</th>
+              <th className="px-2 py-2 text-left">Email</th>
+              <th className="px-2 py-2 text-left">Business</th>
+              <th className="px-2 py-2 text-left">Staff</th>
+              <th className="px-2 py-2 text-left">Order</th>
+              <th className="px-2 py-2 text-left">Charge</th>
+              <th className="px-2 py-2 text-left">Product</th>
+              <th className="px-2 py-2 text-right">Amount</th>
+              <th className="px-2 py-2 text-left">Curr</th>
+              <th className="px-2 py-2 text-left">Installments</th>
+              <th className="px-2 py-2 text-left">Method</th>
+              <th className="px-2 py-2 text-left">Status</th>
+              <th className="px-2 py-2 text-left">Created</th>
+              <th className="px-2 py-2 text-left">ID</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {transactions.map((t) => (
+              <tr key={t.id} className="hover:bg-gray-50 cursor-zoom-in" onDoubleClick={() => onRowDoubleClick(t)}>
+                <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.patient_name || t.patient_profile_id}</td>
+                <td className="px-2 py-2 whitespace-nowrap max-w-[180px] truncate">{t.patient_email || ''}</td>
+                <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.clinic_name || t.clinic_id}</td>
+                <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.doctor_name || t.doctor_id}</td>
+                <td className="px-2 py-2 whitespace-nowrap">{t.provider_order_id}</td>
+                <td className="px-2 py-2 whitespace-nowrap">{t.provider_charge_id}</td>
+                <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.product_id}</td>
+                <td className="px-2 py-2 text-right whitespace-nowrap">{formatAmount(t.amount_cents as any, t.currency)}</td>
+                <td className="px-2 py-2 whitespace-nowrap">{t.currency}</td>
+                <td className="px-2 py-2 whitespace-nowrap">{t.installments}</td>
+                <td className="px-2 py-2 whitespace-nowrap">{t.payment_method_type}</td>
+                <td className="px-2 py-2 whitespace-nowrap">{badgeFor(t.status)}</td>
+                <td className="px-2 py-2 text-gray-500 whitespace-nowrap">{formatDate(t.created_at)}</td>
+                <td className="px-2 py-2 whitespace-nowrap">{t.id}</td>
+              </tr>
+            ))}
+            {transactions.length === 0 && (
+              <tr><td className="px-3 py-6 text-gray-500" colSpan={14}>No rows.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setShowPayload(false); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-white border border-gray-200 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-[18px] font-semibold text-gray-900">Transaction details</DialogTitle>
+          </DialogHeader>
+          {selected && (
+            <div className="space-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-2">
+                <div><span className="text-gray-500">Order:</span> {selected.provider_order_id || '—'}</div>
+                <div><span className="text-gray-500">Charge:</span> {selected.provider_charge_id || '—'}</div>
+                <div><span className="text-gray-500">Método:</span> {(selected.payment_method_type || '—').toUpperCase()}</div>
+                <div><span className="text-gray-500">Status:</span> {statusPt(selected.status)}</div>
+                <div><span className="text-gray-500">Valor:</span> {formatAmount(selected.amount_cents as any, selected.currency)}</div>
+                <div><span className="text-gray-500">Parcelas:</span> {selected.installments || '—'}</div>
+                <div><span className="text-gray-500">Cliente:</span> {selected.patient_name || selected.patient_profile_id || '—'}</div>
+                <div><span className="text-gray-500">Email:</span> {selected.patient_email || '—'}</div>
+                <div><span className="text-gray-500">Business:</span> {selected.clinic_name || selected.clinic_id || '—'}</div>
+                <div><span className="text-gray-500">Staff:</span> {selected.doctor_name || selected.doctor_id || '—'}</div>
+                <div><span className="text-gray-500">Criado em:</span> {formatDate(selected.created_at)}</div>
+                <div><span className="text-gray-500">Tx ID:</span> {selected.id}</div>
+              </div>
+              {canRefund && (
+                <div className="mt-3 flex items-center justify-end gap-2">
+                  {refundError && <div className="text-xs text-red-600 mr-auto">{refundError}</div>}
+                  <button
+                    type="button"
+                    onClick={onRefund}
+                    disabled={refunding}
+                    className={`h-8 px-3 rounded-md text-white ${refunding ? 'bg-gray-400' : 'bg-black hover:bg-gray-900'}`}
+                  >{refunding ? 'Estornando...' : 'Estornar'}</button>
+                </div>
+              )}
+              {payloadPretty && (
+                <div className="mt-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-gray-700 font-medium">Raw payload</div>
+                    <button
+                      type="button"
+                      onClick={() => setShowPayload((v) => !v)}
+                      className="text-xs text-blue-600 hover:underline"
+                    >{showPayload ? 'Ocultar' : 'Mostrar'}</button>
+                  </div>
+                  {showPayload && (
+                    <pre className="mt-2 text-xs bg-gray-50 border border-gray-200 rounded-lg p-2 overflow-auto max-h-[55vh]">{payloadPretty}</pre>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

@@ -28,18 +28,14 @@ export async function GET(request: NextRequest) {
       sessionRole: session?.user?.role || null,
     });
 
-    // Load patient user with relationships and potential doctor info
+    // Load minimal user info (avoid selecting enum-like columns)
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        // Bring a few relationships to decide priority on the app side (when the user is PATIENT)
-        patient_relationships: {
-          include: {
-            doctor: { select: { id: true, name: true, email: true, image: true, doctor_slug: true } }
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 5
-        },
+      select: {
+        id: true,
+        role: true,
+        doctor_id: true,
+        referral_code: true,
       }
     });
 
@@ -49,23 +45,21 @@ export async function GET(request: NextRequest) {
 
     // Determine if this user can act as a patient in the current context
     let asPatient = user.role === 'PATIENT';
-    let rels = ((user as any)?.patient_relationships as any[]) || [];
-
-    // If not a PATIENT by role, see if this user has any doctor-patient relationship as a patient
-    if (!asPatient) {
-      const rel = await prisma.doctorPatientRelationship.findFirst({
-        where: { patientId: userId },
-        include: { doctor: { select: { id: true, name: true, email: true, image: true, doctor_slug: true } } },
-        orderBy: { createdAt: 'desc' },
-      });
-      if (rel) {
-        asPatient = true;
-        rels = [rel as any];
-      }
-    }
+    // Use PatientProfile as the canonical patient->doctor linkage in this schema
+    const profiles = await prisma.patientProfile.findMany({
+      where: { userId: userId },
+      include: {
+        doctor: { select: { id: true, name: true, email: true, image: true, doctor_slug: true } }
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 5,
+    });
+    const rels = profiles as any[];
+    if (profiles.length > 0) asPatient = true;
 
     if (!asPatient) {
-      return NextResponse.json({ success: false, message: 'Forbidden: only patients' }, { status: 403 });
+      // Be tolerant in mixed-role contexts: return success with nulls
+      return NextResponse.json({ success: true, data: { doctor: null, doctorId: null, doctorName: null, doctorSlug: null, referralCode: null } });
     }
 
     // Resolve doctor in the following priority:
@@ -95,12 +89,12 @@ export async function GET(request: NextRequest) {
       })),
     });
     if (!doctor && rels.length) {
-      const primaryActive = rels.find((r: any) => r?.isPrimary === true && r?.isActive === true && r?.doctor);
+      // Prefer active profiles, else most recent
       const active = rels.find((r: any) => r?.isActive === true && r?.doctor);
-      const anyRel = rels.find((r: any) => r?.doctor);
-      const chosen = primaryActive || active || anyRel || null;
+      const anyRel = rels[0];
+      const chosen = active || anyRel || null;
       console.debug('[patients/referral] chosen relationship rule', {
-        rule: primaryActive ? 'primary+active' : active ? 'active' : anyRel ? 'any' : 'none',
+        rule: active ? 'active' : anyRel ? 'any' : 'none',
         chosenDoctorId: chosen?.doctor?.id ?? null,
         chosenDoctorSlug: chosen?.doctor?.doctor_slug ?? null,
       });

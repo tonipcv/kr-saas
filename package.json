@@ -7,6 +7,10 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
+    "seed:plans": "node scripts/seed-plans.js --apply",
+    "migrate:public-template": "node scripts/migrate-public-page-template.js",
+    "audit:schema-models": "node scripts/audit-prisma-schema-models.js",
+    "audit:schema-models:clean": "WRITE_CLEANED=true node scripts/audit-prisma-schema-models.js",
     "migrate:public-fields": "node scripts/run-public-fields-migration.js",
     "seed": "node prisma/seed.js",
     "seed:js": "node scripts/seed-complete-system.js",
@@ -20,7 +24,11 @@
     "test-clinic-referrals": "node scripts/test-clinic-referrals.js",
     "test-admin-clinic-referrals": "node scripts/test-admin-clinic-referrals.js",
     "test:emails": "ts-node src/tests/email-templates/test-emails.ts",
-    "migrate:patient-profiles": "node scripts/migrate-patient-profiles.js"
+    "migrate:patient-profiles": "node scripts/migrate-patient-profiles.js",
+    "migrate:drop-legacy": "node scripts/drop-legacy-tables.js",
+    "delete:user": "node scripts/delete-user-by-email.js",
+    "delete:clinic": "node scripts/delete-clinic.js",
+    "delete:clinics:owner": "node scripts/delete-clinics-by-owner-email.js"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
@@ -115,6 +123,7 @@
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^4.6.0",
+    "autoprefixer": "^10.4.21",
     "dotenv": "^16.6.1",
     "eslint": "^9",
     "eslint-config-next": "15.1.2",

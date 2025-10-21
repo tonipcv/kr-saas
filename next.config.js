@@ -21,7 +21,11 @@ const nextConfig = {
     return config
   },
   images: {
-    domains: ['images.unsplash.com', 'boop-minioboop.dpbdp1.easypanel.host', 'ui-avatars.com'],
+    remotePatterns: [
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: 'boop-minioboop.dpbdp1.easypanel.host' },
+      { protocol: 'https', hostname: 'ui-avatars.com' },
+    ],
   },
 }
 

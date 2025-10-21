@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { useClinic } from '@/contexts/clinic-context';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -98,6 +99,7 @@ interface ImportResults {
 export default function PatientsPage() {
   const { data: session } = useSession();
   const { currentClinic } = useClinic();
+  const router = useRouter();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -114,7 +116,7 @@ export default function PatientsPage() {
   const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
   const [isImprovingNotes, setIsImprovingNotes] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(6);
+  const [itemsPerPage] = useState(40);
   const [showOptionalFields, setShowOptionalFields] = useState(false);
   const [balances, setBalances] = useState<Record<string, number>>({});
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
@@ -1068,7 +1070,12 @@ export default function PatientsPage() {
                 {currentPatients.map((patient) => {
                   const activeProtocol = getActiveProtocol(patient);
                   return (
-                    <div key={patient.id} className="rounded-2xl border border-gray-200 bg-white shadow-sm p-4">
+                    <div
+                      key={patient.id}
+                      className="rounded-2xl border border-gray-200 bg-white shadow-sm p-4"
+                      onDoubleClick={() => router.push(`/business/clients/${patient.id}`)}
+                      title="Double click to open client details"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-start gap-3 min-w-0">
                           <div className="h-9 w-9 rounded-full bg-gray-100 text-gray-700 flex items-center justify-center text-xs font-semibold">
@@ -1165,7 +1172,12 @@ export default function PatientsPage() {
                     {currentPatients.map((patient) => {
                       const activeProtocol = getActiveProtocol(patient);
                       return (
-                        <tr key={patient.id} className="hover:bg-gray-50/60">
+                        <tr
+                          key={patient.id}
+                          className="hover:bg-gray-50/60 cursor-pointer"
+                          onDoubleClick={() => router.push(`/business/clients/${patient.id}`)}
+                          title="Double click to open client details"
+                        >
                           <td className="whitespace-nowrap py-3.5 pl-4 pr-2 sm:pl-6">
                             <input
                               type="checkbox"

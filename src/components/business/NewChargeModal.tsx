@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,9 +15,13 @@ type Props = {
 };
 
 export default function NewChargeModal({ open, onOpenChange, client, defaultSlug = "" }: Props) {
+  const router = useRouter();
   const [slug, setSlug] = useState<string>(defaultSlug);
   const [productId, setProductId] = useState<string>("");
+  const [offers, setOffers] = useState<Array<{ id: string; name: string; priceCents: number; maxInstallments?: number | null; isSubscription?: boolean }>>([]);
+  const [offerId, setOfferId] = useState<string>("");
   const [method, setMethod] = useState<"pix" | "card">("pix");
+  const [installments, setInstallments] = useState<number>(1);
   const [name, setName] = useState<string>(client?.name || "");
   const [email, setEmail] = useState<string>(client?.email || "");
   const [phone, setPhone] = useState<string>(client?.phone || "");
@@ -26,6 +31,7 @@ export default function NewChargeModal({ open, onOpenChange, client, defaultSlug
   const [loadingCards, setLoadingCards] = useState(false);
   const [loadingClinics, setLoadingClinics] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [loadingOffers, setLoadingOffers] = useState(false);
   const [clinics, setClinics] = useState<Array<{ id: string; name: string; slug?: string | null }>>([]);
   const [selectedClinicId, setSelectedClinicId] = useState<string>("");
   const [products, setProducts] = useState<Array<{ id: string; name: string; price?: number | null }>>([]);
@@ -66,11 +72,11 @@ export default function NewChargeModal({ open, onOpenChange, client, defaultSlug
         // Choose default clinic: by defaultSlug match, otherwise first
         let chosen = mapped[0]?.id || '';
         if (defaultSlug) {
-          const found = mapped.find((c) => (c.slug || '') === defaultSlug);
+          const found = mapped.find((c: any) => (c.slug || '') === defaultSlug);
           if (found) chosen = found.id;
         }
         setSelectedClinicId(chosen);
-        const chosenClinic = mapped.find(c => c.id === chosen);
+        const chosenClinic = mapped.find((c: any) => c.id === chosen);
         setSlug(chosenClinic?.slug || '');
       } finally {
         setLoadingClinics(false);
@@ -96,6 +102,35 @@ export default function NewChargeModal({ open, onOpenChange, client, defaultSlug
     };
     loadProducts();
   }, [open, selectedClinicId]);
+
+  // Load offers whenever product changes
+  useEffect(() => {
+    if (!open || !productId) return;
+    const loadOffers = async () => {
+      setLoadingOffers(true);
+      try {
+        const res = await fetch(`/api/products/${encodeURIComponent(productId)}/offers`);
+        const json = await res.json().catch(() => ({}));
+        const list = Array.isArray(json?.offers) ? json.offers : [];
+        const mapped = list.map((o: any) => ({
+          id: o.id,
+          name: o.name || 'Oferta',
+          priceCents: Number(o.priceCents || 0),
+          maxInstallments: Number(o.maxInstallments || 1),
+          isSubscription: !!o.isSubscription,
+        }));
+        setOffers(mapped);
+        const first = mapped[0];
+        setOfferId(first ? first.id : "");
+        setInstallments(1);
+      } finally {
+        setLoadingOffers(false);
+      }
+    };
+    loadOffers();
+  }, [open, productId]);
+
+  const fmtMoney = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
 
   // Load saved cards when modal opens or when slug/client changes
   useEffect(() => {
@@ -142,13 +177,14 @@ export default function NewChargeModal({ open, onOpenChange, client, defaultSlug
       const payload: any = {
         productId: productId,
         slug,
+        offerId: offerId || undefined,
         buyer: {
           name,
           email,
           phone,
         },
         payment: method === "card"
-          ? { method: "card", saved_card_id: selectedSavedCardId, provider_customer_id: selectedProviderCustomerId }
+          ? { method: "card", installments, saved_card_id: selectedSavedCardId, provider_customer_id: selectedProviderCustomerId }
           : { method: "pix" },
       };
       const res = await fetch("/api/checkout/create", {
@@ -159,6 +195,20 @@ export default function NewChargeModal({ open, onOpenChange, client, defaultSlug
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || json?.message || "Erro ao criar cobrança");
       setResult(json);
+      // Open receipt in a new tab for quick verification
+      if (json?.order_id) {
+        try {
+          const url = `/${encodeURIComponent(slug)}/checkout/success?order_id=${encodeURIComponent(json.order_id)}&method=${encodeURIComponent(method)}&product_id=${encodeURIComponent(productId)}`;
+          window.open(url, "_blank");
+        } catch {}
+      }
+      // If card payment is immediately approved, close modal and refresh client page
+      if (method === "card" && json?.card?.approved) {
+        // Small delay to let result render quickly (optional)
+        onOpenChange(false);
+        // Refresh server data (transactions/methods/customers tabs)
+        try { router.refresh(); } catch {}
+      }
     } catch (e: any) {
       setError(e?.message || "Erro inesperado");
     } finally {
@@ -206,7 +256,7 @@ export default function NewChargeModal({ open, onOpenChange, client, defaultSlug
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="pix">PIX</SelectItem>
-                  <SelectItem value="card" disabled={loadingCards || savedCards.length === 0}>
+                  <SelectItem value="card">
                     Card (saved)
                   </SelectItem>
                 </SelectContent>
@@ -224,7 +274,7 @@ export default function NewChargeModal({ open, onOpenChange, client, defaultSlug
                 <SelectValue placeholder={loadingProducts ? 'Loading...' : 'Select a product'} />
               </SelectTrigger>
               <SelectContent>
-                {products.map((p) => (
+                {products.map((p: any) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.name}
                   </SelectItem>
@@ -233,27 +283,91 @@ export default function NewChargeModal({ open, onOpenChange, client, defaultSlug
             </Select>
             <p className="text-xs text-gray-500 mt-1">Produtos da Business selecionada.</p>
           </div>
+
+          {/* Offer selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Offer</label>
+            <Select
+              value={offerId}
+              onValueChange={(v) => {
+                setOfferId(v);
+                setInstallments(1);
+              }}
+              disabled={loadingOffers || offers.length === 0}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={loadingOffers ? 'Loading...' : 'Select an offer'} />
+              </SelectTrigger>
+              <SelectContent>
+                {offers.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>
+                    {o.name} — {fmtMoney(o.priceCents)}{o.isSubscription ? ' (Assinatura)' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-500 mt-1">Selecione a oferta (preço e regras de parcelamento).</p>
+          </div>
+
+          {/* Installments selection (card only) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Parcelas</label>
+            <Select
+              value={String(installments)}
+              onValueChange={(v) => setInstallments(Number(v) || 1)}
+              disabled={method !== 'card' || !offerId}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={method === 'card' ? 'Selecione parcelas' : 'Disponível apenas para cartão'} />
+              </SelectTrigger>
+              <SelectContent>
+                {(() => {
+                  const max = offers.find((o: any) => o.id === offerId)?.maxInstallments || 1;
+                  const items: React.ReactNode[] = [];
+                  for (let i = 1; i <= max; i++) {
+                    items.push(
+                      <SelectItem key={i} value={String(i)}>
+                        {i}x
+                      </SelectItem>
+                    );
+                  }
+                  return items;
+                })()}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-500 mt-1">Parcelamento limitado pela oferta e regras de negócio.</p>
+          </div>
+
           {method === "card" && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Saved card</label>
                 <Select
                   value={selectedSavedCardId}
-                  onValueChange={(v) => setSelectedSavedCardId(v)}
+                  onValueChange={(v) => {
+                    setSelectedSavedCardId(v);
+                    const found = savedCards.find((x) => x.provider_card_id === v);
+                    setSelectedProviderCustomerId(found?.provider_customer_id || "");
+                  }}
                   disabled={loadingCards || savedCards.length === 0}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={loadingCards ? "Loading..." : "Select a card"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {savedCards.map((c) => (
-                      <SelectItem key={c.provider_card_id} value={c.provider_card_id} onClick={() => setSelectedProviderCustomerId(c.provider_customer_id || "") }>
+                    {savedCards.map((c: any) => (
+                      <SelectItem key={c.provider_card_id} value={c.provider_card_id}>
                         {`${c.brand ?? "Card"} •••• ${c.last4 ?? ""}  exp ${c.exp_month ?? ""}/${c.exp_year ?? ""}`}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-500 mt-1">Cartões salvos deste cliente para o business.</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Cartões salvos deste cliente para o business.
+                  {(!loadingCards && savedCards.length === 0) && (
+                    <span className="ml-1 text-gray-600">Nenhum cartão salvo. Peça um checkout de cartão para salvar.</span>
+                  )}
+                </p>
               </div>
             </div>
           )}
@@ -275,6 +389,17 @@ export default function NewChargeModal({ open, onOpenChange, client, defaultSlug
           {result && (
             <div className="text-sm text-gray-800 bg-gray-50 border border-gray-200 p-3 rounded-xl">
               <div className="font-medium mb-1">Charge created</div>
+              {result?.order_id && (
+                <div className="text-xs text-gray-600">Order: {result.order_id}</div>
+              )}
+              {method === "card" && result?.card && (
+                <div className="mt-1 text-xs text-gray-700">
+                  <div>Status: {String(result.card.status || '')}</div>
+                  {result.card.approved === false && result.card.acquirer_message && (
+                    <div>Message: {result.card.acquirer_message}</div>
+                  )}
+                </div>
+              )}
               {result?.payment_url && (
                 <div className="mt-1">
                   <a href={result.payment_url} target="_blank" className="text-blue-600 underline">
@@ -286,6 +411,18 @@ export default function NewChargeModal({ open, onOpenChange, client, defaultSlug
                 <div className="mt-1">
                   <a href={result.pix.qr_code_url} target="_blank" className="text-blue-600 underline">
                     PIX QR Code
+                  </a>
+                </div>
+              )}
+              {/* Link to success page when we have order id */}
+              {result?.order_id && (
+                <div className="mt-2">
+                  <a
+                    href={`/${encodeURIComponent(slug)}/checkout/success?order_id=${encodeURIComponent(result.order_id)}&method=${encodeURIComponent(method)}&product_id=${encodeURIComponent(productId)}`}
+                    target="_blank"
+                    className="text-blue-600 underline"
+                  >
+                    View receipt
                   </a>
                 </div>
               )}

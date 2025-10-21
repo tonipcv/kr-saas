@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { getClinicSubscriptionStatus } from '@/lib/subscription';
+import { Prisma, PlanTier, ClinicRole } from '@prisma/client';
 
 // ========== TIPOS ==========
 export interface ClinicWithDetails {
@@ -348,26 +349,6 @@ export async function addDoctorToClinic(
     });
 
     if (existingMember) {
-      return { success: false, message: 'Médico já é membro desta clínica' };
-    }
-
-    // Adicionar como membro
-    const member = await prisma.clinicMember.create({
-      data: {
-        clinicId,
-        userId: doctor.id,
-        role
-      },
-      include: {
-        user: {
-          select: { id: true, name: true, email: true, role: true }
-        }
-      }
-    });
-
-    return { 
-      success: true, 
-      message: 'Médico adicionado com sucesso', 
       member 
     };
 
@@ -438,7 +419,7 @@ export async function isClinicAdmin(userId: string, clinicId?: string): Promise<
     where: {
       clinicId,
       userId,
-      role: 'ADMIN',
+      role: ClinicRole.MANAGER,
       isActive: true
     }
   });
@@ -467,13 +448,36 @@ export async function ensureDoctorHasClinic(doctorId: string): Promise<{ success
       return { success: true, clinic: existingClinic, message: 'Médico já possui clínica' };
     }
 
-    // Buscar plano padrão
-    const defaultPlan = await prisma.clinicPlan.findFirst({
-      where: { tier: 'STARTER', isActive: true }
+    // Buscar plano padrão, criando automaticamente se não existir
+    let defaultPlan = await prisma.clinicPlan.findFirst({
+      where: { tier: PlanTier.STARTER, isActive: true }
     });
 
     if (!defaultPlan) {
-      return { success: false, message: 'Plano padrão não encontrado' };
+      try {
+        defaultPlan = await prisma.clinicPlan.create({
+          data: {
+            name: 'Starter',
+            tier: PlanTier.STARTER,
+            description: 'Plano inicial criado automaticamente',
+            monthlyPrice: new Prisma.Decimal(99),
+            baseDoctors: 1,
+            basePatients: 500,
+            features: {
+              maxReferralsPerMonth: 500,
+              maxProducts: 50,
+              customBranding: false,
+              advancedReports: false,
+            },
+            trialDays: 14,
+            requireCard: false,
+            isActive: true,
+            isPublic: true,
+          },
+        });
+      } catch (e) {
+        return { success: false, message: 'Plano padrão não encontrado e falha ao criar automaticamente' };
+      }
     }
 
     // Criar clínica automática APENAS se não for membro de nenhuma clínica
@@ -529,7 +533,7 @@ export async function ensureDoctorHasClinic(doctorId: string): Promise<{ success
       data: {
         clinicId: clinic.id,
         userId: doctorId,
-        role: 'ADMIN'
+        role: ClinicRole.OWNER
       }
     });
 

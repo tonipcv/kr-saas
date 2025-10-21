@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
     const normalizedEmail = email.toLowerCase().trim();
     const clinicNameFromToken = decodedToken.clinicName || name; // fallback para compatibilidade
-    const subdomain = (decodedToken.subdomain || '').toLowerCase().trim() || null;
+    const subdomainFromToken = decodedToken.subdomain || decodedToken.slug; // preferir subdomain
 
     if (!clinicNameFromToken) {
       return NextResponse.json(
@@ -53,64 +53,41 @@ export async function POST(req: Request) {
       );
     }
 
-    // Gerar slug automaticamente a partir do clinicName
-    const baseSlug = clinicNameFromToken
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/\p{Diacritic}/gu, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 255);
-
-    // Garantir unicidade do slug (com fallback SQL e limite de tentativas)
-    const slugExists = async (candidate: string): Promise<boolean> => {
-      try {
-        const found = await prisma.clinic.findFirst({
-          where: { OR: [{ slug: candidate }, { /* subdomain may not be known by client */ } as any] }
-        });
-        if (found) return true;
-      } catch {
-        // ignore
-      }
-      // Fallback cru que cobre slug e subdomain
-      const rows = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT 1 FROM clinics WHERE slug = $1 OR subdomain = $1 LIMIT 1`, candidate
-      );
-      return Array.isArray(rows) && rows.length > 0;
-    };
-
-    let finalSlug = baseSlug || `clinic-${Date.now()}`;
-    let suffix = 1;
-    let attempts = 0;
-    const MAX_ATTEMPTS = 50;
-    while (attempts < MAX_ATTEMPTS && (await slugExists(finalSlug))) {
-      finalSlug = `${baseSlug}-${suffix++}`.slice(0, 255);
-      attempts++;
-    }
+    // Slug handling simplified: use provided subdomain as both slug and subdomain when available
 
     // Verificar se o email já está em uso
     const existingUser = await prisma.user.findUnique({
       where: { email: normalizedEmail }
     });
 
-    // Buscar (ou criar) plano Free como padrão (via SQL para compatibilidade)
-    const resolveFreePlanId = async (): Promise<string> => {
-      const rows = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT id FROM subscription_plans WHERE LOWER(name) = 'free' LIMIT 1`
-      );
-      if (rows && rows[0]?.id) return rows[0].id as string;
-      const newId = uuidv4();
-      // Tentar criar um plano mínimo "Free" com defaults seguros
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO subscription_plans (id, name, description, price, is_active, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
-        newId,
-        'Free',
-        'Plano gratuito padrão (auto-criado)',
-        0,
-        true
-      );
-      return newId;
+    // Buscar (ou criar) plano Free como padrão (tolerante a ausência de tabela)
+    const resolveFreePlanId = async (): Promise<string | null> => {
+      try {
+        const rows = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT id FROM subscription_plans WHERE LOWER(name) = 'free' LIMIT 1`
+        );
+        if (rows && rows[0]?.id) return rows[0].id as string;
+        const newId = uuidv4();
+        // Tentar criar um plano mínimo "Free" (se a tabela existir)
+        try {
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO subscription_plans (id, name, description, price, is_active, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
+            newId,
+            'Free',
+            'Plano gratuito padrão (auto-criado)',
+            0,
+            true
+          );
+          return newId;
+        } catch (e) {
+          // Tabela pode não existir; seguir sem plano explícito
+          return null;
+        }
+      } catch (e) {
+        // Tabela pode não existir; seguir sem plano explícito
+        return null;
+      }
     };
     const freePlanId = await resolveFreePlanId();
 
@@ -165,17 +142,23 @@ export async function POST(req: Request) {
           where: { id: existingClinicForOwner.id },
           data: {
             name: clinicNameFromToken,
-            slug: finalSlug,
-            subdomain: subdomain ?? undefined,
-            isActive: true
+            isActive: true,
+            ...(subdomainFromToken ? { subdomain: subdomainFromToken, slug: subdomainFromToken } : {}),
           }
         });
       } catch {
         // Fallback SQL
-        await prisma.$executeRawUnsafe(
-          `UPDATE clinics SET name = $1, slug = $2, subdomain = $3, "isActive" = $4, "updatedAt" = NOW() WHERE id = $5`,
-          clinicNameFromToken, finalSlug, subdomain ?? null, true, existingClinicForOwner.id
-        );
+        if (subdomainFromToken) {
+          await prisma.$executeRawUnsafe(
+            `UPDATE clinics SET name = $1, "isActive" = $2, slug = $3, subdomain = $3, "updatedAt" = NOW() WHERE id = $4`,
+            clinicNameFromToken, true, subdomainFromToken, existingClinicForOwner.id
+          );
+        } else {
+          await prisma.$executeRawUnsafe(
+            `UPDATE clinics SET name = $1, "isActive" = $2, "updatedAt" = NOW() WHERE id = $3`,
+            clinicNameFromToken, true, existingClinicForOwner.id
+          );
+        }
         const row = await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM clinics WHERE id = $1`, existingClinicForOwner.id);
         clinic = row && row[0] ? row[0] : { id: existingClinicForOwner.id };
       }
@@ -187,17 +170,23 @@ export async function POST(req: Request) {
           data: {
             id: clinicId,
             name: clinicNameFromToken,
-            slug: finalSlug,
-            subdomain: subdomain ?? undefined,
             ownerId: doctor.id,
-            isActive: true
+            isActive: true,
+            ...(subdomainFromToken ? { subdomain: subdomainFromToken, slug: subdomainFromToken } : {}),
           }
         });
       } catch {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO clinics (id, name, slug, subdomain, "ownerId", "isActive", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
-          clinicId, clinicNameFromToken, finalSlug, subdomain ?? null, doctor.id, true
-        );
+        if (subdomainFromToken) {
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO clinics (id, name, slug, subdomain, "ownerId", "isActive", "createdAt", "updatedAt") VALUES ($1, $2, $3, $3, $4, $5, NOW(), NOW())`,
+            clinicId, clinicNameFromToken, subdomainFromToken, doctor.id, true
+          );
+        } else {
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO clinics (id, name, "ownerId", "isActive", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+            clinicId, clinicNameFromToken, doctor.id, true
+          );
+        }
         const row = await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM clinics WHERE id = $1`, clinicId);
         clinic = row && row[0] ? row[0] : { id: clinicId };
       }
@@ -208,7 +197,7 @@ export async function POST(req: Request) {
     const now = new Date();
     const trialEnd = resolvedTrialDays > 0 ? new Date(now.getTime() + resolvedTrialDays * 24 * 60 * 60 * 1000) : null;
 
-    // Criar assinatura Free (legado) - nível CLÍNICA via SQL para evitar incompatibilidades de client
+    // Criar assinatura Free (legado) - nível CLÍNICA via SQL; tolera plan_id nulo quando tabela de planos não existe
     // Evitar duplicar assinatura se já existir alguma ativa/trial
     const legacySub = await prisma.$queryRawUnsafe<any[]>(
       `SELECT id FROM unified_subscriptions 

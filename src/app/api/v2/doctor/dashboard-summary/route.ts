@@ -63,43 +63,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get total patients count (distinct users) to match Patients page semantics
-    // Count users that have an active relationship with this doctor.
-    // When clinicId is provided, include legacy relationships with clinicId = null as well.
-    const totalPatients = await prisma.user.count({
-      where: {
-        patient_relationships: {
-          some: clinicId
-            ? {
-                doctorId: userId,
-                isActive: true,
-                OR: [
-                  { clinicId: clinicId },
-                  { clinicId: null },
-                ],
-              }
-            : {
-                doctorId: userId,
-                isActive: true,
-              },
-        },
-      },
+    // Total patients: count active PatientProfile rows for this doctor.
+    // Note: PatientProfile has no clinicId field; when clinicId is provided and access is validated,
+    // we still count all profiles for the doctor (clinic-scoped filtering unsupported with current schema).
+    const totalPatients = await prisma.patientProfile.count({
+      where: { doctorId: userId, isActive: true },
     });
 
     // Get active protocols count
-    const activeProtocols = await prisma.protocolPrescription.count({
-      where: {
-        prescribed_by: userId,
-        status: { in: ['ACTIVE', 'PRESCRIBED'] }
-      }
-    });
+    // Active protocols: if protocol tables were removed, default to 0
+    let activeProtocols = 0;
+    try {
+      activeProtocols = await (prisma as any).protocolPrescription.count({
+        where: { prescribed_by: userId, status: { in: ['ACTIVE', 'PRESCRIBED'] } },
+      });
+    } catch {}
 
     // Get total protocols count
-    const totalProtocols = await prisma.protocol.count({
-      where: {
-        doctor_id: userId
-      }
-    });
+    let totalProtocols = 0;
+    try {
+      totalProtocols = await (prisma as any).protocol.count({ where: { doctor_id: userId } });
+    } catch {}
 
     // Get completed today count
     const today = new Date();
@@ -108,18 +92,16 @@ export async function GET(request: NextRequest) {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     // Use ProtocolTaskProgress to count completed tasks today
-    const completedToday = await prisma.protocolTaskProgress.count({
-      where: {
-        completedAt: {
-          gte: today,
-          lt: tomorrow
+    let completedToday = 0;
+    try {
+      completedToday = await (prisma as any).protocolTaskProgress.count({
+        where: {
+          completedAt: { gte: today, lt: tomorrow },
+          prescription: { prescribed_by: userId },
+          status: 'COMPLETED',
         },
-        prescription: {
-          prescribed_by: userId
-        },
-        status: 'COMPLETED'
-      }
-    });
+      });
+    } catch {}
 
     // Return dashboard stats
     return NextResponse.json({

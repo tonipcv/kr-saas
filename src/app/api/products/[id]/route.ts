@@ -21,7 +21,8 @@ export async function GET(
 
     // Verificar se é médico
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id }
+      where: { id: session.user.id },
+      select: { id: true, role: true }
     });
 
     if (!user || user.role !== 'DOCTOR') {
@@ -35,17 +36,9 @@ export async function GET(
       include: {
         _count: {
           select: {
-            protocol_products: true
-          }
-        },
-        protocol_products: {
-          include: {
-            protocols: {
-              select: {
-                id: true,
-                name: true
-              }
-            }
+            purchases: true,
+            categories: true,
+            coupons: true,
           }
         },
         // include categories through pivot
@@ -78,14 +71,10 @@ export async function GET(
       categories: (product as any)?.categories?.map((cp: any) => ({ id: cp.category.id, name: cp.category.name })) ?? [],
       categoryIds: (product as any)?.categories?.map((cp: any) => cp.category.id) ?? [],
       _count: {
-        protocolProducts: product._count.protocol_products
+        purchases: (product as any)._count?.purchases || 0,
+        categories: (product as any)._count?.categories || 0,
+        coupons: (product as any)._count?.coupons || 0,
       },
-      protocolProducts: product.protocol_products.map(pp => ({
-        protocol: {
-          id: pp.protocols.id,
-          name: pp.protocols.name
-        }
-      }))
     };
 
     return NextResponse.json(transformedProduct);
@@ -111,7 +100,8 @@ export async function PUT(
 
     // Verificar se é médico
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id }
+      where: { id: session.user.id },
+      select: { id: true, role: true }
     });
 
     if (!user || user.role !== 'DOCTOR') {
@@ -129,7 +119,13 @@ export async function PUT(
       isActive = true,
       confirmationUrl,
       categoryIds,
-      priority
+      priority,
+      // Subscription related
+      type,
+      interval,
+      intervalCount,
+      trialDays,
+      autoRenew,
     } = body;
 
     // Verificar se o produto existe
@@ -148,20 +144,40 @@ export async function PUT(
       return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 });
     }
 
+    // Build update data incrementally
+    const updateData: any = {
+      name,
+      description,
+      price: originalPrice ? parseFloat(originalPrice) : existingProduct.price,
+      creditsPerUnit: typeof creditsPerUnit === 'number' ? creditsPerUnit : (creditsPerUnit != null ? parseFloat(creditsPerUnit) : existingProduct.creditsPerUnit),
+      imageUrl: imageUrl ?? (existingProduct as any)?.imageUrl ?? null,
+      category,
+      isActive,
+      confirmationUrl: confirmationUrl ?? (existingProduct as any)?.confirmationUrl ?? null,
+      priority: typeof priority === 'number' ? priority : (priority != null ? Number(priority) : (existingProduct as any)?.priority ?? 0),
+    };
+
+    // Apply subscription fields if provided
+    if (typeof type === 'string') {
+      if (type === 'SUBSCRIPTION') {
+        updateData.type = 'SUBSCRIPTION';
+        updateData.interval = interval ?? (existingProduct as any)?.interval ?? 'MONTH';
+        updateData.intervalCount = typeof intervalCount === 'number' ? intervalCount : (intervalCount != null ? Number(intervalCount) : (existingProduct as any)?.intervalCount ?? 1);
+        updateData.trialDays = typeof trialDays === 'number' ? trialDays : (trialDays != null ? Number(trialDays) : (existingProduct as any)?.trialDays ?? null);
+        updateData.autoRenew = typeof autoRenew === 'boolean' ? autoRenew : ((existingProduct as any)?.autoRenew ?? true);
+      } else if (type === 'PRODUCT') {
+        updateData.type = 'PRODUCT';
+        // Clear subscription-only fields when switching to PRODUCT
+        updateData.interval = null;
+        updateData.intervalCount = null;
+        updateData.trialDays = null;
+        updateData.autoRenew = null;
+      }
+    }
+
     const updatedProduct = await prisma.products.update({
       where: { id: productId },
-      data: {
-        name,
-        description,
-        price: originalPrice ? parseFloat(originalPrice) : existingProduct.price,
-        creditsPerUnit: typeof creditsPerUnit === 'number' ? creditsPerUnit : (creditsPerUnit != null ? parseFloat(creditsPerUnit) : existingProduct.creditsPerUnit),
-        // Atualizar imageUrl quando enviado
-        imageUrl: imageUrl ?? (existingProduct as any)?.imageUrl ?? null,
-        category,
-        isActive,
-        confirmationUrl: confirmationUrl ?? (existingProduct as any)?.confirmationUrl ?? null,
-        priority: typeof priority === 'number' ? priority : (priority != null ? Number(priority) : (existingProduct as any)?.priority ?? 0)
-      }
+      data: updateData,
     });
 
     // Sync categories pivot if categoryIds is provided (array of strings)
@@ -245,22 +261,10 @@ export async function DELETE(
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    // Verificar se é médico
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id }
-    });
-
-    if (!user || user.role !== 'DOCTOR') {
-      return NextResponse.json({ error: 'Acesso negado. Apenas médicos podem excluir produtos.' }, { status: 403 });
-    }
-
     // Verificar se o produto existe
     const existingProduct = await prisma.products.findFirst({
       where: {
         id: productId
-      },
-      include: {
-        protocol_products: true
       }
     });
 
@@ -268,11 +272,9 @@ export async function DELETE(
       return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 });
     }
 
-    // Verificar se há protocolos usando este produto
-    if (existingProduct.protocol_products.length > 0) {
-      return NextResponse.json({ 
-        error: 'Não é possível excluir produto que está sendo usado em protocolos. Remova das associações primeiro.' 
-      }, { status: 400 });
+    // Autorização: só o médico dono do produto pode excluir
+    if (existingProduct.doctorId && existingProduct.doctorId !== session.user.id) {
+      return NextResponse.json({ error: 'Acesso negado. Você não é o dono deste produto.' }, { status: 403 });
     }
 
     // Excluir produto

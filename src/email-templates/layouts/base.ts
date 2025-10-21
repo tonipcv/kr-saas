@@ -15,7 +15,7 @@ export function baseTemplate({
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>${clinicName}</title>
     </head>
-    <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #ffffff; line-height: 1.6; text-transform: uppercase;">
+    <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #ffffff; line-height: 1.6;">
       <div style="max-width: 600px; margin: 40px auto; padding: 0 20px; background-color: #ffffff;">
         <!-- Main Content -->
         ${content}

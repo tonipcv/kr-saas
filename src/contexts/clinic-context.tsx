@@ -64,11 +64,15 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
         const list: ClinicData[] = data.clinics || [];
         setAvailableClinics(list);
 
-        // Se já há clínica atual, atualizá-la com a versão mais recente pelo id
+        // Se já há clínica atual, atualizá-la com a versão mais recente pelo id;
+        // se não existir mais, limpar seleção
         if (currentClinic) {
           const updated = list.find((c: ClinicData) => c.id === currentClinic.id);
           if (updated) {
             setCurrentClinic(updated);
+          } else {
+            setCurrentClinic(null);
+            localStorage.removeItem('selectedClinicId');
           }
         }
 
@@ -94,6 +98,12 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
             list[0];
 
           setCurrentClinic(clinicToSelect);
+        }
+
+        // Se não há nenhuma clínica disponível, limpar seleção persistida
+        if (list.length === 0) {
+          if (currentClinic) setCurrentClinic(null);
+          localStorage.removeItem('selectedClinicId');
         }
 
         // Se a clínica atual não tem plano ativo (ou é Free) mas existe outra ativa/paga,
@@ -140,6 +150,14 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       // Disparar evento customizado para outras partes da aplicação
       window.dispatchEvent(new CustomEvent('clinicChanged', { 
         detail: { clinicId, clinic } 
+      }));
+    }
+    // Se a clínica solicitada não existe mais, limpar seleção
+    else {
+      setCurrentClinic(null);
+      localStorage.removeItem('selectedClinicId');
+      window.dispatchEvent(new CustomEvent('clinicChanged', { 
+        detail: { clinicId: null, clinic: null }
       }));
     }
   };

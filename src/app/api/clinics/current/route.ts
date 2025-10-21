@@ -66,12 +66,45 @@ export async function GET() {
 
     const clinic = rows[0] || null;
     if (!clinic) {
-      return NextResponse.json({ error: 'Nenhuma clínica encontrada' }, { status: 404 });
+      // Extra diagnostics to help understand why there is no clinic
+      const [ownedCount, memberCount] = await Promise.all([
+        prisma.clinic.count({ where: { ownerId: session.user.id, isActive: true } }).catch(() => 0),
+        prisma.clinicMember.count({ where: { userId: session.user.id, isActive: true } }).catch(() => 0),
+      ]);
+      let role: string | null = null;
+      try {
+        const u = await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true } });
+        role = u?.role ?? null;
+      } catch {}
+      return NextResponse.json(
+        {
+          error: 'Nenhuma clínica encontrada',
+          details: {
+            userId: session.user.id,
+            role,
+            ownedClinics: ownedCount,
+            memberClinics: memberCount,
+            hint: 'Crie uma clínica em /business/clinic ou inicie o fluxo de assinatura em /clinic/planos-trial',
+          },
+        },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({ clinic });
   } catch (e: any) {
     console.error('[clinics/current][GET] error', e);
-    return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: 'Internal error',
+        message: e?.message || null,
+        code: e?.code || null,
+        details: {
+          name: e?.name || null,
+          meta: e?.meta || null,
+        },
+      },
+      { status: 500 }
+    );
   }
 }

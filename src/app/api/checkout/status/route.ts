@@ -11,6 +11,7 @@ export async function GET(req: Request) {
     console.log('[checkout][status] order details', {
       id: order?.id,
       status: order?.status,
+      metadata: order?.metadata || null,
       items: order?.items?.map((item: any) => ({
         id: item?.id,
         code: item?.code,

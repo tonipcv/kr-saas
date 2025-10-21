@@ -42,8 +42,8 @@ export class SubscriptionService {
           ca.monthly_price as addon_price
         FROM clinic_subscriptions cs
         JOIN clinic_plans cp ON cp.id = cs.plan_id
-        LEFT JOIN clinic_add_on_subscriptions cas ON cas.subscription_id = cs.id
-        LEFT JOIN clinic_add_ons ca ON ca.id = cas.add_on_id
+        LEFT JOIN clinic_add_on_subscriptions cas ON cas."subscriptionId" = cs.id
+        LEFT JOIN clinic_add_ons ca ON ca.id = cas."addOnId"
         WHERE cs.clinic_id = ${clinicId}
         AND cs.status::text IN ('ACTIVE', 'TRIAL')
         ORDER BY cs.created_at DESC
