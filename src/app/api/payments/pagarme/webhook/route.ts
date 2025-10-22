@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { verifyPagarmeWebhookSignature } from '@/lib/pagarme';
+import { verifyPagarmeWebhookSignature, pagarmeUpdateCharge } from '@/lib/pagarme';
 import { pagarmeGetOrder } from '@/lib/pagarme';
 import { sendEmail } from '@/lib/email';
 import { baseTemplate } from '@/email-templates/layouts/base';
@@ -51,6 +51,66 @@ export async function POST(req: Request) {
             data: { status: normalized, lastSyncAt: new Date() }
           });
         }
+      }
+    }
+
+    // Subscription split via charge.created webhook
+    if (typeLower === 'charge.created') {
+      try {
+        const chargeIdForSplit = event?.data?.id || event?.id || null;
+        const chargeData = event?.data || {};
+        const metadata = chargeData?.metadata || {};
+        const subscriptionIdInCharge = metadata?.subscriptionId || chargeData?.subscription?.id || null;
+        const clinicIdInMeta = metadata?.clinicId || null;
+        
+        const ENABLE_SPLIT = String(process.env.PAGARME_ENABLE_SPLIT || '').toLowerCase() === 'true';
+        const platformRecipientId = String(process.env.PLATFORM_RECIPIENT_ID || process.env.PAGARME_PLATFORM_RECIPIENT_ID || '').trim() || null;
+        
+        if (ENABLE_SPLIT && subscriptionIdInCharge && chargeIdForSplit && clinicIdInMeta && platformRecipientId) {
+          // Lookup clinic merchant to get recipientId and splitPercent
+          const merchant = await prisma.merchant.findFirst({
+            where: { clinicId: String(clinicIdInMeta) },
+            select: { recipientId: true, splitPercent: true },
+          });
+          
+          if (merchant?.recipientId) {
+            const totalCents = Number(chargeData?.amount || 0);
+            if (totalCents > 0) {
+              const clinicPercent = Math.max(0, Math.min(100, Number(merchant.splitPercent || 70)));
+              const clinicAmount = Math.round(totalCents * clinicPercent / 100);
+              const platformAmount = totalCents - clinicAmount;
+              
+              const splitRules = [
+                {
+                  recipient_id: String(platformRecipientId),
+                  amount: platformAmount,
+                  type: 'flat',
+                  liable: true,
+                  charge_processing_fee: true,
+                },
+                {
+                  recipient_id: String(merchant.recipientId),
+                  amount: clinicAmount,
+                  type: 'flat',
+                  liable: false,
+                  charge_processing_fee: false,
+                },
+              ];
+              
+              console.log('[pagarme][webhook][charge.created] applying split to subscription charge', {
+                chargeId: chargeIdForSplit,
+                subscriptionId: subscriptionIdInCharge,
+                clinicId: clinicIdInMeta,
+                platformAmount,
+                clinicAmount,
+              });
+              
+              await pagarmeUpdateCharge(String(chargeIdForSplit), { split: splitRules });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[pagarme][webhook][charge.created] subscription split application failed:', e instanceof Error ? e.message : e);
       }
     }
 

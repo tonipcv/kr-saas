@@ -366,3 +366,26 @@ export async function pagarmeRefundCharge(chargeId: string, amountCents?: number
   }
   return data;
 }
+
+export async function pagarmeUpdateCharge(chargeId: string, payload: Record<string, any>) {
+  // Core v5: PATCH /charges/{charge_id} to update split, metadata, etc.
+  const url = `${PAGARME_BASE_URL}/charges/${encodeURIComponent(chargeId)}`;
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    try { console.error('[pagarme][update_charge] error', { status: res.status, data }); } catch {}
+    const msgFromArray = Array.isArray(data?.errors)
+      ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
+      : undefined;
+    const msg = msgFromArray || data?.message || data?.error || text || `Pagarme update charge error ${res.status}`;
+    throw new Error(msg);
+  }
+  return data;
+}

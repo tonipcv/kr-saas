@@ -64,6 +64,7 @@ export default async function PaymentsDataPage() {
               pt.clinic_id,
               c.name AS clinic_name,
               pt.product_id,
+              p.name AS product_name,
               pt.amount_cents,
               pt.currency,
               pt.installments,
@@ -76,6 +77,7 @@ export default async function PaymentsDataPage() {
     LEFT JOIN patient_profiles pp ON pp.id = pt.patient_profile_id
     LEFT JOIN "User" pu ON pu.id = pp.user_id
     LEFT JOIN clinics c ON c.id = pt.clinic_id
+    LEFT JOIN products p ON p.id = pt.product_id
         ORDER BY pt.created_at DESC
         LIMIT 50`
     )

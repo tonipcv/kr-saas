@@ -15,6 +15,7 @@ type TxRow = {
   clinic_id: string | null;
   clinic_name?: string | null;
   product_id: string | null;
+  product_name?: string | null;
   amount_cents: number | null;
   currency: string | null;
   installments: number | null;
@@ -54,6 +55,26 @@ export default function TransactionsTable({ transactions }: { transactions: TxRo
   const onRowDoubleClick = (t: TxRow) => {
     setSelected(t);
     setOpen(true);
+  };
+
+  const methodBadge = (method?: string | null, installments?: number | null) => {
+    const base = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border bg-gray-100 text-gray-800 border-gray-300';
+    const m = String(method || '').toLowerCase();
+    if (m === 'credit_card' || m === 'card') {
+      return (
+        <span className={base}>
+          <span>Cartão</span>
+          {Number(installments) > 1 ? <span className="opacity-70">({installments}x)</span> : null}
+        </span>
+      );
+    }
+    if (m === 'pix') {
+      return <span className={base}>PIX</span>;
+    }
+    if (m === 'boleto' || m === 'bank_slip') {
+      return <span className={base}>Boleto</span>;
+    }
+    return <span className={base}>{method || '—'}</span>;
   };
 
   const canRefund = useMemo(() => {
@@ -98,22 +119,22 @@ export default function TransactionsTable({ transactions }: { transactions: TxRo
     const base = 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium';
     switch (status) {
       case 'PAID':
-        return <span className={`${base} bg-green-50 text-green-700 border border-green-200`}>Paid</span>;
+        return <span className={`${base} bg-green-100 text-green-800 border border-green-200`}>Paid</span>;
       case 'PROCESSING':
-        return <span className={`${base} bg-amber-50 text-amber-700 border border-amber-200`}>Processing</span>;
+        return <span className={`${base} bg-amber-100 text-amber-800 border border-amber-200`}>Processing</span>;
       case 'PENDING':
-        return <span className={`${base} bg-amber-50 text-amber-700 border border-amber-200`}>Pending</span>;
+        return <span className={`${base} bg-amber-100 text-amber-800 border border-amber-200`}>Pending</span>;
       case 'ACTIVE':
-        return <span className={`${base} bg-amber-50 text-amber-700 border border-amber-200`}>Pending</span>;
+        return <span className={`${base} bg-amber-100 text-amber-800 border border-amber-200`}>Pending</span>;
       case 'FAILED':
       case 'REFUSED':
-        return <span className={`${base} bg-red-50 text-red-700 border border-red-200`}>Failed</span>;
+        return <span className={`${base} bg-red-100 text-red-800 border border-red-200`}>Failed</span>;
       case 'CANCELED':
       case 'CANCELLED':
-        return <span className={`${base} bg-red-50 text-red-700 border border-red-200`}>Canceled</span>;
+        return <span className={`${base} bg-red-100 text-red-800 border border-red-200`}>Canceled</span>;
       case 'REFUNDED':
         // Show interim "Refund" until provider completes cancel flow (webhook will later set Canceled)
-        return <span className={`${base} bg-blue-50 text-blue-700 border border-blue-200`}>Refund</span>;
+        return <span className={`${base} bg-gray-100 text-gray-800 border border-gray-300`}>Refund</span>;
       default:
         return status ? <span className={`${base} bg-gray-100 text-gray-700 border border-gray-200`}>{status}</span>
                        : <span className={`${base} bg-gray-100 text-gray-500 border border-gray-200`}>—</span>;
@@ -150,8 +171,6 @@ export default function TransactionsTable({ transactions }: { transactions: TxRo
               <th className="px-2 py-2 text-left">Email</th>
               <th className="px-2 py-2 text-left">Business</th>
               <th className="px-2 py-2 text-left">Staff</th>
-              <th className="px-2 py-2 text-left">Order</th>
-              <th className="px-2 py-2 text-left">Charge</th>
               <th className="px-2 py-2 text-left">Product</th>
               <th className="px-2 py-2 text-right">Amount</th>
               <th className="px-2 py-2 text-left">Curr</th>
@@ -169,13 +188,11 @@ export default function TransactionsTable({ transactions }: { transactions: TxRo
                 <td className="px-2 py-2 whitespace-nowrap max-w-[180px] truncate">{t.patient_email || ''}</td>
                 <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.clinic_name || t.clinic_id}</td>
                 <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.doctor_name || t.doctor_id}</td>
-                <td className="px-2 py-2 whitespace-nowrap">{t.provider_order_id}</td>
-                <td className="px-2 py-2 whitespace-nowrap">{t.provider_charge_id}</td>
-                <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.product_id}</td>
+                <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.product_name || t.product_id}</td>
                 <td className="px-2 py-2 text-right whitespace-nowrap">{formatAmount(t.amount_cents as any, t.currency)}</td>
                 <td className="px-2 py-2 whitespace-nowrap">{t.currency}</td>
                 <td className="px-2 py-2 whitespace-nowrap">{t.installments}</td>
-                <td className="px-2 py-2 whitespace-nowrap">{t.payment_method_type}</td>
+                <td className="px-2 py-2 whitespace-nowrap">{methodBadge(t.payment_method_type, t.installments as any)}</td>
                 <td className="px-2 py-2 whitespace-nowrap">{badgeFor(t.status)}</td>
                 <td className="px-2 py-2 text-gray-500 whitespace-nowrap">{formatDate(t.created_at)}</td>
                 <td className="px-2 py-2 whitespace-nowrap">{t.id}</td>
@@ -199,7 +216,7 @@ export default function TransactionsTable({ transactions }: { transactions: TxRo
                 <div><span className="text-gray-500">Order:</span> {selected.provider_order_id || '—'}</div>
                 <div><span className="text-gray-500">Charge:</span> {selected.provider_charge_id || '—'}</div>
                 <div><span className="text-gray-500">Método:</span> {(selected.payment_method_type || '—').toUpperCase()}</div>
-                <div><span className="text-gray-500">Status:</span> {statusPt(selected.status)}</div>
+                <div className="flex items-center gap-2"><span className="text-gray-500">Status:</span> {badgeFor(selected.status)}</div>
                 <div><span className="text-gray-500">Valor:</span> {formatAmount(selected.amount_cents as any, selected.currency)}</div>
                 <div><span className="text-gray-500">Parcelas:</span> {selected.installments || '—'}</div>
                 <div><span className="text-gray-500">Cliente:</span> {selected.patient_name || selected.patient_profile_id || '—'}</div>

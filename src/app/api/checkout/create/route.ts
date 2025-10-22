@@ -25,7 +25,7 @@ export async function POST(req: Request) {
 
     if (!productId) return NextResponse.json({ error: 'productId é obrigatório' }, { status: 400 });
     if (!buyer?.name || !buyer?.email || !buyer?.phone) return NextResponse.json({ error: 'Dados do comprador incompletos' }, { status: 400 });
-    if (!payment?.method || !['pix', 'card'].includes(payment.method)) return NextResponse.json({ error: 'Forma de pagamento inválida' }, { status: 400 });
+    if (!payment?.method || !['pix', 'card', 'boleto'].includes(payment.method)) return NextResponse.json({ error: 'Forma de pagamento inválida' }, { status: 400 });
     const explicitSavedCardId: string | null = payment?.saved_card_id || null;
     const explicitProviderCustomerId: string | null = payment?.provider_customer_id || null;
 
@@ -281,6 +281,7 @@ export async function POST(req: Request) {
 
     // Payments (v5)
     let payments: any[] = [];
+    let paymentObject: any = null; // normalized single-method object to reuse in charges
     if (payment.method === 'pix') {
       // expires_in: accept number or string; default 1800s
       const rawExpires = (payment?.pix?.expires_in ?? payment?.pixExpiresIn);
@@ -293,7 +294,8 @@ export async function POST(req: Request) {
         : undefined;
       const pixPayload: any = { expires_in };
       if (additional_information && additional_information.length) pixPayload.additional_information = additional_information;
-      payments = [{ amount: amountCents, payment_method: 'pix', pix: pixPayload }];
+      paymentObject = { amount: amountCents, payment_method: 'pix', pix: pixPayload };
+      payments = [paymentObject];
     } else if (payment.method === 'card') {
       const cc = payment.card || {};
       // Two paths: (A) explicit saved card, (B) raw card capture
@@ -428,6 +430,20 @@ export async function POST(req: Request) {
       if (!useSavedCard) {
         payments = fallbackPayments;
       }
+      paymentObject = payments[0];
+    } else if (payment.method === 'boleto') {
+      // Minimal boleto support; allow caller to pass optional fields
+      const due_date = (payment?.boleto?.due_date || null);
+      const instructions = (payment?.boleto?.instructions || undefined);
+      const boletoPayload: any = {};
+      if (due_date) boletoPayload.due_date = String(due_date);
+      if (instructions) boletoPayload.instructions = String(instructions);
+      paymentObject = {
+        amount: amountCents,
+        payment_method: 'boleto',
+        boleto: boletoPayload,
+      };
+      payments = [paymentObject];
     }
 
     // Apply recipient split when a clinic merchant recipient is available (behind feature flag)
@@ -437,41 +453,86 @@ export async function POST(req: Request) {
     try {
       const ENABLE_SPLIT = String(process.env.PAGARME_ENABLE_SPLIT || '').toLowerCase() === 'true';
       const clinicRecipientId = merchant?.recipientId || null;
-      const rawSplitPercent = typeof merchant?.splitPercent === 'number' ? merchant.splitPercent : null;
-      // We'll prefer split at charges[].split for broader v5 compatibility
+      const platformRecipientId = (String(process.env.PLATFORM_RECIPIENT_ID || process.env.PAGARME_PLATFORM_RECIPIENT_ID || '').trim()) || null;
+      const rawSplitPercent = typeof merchant?.splitPercent === 'number' ? merchant.splitPercent : 70; // default 70% clínica
+      // Split style per method with sensible defaults:
+      // - all methods: payments_percentage (per Pagar.me support example)
+      const method = String(payment?.method || '').toLowerCase();
+      const envStyleGlobal = String(process.env.PAGARME_SPLIT_STYLE || '').toLowerCase();
+      const envStyleCard = String(process.env.PAGARME_SPLIT_STYLE_CARD || '').toLowerCase();
+      const envStylePix = String(process.env.PAGARME_SPLIT_STYLE_PIX || '').toLowerCase();
+      const envStyleBoleto = String(process.env.PAGARME_SPLIT_STYLE_BOLETO || '').toLowerCase();
+      let SPLIT_STYLE = envStyleGlobal || 'payments_percentage';
+      if (method === 'card') SPLIT_STYLE = envStyleCard || envStyleGlobal || 'payments_percentage';
+      if (method === 'pix') SPLIT_STYLE = envStylePix || envStyleGlobal || 'payments_percentage';
+      if (method === 'boleto') SPLIT_STYLE = envStyleBoleto || envStyleGlobal || 'payments_percentage';
       let charges: any[] | null = null;
-      // IMPORTANT: avoid split for PIX to prevent provider rejections
-      const allCreditCard = Array.isArray(payments) && payments.length > 0 && payments.every((p: any) => p?.payment_method === 'credit_card');
-      if (ENABLE_SPLIT && clinicRecipientId && rawSplitPercent != null && allCreditCard) {
-        // Temporary safeguard: enforce 100% to clinic if platform recipient/remainder is not configured
-        let effectiveSplitPercent = Number(rawSplitPercent);
-        if (effectiveSplitPercent !== 100) {
-          console.warn('[checkout][create] splitPercent != 100 detected; overriding to 100% to avoid remainder issues without platform recipient');
-          effectiveSplitPercent = 100;
-        }
-        const clinicAmount = Math.max(0, Math.min(Number(amountCents), Math.round(Number(amountCents) * (effectiveSplitPercent / 100)))) || 0;
-        // Build split rules for Pagar.me v5 (core) using minimal compatible fields
-        // Some accounts reject extra properties. Keep only required fields.
-        const splitRules = clinicAmount > 0 ? [{
-          recipient_id: String(clinicRecipientId),
-          amount: clinicAmount,
-          type: 'flat',
-        }] : [] as any[];
-
-        if (splitRules.length) {
-          console.log('[checkout][create] applying split', { recipient_id: String(clinicRecipientId), amount: clinicAmount });
-          // Convert payments to charges with split rules
+      const splitEnabled = ENABLE_SPLIT && !!clinicRecipientId && !!platformRecipientId;
+      if (splitEnabled) {
+        const clinicPercent = Math.max(0, Math.min(100, Number(rawSplitPercent)));
+        if (SPLIT_STYLE === 'payments_percentage') {
+          const platformPercent = 100 - clinicPercent;
+          // Attach split to payments[] as percentage with options, per support example
+          // Order: clinic (larger %) first with charge_processing_fee=true, platform second with charge_processing_fee=false
+          const paySplit = [
+            {
+              amount: clinicPercent,
+              recipient_id: String(clinicRecipientId),
+              type: 'percentage',
+              options: {
+                charge_processing_fee: true,
+                charge_remainder_fee: true,
+                liable: true,
+              },
+            },
+            {
+              amount: platformPercent,
+              recipient_id: String(platformRecipientId),
+              type: 'percentage',
+              options: {
+                charge_processing_fee: false,
+                charge_remainder_fee: false,
+                liable: true,
+              },
+            },
+          ];
+          payments = payments.map((p: any) => ({ ...p, split: paySplit }));
+          console.log('[checkout][create] applying split (payments percentage)', { method, platformRecipientId, clinicRecipientId, platformPercent, clinicPercent });
+          charges = null; // keep payments-driven flow
+          actualSplitApplied = true;
+        } else {
+          // Fallback: charges[].split with flat amount (previous behavior)
+          const clinicAmount = Math.round(Number(amountCents) * clinicPercent / 100);
+          const platformAmount = Number(amountCents) - clinicAmount;
+          const splitRules = [
+            {
+              recipient_id: String(platformRecipientId),
+              amount: platformAmount,
+              type: 'flat',
+              liable: true,
+              charge_processing_fee: true,
+            },
+            {
+              recipient_id: String(clinicRecipientId),
+              amount: clinicAmount,
+              type: 'flat',
+              liable: false,
+              charge_processing_fee: false,
+            },
+          ];
+          console.log('[checkout][create] applying split (charges flat amount)', { method, platformRecipientId, clinicRecipientId, platformAmount, clinicAmount, clinicPercent });
           charges = payments.map((p: any) => {
-            const base: any = { amount: p.amount, payment_method: p.payment_method, split: splitRules };
-            if (p.credit_card) base.credit_card = p.credit_card;
-            if (p.pix) base.pix = p.pix;
+            const base: any = { amount: p.amount, payment: undefined as any, split: splitRules };
+            const paymentPayload: any = { payment_method: p.payment_method };
+            if (p.credit_card) paymentPayload.credit_card = p.credit_card;
+            if (p.pix) paymentPayload.pix = p.pix;
+            if (p.boleto) paymentPayload.boleto = p.boleto;
+            base.payment = paymentPayload;
             if (p.device) base.device = p.device;
             return base;
           });
           actualSplitApplied = true;
         }
-      } else if (ENABLE_SPLIT && !allCreditCard) {
-        console.log('[checkout][create] split disabled for this payment method', { payment_methods: payments.map((p: any) => p?.payment_method) });
       }
       // Expose charges in a scoped variable for payload construction
       (global as any).__charges_for_payload = charges;
@@ -500,7 +561,7 @@ export async function POST(req: Request) {
     const payload: any = scopedCharges && scopedCharges.length ? {
       customer: baseCustomer,
       items,
-      payments, // keep payments to satisfy API while using charges for split
+      payments, // required by API schema; charges[].split will apply when charges present
       charges: scopedCharges,
       metadata: {
         clinicId: clinic?.id || null,
@@ -541,9 +602,32 @@ export async function POST(req: Request) {
         charges_installments: Array.isArray((payload as any)?.charges) ? (payload as any).charges.map((c: any) => c?.credit_card?.installments || null) : null,
       });
     } catch {}
-    // Debug: log full payload for PIX to diagnose provider rejections
-    if (payment?.method === 'pix') {
-      try {
+    // Debug: log full payload to diagnose provider rejections and split issues
+    try {
+      if (actualSplitApplied && payload.charges) {
+        console.log('[checkout][create] charges with split payload', JSON.stringify({
+          method: payment?.method,
+          charges_count: payload.charges.length,
+          charges: payload.charges.map((c: any) => ({
+            amount: c.amount,
+            payment_method: c.payment?.payment_method,
+            has_split: !!c.split,
+            split: c.split || null,
+          })),
+          payments_count: payload.payments?.length || 0,
+        }, null, 2));
+      } else if (actualSplitApplied && payload.payments && payload.payments[0]?.split) {
+        console.log('[checkout][create] payments with split payload', JSON.stringify({
+          method: payment?.method,
+          payments_count: payload.payments.length,
+          payments: payload.payments.map((p: any) => ({
+            amount: p.amount,
+            payment_method: p.payment_method,
+            has_split: !!p.split,
+            split: p.split || null,
+          })),
+        }, null, 2));
+      } else if (payment?.method === 'pix') {
         console.log('[checkout][create] PIX payload', JSON.stringify({
           payments: payload.payments,
           charges: payload.charges || null,
@@ -552,8 +636,8 @@ export async function POST(req: Request) {
           items_count: payload.items?.length || 0,
           metadata: payload.metadata
         }, null, 2));
-      } catch {}
-    }
+      }
+    } catch {}
     let order = await pagarmeCreateOrder(payload);
 
     // Try to extract payment link or relevant info
