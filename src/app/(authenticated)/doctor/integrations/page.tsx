@@ -103,6 +103,8 @@ export default function IntegrationsPage() {
   const [pgAccountDigit, setPgAccountDigit] = useState('');
   const [pgAccountType, setPgAccountType] = useState<'conta_corrente' | 'conta_poupanca' | ''>('');
   const [pgSaving, setPgSaving] = useState(false);
+  // Allow editing recipient id directly
+  const [pgNewRecipientId, setPgNewRecipientId] = useState<string>('');
   
 
   // (SEO card removed — SEO is automatic and not shown here)
@@ -234,6 +236,7 @@ export default function IntegrationsPage() {
       if (!res.ok) throw new Error(data?.error || 'Erro ao carregar status do Pagar.me');
       const connected = !!data?.connected;
       setPgRecipientId(data?.recipientId || null);
+      setPgNewRecipientId(data?.recipientId || '');
       setPgSplitPercent(Number(data?.splitPercent ?? 100));
       setPgPlatformFeeBps(Number(data?.platformFeeBps ?? 0));
       setPgLastSyncAt(data?.lastSyncAt || null);
@@ -528,6 +531,47 @@ export default function IntegrationsPage() {
                       <div className="col-span-2">
                         <div className="text-gray-500">Última sincronização</div>
                         <div className="text-gray-900">{pgLastSyncAt ? new Date(pgLastSyncAt).toLocaleString() : '-'}</div>
+                      </div>
+                    </div>
+                    {/* Edit recipient id */}
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <Input
+                        value={pgNewRecipientId}
+                        onChange={(e) => setPgNewRecipientId(e.target.value)}
+                        placeholder="re_... (recipient id)"
+                        className="h-8 text-sm font-mono"
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          onClick={async () => {
+                            if (!currentClinic?.id) return;
+                            const rid = pgNewRecipientId.trim();
+                            if (!rid) { toast.error('Informe o recipient_id'); return; }
+                            if (!/^re_[A-Za-z0-9]+$/.test(rid)) { toast.error('ID inválido. Deve iniciar com re_'); return; }
+                            try {
+                              setPgSaving(true);
+                              const res = await fetch('/api/payments/pagarme/recipient/set', {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ clinicId: currentClinic.id, recipientId: rid, verify: true })
+                              });
+                              const data = await res.json();
+                              if (!res.ok || !data?.ok) throw new Error(data?.error || 'Falha ao salvar recipient');
+                              toast.success('Recipient atualizado');
+                              await loadPgStatus();
+                            } catch (e: any) {
+                              toast.error(e?.message || 'Erro ao salvar recipient');
+                            } finally {
+                              setPgSaving(false);
+                            }
+                          }}
+                          disabled={pgSaving || !pgNewRecipientId.trim()}
+                          className="h-8 rounded-md text-xs px-3"
+                        >{pgSaving ? 'Salvando…' : 'Salvar recipient'}</Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setPgNewRecipientId(pgRecipientId || '')}
+                          className="h-8 rounded-md text-xs px-3"
+                        >Repor atual</Button>
                       </div>
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
