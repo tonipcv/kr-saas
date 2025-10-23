@@ -1,6 +1,6 @@
 import { AuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import GoogleProvider from "next-auth/providers/google";
+// GoogleProvider removed to enforce email + code (2FA) only login
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import { emitEvent } from '@/lib/events';
@@ -41,10 +41,6 @@ declare module "next-auth/jwt" {
 export const authOptions: AuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
     CredentialsProvider({
       name: "credentials",
       credentials: {
@@ -107,27 +103,13 @@ export const authOptions: AuthOptions = {
           }
         }
         
-        // Autenticação normal com senha
-        if (!user.password) {
-          throw new Error("Invalid credentials");
-        }
-
-        const isPasswordValid = await compare(
-          credentials.password,
-          user.password
-        );
-
-        if (!isPasswordValid) {
-          throw new Error("Invalid credentials");
-        }
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-          role: user.role,
-        };
+        // Bloquear login apenas com senha: exigir 2FA via token (password deve começar com 'token:')
+        // Neste ponto, se chegou aqui sem o prefixo 'token:', o fluxo correto é:
+        // 1) validar senha via /api/auth/password/verify
+        // 2) enviar código via /api/auth/register/email
+        // 3) validar código em /api/auth/register/verify e obter JWT
+        // 4) chamar signIn('credentials', { email, password: 'token:' + jwt })
+        throw new Error("Two-factor authentication required");
       }
     })
   ],
@@ -136,6 +118,12 @@ export const authOptions: AuthOptions = {
   },
   session: {
     strategy: "jwt",
+    // Force re-authentication after 2 hours for security
+    maxAge: 2 * 60 * 60, // 2 hours in seconds
+  },
+  jwt: {
+    // JWT token validity matches session policy (2 hours)
+    maxAge: 2 * 60 * 60, // 2 hours in seconds
   },
   callbacks: {
     async jwt({ token, user }) {

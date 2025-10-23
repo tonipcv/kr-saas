@@ -359,6 +359,10 @@ export default function EditProductPage({ params }: PageProps) {
   };
 
   const getBaseUrl = () => {
+    // Prefer explicit public base URLs first (allows using https://www.zuzz.vu exactly)
+    const pub = (process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_NEXTAUTH_URL) as string | undefined;
+    if (pub && /^https?:\/\//i.test(pub)) return pub.replace(/\/$/, '');
+    // Fallback to base domain (e.g., zuzz.vu) and force https
     const dom = (process.env.NEXT_PUBLIC_APP_BASE_DOMAIN || process.env.APP_BASE_DOMAIN) as string | undefined;
     if (dom && dom.trim()) {
       const d = dom.trim();
@@ -366,8 +370,7 @@ export default function EditProductPage({ params }: PageProps) {
       const url = hasProto ? d : `https://${d}`;
       return url.replace(/\/$/, '');
     }
-    const pub = (process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_NEXTAUTH_URL) as string | undefined;
-    if (pub && /^https?:\/\//.test(pub)) return pub.replace(/\/$/, '');
+    // Dev fallback
     if (typeof window !== 'undefined') return window.location.origin;
     return 'http://localhost:3000';
   };

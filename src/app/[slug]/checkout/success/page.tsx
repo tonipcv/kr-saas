@@ -9,6 +9,13 @@ function formatBRL(value: number) {
 }
 
 function getBaseUrl() {
+  const dom = (process.env.NEXT_PUBLIC_APP_BASE_DOMAIN || process.env.APP_BASE_DOMAIN) as string | undefined;
+  if (dom && dom.trim()) {
+    const d = dom.trim();
+    const hasProto = /^https?:\/\//i.test(d);
+    const url = hasProto ? d : `https://${d}`;
+    return url.replace(/\/$/, '');
+  }
   return (
     process.env.NEXT_PUBLIC_BASE_URL ||
     process.env.NEXT_PUBLIC_SITE_URL ||

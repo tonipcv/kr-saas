@@ -40,6 +40,27 @@ export async function POST(req: Request) {
       );
     }
 
+    // Cooldown: only allow resending every 2 minutes
+    const latestToken = await prisma.verificationToken.findFirst({
+      where: { identifier: email },
+      orderBy: { expires: 'desc' },
+      select: { expires: true }
+    });
+
+    if (latestToken) {
+      // We set expires = sentAt + 1 hour when generating the code
+      const sentAt = new Date(latestToken.expires.getTime() - 60 * 60 * 1000);
+      const elapsedMs = Date.now() - sentAt.getTime();
+      const minIntervalMs = 2 * 60 * 1000; // 2 minutes
+      if (elapsedMs < minIntervalMs) {
+        const waitSeconds = Math.ceil((minIntervalMs - elapsedMs) / 1000);
+        return NextResponse.json(
+          { message: `Please wait ${waitSeconds}s before requesting a new code.` },
+          { status: 429 }
+        );
+      }
+    }
+
     // Generate new verification code (6 digits)
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     const codeExpiry = new Date(Date.now() + 3600000); // 1 hour
@@ -86,13 +107,13 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json(
-      { message: "New code sent successfully" },
+      { message: "New verification code sent successfully" },
       { status: 200 }
     );
   } catch (error) {
     console.error('Error resending code:', error);
     return NextResponse.json(
-      { message: "Error sending new code" },
+      { message: "Error sending a new verification code" },
       { status: 500 }
     );
   }

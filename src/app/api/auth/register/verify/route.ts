@@ -86,13 +86,13 @@ export async function POST(req: Request) {
         );
       }
 
-      // Criar token de autenticação (compatível com auth.ts)
+      // Criar token de autenticação (compatível com auth.ts) com expiração curta (10 min)
       const token = sign(
         { 
           id: user.id,
           email: user.email,
           role: user.role,
-          exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 // 7 dias
+          exp: Math.floor(Date.now() / 1000) + 60 * 10 // 10 minutos
         },
         SECRET_KEY
       );

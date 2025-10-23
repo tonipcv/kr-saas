@@ -79,7 +79,7 @@ export default function EditOfferPage({ params }: PageProps) {
     return 'http://localhost:3000';
   };
 
-  const getSlug = () => (currentClinic?.slug && String(currentClinic.slug)) || 'krx-clinic';
+  const getSlug = () => (currentClinic?.slug && String(currentClinic.slug)) || 'bella-vida';
 
   const ensureSlugInPath = (path: string) => {
     const slug = getSlug();

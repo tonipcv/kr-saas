@@ -16,9 +16,10 @@ export function createVerificationCodeEmail({ code, clinicName = 'Zuzz', clinicL
         body {
           font-family: 'Helvetica Neue', Arial, sans-serif;
           line-height: 1.6;
-          color: #333;
+          color: #000000;
           margin: 0;
           padding: 0;
+          background-color: #ffffff;
         }
         .container {
           max-width: 600px;
@@ -36,7 +37,8 @@ export function createVerificationCodeEmail({ code, clinicName = 'Zuzz', clinicL
           background-color: #ffffff;
           padding: 30px;
           border-radius: 8px;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+          color: #000000;
         }
         .verification-code {
           font-size: 32px;
@@ -44,18 +46,18 @@ export function createVerificationCodeEmail({ code, clinicName = 'Zuzz', clinicL
           text-align: center;
           letter-spacing: 4px;
           margin: 30px 0;
-          color: #2563eb;
+          color: #000000;
         }
         .footer {
           text-align: center;
           font-size: 12px;
-          color: #666;
+          color: #444444;
           margin-top: 30px;
         }
         .button {
           display: inline-block;
-          background-color: #2563eb;
-          color: white;
+          background-color: #000000;
+          color: #ffffff;
           text-decoration: none;
           padding: 12px 24px;
           border-radius: 4px;
