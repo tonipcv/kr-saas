@@ -63,9 +63,18 @@ export default function EditOfferPage({ params }: PageProps) {
   });
 
   const getBaseUrl = () => {
-    // Prefer public envs if provided; otherwise use window origin
+    // 1) Prefer APP_BASE_DOMAIN (public or server)
+    const dom = (process.env.NEXT_PUBLIC_APP_BASE_DOMAIN || process.env.APP_BASE_DOMAIN) as string | undefined;
+    if (dom && dom.trim()) {
+      const d = dom.trim();
+      const hasProto = /^https?:\/\//i.test(d);
+      const url = hasProto ? d : `https://${d}`;
+      return url.replace(/\/$/, '');
+    }
+    // 2) Fallback to previous public base URLs
     const pub = (process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_NEXTAUTH_URL) as string | undefined;
     if (pub && /^https?:\/\//.test(pub)) return pub.replace(/\/$/, '');
+    // 3) Finally, window origin or localhost
     if (typeof window !== 'undefined') return window.location.origin;
     return 'http://localhost:3000';
   };
