@@ -120,7 +120,12 @@ export default async function middleware(request: NextRequestWithAuth) {
     return NextResponse.redirect(new URL(destPath + url.search, request.url))
   }
   if (pathname.startsWith('/doctor/purchases')) {
-    const destPath = pathname.replace(/^\/doctor\/purchases(.*)$/i, '/business/purchases$1')
+    const destPath = pathname.replace(/^\/doctor\/purchases(.*)$/i, '/business/payments$1')
+    return NextResponse.redirect(new URL(destPath + url.search, request.url))
+  }
+  // Canonicalize old business purchases path
+  if (pathname.startsWith('/business/purchases')) {
+    const destPath = pathname.replace(/^\/business\/purchases(.*)$/i, '/business/payments$1')
     return NextResponse.redirect(new URL(destPath + url.search, request.url))
   }
   if (pathname.startsWith('/doctor/referrals')) {

@@ -311,8 +311,8 @@ export default function Navigation() {
           description: 'Manage products & services'
         },
         {
-          href: '/business/purchases',
-          label: 'Purchases',
+          href: '/business/payments',
+          label: 'Payments',
           icon: CreditCardIcon,
           description: 'Record patient purchases'
         },
