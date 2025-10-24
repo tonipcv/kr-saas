@@ -75,8 +75,12 @@ export default function EditOfferPage({ params }: PageProps) {
     const pub = (process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_NEXTAUTH_URL) as string | undefined;
     if (pub && /^https?:\/\//.test(pub)) return pub.replace(/\/$/, '');
     // 3) Finally, window origin or localhost
-    if (typeof window !== 'undefined') return window.location.origin;
-    return 'http://localhost:3000';
+    if (typeof window !== 'undefined') {
+      const origin = window.location.origin;
+      if (/localhost|127\.0\.0\.1/i.test(origin)) return 'https://www.zuzz.vu';
+      return origin;
+    }
+    return 'https://www.zuzz.vu';
   };
 
   const getSlug = () => (currentClinic?.slug && String(currentClinic.slug)) || 'bella-vida';

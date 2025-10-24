@@ -215,6 +215,30 @@ export default function ProductsPage() {
   // Unlock products for all plans
   const isFree = false;
 
+  // Helper to build base URL preferring env configuration
+  const getBaseUrl = () => {
+    // Prefer explicit base URLs
+    const pub = (process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_NEXTAUTH_URL) as string | undefined;
+    if (pub && /^https?:\/\//i.test(pub)) return pub.replace(/\/$/, '');
+    // Prefer base domain
+    const dom = (process.env.NEXT_PUBLIC_APP_BASE_DOMAIN || process.env.APP_BASE_DOMAIN) as string | undefined;
+    if (dom && dom.trim()) {
+      const d = dom.trim();
+      const hasProto = /^https?:\/\//i.test(d);
+      const url = hasProto ? d : `https://${d}`;
+      return url.replace(/\/$/, '');
+    }
+    // Fallback: if on localhost, force production domain
+    if (typeof window !== 'undefined') {
+      const origin = window.location.origin;
+      if (/localhost|127\.0\.0\.1/i.test(origin)) return 'https://www.zuzz.vu';
+      return origin;
+    }
+    return 'https://www.zuzz.vu';
+  };
+
+  const getSlug = () => (currentClinic?.slug && String(currentClinic.slug)) || 'bella-vida';
+
   // Show loading when no clinic is selected
   if (!currentClinic) {
     return (
@@ -512,11 +536,14 @@ export default function ProductsPage() {
                             className="h-7 w-7 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
                             title="Copiar link de checkout"
                             onClick={async () => {
-                              const href = `/checkout/${product.id}`;
+                              const base = getBaseUrl();
+                              const slug = getSlug();
+                              const path = `/${slug}/checkout/${product.id}`;
+                              const full = `${base}${path}`;
                               try {
-                                await navigator.clipboard.writeText(window.location.origin + href);
+                                await navigator.clipboard.writeText(full);
                               } catch {
-                                await navigator.clipboard.writeText(href);
+                                await navigator.clipboard.writeText(path);
                               }
                             }}
                           >

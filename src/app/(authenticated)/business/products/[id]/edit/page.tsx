@@ -359,10 +359,7 @@ export default function EditProductPage({ params }: PageProps) {
   };
 
   const getBaseUrl = () => {
-    // Prefer explicit public base URLs first (allows using https://www.zuzz.vu exactly)
-    const pub = (process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_NEXTAUTH_URL) as string | undefined;
-    if (pub && /^https?:\/\//i.test(pub)) return pub.replace(/\/$/, '');
-    // Fallback to base domain (e.g., zuzz.vu) and force https
+    // 1) Prefer base domain (public or server) to avoid leaking localhost
     const dom = (process.env.NEXT_PUBLIC_APP_BASE_DOMAIN || process.env.APP_BASE_DOMAIN) as string | undefined;
     if (dom && dom.trim()) {
       const d = dom.trim();
@@ -370,11 +367,22 @@ export default function EditProductPage({ params }: PageProps) {
       const url = hasProto ? d : `https://${d}`;
       return url.replace(/\/$/, '');
     }
-    // Dev fallback
-    if (typeof window !== 'undefined') return window.location.origin;
-    return 'http://localhost:3000';
+    // 2) Then public base URLs, but sanitize localhost
+    const pub = (process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_NEXTAUTH_URL) as string | undefined;
+    if (pub && /^https?:\/\//i.test(pub)) {
+      const clean = pub.replace(/\/$/, '');
+      if (/localhost|127\.0\.0\.1/i.test(clean)) return 'https://www.zuzz.vu';
+      return clean;
+    }
+    // 3) Fallback: window origin, sanitize localhost
+    if (typeof window !== 'undefined') {
+      const origin = window.location.origin;
+      if (/localhost|127\.0\.0\.1/i.test(origin)) return 'https://www.zuzz.vu';
+      return origin;
+    }
+    return 'https://www.zuzz.vu';
   };
-  const getSlug = () => (currentClinic?.slug && String(currentClinic.slug)) || 'krx-clinic';
+  const getSlug = () => (currentClinic?.slug && String(currentClinic.slug)) || 'bella-vida';
   const buildCheckoutUrl = (of: Offer) => {
     const base = getBaseUrl();
     const slug = getSlug();
@@ -396,11 +404,12 @@ export default function EditProductPage({ params }: PageProps) {
     };
     try {
       if (of.checkoutUrl) {
-        // If absolute, parse and normalize
+        // If absolute, parse and normalize; always enforce our base domain
         if (/^https?:\/\//i.test(of.checkoutUrl)) {
           const u = new URL(of.checkoutUrl);
-          let p = ensureSlugPath(u.pathname || '/');
-          const url = new URL(`${u.origin}${p}`);
+          const base = getBaseUrl();
+          const p = ensureSlugPath(u.pathname || '/');
+          const url = new URL(`${base}${p}`);
           const sp = new URLSearchParams(u.search);
           if (!sp.get('offer')) sp.set('offer', of.id);
           url.search = sp.toString();
