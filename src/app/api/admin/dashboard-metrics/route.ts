@@ -25,8 +25,6 @@ export async function GET(request: NextRequest) {
     const [
       totalDoctors,
       totalPatients,
-      totalProtocols,
-      totalCourses,
       totalProducts,
       totalClinics,
       activeSubscriptions,
@@ -35,8 +33,6 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       prisma.user.count({ where: { role: 'DOCTOR' } }),
       prisma.user.count({ where: { role: 'PATIENT' } }),
-      prisma.protocol.count(),
-      prisma.course.count(),
       prisma.products.count(),
       prisma.clinic.count(),
       prisma.clinicSubscription.count({ where: { status: 'ACTIVE' } }),
@@ -98,13 +94,14 @@ export async function GET(request: NextRequest) {
     const metrics = {
       totalDoctors,
       totalPatients,
-      totalProtocols,
-      totalCourses,
       totalProducts,
       totalClinics,
+      activeClinicSubscriptions: activeSubscriptions,
+      trialClinicSubscriptions: trialSubscriptions,
+      // Legacy keys (temporary compatibility)
       activeSubscriptions,
       trialSubscriptions,
-      expiringSoon
+      expiringSoon,
     };
 
     return NextResponse.json({

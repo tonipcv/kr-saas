@@ -94,13 +94,13 @@ export default function DoctorsPage() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Failed to create doctor');
       }
-      toast.success('Doctor created and invite sent');
+      toast.success('User created and invite sent');
       await loadDoctors();
       setIsCreateOpen(false);
       resetForm();
     } catch (err) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : 'Error creating doctor');
+      toast.error(err instanceof Error ? err.message : 'Error creating user');
     } finally {
       setIsSubmitting(false);
     }
@@ -115,7 +115,7 @@ export default function DoctorsPage() {
         setDoctors(data.doctors || []);
       }
     } catch (error) {
-      console.error('Error loading doctors:', error);
+      console.error('Error loading users:', error);
     } finally {
       setIsLoading(false);
     }
@@ -175,16 +175,16 @@ export default function DoctorsPage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to update doctor');
+        throw new Error(err.error || 'Failed to update user');
       }
-      toast.success('Doctor updated');
+      toast.success('User updated');
       await loadDoctors();
       setIsEditOpen(false);
       // sync selection
       setSelectedDoctor((prev) => prev ? { ...prev, name: editName.trim(), email: editEmail.trim() } : prev);
     } catch (err) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : 'Error updating doctor');
+      toast.error(err instanceof Error ? err.message : 'Error updating user');
     } finally {
       setIsSubmitting(false);
     }
@@ -199,7 +199,7 @@ export default function DoctorsPage() {
   }).length;
 
   const handleDelete = async (doctorId: string) => {
-    if (!confirm('Are you sure you want to delete this doctor? This action cannot be undone.')) {
+    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
       return;
     }
 
@@ -210,15 +210,15 @@ export default function DoctorsPage() {
       });
 
       if (response.ok) {
-        toast.success('Doctor deleted successfully');
+        toast.success('User deleted successfully');
         setDoctors(doctors.filter(d => d.id !== doctorId));
       } else {
         const error = await response.json();
-        toast.error(error.error || 'Error deleting doctor');
+        toast.error(error.error || 'Error deleting user');
       }
     } catch (error) {
-      console.error('Error deleting doctor:', error);
-      toast.error('Error deleting doctor');
+      console.error('Error deleting user:', error);
+      toast.error('Error deleting user');
     } finally {
       setIsDeleting(null);
     }
@@ -259,7 +259,7 @@ export default function DoctorsPage() {
               ))}
             </div>
 
-            {/* Doctors List Skeleton */}
+            {/* Users List Skeleton */}
             <div className="bg-white border border-gray-200 shadow-lg rounded-2xl">
               <div className="p-6 pb-4">
                 <div className="h-6 bg-gray-200 rounded w-32 animate-pulse"></div>
@@ -306,8 +306,8 @@ export default function DoctorsPage() {
           <div className="flex flex-col gap-3 mb-6">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
               <div>
-                <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Manage doctors</h1>
-                <p className="text-gray-600 mt-0.5 text-sm">View and manage all registered doctors</p>
+                <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Manage users</h1>
+                <p className="text-gray-600 mt-0.5 text-sm">View and manage all registered users</p>
               </div>
               <div className="flex gap-2">
                 <Dialog open={isCreateOpen} onOpenChange={(o) => {
@@ -320,13 +320,13 @@ export default function DoctorsPage() {
                       className="h-8 rounded-full border-gray-200 bg-white text-gray-800 hover:bg-white hover:text-gray-900 px-3 py-1 text-xs font-medium inline-flex items-center gap-1.5"
                     >
                       <PlusIcon className="h-3.5 w-3.5" />
-                      Add Doctor
+                      Add User
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-[520px]">
                     <DialogHeader>
-                      <DialogTitle>Add new doctor</DialogTitle>
-                      <DialogDescription>Create a doctor and send an invite email to set a password.</DialogDescription>
+                      <DialogTitle>Add new user</DialogTitle>
+                      <DialogDescription>Create a user and send an invite email to set a password.</DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleCreate} className="space-y-4">
                       <div className="grid grid-cols-1 gap-4">
@@ -336,7 +336,7 @@ export default function DoctorsPage() {
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            placeholder="Dr. Jane Doe"
+                            placeholder="Jane Doe"
                             className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none"
                             required
                           />
@@ -347,7 +347,7 @@ export default function DoctorsPage() {
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="doctor@email.com"
+                            placeholder="user@email.com"
                             className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:outline-none"
                             required
                           />
@@ -413,7 +413,7 @@ export default function DoctorsPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium text-gray-500">Total Doctors</span>
+                <span className="text-[11px] font-medium text-gray-500">Total Users</span>
                 <UsersIcon className="h-3.5 w-3.5 text-blue-600" />
               </div>
               <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{doctors.length}</div>
@@ -444,17 +444,17 @@ export default function DoctorsPage() {
             </div>
           </div>
 
-          {/* Doctors List - table style like doctor's patients page */}
+          {/* Users List - table style */}
           <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">Doctors</CardTitle>
+              <CardTitle className="text-lg font-semibold text-gray-900">Users</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               {doctors.length === 0 ? (
                 <div className="text-center py-12">
                   <UsersIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 text-lg">No doctors registered yet.</p>
-                  <p className="text-gray-500 text-sm mt-2">Add your first doctor to get started.</p>
+                  <p className="text-gray-600 text-lg">No users registered yet.</p>
+                  <p className="text-gray-500 text-sm mt-2">Add your first user to get started.</p>
                 </div>
               ) : (
                 <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
@@ -577,12 +577,12 @@ export default function DoctorsPage() {
             </CardContent>
           </Card>
 
-          {/* View Doctor Modal */}
+          {/* View User Modal */}
           <Dialog open={isViewOpen} onOpenChange={(o) => { setIsViewOpen(o); if (!o) setSelectedDoctor(null); }}>
             <DialogContent className="sm:max-w-[560px]">
               <DialogHeader>
-                <DialogTitle>Doctor details</DialogTitle>
-                <DialogDescription>Overview of the selected doctor.</DialogDescription>
+                <DialogTitle>User details</DialogTitle>
+                <DialogDescription>Overview of the selected user.</DialogDescription>
               </DialogHeader>
               {selectedDoctor ? (
                 <div className="space-y-4">
@@ -654,12 +654,12 @@ export default function DoctorsPage() {
             </DialogContent>
           </Dialog>
 
-          {/* Edit Doctor Modal */}
+          {/* Edit User Modal */}
           <Dialog open={isEditOpen} onOpenChange={(o) => { setIsEditOpen(o); }}>
             <DialogContent className="sm:max-w-[520px]">
               <DialogHeader>
-                <DialogTitle>Edit doctor</DialogTitle>
-                <DialogDescription>Update the doctor information.</DialogDescription>
+                <DialogTitle>Edit user</DialogTitle>
+                <DialogDescription>Update the user information.</DialogDescription>
               </DialogHeader>
               <form onSubmit={handleEdit} className="space-y-4">
                 <div className="grid grid-cols-1 gap-4">

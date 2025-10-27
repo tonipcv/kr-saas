@@ -34,22 +34,25 @@ export async function POST(req: Request) {
     }
 
     console.log('Looking up user:', email, slug ? `(slug: ${slug})` : '');
-    // Check if user exists
+    // Check if user exists (select only safe fields to avoid legacy enum conversions)
     const user = await prisma.user.findUnique({
       where: { email },
-      include: {
+      select: {
+        id: true,
+        email: true,
+        name: true,
         clinic_memberships: {
           where: { isActive: true },
-          include: {
+          select: {
             clinic: {
               select: {
                 name: true,
                 logo: true,
-                email: true
+                email: true,
               }
             }
           },
-          take: 1
+          take: 1,
         }
       }
     });
@@ -79,6 +82,7 @@ export async function POST(req: Request) {
         reset_token: hashedToken,
         reset_token_expiry: new Date(Date.now() + 3600000), // 1 hour from now
       },
+      select: { id: true },
     });
 
     // Get base URL from environment variables
@@ -94,9 +98,9 @@ export async function POST(req: Request) {
     if (typeof slug === 'string' && slug.trim().length > 0) {
       const doctor = await getDoctorBySlug(slug.trim());
       if (doctor) {
-        // Verify patient relationship
-        const rel = await prisma.doctorPatientRelationship.findFirst({
-          where: { doctorId: doctor.id, patientId: user.id, isActive: true },
+        // Verify patient relationship via PatientProfile (tenant-scoped)
+        const rel = await prisma.patientProfile.findFirst({
+          where: { doctorId: doctor.id, userId: user.id, isActive: true },
           select: { id: true },
         });
         if (rel) {

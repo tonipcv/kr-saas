@@ -21,7 +21,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Password must be at least 6 characters long' }, { status: 400 });
     }
 
-    // Find user with valid reset token
+    // Find user with valid reset token (select only safe fields)
     const user = await prisma.user.findFirst({
       where: {
         reset_token: hashedToken, // Use the hashed token for comparison
@@ -29,7 +29,10 @@ export async function POST(request: Request) {
           gt: new Date() // Token must not be expired
         }
       },
-      // No need to include relations for password reset
+      select: {
+        id: true,
+        email: true,
+      }
     });
 
     if (!user) {
@@ -47,7 +50,8 @@ export async function POST(request: Request) {
         reset_token: null,
         reset_token_expiry: null,
         email_verified: new Date() // Mark email as verified when password is set
-      }
+      },
+      select: { id: true }
     });
 
     console.log(`✅ Password updated successfully for user: ${user.email}`);

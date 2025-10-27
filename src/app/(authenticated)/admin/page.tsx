@@ -22,10 +22,9 @@ import Link from 'next/link';
 interface SystemMetrics {
   totalDoctors: number;
   totalPatients: number;
-  totalProtocols: number;
-  totalCourses: number;
   totalProducts: number;
   totalClinics: number;
+  // kept for compatibility with existing UI badges
   activeSubscriptions: number;
   trialSubscriptions: number;
   activeClinicSubscriptions: number;
@@ -33,14 +32,11 @@ interface SystemMetrics {
   expiringSoon: number;
 }
 
-interface RecentDoctor {
+interface RecentClinic {
   id: string;
   name: string;
-  email: string;
-  subscription?: {
-    status: string;
-    plan: { name: string };
-  };
+  owner?: { id: string; name: string | null; email: string };
+  subscription?: { status: string; plan: { name: string } };
 }
 
 export default function AdminDashboard() {
@@ -48,8 +44,6 @@ export default function AdminDashboard() {
   const [metrics, setMetrics] = useState<SystemMetrics>({
     totalDoctors: 0,
     totalPatients: 0,
-    totalProtocols: 0,
-    totalCourses: 0,
     totalProducts: 0,
     totalClinics: 0,
     activeSubscriptions: 0,
@@ -58,7 +52,7 @@ export default function AdminDashboard() {
     trialClinicSubscriptions: 0,
     expiringSoon: 0
   });
-  const [recentDoctors, setRecentDoctors] = useState<RecentDoctor[]>([]);
+  const [recentClinics, setRecentClinics] = useState<RecentClinic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -71,7 +65,7 @@ export default function AdminDashboard() {
         if (response.ok) {
           const data = await response.json();
           setMetrics(data.metrics || metrics);
-          setRecentDoctors(data.recentDoctors || []);
+          setRecentClinics(data.recentClinics || []);
         }
       } catch (error) {
         console.error('Error loading dashboard data:', error);
@@ -204,7 +198,7 @@ export default function AdminDashboard() {
                 >
                   <Link href="/admin/doctors/new" className="inline-flex items-center gap-1.5">
                     <PlusIcon className="h-3.5 w-3.5" />
-                    New Doctor
+                    New Business
                   </Link>
                 </Button>
                 <Button
@@ -214,7 +208,7 @@ export default function AdminDashboard() {
                 >
                   <Link href="/admin/clinics" className="inline-flex items-center gap-1.5">
                     <BuildingOffice2Icon className="h-3.5 w-3.5" />
-                    Clinics
+                    Business
                   </Link>
                 </Button>
                 <Button
@@ -233,8 +227,8 @@ export default function AdminDashboard() {
             <div className="flex items-center gap-2 overflow-auto">
               {[
                 { key: 'overview', label: 'Overview', active: true },
-                { key: 'users', label: 'Doctors' },
-                { key: 'clinics', label: 'Clinics' },
+                { key: 'users', label: 'Business' },
+                { key: 'clinics', label: 'Business' },
                 { key: 'subs', label: 'Subscriptions' }
               ].map(tab => (
                 <span
@@ -256,7 +250,7 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
             <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium text-gray-500">Doctors</span>
+                <span className="text-[11px] font-medium text-gray-500">Business</span>
                 <span className="inline-flex items-center gap-1 text-[10px] text-gray-500">
                   <CheckIcon className="h-3.5 w-3.5 text-blue-600" />
                   {metrics.activeSubscriptions} active / {metrics.trialSubscriptions} trial
@@ -267,25 +261,25 @@ export default function AdminDashboard() {
 
             <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium text-gray-500">Patients</span>
+                <span className="text-[11px] font-medium text-gray-500">Users</span>
                 <UsersIcon className="h-3.5 w-3.5 text-green-600" />
               </div>
               <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{metrics.totalPatients}</div>
-              <div className="text-[10px] text-gray-400">Avg {Math.round(metrics.totalPatients / Math.max(metrics.totalDoctors, 1))} per doctor</div>
+              <div className="text-[10px] text-gray-400">Avg {Math.round(metrics.totalPatients / Math.max(metrics.totalDoctors, 1))} per business</div>
             </div>
 
             <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium text-gray-500">Protocols</span>
-                <DocumentTextIcon className="h-3.5 w-3.5 text-purple-600" />
+                <span className="text-[11px] font-medium text-gray-500">Products</span>
+                <ShoppingBagIcon className="h-3.5 w-3.5 text-purple-600" />
               </div>
-              <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{metrics.totalProtocols}</div>
-              <div className="text-[10px] text-gray-400">Created by doctors</div>
+              <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{metrics.totalProducts}</div>
+              <div className="text-[10px] text-gray-400">Items available for sale</div>
             </div>
 
             <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium text-gray-500">Clinics</span>
+                <span className="text-[11px] font-medium text-gray-500">Business</span>
                 <BuildingOffice2Icon className="h-3.5 w-3.5 text-orange-600" />
               </div>
               <div className="mt-1 text-[22px] leading-7 font-semibold text-gray-900">{metrics.totalClinics}</div>
@@ -304,11 +298,11 @@ export default function AdminDashboard() {
 
           {/* Main Content */}
           <div className="grid lg:grid-cols-2 gap-8">
-            {/* Recent Doctors */}
+            {/* Recent Business */}
             <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
               <CardHeader className="flex flex-row items-center justify-between pb-4">
                 <CardTitle className="text-lg font-semibold text-gray-900">
-                  Recent Doctors
+                  Recent Business
                 </CardTitle>
                 <Button 
                   asChild
@@ -316,7 +310,7 @@ export default function AdminDashboard() {
                   size="sm"
                   className="rounded-full bg-white border-gray-200 text-gray-700 hover:bg-white"
                 >
-                  <Link href="/admin/doctors">
+                  <Link href="/admin/clinics">
                     <EyeIcon className="h-3.5 w-3.5 mr-1.5" />
                     View All
                   </Link>
@@ -324,23 +318,25 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="space-y-2">
-                  {recentDoctors.length > 0 ? (
-                    recentDoctors.slice(0, 5).map((doctor) => (
-                      <div key={doctor.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors">
+                  {recentClinics.length > 0 ? (
+                    recentClinics.slice(0, 5).map((clinic) => (
+                      <div key={clinic.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors">
                         <div className="flex items-center gap-3">
                           <div className="p-2.5 bg-gray-100 rounded-lg">
                             <span className="text-sm font-semibold text-gray-700 leading-none">
-                              {getDoctorInitials(doctor.name)}
+                              {getDoctorInitials(clinic.name)}
                             </span>
                           </div>
                           <div>
-                            <p className="font-medium text-gray-900">{doctor.name}</p>
-                            <p className="text-xs text-gray-600">{doctor.email}</p>
+                            <p className="font-medium text-gray-900">{clinic.name}</p>
+                            {clinic.owner?.email && (
+                              <p className="text-xs text-gray-600">Owner: {clinic.owner.name || clinic.owner.email}</p>
+                            )}
                           </div>
                         </div>
-                        {doctor.subscription && (
-                          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${getStatusColor(doctor.subscription.status)}`}>
-                            {doctor.subscription.status}
+                        {clinic.subscription && (
+                          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${getStatusColor(clinic.subscription.status)}`}>
+                            {clinic.subscription.status}
                           </span>
                         )}
                       </div>
@@ -348,7 +344,7 @@ export default function AdminDashboard() {
                   ) : (
                     <div className="text-center py-8">
                       <CheckIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-600">No doctors found</p>
+                      <p className="text-gray-600">No business found</p>
                     </div>
                   )}
                 </div>
@@ -372,8 +368,8 @@ export default function AdminDashboard() {
                       <PlusIcon className="h-4 w-4 text-gray-700" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-900">Create New Doctor</p>
-                      <p className="text-xs text-gray-600">Add doctor to the system</p>
+                      <p className="text-sm font-medium text-gray-900">Create New Business</p>
+                      <p className="text-xs text-gray-600">Add business to the system</p>
                     </div>
                   </Link>
 
@@ -385,8 +381,8 @@ export default function AdminDashboard() {
                       <BuildingOffice2Icon className="h-4 w-4 text-gray-700" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-900">Manage Clinics</p>
-                      <p className="text-xs text-gray-600">View and edit clinics</p>
+                      <p className="text-sm font-medium text-gray-900">Manage Business</p>
+                      <p className="text-xs text-gray-600">View and edit business</p>
                     </div>
                   </Link>
 

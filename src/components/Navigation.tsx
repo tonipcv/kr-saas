@@ -381,15 +381,15 @@ export default function Navigation() {
         },
         {
           href: '/admin/clinics',
-          label: 'Clinics',
+          label: 'Business',
           icon: BuildingOfficeIcon,
-          description: 'Manage all clinics'
+          description: 'Manage all business'
         },
         {
           href: '/admin/doctors',
-          label: 'Doctors',
+          label: 'Users',
           icon: UsersIcon,
-          description: 'Manage doctors'
+          description: 'Manage users'
         },
         {
           href: '/admin/subscriptions',
@@ -405,9 +405,9 @@ export default function Navigation() {
         },
         {
           href: '/clinic/subscription',
-          label: 'Clinic Subscription',
+          label: 'Business Subscription',
           icon: ShieldCheckIcon,
-          description: 'Manage active clinic plan'
+          description: 'Manage active business plan'
         },
       ]
     }
