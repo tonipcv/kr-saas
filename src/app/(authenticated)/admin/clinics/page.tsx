@@ -89,6 +89,7 @@ export default function ClinicsPage() {
   const { data: session } = useSession();
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [payStatus, setPayStatus] = useState<Record<string, 'ready' | 'issue' | 'loading'>>({});
 
   useEffect(() => {
     const loadClinics = async () => {
@@ -111,6 +112,30 @@ export default function ClinicsPage() {
       loadClinics();
     }
   }, [session]);
+
+  // Fetch payment integration status per clinic
+  useEffect(() => {
+    const controller = new AbortController();
+    const run = async () => {
+      const initial: Record<string, 'ready' | 'issue' | 'loading'> = {};
+      clinics.forEach(c => { initial[c.id] = 'loading'; });
+      setPayStatus((prev) => ({ ...initial }));
+      await Promise.all(
+        clinics.map(async (c) => {
+          try {
+            const res = await fetch(`/api/payments/pagarme/config/status?clinic_id=${encodeURIComponent(c.id)}`, { cache: 'no-store', signal: controller.signal });
+            const js = await res.json().catch(() => ({}));
+            const ready = res.ok && js?.ready_for_production === true;
+            setPayStatus((prev) => ({ ...prev, [c.id]: ready ? 'ready' : 'issue' }));
+          } catch {
+            setPayStatus((prev) => ({ ...prev, [c.id]: 'issue' }));
+          }
+        })
+      );
+    };
+    if (clinics.length > 0) run();
+    return () => controller.abort();
+  }, [clinics]);
 
   // Statistics calculations
   const activeCount = clinics.filter(c => c.isActive).length;
@@ -217,68 +242,69 @@ export default function ClinicsPage() {
   return (
     <div className="min-h-screen bg-white">
       <div className="lg:ml-64">
-        <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
+        <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 bg-gray-50">
           
           {/* Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-            <div>
-              <h1 className="text-3xl font-light text-gray-900 tracking-tight">
-                Manage Clinics
-              </h1>
-              <p className="text-gray-600 mt-1">
-                View and manage all registered clinics
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <Button 
-                asChild
-                className="bg-turquoise hover:bg-turquoise/90 text-black font-semibold shadow-lg shadow-turquoise/25 hover:shadow-turquoise/40 hover:scale-105 transition-all duration-200"
-              >
-                <Link href="/admin/clinics/new">
-                  <PlusIcon className="h-4 w-4 mr-2" />
-                  New Clinic
-                </Link>
-              </Button>
-              <Button 
-                asChild
-                variant="outline"
-                className="bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900 shadow-sm"
-              >
-                <Link href="/admin">
-                  <ArrowLeftIcon className="h-4 w-4 mr-2" />
-                  Back to Dashboard
-                </Link>
-              </Button>
+          <div className="flex flex-col gap-3 mb-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+              <div>
+                <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">
+                  Manage Business
+                </h1>
+                <p className="text-gray-600 mt-0.5 text-sm">
+                  View and manage all registered businesses
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  asChild
+                  className="bg-black hover:bg-gray-900 text-white font-semibold shadow-sm hover:opacity-95 transition-all duration-200"
+                >
+                  <Link href="/admin/clinics/new">
+                    <PlusIcon className="h-4 w-4 mr-2" />
+                    New Clinic
+                  </Link>
+                </Button>
+                <Button 
+                  asChild
+                  className="bg-black hover:bg-gray-900 text-white font-semibold shadow-sm hover:opacity-95 transition-all duration-200"
+                >
+                  <Link href="/admin">
+                    <ArrowLeftIcon className="h-4 w-4 mr-2" />
+                    Back to Dashboard
+                  </Link>
+                </Button>
+              </div>
             </div>
           </div>
 
           {/* Quick Statistics (icon-less) */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-xl">
               <CardContent className="p-6">
                 <p className="text-sm text-gray-600 font-medium">Total</p>
                 <p className="mt-1 text-2xl font-light text-gray-900">{clinics.length}</p>
               </CardContent>
             </Card>
-            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-xl">
               <CardContent className="p-6">
                 <p className="text-sm text-gray-600 font-medium">Active</p>
                 <p className="mt-1 text-2xl font-light text-gray-900">{activeCount}</p>
               </CardContent>
             </Card>
-            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-xl">
               <CardContent className="p-6">
                 <p className="text-sm text-gray-600 font-medium">With Subscription</p>
                 <p className="mt-1 text-2xl font-light text-gray-900">{withSubscriptionCount}</p>
               </CardContent>
             </Card>
-            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-xl">
               <CardContent className="p-6">
                 <p className="text-sm text-gray-600 font-medium">Trial</p>
                 <p className="mt-1 text-2xl font-light text-gray-900">{trialCount}</p>
               </CardContent>
             </Card>
-            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-xl">
               <CardContent className="p-6">
                 <p className="text-sm text-gray-600 font-medium">Total Members</p>
                 <p className="mt-1 text-2xl font-light text-gray-900">{totalMembers}</p>
@@ -297,7 +323,7 @@ export default function ClinicsPage() {
                   <BuildingOfficeIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
                   <p className="text-gray-600 text-lg">No clinics found.</p>
                   <p className="text-gray-500 text-sm mt-2">Clinics will appear here once they are registered.</p>
-                  <Button asChild className="mt-4 bg-turquoise hover:bg-turquoise/90 text-black font-semibold">
+                  <Button asChild className="mt-4 bg-black hover:bg-gray-900 text-white font-semibold">
                     <Link href="/admin/clinics/new">
                       <PlusIcon className="h-4 w-4 mr-2" />
                       Create First Clinic
@@ -316,6 +342,7 @@ export default function ClinicsPage() {
                         <th className="px-3 py-3.5 font-medium">Plan</th>
                         <th className="px-3 py-3.5 font-medium">Tier</th>
                         <th className="px-3 py-3.5 font-medium">Trial Ends</th>
+                        <th className="px-3 py-3.5 font-medium">Payments</th>
                         <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
                       </tr>
                     </thead>
@@ -358,6 +385,18 @@ export default function ClinicsPage() {
                               }
                             })()}
                           </td>
+                          {/* Payments integration status */}
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm">
+                            {payStatus[clinic.id] === 'loading' && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Checking…</span>
+                            )}
+                            {payStatus[clinic.id] === 'ready' && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Integrated</span>
+                            )}
+                            {payStatus[clinic.id] === 'issue' && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700 ring-1 ring-inset ring-yellow-200">Not integrated</span>
+                            )}
+                          </td>
                           <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                             <div className="flex items-center justify-end gap-1.5">
                               <Button
@@ -382,6 +421,26 @@ export default function ClinicsPage() {
                                   <EyeIcon className="h-4 w-4" />
                                 </Link>
                               </Button>
+                              {/* Integrate payments button */}
+                              {payStatus[clinic.id] !== 'ready' && (
+                                <Button
+                                  size="sm"
+                                  className="h-8 px-3 rounded-full bg-black text-white hover:bg-gray-900"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    try { localStorage.setItem('selectedClinicId', clinic.id); } catch {}
+                                    const role = (session as any)?.user?.role;
+                                    if (role === 'SUPER_ADMIN') {
+                                      window.location.href = `/admin/integrations/payments/setup?clinicId=${encodeURIComponent(clinic.id)}`;
+                                    } else {
+                                      window.location.href = '/business/integrations/pagarme/setup';
+                                    }
+                                  }}
+                                  title="Integrate payments"
+                                >
+                                  Integrate
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>

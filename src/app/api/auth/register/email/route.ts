@@ -119,11 +119,11 @@ export async function POST(req: Request) {
 
         await transporter.sendMail({
           from: {
-            name: 'Zuzz',
+            name: 'KRX',
             address: process.env.SMTP_FROM as string
           },
           to: normalizedEmail,
-          subject: '[Zuzz] Your verification code',
+          subject: '[KRX] Your verification code',
           html
         });
 
@@ -208,11 +208,11 @@ export async function POST(req: Request) {
 
       await transporter.sendMail({
         from: {
-          name: 'Zuzz',
+          name: 'KRX',
           address: process.env.SMTP_FROM as string
         },
         to: normalizedEmail,
-        subject: '[Zuzz] Your verification code',
+        subject: '[KRX] Your verification code',
         html
       });
 

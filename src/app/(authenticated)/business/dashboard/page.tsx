@@ -6,6 +6,7 @@ import { useClinic } from '@/contexts/clinic-context';
 import TransactionsTable from '@/components/business/TransactionsTable';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 
 const ApexChart = dynamic(() => import('react-apexcharts'), { ssr: false }) as any;
 
@@ -93,7 +94,9 @@ function DonutBreakdown({ title, data, palette }: { title: string; data: Array<[
 
 export default function BusinessDashboard() {
   const { data: session } = useSession();
-  const { currentClinic } = useClinic();
+  const { currentClinic, isLoading } = useClinic();
+  const router = useRouter();
+  const [paymentsReady, setPaymentsReady] = useState<boolean | null>(null);
   const [dateFrom, setDateFrom] = useState<string>(() => {
     const d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const y = d.getFullYear();
@@ -143,6 +146,26 @@ export default function BusinessDashboard() {
     };
     load();
   }, [session, currentClinic, dateFrom, dateTo]);
+
+  // Check payment integration readiness; if not ready, redirect to waiting list
+  useEffect(() => {
+    const checkPayments = async () => {
+      if (!currentClinic?.id) return;
+      try {
+        const res = await fetch(`/api/payments/pagarme/config/status?clinic_id=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+        const js = await res.json().catch(() => ({}));
+        const ready = res.ok && js?.ready_for_production === true;
+        setPaymentsReady(ready);
+        if (!ready) {
+          router.replace('/waiting-list');
+        }
+      } catch {
+        setPaymentsReady(false);
+        router.replace('/waiting-list');
+      }
+    };
+    if (currentClinic?.id) checkPayments();
+  }, [currentClinic?.id, router]);
 
   const formatBRL = (amount: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount || 0);
 
@@ -204,6 +227,16 @@ export default function BusinessDashboard() {
 
   const visibleCount = 10;
   const visibleTransactions = useMemo(() => transactions.slice(0, visibleCount), [transactions]);
+  // If no clinic selected, redirect to blocked/create page
+  useEffect(() => {
+    if (!isLoading && !currentClinic) {
+      router.replace('/business/clinic?create=1');
+    }
+  }, [isLoading, currentClinic, router]);
+  if (!currentClinic) return null;
+  // While checking payments, avoid flicker
+  if (paymentsReady === null) return null;
+
   return (
     <div className="min-h-screen bg-white">
       <div className="lg:ml-64">

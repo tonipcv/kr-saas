@@ -30,13 +30,13 @@ export const createSetPasswordEmail = ({
         
         <p>
           Hi ${name}, ${currentDoctorName}'s client!<br>
-          ${doctorName} invited you to join their protocols on Zuzz
+          ${doctorName} invited you to join their protocols on KRX
         </p>
       ` : `
-        <p>Welcome to Zuzz</p>
+        <p>Welcome to KRX</p>
         
         <p>
-          ${doctorName || 'Your doctor'} invited you to join Zuzz<br>
+          ${doctorName || 'Your doctor'} invited you to join KRX<br>
           Set up your password to get started →
         </p>
       `}
@@ -49,7 +49,7 @@ export const createSetPasswordEmail = ({
 
   return baseTemplate({
     content,
-    clinicName: clinicName || 'Zuzz',
+    clinicName: clinicName || 'KRX',
     clinicLogo,
     doctorName,
   });

@@ -12,6 +12,7 @@ function RegisterPasswordInner() {
   const searchParams = useSearchParams();
   const emailParam = searchParams.get('email');
   const tokenParam = searchParams.get('token');
+  const clinicNameParam = searchParams.get('clinicName');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +28,14 @@ function RegisterPasswordInner() {
       router.push('/auth/register/email');
     }
   }, [emailParam, tokenParam, router]);
+
+  // Prefill business name from previous step if provided
+  useEffect(() => {
+    if (clinicNameParam && !name) {
+      setName(clinicNameParam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clinicNameParam]);
 
   // Evaluate password strength
   useEffect(() => {
@@ -185,21 +194,41 @@ function RegisterPasswordInner() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                Business name
-              </label>
-              <input
-                type="text"
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                autoComplete="off"
-                className="w-full px-4 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900"
-                placeholder="Your Business"
-              />
-            </div>
+            {clinicNameParam ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Business name
+                </label>
+                <div className="w-full px-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-900">
+                  {name}
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  To change the business name, go back to the previous step.
+                  <Link
+                    href={`/auth/register/slug?email=${encodeURIComponent(emailParam || '')}&token=${encodeURIComponent(tokenParam || '')}`}
+                    className="ml-1 underline text-gray-700 hover:text-gray-900"
+                  >
+                    Edit business info
+                  </Link>
+                </p>
+              </div>
+            ) : (
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+                  Business name
+                </label>
+                <input
+                  type="text"
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  autoComplete="off"
+                  className="w-full px-4 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900"
+                  placeholder="Your Business"
+                />
+              </div>
+            )}
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">

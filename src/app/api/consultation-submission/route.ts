@@ -100,7 +100,7 @@ export async function POST(request: Request) {
       }
     });
 
-    const clinicName = form.doctor.clinicMemberships?.[0]?.clinic?.name || form.doctor.name || 'Zuzz';
+    const clinicName = form.doctor.clinicMemberships?.[0]?.clinic?.name || form.doctor.name || 'KRX';
     const clinicLogo = form.doctor.clinicMemberships?.[0]?.clinic?.logo || undefined;
     const doctorName = form.doctor.name || '';
 
@@ -123,7 +123,7 @@ export async function POST(request: Request) {
       await transporter.sendMail({
         from: process.env.SMTP_USER,
         to: form.doctor.email!,
-        subject: `[Zuzz] New Consultation Request - ${name}`,
+        subject: `[KRX] New Consultation Request - ${name}`,
         html: doctorEmailHtml
       });
     } catch (emailError) {
@@ -146,7 +146,7 @@ export async function POST(request: Request) {
         await transporter.sendMail({
           from: process.env.SMTP_USER,
           to: email,
-          subject: `[Zuzz] Consultation Request Confirmation - ${form.doctor.name}`,
+          subject: `[KRX] Consultation Request Confirmation - ${form.doctor.name}`,
           html: patientEmailHtml
         });
       } catch (emailError) {

@@ -74,6 +74,7 @@ export default function PagarmeSetupPage() {
     // Address
     if (!addrStreet.trim()) errs.push('Informe a rua.');
     if (!addrStreetNumber.trim()) errs.push('Informe o número.');
+    if (!addrComplementary.trim()) errs.push('Informe o complemento.');
     if (!addrNeighborhood.trim()) errs.push('Informe o bairro.');
     if (!addrCity.trim()) errs.push('Informe a cidade.');
     if (!addrState.trim() || !isUF(addrState)) errs.push('UF inválida (ex.: SP).');
@@ -86,6 +87,7 @@ export default function PagarmeSetupPage() {
       if (onlyDigits(bank).length < 3) errs.push('Banco inválido (código com 3 dígitos).');
       if (onlyDigits(agency).length < 3) errs.push('Agência inválida.');
       if (onlyDigits(account).length < 1) errs.push('Conta inválida.');
+      if (!accountDigit || !accountDigit.trim()) errs.push('Dígito da conta é obrigatório.');
       if (!accountType) errs.push('Selecione o tipo de conta.');
       const dAcc = onlyDigits(account);
       if (!(dAcc.length >= 4 && dAcc.length <= 12)) errs.push('Conta deve ter entre 4 e 12 dígitos.');
@@ -94,36 +96,168 @@ export default function PagarmeSetupPage() {
     return errs;
   }
 
+  // ---------- Helpers para dados aleatórios de teste ----------
+  function randInt(min: number, max: number) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function pick<T>(arr: T[]): T {
+    return arr[randInt(0, arr.length - 1)];
+  }
+
+  function pad(n: number, size: number) {
+    let s = String(n);
+    while (s.length < size) s = '0' + s;
+    return s;
+  }
+
+  // Gera CPF válido (11 dígitos) com DV calculado
+  function generateValidCPF(): string {
+    const n: number[] = Array.from({ length: 9 }, () => randInt(0, 9));
+    const d1Sum = n.reduce((acc, cur, idx) => acc + cur * (10 - idx), 0);
+    const d1 = (d1Sum * 10) % 11 % 10;
+    const d2Sum = [...n, d1].reduce((acc, cur, idx) => acc + cur * (11 - idx), 0);
+    const d2 = (d2Sum * 10) % 11 % 10;
+    return [...n, d1, d2].join('');
+  }
+
+  function randomBrazilPhone(): string {
+    // +55 DDD (10-11 dígitos nacionais). Usaremos formato E.164
+    const ddd = pad(randInt(11, 99), 2);
+    const first = randInt(6, 9); // celulares 6-9
+    const rest = pad(randInt(0, 99999999), 8);
+    return `+55${ddd}${first}${rest}`;
+  }
+
+  function randomBirthdate(): string {
+    const year = randInt(1960, 2005);
+    const month = randInt(1, 12);
+    const day = randInt(1, 28); // evita meses com menos dias
+    return `${pad(day, 2)}/${pad(month, 2)}/${year}`;
+  }
+
+  function randomEmail(base: string = 'teste.pagarme'): string {
+    const u = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    return `${base}+${u}@example.com`;
+  }
+
+  function randomName(): string {
+    const first = pick(['Ana', 'Bruno', 'Carla', 'Diego', 'Eduarda', 'Fernando', 'Gabriela', 'Henrique', 'Isabela', 'João', 'Karina', 'Lucas', 'Mariana', 'Nicolas', 'Olivia', 'Paulo', 'Queila', 'Rafael', 'Sofia', 'Thiago']);
+    const last = pick(['Silva', 'Souza', 'Oliveira', 'Santos', 'Lima', 'Pereira', 'Ferreira', 'Almeida', 'Gomes', 'Costa', 'Ribeiro', 'Carvalho']);
+    const suf = pick(['ME', 'LTDA', 'EIRELI', '']);
+    return `${first} ${last}${suf ? ' ' + suf : ''}`.trim();
+  }
+
+  function randomMotherName(): string {
+    const first = pick(['Maria', 'Patricia', 'Juliana', 'Claudia', 'Andrea', 'Camila', 'Aline', 'Renata']);
+    const last = pick(['Silva', 'Souza', 'Oliveira', 'Santos', 'Pereira', 'Fernandes']);
+    return `${first} ${last}`;
+  }
+
+  function randomOccupation(): string {
+    return pick(['Dentista', 'Médico', 'Fisioterapeuta', 'Psicólogo', 'Nutricionista']);
+  }
+
+  function randomMonthlyIncomeCents(): string {
+    const val = randInt(50000, 500000); // R$ 500,00 a R$ 5.000,00
+    return String(val);
+  }
+
+  function randomSiteUrl(): string {
+    const name = Math.random().toString(36).slice(2, 8);
+    return `https://www.${name}.com.br`;
+  }
+
+  function randomBankCode(): string {
+    return pick(['001', '033', '104', '237', '341', '356', '399', '745']);
+  }
+
+  function randomAgency(): string {
+    return String(randInt(100, 9999));
+  }
+
+  function alwaysDigit(): string {
+    return String(randInt(0, 9));
+  }
+
+  function randomAccount(): string {
+    return String(randInt(1000, 999999999999)); // 4 a 12 dígitos aprox.
+  }
+
+  function randomAccountType(): 'conta_corrente' | 'conta_poupanca' {
+    return pick(['conta_corrente', 'conta_poupanca']);
+  }
+
+  function randomAddress() {
+    const streets = ['Av. Paulista', 'Rua das Flores', 'Rua da Harmonia', 'Rua Vergueiro', 'Rua Augusta', 'Av. Brasil'];
+    const neigh = ['Centro', 'Bela Vista', 'Pinheiros', 'Vila Mariana', 'Moema'];
+    const cities = ['São Paulo', 'Rio de Janeiro', 'Belo Horizonte', 'Curitiba', 'Porto Alegre'];
+    const states = ['SP', 'RJ', 'MG', 'PR', 'RS'];
+    return {
+      street: pick(streets),
+      number: String(randInt(10, 5000)),
+      comp: pick([
+        `Sala ${randInt(1, 1201)}`,
+        `Conjunto ${randInt(1, 801)}`,
+        `Apto ${randInt(11, 1901)}`,
+        `Bloco ${pick(['A','B','C','D'])}, Sala ${randInt(1, 501)}`,
+      ]),
+      neighborhood: pick(neigh),
+      city: pick(cities),
+      state: pick(states),
+      zip: pad(randInt(1000000, 9999999), 8), // garante 8 dígitos com 0 à esquerda
+      ref: Math.random() < 0.5 ? 'Ponto de referência' : 'Em frente à praça',
+    };
+  }
+
   function fillWithTestData() {
+    const cpf = generateValidCPF();
+    const fullName = randomName();
+    const mail = randomEmail('pagarme');
+    const phone = randomBrazilPhone();
+    const birth = randomBirthdate();
+    const income = randomMonthlyIncomeCents();
+    const occ = randomOccupation();
+    const site = randomSiteUrl();
+    const mom = randomMotherName();
+
+    const bankCode = randomBankCode();
+    const ag = randomAgency();
+    const agd = alwaysDigit();
+    const acc = randomAccount();
+    const accd = alwaysDigit();
+    const accType = randomAccountType();
+
+    const addr = randomAddress();
+
     // Legal
-    setName('Clinica Exemplo LTDA');
-    // Use um CPF válido para testes (11 dígitos). Ex.: 11144477735
-    setDocumentNumber('11144477735');
-    setEmail('teste+pagarme@example.com');
-    setPhone('+5511999999999');
-    setSiteUrl('https://clinicaexemplo.com');
-    setMotherName('Maria Exemplo');
-    setBirthdate('10/10/1990');
-    setMonthlyIncome('120000'); // em centavos (R$ 1.200,00)
-    setOccupation('Dentista');
+    setName(fullName);
+    setDocumentNumber(cpf);
+    setEmail(mail);
+    setPhone(phone);
+    setSiteUrl(site);
+    setMotherName(mom);
+    setBirthdate(birth);
+    setMonthlyIncome(income);
+    setOccupation(occ);
 
     // Bank
-    setBank('341');
-    setAgency('1234');
-    setAgencyDigit('6');
-    setAccount('123456');
-    setAccountDigit('7');
-    setAccountType('conta_corrente');
+    setBank(bankCode);
+    setAgency(ag);
+    setAgencyDigit(agd);
+    setAccount(acc);
+    setAccountDigit(accd);
+    setAccountType(accType);
 
     // Address
-    setAddrStreet('Av. Paulista');
-    setAddrStreetNumber('1000');
-    setAddrComplementary('Sala 101');
-    setAddrNeighborhood('Bela Vista');
-    setAddrCity('São Paulo');
-    setAddrState('SP');
-    setAddrZip('01310000');
-    setAddrRef('Próximo ao MASP');
+    setAddrStreet(addr.street);
+    setAddrStreetNumber(addr.number);
+    setAddrComplementary(addr.comp);
+    setAddrNeighborhood(addr.neighborhood);
+    setAddrCity(addr.city);
+    setAddrState(addr.state);
+    setAddrZip(addr.zip);
+    setAddrRef(addr.ref);
   }
 
   async function onSubmit() {

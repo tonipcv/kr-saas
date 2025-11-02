@@ -9,7 +9,7 @@ import { Toaster } from 'sonner'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Zuzz',
+  title: 'KRX',
   description: 'Drive growth with rewards: referrals, points, and rewards codes made simple.',
   manifest: '/site.webmanifest',
   icons: {
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Zuzz Rewards',
+    title: 'KRX Rewards',
   },
 }
 

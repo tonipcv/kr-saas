@@ -33,7 +33,7 @@ export default function IntegrationsPage() {
   const [instanceId, setInstanceId] = useState<string | null>(null);
   const [lastSeenAt, setLastSeenAt] = useState<string | null>(null);
   const [testTo, setTestTo] = useState('');
-  const [testMsg, setTestMsg] = useState('Olá! Integração ativa pela Zuzz.');
+  const [testMsg, setTestMsg] = useState('Olá! Integração ativa pela KRX.');
   const [testing, setTesting] = useState(false);
 
   // WhatsApp (Official) state

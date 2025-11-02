@@ -234,21 +234,43 @@ export async function pagarmeCreateRecipient(payload: Record<string, any>) {
 }
 
 export async function pagarmeUpdateRecipient(recipientId: string, payload: Record<string, any>) {
-  const res = await fetch(`${PAGARME_BASE_URL}/recipients/${encodeURIComponent(recipientId)}`, {
-    method: IS_V5 ? 'PATCH' : 'PUT',
+  const url = `${PAGARME_BASE_URL}/recipients/${encodeURIComponent(recipientId)}`;
+  // Primary attempt: PATCH on v5, PUT on v1
+  let method = IS_V5 ? 'PATCH' : 'PUT';
+  let res = await fetch(url, {
+    method,
     headers: authHeaders(),
     body: JSON.stringify(payload),
     cache: 'no-store',
   });
-  const text = await res.text();
+  let text = await res.text();
   let data: any = {};
   try { data = JSON.parse(text); } catch {}
+
+  // If v5 rejects PATCH (405/404), fallback to PUT
+  if (!res.ok && IS_V5 && (res.status === 405 || res.status === 404)) {
+    method = 'PUT';
+    res = await fetch(url, {
+      method,
+      headers: authHeaders(),
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+    });
+    text = await res.text();
+    data = {};
+    try { data = JSON.parse(text); } catch {}
+  }
+
   if (!res.ok) {
     const msgFromArray = Array.isArray(data?.errors)
       ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
       : undefined;
     const msg = msgFromArray || data?.message || data?.error || text || `Pagarme error ${res.status}`;
-    throw new Error(`[Pagarme ${res.status}] ${msg}`);
+    const err: any = new Error(`[Pagarme ${res.status}] ${msg}`);
+    err.status = res.status;
+    err.responseText = text;
+    err.responseJson = data;
+    throw err;
   }
   return data;
 }

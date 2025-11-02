@@ -4,7 +4,7 @@ interface VerificationCodeEmailProps {
   clinicLogo?: string;
 }
 
-export function createVerificationCodeEmail({ code, clinicName = 'Zuzz', clinicLogo }: VerificationCodeEmailProps): string {
+export function createVerificationCodeEmail({ code, clinicName = 'KRX', clinicLogo }: VerificationCodeEmailProps): string {
   return `
     <!DOCTYPE html>
     <html>

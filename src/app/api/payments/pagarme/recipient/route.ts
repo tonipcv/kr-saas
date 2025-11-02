@@ -19,32 +19,40 @@ export async function POST(req: Request) {
     const { clinicId, legalInfo, bankAccount, splitPercent, platformFeeBps } = await req.json();
     if (!clinicId) return NextResponse.json({ error: 'clinicId é obrigatório' }, { status: 400 });
 
-    // Ensure the user is authorized for the clinic. If the user owns the clinic but
-    // doesn't yet have a ClinicMember row, create it automatically (root-cause fix).
-    let clinicMember = await prisma.clinicMember.findFirst({ where: { clinicId, userId: session.user.id } });
-    if (!clinicMember) {
-      const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { id: true, ownerId: true } });
-      if (clinic?.ownerId === session.user.id) {
-        // Auto-create membership for owner
-        try {
-          clinicMember = await prisma.clinicMember.upsert({
-            where: { clinicId_userId: { clinicId, userId: session.user.id } },
-            create: { clinicId, userId: session.user.id, role: 'OWNER' },
-            update: {},
-          });
-          if (isDev) {
-            console.warn('[pagarme][recipient] Auto-created ClinicMember for owner', { userId: session.user.id, clinicId });
+    // Identify SUPER_ADMIN to allow bypassing clinic membership checks
+    const dbUser = await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true, email: true } });
+    const isSuperAdmin = dbUser?.role === 'SUPER_ADMIN';
+
+    // Ensure the user is authorized for the clinic except SUPER_ADMIN users
+    if (!isSuperAdmin) {
+      // If the user owns the clinic but doesn't yet have a ClinicMember row, create it automatically (root-cause fix).
+      let clinicMember = await prisma.clinicMember.findFirst({ where: { clinicId, userId: session.user.id } });
+      if (!clinicMember) {
+        const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { id: true, ownerId: true } });
+        if (clinic?.ownerId === session.user.id) {
+          // Auto-create membership for owner
+          try {
+            clinicMember = await prisma.clinicMember.upsert({
+              where: { clinicId_userId: { clinicId, userId: session.user.id } },
+              create: { clinicId, userId: session.user.id, role: 'OWNER' },
+              update: {},
+            });
+            if (isDev) {
+              console.warn('[pagarme][recipient] Auto-created ClinicMember for owner', { userId: session.user.id, clinicId });
+            }
+          } catch (err) {
+            if (isDev) console.warn('[pagarme][recipient] Failed to auto-create owner membership', err);
           }
-        } catch (err) {
-          if (isDev) console.warn('[pagarme][recipient] Failed to auto-create owner membership', err);
         }
       }
-    }
-    if (!clinicMember) {
-      if (isDev) {
-        console.warn('[pagarme][recipient] 403 - user is not member of clinic', { userId: session.user.id, clinicId });
+      if (!clinicMember) {
+        if (isDev) {
+          console.warn('[pagarme][recipient] 403 - user is not member of clinic', { userId: session.user.id, clinicId });
+        }
+        return NextResponse.json({ error: 'Não autorizado para esta clínica', ...(isDev ? { details: { userId: session.user.id, clinicId } } : {}) }, { status: 403 });
       }
-      return NextResponse.json({ error: 'Não autorizado para esta clínica', ...(isDev ? { details: { userId: session.user.id, clinicId } } : {}) }, { status: 403 });
+    } else if (isDev) {
+      console.warn('[pagarme][recipient] SUPER_ADMIN bypassing clinic membership', { email: dbUser?.email, clinicId });
     }
 
     // Ensure Merchant row exists
@@ -133,7 +141,8 @@ export async function POST(req: Request) {
         branch_number: bankAccount.agencia || bankAccount.branch_number || undefined,
         branch_check_digit: bankAccount.branch_check_digit || undefined,
         account_number: (bankAccount.conta || bankAccount.account_number || '').toString().replace(/[^0-9]/g, ''),
-        account_check_digit: bankAccount.account_check_digit || undefined,
+        // Pagar.me v5 requires account_check_digit; use '0' as fallback if not provided
+        account_check_digit: (bankAccount.account_check_digit || '').toString().trim() || '0',
         type: normalizedBankType,
       } : undefined;
       const defaultBank = prune(defaultBankRaw);
@@ -219,11 +228,44 @@ export async function POST(req: Request) {
       console.warn('[pagarme][recipient] Payload (v5:', useV5, ')', JSON.stringify(recipPayload));
     }
     if (recipientId) {
-      const upd = await pagarmeUpdateRecipient(recipientId, recipPayload);
-      recipientId = upd?.id || upd?.recipient_id || recipientId;
+      try {
+        const upd = await pagarmeUpdateRecipient(recipientId, recipPayload);
+        recipientId = upd?.id || upd?.recipient_id || recipientId;
+      } catch (err: any) {
+        // If remote recipient does not exist anymore, create a new one
+        if (err?.status === 404) {
+          try {
+            const created = await pagarmeCreateRecipient(recipPayload);
+            recipientId = created?.id || created?.recipient_id || null;
+          } catch (ce: any) {
+            // Handle duplicate external_id/code (412) by regenerating code once
+            if (ce?.status === 412) {
+              const orig = recipPayload?.code || `clinic-${clinicId}`;
+              recipPayload.code = `${orig}-${Math.random().toString(36).slice(2, 8)}`;
+              const created2 = await pagarmeCreateRecipient(recipPayload);
+              recipientId = created2?.id || created2?.recipient_id || null;
+            } else {
+              throw ce;
+            }
+          }
+        } else {
+          throw err;
+        }
+      }
     } else {
-      const created = await pagarmeCreateRecipient(recipPayload);
-      recipientId = created?.id || created?.recipient_id || null;
+      try {
+        const created = await pagarmeCreateRecipient(recipPayload);
+        recipientId = created?.id || created?.recipient_id || null;
+      } catch (ce: any) {
+        if (ce?.status === 412) {
+          const orig = recipPayload?.code || `clinic-${clinicId}`;
+          recipPayload.code = `${orig}-${Math.random().toString(36).slice(2, 8)}`;
+          const created2 = await pagarmeCreateRecipient(recipPayload);
+          recipientId = created2?.id || created2?.recipient_id || null;
+        } else {
+          throw ce;
+        }
+      }
     }
 
     const updated = await prisma.merchant.update({

@@ -46,8 +46,8 @@ export async function GET(request: NextRequest) {
         id: true,
         name: true,
         email: true,
-        createdAt: true,
-        clinicMembers: {
+        created_at: true,
+        clinic_memberships: {
           where: { isActive: true },
           select: {
             role: true,
@@ -66,9 +66,9 @@ export async function GET(request: NextRequest) {
                       select: {
                         id: true,
                         name: true,
-                        price: true,
-                        maxDoctors: true,
-                        maxPatients: true,
+                        monthlyPrice: true,
+                        baseDoctors: true,
+                        basePatients: true,
                         tier: true,
                         trialDays: true
                       }
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
           }
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { created_at: 'desc' }
     });
 
     // Fetch patient counts per doctor (using doctor_id field)
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
     // Combine data
     const doctorsWithData = doctors.map(doctor => {
       const patientCount = patientCounts.find(p => p.doctorId === doctor.id)?.count || 0;
-      const activeClinic = doctor.clinicMembers[0]?.clinic; // Pegar a primeira clínica ativa
+      const activeClinic = (doctor as any).clinic_memberships?.[0]?.clinic; // Pegar a primeira clínica ativa
       const subscription = activeClinic?.subscriptions[0]; // Pegar a subscrição mais recente
 
       const normalizedSubscription = subscription
@@ -113,9 +113,9 @@ export async function GET(request: NextRequest) {
               ? {
                   id: subscription.plan.id,
                   name: subscription.plan.name,
-                  price: subscription.plan.price ?? 0,
-                  maxDoctors: subscription.plan.maxDoctors ?? 0,
-                  maxPatients: subscription.plan.maxPatients ?? 0,
+                  price: (subscription.plan as any).monthlyPrice ?? 0,
+                  maxDoctors: (subscription.plan as any).baseDoctors ?? 0,
+                  maxPatients: (subscription.plan as any).basePatients ?? 0,
                   tier: subscription.plan.tier,
                   trialDays: subscription.plan.trialDays ?? 0,
                 }
@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
           }
         : {
             status: 'ACTIVE',
-            startDate: doctor.createdAt.toISOString(),
+            startDate: (doctor as any).created_at.toISOString(),
             endDate: null,
             trialEndDate: null,
             plan: {
@@ -138,12 +138,12 @@ export async function GET(request: NextRequest) {
         id: doctor.id,
         name: doctor.name,
         email: doctor.email,
-        createdAt: doctor.createdAt,
+        createdAt: (doctor as any).created_at,
         clinic: activeClinic
           ? {
               id: activeClinic.id,
               name: activeClinic.name,
-              role: doctor.clinicMembers[0]?.role
+              role: (doctor as any).clinic_memberships?.[0]?.role
             }
           : null,
         subscription: normalizedSubscription,

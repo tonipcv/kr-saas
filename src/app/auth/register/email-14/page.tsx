@@ -89,7 +89,7 @@ function RegisterEmail14Inner() {
               className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-gradient-to-b from-gray-900 to-black hover:opacity-90 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Sending…' : 'Start 14-day free trial'}
+              {isSubmitting ? 'Sending…' : 'Create a account'}
               <ArrowRight className="h-4 w-4" />
             </button>
           </form>

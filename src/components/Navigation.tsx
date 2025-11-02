@@ -620,8 +620,10 @@ export default function Navigation() {
               </Link>
             </div>
 
-            {/* Clinic Selector */}
-            <SidebarClinicSelector />
+            {/* Clinic Selector: only for doctors/business users, not for SUPER_ADMIN */}
+            {effectiveRole !== 'SUPER_ADMIN' && (
+              <SidebarClinicSelector />
+            )}
 
             {/* Navigation Sections */}
             <div className="flex-1 py-5 px-3 overflow-y-auto">
@@ -844,7 +846,7 @@ export default function Navigation() {
           <nav className="fixed bottom-0 left-0 right-0 border-t backdrop-blur z-40 border-gray-200 bg-white">
             <div className="py-2 px-2">
               <div className="flex items-center justify-around">
-                {doctorNavSections.flatMap(section => section.items).map((item) => {
+                {navSections.flatMap(section => section.items).map((item) => {
                   const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
                   return (
                     <Link key={item.href} href={item.href} className="flex-1 max-w-[56px]">

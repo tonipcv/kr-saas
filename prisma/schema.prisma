@@ -138,6 +138,9 @@ model Clinic {
   logo            String?
   slug            String?     @unique @db.VarChar(255)
   subdomain       String?     @unique @db.VarChar(255)
+  // Business metadata
+  monthlyRevenueRange String?  @map("monthly_revenue_range")
+  currentGateway       String?  @map("current_gateway")
   // Branding / Theming
   theme           ClinicTheme @default(LIGHT)
   buttonColor     String?
@@ -407,7 +410,7 @@ model User {
   name                     String?
   image                    String?
   public_cover_image_url   String?
-  public_page_template     String?   @default("DEFAULT")
+  public_page_template     String? @ignore
   doctor_slug              String?   @unique
   role                     String    @default("PATIENT")
   is_active                Boolean   @default(true)

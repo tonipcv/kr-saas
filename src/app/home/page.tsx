@@ -44,24 +44,24 @@ export default function PublicHome() {
   ];
   const faqItems = [
     {
-      q: 'What is Zuzz and how does it help my business grow?',
-      a: 'Zuzz is a membership and loyalty platform that helps service businesses such as clinics, gyms, spas, dentists and restaurants grow without relying on paid ads. By combining subscriptions, rewards and referrals, Zuzz increases predictable revenue and customer retention.'
+      q: 'What is KRX and how does it help my business grow?',
+      a: 'KRX is a membership and loyalty platform that helps service businesses such as clinics, gyms, spas, dentists and restaurants grow without relying on paid ads. By combining subscriptions, rewards and referrals, KRX increases predictable revenue and customer retention.'
     },
     {
       q: 'How does the loyalty program work?',
       a: 'Your clients earn rewards when they book more services, refer friends or leave reviews. This drives repeat purchases, boosts average ticket size and turns happy clients into promoters.'
     },
     {
-      q: 'Can Zuzz also bring me new customers?',
+      q: 'Can KRX also bring me new customers?',
       a: 'Yes. With built-in referral programs, your existing clients become a powerful acquisition channel, bringing in qualified new customers at a lower cost than ads.'
     },
     {
       q: 'Does it only work for clinics?',
-      a: 'No. Zuzz is built for all service-based SMBs. It works seamlessly for beauty clinics, fitness studios, dental practices, spas and restaurants.'
+      a: 'No. KRX is built for all service-based SMBs. It works seamlessly for beauty clinics, fitness studios, dental practices, spas and restaurants.'
     },
     {
       q: 'Do I need integrations to get started?',
-      a: 'No. Zuzz works as a standalone platform. If you already use POS, scheduling or CRM software, Zuzz can connect to it for a smoother workflow.'
+      a: 'No. KRX works as a standalone platform. If you already use POS, scheduling or CRM software, KRX can connect to it for a smoother workflow.'
     },
     {
       q: 'Can I customize rewards and campaigns?',
@@ -69,14 +69,14 @@ export default function PublicHome() {
     },
     {
       q: 'What results can I expect?',
-      a: 'Businesses using Zuzz have seen revenue grow by more than 30 percent in the first months through higher retention and repeat sales.'
+      a: 'Businesses using KRX have seen revenue grow by more than 30 percent in the first months through higher retention and repeat sales.'
     },
     {
       q: 'How long does setup take?',
       a: 'Less than 30 minutes. Your branded program can be live the same day.'
     },
     {
-      q: 'How do I try Zuzz?',
+      q: 'How do I try KRX?',
       a: 'Book a demo with our team and launch your loyalty membership program with your own brand in minutes.'
     }
   ];
@@ -141,7 +141,7 @@ export default function PublicHome() {
             <h1 className="text-4xl md:text-7xl font-extrabold tracking-tight leading-tight text-gray-900 motion-safe:animate-fade-up">
               Grow with {" "}
               <RotatingWord
-                words={["Rewards","Loyalty","Intelligence"]}
+                words={["Local Payments","Intelligence",""]}
                 className="bg-gradient-to-b from-[#2d3238] to-[#545860] bg-clip-text text-transparent"
               />
             </h1>
@@ -230,20 +230,20 @@ export default function PublicHome() {
           </div>
 
           <div className="mt-8 md:mt-12 grid md:grid-cols-3 gap-4 md:gap-6">
-            {/* ZuzzBack */}
+            {/* KRXBack */}
             <div className="group rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
-              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">ZuzzBack</h3>
+              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">KRXBack</h3>
               <p className="mt-2 text-sm text-gray-700 font-medium">Smart cashback that builds habits.</p>
               {/* Mobile: tap to expand */}
               <div className="sm:hidden">
                 <details className="mt-2">
                   <summary className="text-sm text-gray-600 cursor-pointer select-none">Read more</summary>
-                  <p className="mt-2 text-sm text-gray-600">Every purchase returns credits (ZuzzBack) clients can use for future visits. Instead of chasing discounts, you’re rewarding loyalty — driving repeat bookings and predictable revenue.</p>
+                  <p className="mt-2 text-sm text-gray-600">Every purchase returns credits (KRXBack) clients can use for future visits. Instead of chasing discounts, you’re rewarding loyalty — driving repeat bookings and predictable revenue.</p>
                 </details>
               </div>
               {/* Desktop: hover to reveal */}
               <div className="hidden sm:block mt-2 text-sm text-gray-600 sm:max-h-0 sm:opacity-0 sm:group-hover:max-h-40 sm:group-hover:opacity-100 sm:transition-all sm:duration-300 sm:ease-out overflow-hidden">
-                <p>Every purchase returns credits (ZuzzBack) clients can use for future visits. Instead of chasing discounts, you’re rewarding loyalty — driving repeat bookings and predictable revenue.</p>
+                <p>Every purchase returns credits (KRXBack) clients can use for future visits. Instead of chasing discounts, you’re rewarding loyalty — driving repeat bookings and predictable revenue.</p>
               </div>
             </div>
 
@@ -254,26 +254,26 @@ export default function PublicHome() {
               <div className="sm:hidden">
                 <details className="mt-2">
                   <summary className="text-sm text-gray-600 cursor-pointer select-none">Read more</summary>
-                  <p className="mt-2 text-sm text-gray-600">Design custom offers, digital vouchers, and VIP perks for new and returning clients. Whether it’s “20% off for first-timers” or “double points in your birthday month,” you control the rules, and Zuzz handles the delivery.</p>
+                  <p className="mt-2 text-sm text-gray-600">Design custom offers, digital vouchers, and VIP perks for new and returning clients. Whether it’s “20% off for first-timers” or “double points in your birthday month,” you control the rules, and KRX handles the delivery.</p>
                 </details>
               </div>
               <div className="hidden sm:block mt-2 text-sm text-gray-600 sm:max-h-0 sm:opacity-0 sm:group-hover:max-h-40 sm:group-hover:opacity-100 sm:transition-all sm:duration-300 sm:ease-out overflow-hidden">
-                <p>Design custom offers, digital vouchers, and VIP perks for new and returning clients. Whether it’s “20% off for first-timers” or “double points in your birthday month,” you control the rules, and Zuzz handles the delivery.</p>
+                <p>Design custom offers, digital vouchers, and VIP perks for new and returning clients. Whether it’s “20% off for first-timers” or “double points in your birthday month,” you control the rules, and KRX handles the delivery.</p>
               </div>
             </div>
 
-            {/* ZuzzFlow */}
+            {/* KRXFlow */}
             <div className="group rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
-              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">ZuzzFlow</h3>
+              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">KRXFlow</h3>
               <p className="mt-2 text-sm text-gray-700 font-medium">Recover abandoned bookings with WhatsApp.</p>
               <div className="sm:hidden">
                 <details className="mt-2">
                   <summary className="text-sm text-gray-600 cursor-pointer select-none">Read more</summary>
-                  <p className="mt-2 text-sm text-gray-600">Zuzz detects incomplete checkouts or unconfirmed reservations and automatically sends reminders through WhatsApp. These smart nudges recover sales that would otherwise slip away.</p>
+                  <p className="mt-2 text-sm text-gray-600">KRX detects incomplete checkouts or unconfirmed reservations and automatically sends reminders through WhatsApp. These smart nudges recover sales that would otherwise slip away.</p>
                 </details>
               </div>
               <div className="hidden sm:block mt-2 text-sm text-gray-600 sm:max-h-0 sm:opacity-0 sm:group-hover:max-h-40 sm:group-hover:opacity-100 sm:transition-all sm:duration-300 sm:ease-out overflow-hidden">
-                <p>Zuzz detects incomplete checkouts or unconfirmed reservations and automatically sends reminders through WhatsApp. These smart nudges recover sales that would otherwise slip away.</p>
+                <p>KRX detects incomplete checkouts or unconfirmed reservations and automatically sends reminders through WhatsApp. These smart nudges recover sales that would otherwise slip away.</p>
               </div>
             </div>
 
@@ -292,9 +292,9 @@ export default function PublicHome() {
               </div>
             </div>
 
-            {/* DuoZuzz */}
+            {/* DuoKRX */}
             <div className="group rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
-              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">DuoZuzz</h3>
+              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">DuoKRX</h3>
               <p className="mt-2 text-sm text-gray-700 font-medium">Referrals made simple.</p>
               <div className="sm:hidden">
                 <details className="mt-2">
@@ -337,33 +337,33 @@ export default function PublicHome() {
               </div>
             </div>
 
-            {/* ZuzzTalk */}
+            {/* KRXTalk */}
             <div className="group rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
-              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">ZuzzTalk</h3>
+              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">KRXTalk</h3>
               <p className="mt-2 text-sm text-gray-700 font-medium">Conversational commerce powered by AI.</p>
               <div className="sm:hidden">
                 <details className="mt-2">
                   <summary className="text-sm text-gray-600 cursor-pointer select-none">Read more</summary>
-                  <p className="mt-2 text-sm text-gray-600">Your clients can chat with your business on WhatsApp — asking questions, booking services, or paying instantly. ZuzzTalk suggests upgrades, answers FAQs, and sells for you 24/7.</p>
+                  <p className="mt-2 text-sm text-gray-600">Your clients can chat with your business on WhatsApp — asking questions, booking services, or paying instantly. KRXTalk suggests upgrades, answers FAQs, and sells for you 24/7.</p>
                 </details>
               </div>
               <div className="hidden sm:block mt-2 text-sm text-gray-600 sm:max-h-0 sm:opacity-0 sm:group-hover:max-h-40 sm:group-hover:opacity-100 sm:transition-all sm:duration-300 sm:ease-out overflow-hidden">
-                <p>Your clients can chat with your business on WhatsApp — asking questions, booking services, or paying instantly. ZuzzTalk suggests upgrades, answers FAQs, and sells for you 24/7.</p>
+                <p>Your clients can chat with your business on WhatsApp — asking questions, booking services, or paying instantly. KRXTalk suggests upgrades, answers FAQs, and sells for you 24/7.</p>
               </div>
             </div>
 
-            {/* ZuzzVision */}
+            {/* KRXVision */}
             <div className="group rounded-xl md:rounded-2xl p-5 md:p-7 bg-white ring-1 ring-gray-200 shadow-sm">
-              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">ZuzzVision</h3>
+              <h3 className="text-base md:text-lg font-semibold text-gray-900 tracking-tight">KRXVision</h3>
               <p className="mt-2 text-sm text-gray-700 font-medium">See the full picture, not scattered numbers.</p>
               <div className="sm:hidden">
                 <details className="mt-2">
                   <summary className="text-sm text-gray-600 cursor-pointer select-none">Read more</summary>
-                  <p className="mt-2 text-sm text-gray-600">A single dashboard showing acquisition, retention, reactivation, referrals, and NPS. With ZuzzVision, you get predictable revenue insights and a clear view of what drives growth.</p>
+                  <p className="mt-2 text-sm text-gray-600">A single dashboard showing acquisition, retention, reactivation, referrals, and NPS. With KRXVision, you get predictable revenue insights and a clear view of what drives growth.</p>
                 </details>
               </div>
               <div className="hidden sm:block mt-2 text-sm text-gray-600 sm:max-h-0 sm:opacity-0 sm:group-hover:max-h-40 sm:group-hover:opacity-100 sm:transition-all sm:duration-300 sm:ease-out overflow-hidden">
-                <p>A single dashboard showing acquisition, retention, reactivation, referrals, and NPS. With ZuzzVision, you get predictable revenue insights and a clear view of what drives growth.</p>
+                <p>A single dashboard showing acquisition, retention, reactivation, referrals, and NPS. With KRXVision, you get predictable revenue insights and a clear view of what drives growth.</p>
               </div>
             </div>
           </div>
@@ -376,7 +376,7 @@ export default function PublicHome() {
           <div className="text-center max-w-3xl mx-auto">
             <span className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ring-1 ring-gray-200 text-gray-700 bg-white">Testimonials</span>
             <h2 className="mt-3 text-3xl md:text-5xl font-extrabold text-gray-900 tracking-tight">Don’t just take our word for it</h2>
-            <p className="mt-3 text-gray-600 text-sm md:text-base">Our users are our best ambassadors. See why teams choose Zuzz to run rewards and referrals.</p>
+            <p className="mt-3 text-gray-600 text-sm md:text-base">Our users are our best ambassadors. See why teams choose KRX to run rewards and referrals.</p>
           </div>
           <TestimonialsCarousel items={testimonials} />
         </div>
@@ -386,7 +386,7 @@ export default function PublicHome() {
       <section className="py-20 md:py-24 border-t border-gray-100">
         <div className="max-w-5xl mx-auto px-4 text-center">
           <h2 className="text-3xl md:text-5xl font-extrabold text-gray-900 tracking-tight">Your Free Trial, Made Easy</h2>
-          <p className="mt-3 text-gray-600 text-sm md:text-base">Try Zuzz risk-free for 14 days. Get full access to all features. No commitment — cancel anytime.</p>
+          <p className="mt-3 text-gray-600 text-sm md:text-base">Try KRX risk-free for 14 days. Get full access to all features. No commitment — cancel anytime.</p>
 
           {/* Timeline */}
           <div className="mt-10 md:mt-12">
