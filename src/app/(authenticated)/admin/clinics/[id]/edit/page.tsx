@@ -118,6 +118,9 @@ export default function EditClinicPage() {
     maxDoctors: 1
   });
 
+  // Payments (merchant) state
+  const [merchantRecipientId, setMerchantRecipientId] = useState<string>('');
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -156,6 +159,9 @@ export default function EditClinicPage() {
               maxDoctors: clinicData.clinic.subscription.maxDoctors
             });
           }
+
+          // Populate payments (merchant)
+          setMerchantRecipientId((clinicData?.clinic?.merchant?.recipientId as string) || '');
         }
 
         if (plansResponse.ok) {
@@ -200,7 +206,10 @@ export default function EditClinicPage() {
         },
         body: JSON.stringify({
           ...formData,
-          subscription: subscriptionData
+          subscription: subscriptionData,
+          merchant: {
+            recipientId: merchantRecipientId?.trim() || null,
+          },
         }),
       });
 
@@ -247,12 +256,12 @@ export default function EditClinicPage() {
 
   const getSubscriptionStatusColor = (status: string) => {
     switch (status) {
-      case 'ACTIVE': return 'bg-green-100 text-green-800';
-      case 'TRIAL': return 'bg-blue-100 text-blue-800';
-      case 'EXPIRED': return 'bg-red-100 text-red-800';
-      case 'SUSPENDED': return 'bg-yellow-100 text-yellow-800';
-      case 'CANCELLED': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'ACTIVE': return 'bg-green-50 text-green-700 ring-1 ring-inset ring-green-200';
+      case 'TRIAL': return 'bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200';
+      case 'EXPIRED': return 'bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200';
+      case 'SUSPENDED': return 'bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200';
+      case 'CANCELLED': return 'bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200';
+      default: return 'bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200';
     }
   };
 
@@ -318,9 +327,9 @@ export default function EditClinicPage() {
         <div className="lg:ml-64">
           <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
             <div className="text-center py-12">
-              <ExclamationTriangleIcon className="h-16 w-16 text-red-400 mx-auto mb-4" />
-              <p className="text-red-600 text-lg">Clinic not found.</p>
-              <Button asChild className="mt-4 bg-turquoise hover:bg-turquoise/90 text-black font-semibold">
+              <ExclamationTriangleIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-700 text-lg">Clinic not found.</p>
+              <Button asChild variant="outline" className="mt-4 border-gray-200 text-gray-700 hover:bg-gray-50">
                 <Link href="/admin/clinics">
                   <ArrowLeftIcon className="h-4 w-4 mr-2" />
                   Back to Clinics
@@ -352,7 +361,7 @@ export default function EditClinicPage() {
               <Button 
                 onClick={handleSave}
                 disabled={isSaving}
-                className="bg-turquoise hover:bg-turquoise/90 text-black font-semibold shadow-lg shadow-turquoise/25 hover:shadow-turquoise/40 hover:scale-105 transition-all duration-200"
+                className="bg-gray-900 hover:bg-black text-white font-medium rounded-xl"
               >
                 {isSaving ? (
                   <>
@@ -369,12 +378,12 @@ export default function EditClinicPage() {
               <Button 
                 onClick={handleDelete}
                 disabled={isDeleting}
-                variant="destructive"
-                className="bg-red-600 hover:bg-red-700 text-white font-semibold shadow-lg shadow-red-600/25 hover:shadow-red-600/40 hover:scale-105 transition-all duration-200"
+                variant="outline"
+                className="border-gray-200 text-gray-700 hover:bg-gray-50 font-medium rounded-xl"
               >
                 {isDeleting ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700 mr-2"></div>
                     Deleting...
                   </>
                 ) : (
@@ -405,7 +414,7 @@ export default function EditClinicPage() {
               <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl">
                 <CardHeader>
                   <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    <BuildingOfficeIcon className="h-5 w-5 text-turquoise" />
+                    <BuildingOfficeIcon className="h-5 w-5 text-gray-700" />
                     Basic Information
                   </CardTitle>
                 </CardHeader>
@@ -419,7 +428,7 @@ export default function EditClinicPage() {
                         id="name"
                         value={formData.name}
                         onChange={(e) => handleInputChange('name', e.target.value)}
-                        className="border-gray-300 focus:border-turquoise focus:ring-turquoise"
+                        className="border-gray-300 focus:border-gray-900 focus:ring-gray-900"
                         placeholder="Enter clinic name"
                       />
                     </div>
@@ -433,7 +442,7 @@ export default function EditClinicPage() {
                         type="email"
                         value={formData.email}
                         onChange={(e) => handleInputChange('email', e.target.value)}
-                        className="border-gray-300 focus:border-turquoise focus:ring-turquoise"
+                        className="border-gray-300 focus:border-gray-900 focus:ring-gray-900"
                         placeholder="clinic@example.com"
                       />
                     </div>
@@ -447,7 +456,7 @@ export default function EditClinicPage() {
                       id="description"
                       value={formData.description}
                       onChange={(e) => handleInputChange('description', e.target.value)}
-                      className="border-gray-300 focus:border-turquoise focus:ring-turquoise"
+                      className="border-gray-300 focus:border-gray-900 focus:ring-gray-900"
                       placeholder="Brief description of the clinic"
                       rows={3}
                     />
@@ -462,7 +471,7 @@ export default function EditClinicPage() {
                         id="phone"
                         value={formData.phone}
                         onChange={(e) => handleInputChange('phone', e.target.value)}
-                        className="border-gray-300 focus:border-turquoise focus:ring-turquoise"
+                        className="border-gray-300 focus:border-gray-900 focus:ring-gray-900"
                         placeholder="+1 (555) 123-4567"
                       />
                     </div>
@@ -475,7 +484,7 @@ export default function EditClinicPage() {
                         id="website"
                         value={formData.website}
                         onChange={(e) => handleInputChange('website', e.target.value)}
-                        className="border-gray-300 focus:border-turquoise focus:ring-turquoise"
+                        className="border-gray-300 focus:border-gray-900 focus:ring-gray-900"
                         placeholder="https://www.clinic.com"
                       />
                     </div>
@@ -487,7 +496,7 @@ export default function EditClinicPage() {
               <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl">
                 <CardHeader>
                   <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    <MapPinIcon className="h-5 w-5 text-turquoise" />
+                    <MapPinIcon className="h-5 w-5 text-gray-700" />
                     Address Information
                   </CardTitle>
                 </CardHeader>
@@ -500,7 +509,7 @@ export default function EditClinicPage() {
                       id="address"
                       value={formData.address}
                       onChange={(e) => handleInputChange('address', e.target.value)}
-                      className="border-gray-300 focus:border-turquoise focus:ring-turquoise"
+                      className="border-gray-300 focus:border-gray-900 focus:ring-gray-900"
                       placeholder="123 Main Street"
                     />
                   </div>
@@ -514,7 +523,7 @@ export default function EditClinicPage() {
                         id="city"
                         value={formData.city}
                         onChange={(e) => handleInputChange('city', e.target.value)}
-                        className="border-gray-300 focus:border-turquoise focus:ring-turquoise"
+                        className="border-gray-300 focus:border-gray-900 focus:ring-gray-900"
                         placeholder="New York"
                       />
                     </div>
@@ -527,7 +536,7 @@ export default function EditClinicPage() {
                         id="state"
                         value={formData.state}
                         onChange={(e) => handleInputChange('state', e.target.value)}
-                        className="border-gray-300 focus:border-turquoise focus:ring-turquoise"
+                        className="border-gray-300 focus:border-gray-900 focus:ring-gray-900"
                         placeholder="NY"
                       />
                     </div>
@@ -540,7 +549,7 @@ export default function EditClinicPage() {
                         id="zipCode"
                         value={formData.zipCode}
                         onChange={(e) => handleInputChange('zipCode', e.target.value)}
-                        className="border-gray-300 focus:border-turquoise focus:ring-turquoise"
+                        className="border-gray-300 focus:border-gray-900 focus:ring-gray-900"
                         placeholder="10001"
                       />
                     </div>
@@ -554,7 +563,7 @@ export default function EditClinicPage() {
                       id="country"
                       value={formData.country}
                       onChange={(e) => handleInputChange('country', e.target.value)}
-                      className="border-gray-300 focus:border-turquoise focus:ring-turquoise"
+                      className="border-gray-300 focus:border-gray-900 focus:ring-gray-900"
                       placeholder="United States"
                     />
                   </div>
@@ -569,13 +578,13 @@ export default function EditClinicPage() {
               <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl">
                 <CardHeader>
                   <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    <UsersIcon className="h-5 w-5 text-turquoise" />
+                    <UsersIcon className="h-5 w-5 text-gray-700" />
                     Clinic Owner
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                    <div className="h-10 w-10 bg-turquoise rounded-full flex items-center justify-center">
+                    <div className="h-10 w-10 bg-gray-200 rounded-full flex items-center justify-center">
                       <span className="text-black font-semibold text-sm">
                         {clinic.owner.name.charAt(0).toUpperCase()}
                       </span>
@@ -629,7 +638,7 @@ export default function EditClinicPage() {
                       value={subscriptionData.planId}
                       onValueChange={(value) => handleSubscriptionChange('planId', value)}
                     >
-                      <SelectTrigger className="border-gray-300 focus:border-turquoise focus:ring-turquoise">
+                      <SelectTrigger className="border-gray-300 focus:border-gray-900 focus:ring-gray-900">
                         <SelectValue placeholder="Select a plan" />
                       </SelectTrigger>
                       <SelectContent>
@@ -652,7 +661,7 @@ export default function EditClinicPage() {
                       value={subscriptionData.status}
                       onValueChange={(value) => handleSubscriptionChange('status', value)}
                     >
-                      <SelectTrigger className="border-gray-300 focus:border-turquoise focus:ring-turquoise">
+                      <SelectTrigger className="border-gray-300 focus:border-gray-900 focus:ring-gray-900">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -675,7 +684,7 @@ export default function EditClinicPage() {
                       min="1"
                       value={subscriptionData.maxDoctors}
                       onChange={(e) => handleSubscriptionChange('maxDoctors', parseInt(e.target.value) || 1)}
-                      className="border-gray-300 focus:border-turquoise focus:ring-turquoise"
+                      className="border-gray-300 focus:border-gray-900 focus:ring-gray-900"
                     />
                   </div>
 
@@ -699,7 +708,7 @@ export default function EditClinicPage() {
 
                   {/* Selected Plan Info */}
                   {selectedPlan && (
-                    <div className="p-3 bg-turquoise/10 border border-turquoise/20 rounded-lg">
+                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
                       <h4 className="font-medium text-gray-900 mb-2">{selectedPlan.name}</h4>
                       <p className="text-sm text-gray-600 mb-2">${selectedPlan.price}/month</p>
                       <p className="text-sm text-gray-600">Max Doctors: {selectedPlan.maxDoctors}</p>
@@ -709,7 +718,7 @@ export default function EditClinicPage() {
                           <div className="text-xs text-gray-600">
                             {selectedPlan.features.split(',').map((feature, index) => (
                               <div key={index} className="flex items-center gap-1 mb-1">
-                                <CheckCircleIcon className="h-3 w-3 text-turquoise" />
+                                <CheckCircleIcon className="h-3 w-3 text-gray-600" />
                                 {feature.trim()}
                               </div>
                             ))}
@@ -718,6 +727,30 @@ export default function EditClinicPage() {
                       )}
                     </div>
                   )}
+                </CardContent>
+              </Card>
+
+              {/* Payments */}
+              <Card className="bg-white border border-gray-200 shadow-lg rounded-2xl">
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold text-gray-900">
+                    Payments
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="recipientId" className="text-sm font-medium text-gray-700">
+                      Recipient ID (Pagar.me)
+                    </Label>
+                    <Input
+                      id="recipientId"
+                      value={merchantRecipientId}
+                      onChange={(e) => setMerchantRecipientId(e.target.value)}
+                      placeholder="recp_..."
+                      className="border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                    />
+                    <p className="text-xs text-gray-500">Used for settlements and splits. Leave blank to unset.</p>
+                  </div>
                 </CardContent>
               </Card>
 

@@ -83,13 +83,17 @@ interface Clinic {
     };
   }>;
   subscription?: ClinicSubscription;
+  merchant?: {
+    recipientId: string | null;
+    status?: string | null;
+  } | null;
 }
 
 export default function ClinicsPage() {
   const { data: session } = useSession();
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [payStatus, setPayStatus] = useState<Record<string, 'ready' | 'issue' | 'loading'>>({});
+  const [payStatus, setPayStatus] = useState<Record<string, 'ready' | 'issue'>>({});
 
   useEffect(() => {
     const loadClinics = async () => {
@@ -117,9 +121,12 @@ export default function ClinicsPage() {
   useEffect(() => {
     const controller = new AbortController();
     const run = async () => {
-      const initial: Record<string, 'ready' | 'issue' | 'loading'> = {};
-      clinics.forEach(c => { initial[c.id] = 'loading'; });
-      setPayStatus((prev) => ({ ...initial }));
+      // Seed initial status from server data to avoid flicker
+      const initial: Record<string, 'ready' | 'issue'> = {};
+      clinics.forEach(c => {
+        initial[c.id] = c?.merchant?.recipientId ? 'ready' : 'issue';
+      });
+      setPayStatus(initial);
       await Promise.all(
         clinics.map(async (c) => {
           try {
@@ -387,9 +394,6 @@ export default function ClinicsPage() {
                           </td>
                           {/* Payments integration status */}
                           <td className="whitespace-nowrap px-3 py-3.5 text-sm">
-                            {payStatus[clinic.id] === 'loading' && (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Checking…</span>
-                            )}
                             {payStatus[clinic.id] === 'ready' && (
                               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Integrated</span>
                             )}

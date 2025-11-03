@@ -31,6 +31,7 @@ export async function GET(
       include: {
         owner: { select: { id: true, name: true, email: true } },
         members: { include: { user: { select: { id: true, name: true, email: true } } } },
+        merchant: { select: { recipientId: true, status: true, splitPercent: true, platformFeeBps: true, lastSyncAt: true } },
         subscriptions: {
           where: {
             status: { in: ['ACTIVE', 'TRIAL'] }
@@ -130,7 +131,8 @@ export async function PUT(
       country,
       website,
       isActive,
-      subscription
+      subscription,
+      merchant
     } = await request.json();
 
     if (!name) {
@@ -190,6 +192,7 @@ export async function PUT(
             }
           }
         },
+        merchant: { select: { recipientId: true, status: true, splitPercent: true, platformFeeBps: true, lastSyncAt: true } },
         subscriptions: {
           where: {
             status: { in: ['ACTIVE', 'TRIAL'] }
@@ -201,9 +204,9 @@ export async function PUT(
               select: {
                 id: true,
                 name: true,
-                price: true,
-                maxDoctors: true,
-                maxPatients: true,
+                monthlyPrice: true,
+                baseDoctors: true,
+                basePatients: true,
                 tier: true
               }
             }

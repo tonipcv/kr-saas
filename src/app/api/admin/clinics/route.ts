@@ -32,6 +32,7 @@ export async function GET() {
             user: { select: { id: true, name: true, email: true, role: true } }
           }
         },
+        merchant: { select: { recipientId: true, status: true, splitPercent: true, platformFeeBps: true, lastSyncAt: true } },
         subscriptions: {
           where: { status: { in: ['ACTIVE', 'TRIAL'] } },
           orderBy: { createdAt: 'desc' },
@@ -75,6 +76,13 @@ export async function GET() {
       return {
         ...c,
         subscription: mappedSub,
+        merchant: (c as any).merchant ? {
+          recipientId: (c as any).merchant.recipientId || null,
+          status: (c as any).merchant.status || null,
+          splitPercent: (c as any).merchant.splitPercent ?? null,
+          platformFeeBps: (c as any).merchant.platformFeeBps ?? null,
+          lastSyncAt: (c as any).merchant.lastSyncAt || null,
+        } : null,
       } as any;
     });
 

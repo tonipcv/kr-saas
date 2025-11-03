@@ -670,29 +670,58 @@ export async function POST(req: Request) {
       payment_url = tx?.qr_code_url || tx?.gateway_reference || tx?.url || null;
       if (payment?.method === 'pix') {
         const pixStatus = (tx?.status || ch?.status || order?.status || 'processing').toString().toLowerCase();
-        pix = {
+        const basePix = {
           qr_code_url: tx?.qr_code_url || null,
           qr_code: tx?.qr_code || null,
           expires_in: (typeof (payment?.pix?.expires_in ?? payment?.pixExpiresIn) === 'number' ? Number(payment?.pix?.expires_in ?? payment?.pixExpiresIn) : 1800),
           expires_at: tx?.expires_at ?? null,
-        };
-        // Diagnostics for failed PIX
+        } as any;
+        // Attach debug info on failure to help surface reasons instead of nulls
         if (pixStatus === 'failed') {
+          const debug = {
+            order_status: order?.status ?? null,
+            charge_status: ch?.status ?? null,
+            tx_status: tx?.status ?? null,
+            status_reason: tx?.status_reason ?? null,
+            code: (tx as any)?.code ?? null,
+            message: (tx as any)?.message ?? null,
+            error_code: (tx as any)?.error_code ?? null,
+            refusal_reason: (tx as any)?.refusal_reason ?? null,
+            gateway_response_code: (tx as any)?.gateway_response_code ?? null,
+            gateway_response_message: (tx as any)?.gateway_response_message ?? null,
+            acquirer_name: (tx as any)?.acquirer_name ?? null,
+            provider: (tx as any)?.provider ?? null,
+          };
+          basePix.debug = debug;
           try {
             console.error('[checkout][create] PIX failed diagnostics', {
               order_id: order?.id,
               charge_id: ch?.id,
               tx_id: tx?.id,
-              status_reason: tx?.status_reason ?? null,
-              gateway_response_code: (tx as any)?.gateway_response_code ?? null,
-              gateway_response_message: (tx as any)?.gateway_response_message ?? null,
+              ...debug,
               has_qr_code: !!(tx?.qr_code_url || tx?.qr_code),
               split_applied: actualSplitApplied,
               split_env_flag: String(process.env.PAGARME_ENABLE_SPLIT || '').toLowerCase() === 'true',
               is_subscription_prepaid: !!(body as any)?.subscriptionPeriodMonths
             });
+            // One more attempt to refresh order details for richer tx error payload
+            try {
+              const refreshed = await pagarmeGetOrder(order?.id);
+              const rch = Array.isArray(refreshed?.charges) ? refreshed.charges[0] : null;
+              const rtx = rch?.last_transaction || null;
+              console.error('[checkout][create] PIX refreshed tx snapshot', {
+                tx_status: rtx?.status ?? null,
+                status_reason: rtx?.status_reason ?? null,
+                code: (rtx as any)?.code ?? null,
+                message: (rtx as any)?.message ?? null,
+                error_code: (rtx as any)?.error_code ?? null,
+                gateway_response_code: (rtx as any)?.gateway_response_code ?? null,
+                gateway_response_message: (rtx as any)?.gateway_response_message ?? null,
+              });
+            } catch {}
           } catch {}
         }
+        pix = basePix;
       }
       if (payment?.method === 'card') {
         const status = (tx?.status || pay?.status || ch?.status || order?.status || 'processing').toString().toLowerCase();
