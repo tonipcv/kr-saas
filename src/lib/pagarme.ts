@@ -359,7 +359,11 @@ export async function pagarmeCancelCharge(chargeId: string) {
       ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
       : undefined;
     const msg = msgFromArray || data?.message || data?.error || text || `Pagarme cancel error ${res.status}`;
-    throw new Error(msg);
+    const err: any = new Error(msg);
+    err.status = res.status;
+    err.responseText = text;
+    err.responseJson = data;
+    throw err;
   }
   return data;
 }
@@ -384,7 +388,11 @@ export async function pagarmeRefundCharge(chargeId: string, amountCents?: number
       ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
       : undefined;
     const msg = msgFromArray || data?.message || data?.error || text || `Pagarme refund error ${res.status}`;
-    throw new Error(msg);
+    const err: any = new Error(msg);
+    err.status = res.status;
+    err.responseText = text;
+    err.responseJson = data;
+    throw err;
   }
   return data;
 }

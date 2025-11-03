@@ -199,6 +199,8 @@ export default function Navigation() {
   const { userRole, isLoadingRole } = useUserRole();
   const { currentClinic } = useClinic();
   const isFreePlan = currentClinic?.subscription?.plan?.name?.toLowerCase() === 'free';
+  // Payments integration status for current clinic
+  const [payStatus, setPayStatus] = useState<'active' | 'inactive' | 'loading'>('loading');
   
   // Estado para controlar hidratação e evitar erros de SSR
   const [isHydrated, setIsHydrated] = useState(false);
@@ -213,6 +215,28 @@ export default function Navigation() {
   useEffect(() => {
     setIsHydrated(true);
   }, []);
+
+  // Load payments status for current clinic to show an active icon in the menu
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!currentClinic?.id) {
+        if (!cancelled) setPayStatus('inactive');
+        return;
+      }
+      try {
+        if (!cancelled) setPayStatus('loading');
+        const res = await fetch(`/api/payments/pagarme/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+        const js = await res.json().catch(() => ({}));
+        const connected = res.ok && (js?.connected === true) && !!(js?.recipientId);
+        if (!cancelled) setPayStatus(connected ? 'active' : 'inactive');
+      } catch {
+        if (!cancelled) setPayStatus('inactive');
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [currentClinic?.id]);
 
   // Close menus on outside click
   useEffect(() => {
@@ -535,8 +559,16 @@ export default function Navigation() {
         shouldUseLightTheme ? "h-4 w-4 flex-shrink-0" : "h-4.5 w-4.5 flex-shrink-0",
         shouldUseLightTheme ? "text-gray-500" : "text-white/70"
       )} />
-      {/* Smaller label on doctor/admin nav */}
-      <span className={cn(shouldUseLightTheme ? "text-xs truncate" : "text-sm truncate")}>{item.label}</span>
+      {/* Label + optional payments status dot */}
+      <span className={cn(shouldUseLightTheme ? "text-xs truncate" : "text-sm truncate", "flex items-center gap-1")}> 
+        {item.label}
+        {item.href === '/business/payments' && payStatus === 'active' && (
+          <span className={cn(
+            "inline-block h-1.5 w-1.5 rounded-full",
+            shouldUseLightTheme ? "bg-green-500" : "bg-green-400"
+          )} />
+        )}
+      </span>
     </Button>
   );
 

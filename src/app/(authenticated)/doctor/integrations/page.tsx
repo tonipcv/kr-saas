@@ -4,9 +4,9 @@ import React, { useMemo, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { CogIcon, LinkIcon, LockClosedIcon } from '@heroicons/react/24/outline';
+import { LinkIcon, LockClosedIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useClinic } from '@/contexts/clinic-context';
 import { Input } from '@/components/ui/input';
 import { toast } from 'react-hot-toast';
@@ -14,6 +14,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 
 export default function IntegrationsPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const isBusinessRoute = typeof pathname === 'string' && pathname.includes('/business/');
   const { currentClinic, isLoading } = useClinic();
   const planName = currentClinic?.subscription?.plan?.name || '';
   const planLower = planName.toLowerCase();
@@ -476,7 +478,8 @@ export default function IntegrationsPage() {
 
           {/* Cards (minimal headers; click to view details) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Pagar.me Payments */}
+            {/* Pagar.me Payments (hidden on business route) */}
+            {!isBusinessRoute && (
             <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
               {blocked && (
                 <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-1 text-xs">
@@ -486,7 +489,7 @@ export default function IntegrationsPage() {
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    <CogIcon className="h-5 w-5 text-gray-500" /> Pagamentos
+                    Pagamentos
                   </CardTitle>
                   <div className="flex items-center gap-2">
                     <div className="text-xs">
@@ -682,6 +685,7 @@ export default function IntegrationsPage() {
                 </CardContent>
               )}
             </Card>
+            )}
             {/* SEO card removed */}
             {/* WhatsApp (Xase.ai) */}
             <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
@@ -693,7 +697,7 @@ export default function IntegrationsPage() {
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    <CogIcon className="h-5 w-5 text-gray-500" /> WhatsApp (Xase.ai)
+                    WhatsApp (Xase.ai)
                   </CardTitle>
                   <div className="flex items-center gap-2">
                     <div className="text-xs">
@@ -762,7 +766,7 @@ export default function IntegrationsPage() {
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    <CogIcon className="h-5 w-5 text-gray-500" /> E-mail
+                    E-mail
                   </CardTitle>
                   <div className="flex items-center gap-2">
                     <div className="text-xs">
@@ -901,7 +905,7 @@ export default function IntegrationsPage() {
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    <CogIcon className="h-5 w-5 text-gray-500" /> WhatsApp (Oficial)
+                    WhatsApp (Oficial)
                   </CardTitle>
                   <div className="flex items-center gap-2">
                     <div className="text-xs">

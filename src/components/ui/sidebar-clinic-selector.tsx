@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ChevronDown, ChevronRight, Building2, Users, Plus, Check } from 'lucide-react';
 import { useClinic } from '@/contexts/clinic-context';
@@ -8,6 +8,8 @@ import { useClinic } from '@/contexts/clinic-context';
 export function SidebarClinicSelector() {
   const { currentClinic, availableClinics, isLoading, switchClinic } = useClinic();
   const [isOpen, setIsOpen] = useState(false);
+  const [payActive, setPayActive] = useState<boolean>(false);
+  const [payLoading, setPayLoading] = useState<boolean>(false);
 
   const getClinicInitials = (name: string) => {
     return name
@@ -18,9 +20,35 @@ export function SidebarClinicSelector() {
       .slice(0, 2);
   };
 
-  const getPlanBadgeColor = (status?: string) => {
-    return 'bg-gray-100 text-gray-600 border border-gray-200';
-  };
+  const badgeClasses = (active: boolean) => active
+    ? 'bg-green-50 text-green-700 border border-green-200'
+    : 'bg-gray-100 text-gray-600 border border-gray-200';
+
+  // Keep plan badge color for the dropdown list (unchanged behavior)
+  const getPlanBadgeColor = (_status?: string) => 'bg-gray-100 text-gray-600 border border-gray-200';
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!currentClinic?.id) {
+        if (!cancelled) setPayActive(false);
+        return;
+      }
+      try {
+        if (!cancelled) setPayLoading(true);
+        const res = await fetch(`/api/payments/pagarme/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+        const js = await res.json().catch(() => ({}));
+        const connected = res.ok && (js?.connected === true) && !!(js?.recipientId);
+        if (!cancelled) setPayActive(connected);
+      } catch {
+        if (!cancelled) setPayActive(false);
+      } finally {
+        if (!cancelled) setPayLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [currentClinic?.id]);
 
   if (isLoading) {
     return (
@@ -62,11 +90,9 @@ export function SidebarClinicSelector() {
             <span className="font-medium text-gray-900 truncate text-sm">
               {currentClinic.name}
             </span>
-            {currentClinic.subscription && (
-              <span className={`text-xs px-2 py-0.5 rounded-full ${getPlanBadgeColor(currentClinic.subscription.status)}`}>
-                {currentClinic.subscription.plan.name}
-              </span>
-            )}
+            <span className={`text-xs px-2 py-0.5 rounded-full ${badgeClasses(payActive)}`}>
+              {payLoading ? '...' : (payActive ? 'Active' : 'Inactive')}
+            </span>
           </div>
         </div>
         
