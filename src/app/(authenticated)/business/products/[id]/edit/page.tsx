@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -563,17 +562,8 @@ export default function EditProductPage({ params }: PageProps) {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center select-none" aria-label="Carregando">
-          <div className="relative w-12 h-12 mx-auto mb-6">
-            <Image
-              src="/logo.png"
-              alt="Logo"
-              fill
-              className="object-contain"
-              priority
-            />
-          </div>
-          <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-[#5154e7]/30 border-t-[#5154e7]"></div>
+        <div className="select-none" aria-label="Carregando">
+          <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-gray-300 border-t-gray-600"></div>
         </div>
       </div>
     );
