@@ -216,6 +216,13 @@ export default async function middleware(request: NextRequestWithAuth) {
     return NextResponse.redirect(dest)
   }
 
+  // Redirect root to login when unauthenticated
+  if (pathname === '/' && !isAuthenticated) {
+    const redirectUrl = new URL('/auth/signin', request.url)
+    redirectUrl.searchParams.set('callbackUrl', request.url)
+    return NextResponse.redirect(redirectUrl)
+  }
+
   // Se for uma rota protegida e o usuário não está autenticado
   if (isProtectedRoute && !isAuthenticated) {
     const redirectUrl = new URL('/auth/signin', request.url)

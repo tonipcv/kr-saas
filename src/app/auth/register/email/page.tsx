@@ -86,7 +86,7 @@ function RegisterEmailInner() {
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
             {/* Minimal helper message above the email */}
-            <p className="text-sm text-gray-700">Enter your email to start your 14-day free trial.</p>
+            <p className="text-sm text-gray-700">Enter your email to create your account.</p>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                 Email
