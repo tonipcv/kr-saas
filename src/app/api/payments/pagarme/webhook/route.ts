@@ -6,6 +6,11 @@ import { sendEmail } from '@/lib/email';
 import { baseTemplate } from '@/email-templates/layouts/base';
 import crypto from 'crypto';
 
+export async function GET() {
+  // Health check endpoint; webhooks must POST
+  return NextResponse.json({ ok: true, method: 'GET', note: 'Use POST for Pagar.me webhooks' });
+}
+
 export async function POST(req: Request) {
   try {
     const rawBody = await req.text();
