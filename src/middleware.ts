@@ -29,6 +29,15 @@ function getHostSlug(host?: string | null): string | null {
 }
 
 export default async function middleware(request: NextRequestWithAuth) {
+  // Bypass middleware entirely for PagarMe webhooks to avoid any redirects/rewrite
+  // that third-party providers may not follow. This ensures a straight 2xx response.
+  try {
+    const p = request.nextUrl.pathname
+    if (p.startsWith('/api/payments/pagarme/webhook') || p.startsWith('/api/pagarme/webhook')) {
+      return NextResponse.next()
+    }
+  } catch {}
+
   const token = await getToken({ req: request })
   const isAuthenticated = !!token
   const url = request.nextUrl

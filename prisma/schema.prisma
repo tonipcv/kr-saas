@@ -1094,3 +1094,69 @@ model MessageSequenceStep {
   @@index([templateId])
   @@map("message_sequence_steps")
 }
+
+/// Open Finance enrollment link (vínculo) for Pix Automático
+model OpenFinanceLink {
+  id                    String   @id @default(cuid())
+  userId                String
+  clinicId              String?
+  organisationId        String
+  authorisationServerId String
+  enrollmentId          String
+  status                String   @default("PENDING") // PENDING | AUTHORISED | REVOKED
+  deviceBinding         Json?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Back-relations
+  consent OpenFinanceConsent?
+
+  @@index([userId])
+  @@index([clinicId])
+  @@index([status])
+  @@map("open_finance_links")
+}
+
+/// Open Finance recurring consent/contract for Pix Automático
+model OpenFinanceConsent {
+  id              String   @id @default(cuid())
+  linkId          String   @unique
+  consentId       String
+  contractId      String
+  status          String   @default("ACTIVE")
+  amountCents     Int
+  periodicity     String   // WEEKLY | MONTHLY | ...
+  nextExecutionAt DateTime?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  link OpenFinanceLink @relation(fields: [linkId], references: [id])
+
+  @@index([status])
+  @@index([nextExecutionAt])
+  @@map("open_finance_consents")
+}
+
+/// Webhook delivery log (existing table created via SQL migrations)
+model WebhookEvent {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider          String
+  hook_id           String   @map("hook_id")
+  type              String
+  resource_order_id String?  @map("resource_order_id")
+  resource_charge_id String? @map("resource_charge_id")
+  status            String?
+  received_at       DateTime @default(now()) @map("received_at")
+  processed_at      DateTime? @map("processed_at")
+  attempts          Int?
+  raw               Json
+
+  @@unique([provider, hook_id], map: "webhook_events_provider_hook_id_key")
+  @@index([type], map: "idx_webhook_events_type")
+  @@index([resource_order_id], map: "idx_webhook_events_order")
+  @@index([resource_charge_id], map: "idx_webhook_events_charge")
+  @@index([received_at], map: "idx_webhook_events_received")
+  @@map("webhook_events")
+}

@@ -46,7 +46,7 @@ export default function BrandedCheckoutPage() {
   const [buyerEmail, setBuyerEmail] = useState('');
   const [buyerPhone, setBuyerPhone] = useState('');
   const [buyerDocument, setBuyerDocument] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | null>('card');
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | 'pix_ob' | null>('card');
   const [hasRedirected, setHasRedirected] = useState(false);
   const LOCAL_REDIRECT_KEY = 'checkout_pending_redirect_to';
   const [showEmergency, setShowEmergency] = useState(false);
@@ -215,7 +215,8 @@ export default function BrandedCheckoutPage() {
     async function loadProduct() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/products/${productId}`, { cache: 'no-store' });
+        // Use public endpoint so anonymous users (checkout) can fetch product details
+        const res = await fetch(`/api/products/public/${productId}`, { cache: 'no-store' });
         if (!res.ok) throw new Error('Produto não encontrado');
         const data = await res.json();
         // Developer console visibility - detailed product data
@@ -226,7 +227,12 @@ export default function BrandedCheckoutPage() {
           imageUrl: data?.imageUrl || data?.image_url || data?.image,
           fullData: data
         });
-        setProduct(data);
+        // Map public payload to the shape expected by the checkout UI
+        setProduct({
+          ...data,
+          originalPrice: typeof data?.price === 'number' ? Number(data.price) : (typeof data?.price === 'string' ? Number(data.price) : undefined),
+          imageUrl: data?.imageUrl || data?.image_url || data?.image,
+        });
         // Load offers and select the first active one (source of truth)
         try {
           const ores = await fetch(`/api/products/${productId}/offers`, { cache: 'no-store' });
@@ -386,6 +392,71 @@ export default function BrandedCheckoutPage() {
     if (!buyerEmail.trim()) { console.warn('Informe o email'); return; }
     if (!buyerPhone.trim()) { console.warn('Informe o telefone'); return; }
     if (!buyerDocument.trim()) { console.warn('Informe o CPF/CNPJ'); return; }
+    if (paymentMethod === 'pix_ob') {
+      try {
+        setSubmitting(true);
+        const externalId = crypto.randomUUID();
+        const redirectUri = `${window.location.origin}/${slug}/checkout/${productId}`;
+        const ua = typeof navigator !== 'undefined' ? navigator.userAgent : 'browser';
+        const body = {
+          userId: externalId,
+          clinicId: null,
+          organisationId: undefined,
+          authorisationServerId: undefined,
+          redirectUri,
+          enrollment: {
+            document: buyerDocument.replace(/\D/g, ''),
+            deviceName: ua,
+            externalId
+          },
+          riskSignals: {
+            deviceId: externalId,
+            osVersion: '14',
+            userTimeZoneOffset: '-03',
+            language: (typeof navigator !== 'undefined' ? navigator.language : 'pt-BR').slice(0,2),
+            screenDimensions: { width: typeof window !== 'undefined' ? window.innerWidth : 1080, height: typeof window !== 'undefined' ? window.innerHeight : 1920 },
+            accountTenure: '2024-11-18',
+            isRootedDevice: false,
+            elapsedTimeSinceBoot: (typeof performance !== 'undefined' && typeof performance.now === 'function') ? Math.max(1, Math.floor(performance.now())) : 15555555,
+            screenBrightness: 1
+          }
+        } as any;
+        console.log('[pix_ob][request] POST /api/open-finance/enrollments', { body });
+        const res = await fetch('/api/open-finance/enrollments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const raw = await res.text();
+        let js: any = null;
+        try { js = JSON.parse(raw); } catch {}
+        console.log('[pix_ob][response][raw]', { status: res.status, raw });
+        if (!res.ok) {
+          console.error('[pix_ob][response][error]', { status: res.status, json: js, raw });
+          const err0 = js?.providerResponse?.errors?.[0] || null;
+          const code = err0?.code || js?.status || res.status;
+          const title = err0?.title || js?.error || 'Falha ao criar enrollment';
+          const detail = err0?.detail || '';
+          const friendly = `Open Finance: ${title}${code ? ` (código ${code})` : ''}${detail ? ` — ${detail}` : ''}`;
+          setError(friendly);
+          return;
+        }
+        const redirectUrl =
+          js?.redirectUrl ||
+          js?.providerResponse?.redirectUri ||
+          js?.providerResponse?.authorization_url ||
+          js?.providerResponse?.data?.redirectUrl ||
+          js?.providerResponse?.data?.authorization_url;
+        if (redirectUrl) {
+          console.log('[pix_ob][response][success] redirecting to', redirectUrl);
+          window.location.href = redirectUrl;
+          return;
+        }
+        console.warn('[pix_ob][response] no redirectUrl found', { json: js });
+        setError('Redirect não fornecido pelo provedor');
+      } catch (e: any) {
+        setError(e?.message || 'Erro no fluxo Open Finance');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
     if (paymentMethod === 'card') {
       if (!cardNumber.trim() || !cardHolder.trim() || !cardExpMonth.trim() || !cardExpYear.trim() || !cardCvv.trim()) {
         console.warn('Preencha todos os dados do cartão');
@@ -979,7 +1050,7 @@ export default function BrandedCheckoutPage() {
                       </button>
                     )}
                   </div>
-                  <div className={`grid ${pixAllowed && cardAllowed ? 'grid-cols-2' : 'grid-cols-1'} gap-3 mb-3`}>
+                  <div className={`grid ${pixAllowed && cardAllowed ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'} gap-3 mb-3`}>
                     {/* Cartão */}
                     {cardAllowed && (
                       <button
@@ -1020,6 +1091,21 @@ export default function BrandedCheckoutPage() {
                         </div>
                       </button>
                     )}
+                    {pixAllowed && (
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('pix_ob')}
+                        className={`relative group rounded-xl border p-3 text-left transition ${paymentMethod==='pix_ob' ? (theme==='DARK' ? 'border-blue-500 bg-[#0f0f0f]' : 'border-blue-500 bg-white shadow-sm') : (theme==='DARK' ? 'border-gray-800 bg-transparent hover:border-gray-700' : 'border-gray-300 bg-white hover:border-gray-400')}`}
+                      >
+                        {paymentMethod==='pix_ob' && (
+                          <span className="absolute -top-2 -right-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] shadow">✓</span>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <img src="/pix.png" alt="Pix" className="h-4 w-4 object-contain" />
+                          <span className={`${paymentMethod==='pix_ob' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>Pix Automático</span>
+                        </div>
+                      </button>
+                    )}
                   </div>
                   {paymentMethod === 'card' && cardAllowed && (
                     <div>{/* Parcelas e País serão exibidos após os campos do cartão */}</div>
@@ -1032,6 +1118,16 @@ export default function BrandedCheckoutPage() {
                           <li>Valor à vista: {formatBRL(displayPrice as number)}.</li>
                           <li>É simples, só usar o aplicativo de seu banco para pagar PIX.</li>
                           <li>Super seguro. O pagamento PIX foi desenvolvido pelo Banco Central para facilitar pagamentos.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+                  {paymentMethod === 'pix_ob' && (
+                    <div className="mt-2 text-sm">
+                      <div className={`${theme==='DARK'?'text-gray-300':'text-gray-700'}`}>
+                        <ul className="list-disc ml-5 mt-1 space-y-1">
+                          <li>Pix Automático (Open Finance) com vínculo ao banco.</li>
+                          <li>Você será redirecionado para autorizar o acesso.</li>
                         </ul>
                       </div>
                     </div>

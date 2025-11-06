@@ -156,12 +156,8 @@ export default function BusinessDashboard() {
         const js = await res.json().catch(() => ({}));
         const ready = res.ok && js?.ready_for_production === true;
         setPaymentsReady(ready);
-        if (!ready) {
-          router.replace('/waiting-list');
-        }
       } catch {
         setPaymentsReady(false);
-        router.replace('/waiting-list');
       }
     };
     if (currentClinic?.id) checkPayments();

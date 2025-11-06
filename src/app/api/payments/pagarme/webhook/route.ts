@@ -33,6 +33,21 @@ export async function POST(req: Request) {
     const event = JSON.parse(rawBody || '{}');
     const type = String(event?.type || event?.event || '');
     const typeLower = type.toLowerCase();
+    const hookId: string | null = event?.id ? String(event.id) : null;
+    const initialStatus: string | null = (event?.data?.status || event?.status || null) ? String(event?.data?.status || event?.status) : null;
+    try {
+      if (hookId) {
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO webhook_events (provider, hook_id, type, status, raw)
+           VALUES ('pagarme', $1, $2, $3, $4::jsonb)
+           ON CONFLICT (provider, hook_id) DO NOTHING`,
+          String(hookId),
+          String(type),
+          initialStatus,
+          JSON.stringify(event)
+        );
+      }
+    } catch {}
     try {
       // High-level audit log (no sensitive data)
       const basic = {
@@ -169,6 +184,20 @@ export async function POST(req: Request) {
           console.warn('[pagarme][webhook] remediation order_id<-charge_id fix failed:', e instanceof Error ? e.message : e);
         }
       }
+
+      try {
+        if (hookId) {
+          await prisma.$executeRawUnsafe(
+            `UPDATE webhook_events
+               SET resource_order_id = COALESCE(resource_order_id, $1),
+                   resource_charge_id = COALESCE(resource_charge_id, $2)
+             WHERE provider = 'pagarme' AND hook_id = $3`,
+            orderId ? String(orderId) : null,
+            chargeId ? String(chargeId) : null,
+            String(hookId)
+          );
+        }
+      } catch {}
 
       // Status mapping
       const rawStatus = (event?.data?.status
