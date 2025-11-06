@@ -39,7 +39,7 @@ export async function POST(req: Request) {
 
     const recurringPaymentId: string | null = res?.id || res?.paymentId || res?.recurringPaymentId || null;
     const status: string = String(res?.status || 'processing').toLowerCase();
-    const effectiveAmountCents = Number(amountCents ?? Math.round(Number(res?.amount || 0) * 100) || 0);
+    const effectiveAmountCents = Number((amountCents ?? Math.round(Number(res?.amount || 0) * 100)) || 0);
 
     const txId = crypto.randomUUID();
     await prisma.$executeRawUnsafe(
