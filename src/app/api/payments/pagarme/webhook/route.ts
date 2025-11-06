@@ -213,8 +213,12 @@ export async function POST(req: Request) {
         cancelled: 'canceled',
         refused: 'refused',
         failed: 'failed',
+        refunded: 'refunded',
         processing: 'processing',
         pending: 'pending',
+        underpaid: 'underpaid',
+        overpaid: 'overpaid',
+        chargedback: 'chargedback',
       };
       const mappedRaw = statusMap[rawStatus] || (rawStatus ? rawStatus : undefined);
       const isPaidEvent = typeLower.includes('order.paid') || typeLower.includes('charge.paid');
@@ -252,6 +256,13 @@ export async function POST(req: Request) {
         return Number.isFinite(n) && n > 0 ? n : null;
       })();
 
+      // Placeholder status to use when we need to upsert a row for non-terminal events
+      const placeholderStatus: string = (() => {
+        if (mapped) return mapped;
+        if (rawStatus === 'processing' || rawStatus === 'pending') return rawStatus;
+        return 'processing';
+      })();
+
       // Update by provider_order_id; create if not exists (webhooks may arrive before checkout/create)
       if (orderId) {
         try {
@@ -259,16 +270,17 @@ export async function POST(req: Request) {
             `UPDATE payment_transactions
              SET status = CASE
                             WHEN ($2::text) IS NULL THEN status
-                            WHEN status = 'pending' AND ($2::text) IN ('processing','paid','refunded','canceled','failed') THEN ($2::text)
-                            WHEN status = 'processing' AND ($2::text) IN ('paid','refunded','canceled','failed') THEN ($2::text)
-                            WHEN status = 'paid' AND ($2::text) IN ('refunded','canceled','failed') THEN ($2::text)
+                            WHEN status = 'pending' AND ($2::text) IN ('processing','paid','refunded','canceled','failed','underpaid','overpaid','chargedback') THEN ($2::text)
+                            WHEN status = 'processing' AND ($2::text) IN ('paid','refunded','canceled','failed','underpaid','overpaid','chargedback') THEN ($2::text)
+                            WHEN status = 'paid' AND ($2::text) IN ('refunded','canceled','failed','chargedback') THEN ($2::text)
                             WHEN status = 'refunded' AND ($2::text) IN ('canceled','failed') THEN ($2::text)
                             WHEN status = 'canceled' AND ($2::text) = 'failed' THEN ($2::text)
                             ELSE status
                           END,
                  raw_payload = $3::jsonb,
                  payment_method_type = COALESCE($4::text, payment_method_type),
-                 installments = COALESCE($5::int, installments)
+                 installments = COALESCE($5::int, installments),
+                 updated_at = NOW()
              WHERE provider = 'pagarme' AND provider_order_id = $1`,
             String(orderId),
             mapped || null,
@@ -277,7 +289,7 @@ export async function POST(req: Request) {
             installmentsVal
           );
           // If UPDATE affected 0 rows, INSERT a placeholder row for webhooks that arrive early
-          if (result === 0 && mapped) {
+          if (result === 0) {
             const webhookTxId = `wh_${orderId}_${Date.now()}`;
             try {
               await prisma.$executeRawUnsafe(
@@ -286,12 +298,12 @@ export async function POST(req: Request) {
                  ON CONFLICT DO NOTHING`,
                 webhookTxId,
                 String(orderId),
-                mapped,
+                placeholderStatus,
                 paymentMethodType,
                 installmentsVal,
                 JSON.stringify(event)
               );
-              console.log('[pagarme][webhook] created early row by orderId', { orderId, status: mapped });
+              console.log('[pagarme][webhook] created early row by orderId', { orderId, status: placeholderStatus });
             } catch {}
           } else {
             console.log('[pagarme][webhook] updated by orderId', { orderId, status: mapped || 'unchanged', affected: result });
@@ -303,21 +315,22 @@ export async function POST(req: Request) {
       // Update by provider_charge_id if we have it (and set charge id on row)
       if (chargeId) {
         try {
-          await prisma.$executeRawUnsafe(
+          const result2 = await prisma.$executeRawUnsafe(
             `UPDATE payment_transactions
              SET provider_charge_id = COALESCE(provider_charge_id, $1),
                  status = CASE
                             WHEN ($2::text) IS NULL THEN status
-                            WHEN status = 'pending' AND ($2::text) IN ('processing','paid','refunded','canceled','failed') THEN ($2::text)
-                            WHEN status = 'processing' AND ($2::text) IN ('paid','refunded','canceled','failed') THEN ($2::text)
-                            WHEN status = 'paid' AND ($2::text) IN ('refunded','canceled','failed') THEN ($2::text)
+                            WHEN status = 'pending' AND ($2::text) IN ('processing','paid','refunded','canceled','failed','underpaid','overpaid','chargedback') THEN ($2::text)
+                            WHEN status = 'processing' AND ($2::text) IN ('paid','refunded','canceled','failed','underpaid','overpaid','chargedback') THEN ($2::text)
+                            WHEN status = 'paid' AND ($2::text) IN ('refunded','canceled','failed','chargedback') THEN ($2::text)
                             WHEN status = 'refunded' AND ($2::text) IN ('canceled','failed') THEN ($2::text)
                             WHEN status = 'canceled' AND ($2::text) = 'failed' THEN ($2::text)
                             ELSE status
                           END,
                  raw_payload = $3::jsonb,
                  payment_method_type = COALESCE($5::text, payment_method_type),
-                 installments = COALESCE($6::int, installments)
+                 installments = COALESCE($6::int, installments),
+                 updated_at = NOW()
              WHERE provider = 'pagarme' AND (provider_charge_id = $1 OR provider_order_id = $4)`,
             String(chargeId),
             mapped || null,
@@ -326,7 +339,26 @@ export async function POST(req: Request) {
             paymentMethodType,
             installmentsVal
           );
-          console.log('[pagarme][webhook] updated by chargeId', { chargeId, orderId, status: mapped || 'unchanged' });
+          if (result2 === 0 && !orderId) {
+            // No row matched; create placeholder by charge id to ensure visibility in listings
+            const webhookTxId2 = `wh_${chargeId}_${Date.now()}`;
+            try {
+              await prisma.$executeRawUnsafe(
+                `INSERT INTO payment_transactions (id, provider, provider_charge_id, status, payment_method_type, installments, amount_cents, currency, raw_payload, created_at)
+                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, 0, 'BRL', $6::jsonb, NOW())
+                 ON CONFLICT DO NOTHING`,
+                webhookTxId2,
+                String(chargeId),
+                placeholderStatus,
+                paymentMethodType,
+                installmentsVal,
+                JSON.stringify(event)
+              );
+              console.log('[pagarme][webhook] created early row by chargeId', { chargeId, status: placeholderStatus });
+            } catch {}
+          } else {
+            console.log('[pagarme][webhook] updated by chargeId', { chargeId, orderId, status: mapped || 'unchanged' });
+          }
         } catch (e) {
           console.warn('[pagarme][webhook] update by chargeId failed', { chargeId, orderId, err: e instanceof Error ? e.message : e });
         }

@@ -739,6 +739,7 @@ model PaymentTransaction {
   id                 String   @id
   provider           String
   providerOrderId    String?  @map("provider_order_id")
+  providerChargeId   String?  @map("provider_charge_id")
   doctorId           String?  @map("doctor_id")
   patientProfileId   String?  @map("patient_profile_id")
   clinicId           String?  @map("clinic_id")
@@ -750,13 +751,18 @@ model PaymentTransaction {
   status             String   @default("processing")
   rawPayload         Json?    @map("raw_payload")
   createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   @@index([doctorId])
   @@index([productId])
   @@index([createdAt])
   @@index([providerOrderId])
+  @@index([provider, providerChargeId])
+  @@index([updatedAt])
   @@map("payment_transactions")
 }
+
+ 
 
 // Removed enums: AppointmentStatus, ServiceAvailability, FeeType, FeeVisibility
 

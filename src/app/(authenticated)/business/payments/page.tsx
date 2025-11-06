@@ -78,7 +78,7 @@ export default async function PaymentsDataPage() {
     LEFT JOIN "User" pu ON pu.id = pp.user_id
     LEFT JOIN clinics c ON c.id = pt.clinic_id
     LEFT JOIN products p ON p.id = pt.product_id
-        ORDER BY pt.created_at DESC
+        ORDER BY pt.updated_at DESC NULLS LAST, pt.created_at DESC
         LIMIT 50`
     )
   ]);
