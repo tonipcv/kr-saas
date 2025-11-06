@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { pagarmeCancelCharge, pagarmeRefundCharge } from '@/lib/pagarme';
+import { pagarmeCancelCharge, pagarmeRefundCharge, pagarmeGetCharge } from '@/lib/pagarme';
 
 export async function POST(req: Request) {
   try {
@@ -12,6 +12,32 @@ export async function POST(req: Request) {
 
     if (!chargeId) {
       return NextResponse.json({ ok: false, error: 'chargeId é obrigatório' }, { status: 400 });
+    }
+
+    // Diagnostics: environment snapshot (non-sensitive)
+    const baseUrl = process.env.PAGARME_BASE_URL || 'https://api.pagar.me/1';
+    const accountPresent = !!process.env.PAGARME_ACCOUNT_ID;
+    try {
+      console.log('[refund][diag] env', { baseUrl, accountHeader: accountPresent ? 'present' : 'absent' });
+    } catch {}
+
+    // Pre-flight: verify charge exists in provider with current credentials
+    try {
+      const ch = await pagarmeGetCharge(chargeId);
+      try { console.log('[refund][diag] provider charge found', { id: ch?.id, status: ch?.status, order_id: ch?.order?.id }); } catch {}
+    } catch (pre: any) {
+      const st = Number(pre?.status) || 404;
+      const prov = pre?.responseJson || pre?.responseText;
+      console.warn('[refund][diag] preflight GET charge failed', { status: st, provider: prov });
+      if (st === 404) {
+        return NextResponse.json({
+          ok: false,
+          error: 'Charge not found at provider',
+          hint: 'Verifique PAGARME_BASE_URL (v5), PAGARME_API_KEY e X-PagarMe-Account-Id (se usar subconta) neste ambiente',
+          provider: prov
+        }, { status: 404 });
+      }
+      // Non-404 errors fall-through to try refund anyway
     }
 
     let result: any = null;

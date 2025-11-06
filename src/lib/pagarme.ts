@@ -175,6 +175,29 @@ export async function pagarmeGetOrder(orderId: string) {
   return data;
 }
 
+export async function pagarmeGetCharge(chargeId: string) {
+  const res = await fetch(`${PAGARME_BASE_URL}/charges/${encodeURIComponent(chargeId)}`, {
+    method: 'GET',
+    headers: authHeaders(),
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    const msgFromArray = Array.isArray(data?.errors)
+      ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
+      : undefined;
+    const msg = msgFromArray || data?.message || data?.error || text || `Pagarme error ${res.status}`;
+    const err: any = new Error(`[Pagarme ${res.status}] ${msg}`);
+    err.status = res.status;
+    err.responseText = text;
+    err.responseJson = data;
+    throw err;
+  }
+  return data;
+}
+
 function authHeaders() {
   if (AUTH_SCHEME === 'bearer') {
     const h: Record<string, string> = {
