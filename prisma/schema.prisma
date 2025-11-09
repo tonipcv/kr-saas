@@ -693,6 +693,8 @@ enum PaymentMethod {
   PIX
   BOLETO
   PAYPAL
+  OPEN_FINANCE
+  OPEN_FINANCE_AUTOMATIC
 }
 
 model Offer {
@@ -752,6 +754,9 @@ model PaymentTransaction {
   rawPayload         Json?    @map("raw_payload")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
+
+  // Optional back-relation to CheckoutSession
+  checkoutSession    CheckoutSession? @relation("SessionPayment")
 
   @@index([doctorId])
   @@index([productId])
@@ -826,6 +831,87 @@ model PointsLedger {
   @@index([sourceId])
   @@index([createdAt])
   @@map("points_ledger")
+}
+
+/// Checkout session lifecycle for abandoned cart and recovery
+enum CheckoutSessionStatus {
+  started
+  pix_generated
+  paid
+  abandoned
+  canceled
+}
+
+/// Specific payment methods used in checkout sessions (distinct from Offer PaymentMethod)
+enum CheckoutPaymentMethod {
+  pix
+  card
+  pix_ob
+  unknown
+}
+
+model CheckoutSession {
+  id                     String                  @id @default(cuid())
+  resumeToken            String                  @unique @map("resume_token")
+
+  // Business context
+  clinicId               String?                 @map("clinic_id")
+  productId              String?                 @map("product_id")
+  offerId                String?                 @map("offer_id")
+  slug                   String?
+
+  // State
+  status                 CheckoutSessionStatus   @default(started)
+  paymentMethod          CheckoutPaymentMethod?  @default(unknown) @map("payment_method")
+  orderId                String?                 @map("order_id")
+  pixOrderId             String?                 @map("pix_order_id")
+  pixExpiresAt           DateTime?               @map("pix_expires_at")
+  paymentTransactionId   String?                 @unique @map("payment_transaction_id")
+  paymentTransaction     PaymentTransaction?     @relation("SessionPayment", fields: [paymentTransactionId], references: [id])
+
+  // Contact
+  email                  String?
+  phone                  String?
+  document               String?
+
+  // Attribution
+  utmSource              String?                 @map("utm_source")
+  utmMedium              String?                 @map("utm_medium")
+  utmCampaign            String?                 @map("utm_campaign")
+  utmTerm                String?                 @map("utm_term")
+  utmContent             String?                 @map("utm_content")
+  referrer               String?
+  ip                     String?
+  userAgent              String?                 @map("user_agent")
+
+  // Selection snapshot
+  selectedInstallments   Int?                    @map("selected_installments")
+  selectedBank           String?                 @map("selected_bank")
+  paymentMethodsAllowed  Json?                   @map("payment_methods_allowed")
+  metadata               Json?
+
+  // Timestamps and activity
+  startedAt              DateTime                @default(now()) @map("started_at")
+  createdAt              DateTime                @default(now()) @map("created_at")
+  updatedAt              DateTime                @updatedAt @map("updated_at")
+  lastHeartbeatAt        DateTime?               @map("last_heartbeat_at")
+  lastStep               String?                 @map("last_step")
+
+  // Reminders and scoring
+  reminders              Json?
+  reminderExpiringSentAt DateTime?               @map("reminder_expiring_sent_at")
+  reminderExpiredSentAt  DateTime?               @map("reminder_expired_sent_at")
+  conversionLikelihood   Float?                  @map("conversion_likelihood")
+
+  // Source/audit
+  origin                 String?
+  createdBy              String?                 @map("created_by")
+
+  @@index([status, clinicId, updatedAt])
+  @@index([status, pixExpiresAt])
+  @@index([orderId])
+  @@index([pixOrderId])
+  @@map("checkout_sessions")
 }
 
 model Coupon {
@@ -1101,18 +1187,19 @@ model MessageSequenceStep {
   @@map("message_sequence_steps")
 }
 
+
 /// Open Finance enrollment link (vínculo) for Pix Automático
 model OpenFinanceLink {
   id                    String   @id @default(cuid())
-  userId                String
-  clinicId              String?
-  organisationId        String
-  authorisationServerId String
-  enrollmentId          String
+  userId                String   @map("user_id")
+  clinicId              String?  @map("clinic_id")
+  organisationId        String   @map("organisation_id")
+  authorisationServerId String   @map("authorisation_server_id")
+  enrollmentId          String   @map("enrollment_id")
   status                String   @default("PENDING") // PENDING | AUTHORISED | REVOKED
-  deviceBinding         Json?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  deviceBinding         Json?    @map("device_binding")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
 
   // Back-relations
   consent OpenFinanceConsent?
@@ -1165,4 +1252,223 @@ model WebhookEvent {
   @@index([resource_charge_id], map: "idx_webhook_events_charge")
   @@index([received_at], map: "idx_webhook_events_received")
   @@map("webhook_events")
+}
+
+// ===== Open Finance Enums =====
+enum PaymentTypeOB {
+  SINGLE
+  RECURRING
+}
+
+enum PaymentStatusOB {
+  PENDING
+  PROCESSING
+  COMPLETED
+  REJECTED
+  CANCELLED
+  EXPIRED
+  ACCP
+  PAGO
+  RJCT
+  CANC
+}
+
+enum EnrollmentStatusOB {
+  PENDING
+  AUTHORISED
+  REJECTED
+  REVOKED
+  EXPIRED
+}
+
+enum ConsentStatusOB {
+  AWAITING_AUTHORISATION
+  AUTHORISED
+  REJECTED
+  CONSUMED
+  EXPIRED
+}
+
+/// OAuth state storage for PKCE/OpenID flows
+model OAuthState {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  state        String   @unique
+  nonce        String?
+  codeVerifier String?  @map("code_verifier")
+  tenantId     String?  @map("tenant_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  usedAt       DateTime? @map("used_at")
+
+  @@map("oauth_states")
+}
+
+/// OAuth tokens (access/refresh) per tenant/provider
+model OAuthToken {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String?  @map("tenant_id")
+  provider     String   @default("mockbank")
+  accessToken  String   @map("access_token")
+  refreshToken String?  @map("refresh_token")
+  scope        String?
+  expiresAt    DateTime? @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("oauth_tokens")
+}
+
+/// Stored payment consents from Open Finance provider
+model PaymentConsent {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String?  @map("tenant_id")
+  consentId  String   @unique @map("consent_id")
+  status     String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("payment_consents")
+}
+
+/// Executed payments via Open Finance
+model OpenBankingPayment {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  providerPaymentId String?  @map("provider_payment_id")
+  consentId        String?
+  amountCents      Int?
+  currency         String?
+  status           PaymentStatusOB?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Additive fields for full audit and payer/creditor references
+  enrollmentId             String?   @map("enrollment_id")
+  transactionIdentification String?  @map("transaction_identification")
+  payerId                  String?   @map("payer_id")
+  payerDocument            String?   @map("payer_document")
+  payerEmail               String?   @map("payer_email")
+  payerName                String?   @map("payer_name")
+  creditorName             String?   @map("creditor_name")
+  creditorCpfCnpj          String?   @map("creditor_cpf_cnpj")
+  clinicId                 String?   @map("clinic_id")
+  productId                String?   @map("product_id")
+  purchaseId               String?   @map("purchase_id")
+  type                     PaymentTypeOB?   @map("type")
+  executedAt               DateTime? @map("executed_at")
+  settledAt                DateTime? @map("settled_at")
+  recurrenceType           String?   @map("recurrence_type")
+  subscriptionId           String?   @map("subscription_id")
+  executionOrder           Int?      @map("execution_order")
+  providerResponse         Json?     @map("provider_response_json")
+  fidoAssertion            Json?     @map("fido_assertion_json")
+  riskSignals              Json?     @map("risk_signals_json")
+
+  // Redirect-based flow fields
+  paymentLinkId            String?   @unique @map("payment_link_id")
+  userId                   String?   @map("user_id")
+  orderRef                 String?   @map("order_ref")
+  redirectUri              String?   @map("redirect_uri")
+  transactionId            String?   @map("transaction_id")
+  expiresAt                DateTime? @map("expires_at")
+  metadata                 Json?     @map("metadata")
+
+  @@map("openbanking_payments")
+  @@index([enrollmentId])
+  @@index([payerId])
+  @@index([clinicId])
+  @@index([status])
+  @@index([executedAt])
+  @@index([providerPaymentId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+/// Metadata linked to an OAuth state (bank selection)
+model OAuthStateMeta {
+  state                  String   @id
+  organisationId         String?  @map("organisation_id")
+  authorisationServerId  String?  @map("authorisation_server_id")
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  // Checkout context for persistence after validate
+  productId              String?  @map("product_id")
+  amountCents            Int?     @map("amount_cents")
+  currency               String?  @map("currency")
+  orderRef               String?  @map("order_ref")
+
+  @@map("oauth_state_meta")
+}
+
+/// Persist last successful Open Finance enrollment context per user/session
+model EnrollmentContext {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                 String   @map("user_id")
+  sessionId              String?  @map("session_id")
+  enrollmentId           String   @map("enrollment_id")
+  organisationId         String   @map("organisation_id")
+  authorisationServerId  String   @map("authorisation_server_id")
+  fallbackUsed           Boolean  @default(false) @map("fallback_used")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @default(now()) @updatedAt @map("updated_at")
+  status                 EnrollmentStatusOB?  @map("status")
+  deviceRegistered       Boolean  @default(false) @map("device_registered")
+  expiresAt              DateTime? @map("expires_at")
+
+  // Additive buyer/device/audit fields
+  clinicId               String?  @map("clinic_id")
+  payerEmail             String?  @map("payer_email")
+  payerDocument          String?  @map("payer_document")
+  payerName              String?  @map("payer_name")
+  recurringEnabled       Boolean? @map("recurring_enabled")
+  deviceBinding          Json?    @map("device_binding_json")
+  providerResponse       Json?    @map("provider_response_json")
+
+  @@unique([userId, organisationId])
+  @@index([userId, createdAt])
+  @@index([sessionId, createdAt])
+  @@map("enrollment_contexts")
+  @@index([enrollmentId])
+  @@index([clinicId])
+  @@index([status])
+  @@index([deviceRegistered])
+  @@index([recurringEnabled])
+}
+
+/// Consents created for Open Finance payments (JSR)
+model OpenBankingConsent {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  enrollmentId     String?  @map("enrollment_id")
+  consentId        String   @unique @map("consent_id")
+  amountCents      Int?     @map("amount_cents")
+  currency         String?  @map("currency")
+  creditorName     String?  @map("creditor_name")
+  creditorCpfCnpj  String?  @map("creditor_cpf_cnpj")
+  productId        String?  @map("product_id")
+  clinicId         String?  @map("clinic_id")
+  status           ConsentStatusOB?  @map("status")
+  providerResponse Json?    @map("provider_response_json")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([consentId])
+  @@index([enrollmentId])
+  @@map("openbanking_consents")
+  @@index([status])
+  @@index([productId])
+}
+
+/// Buyer profile for checkouts (non-clinical)
+model PaymentCustomer {
+  id         String   @id @default(cuid())
+  userId     String?
+  clinicId   String?
+  email      String?
+  document   String?  @map("document")
+  fullName   String?
+  phones     String?  @map("phones_json")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([clinicId])
+  @@index([document])
+  @@map("payment_customers")
 }

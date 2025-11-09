@@ -29,7 +29,7 @@ export default async function DoctorProductsPage({ params, searchParams }: {
   // Resolve doctor by slug or by clinic slug OR subdomain (owner/member fallback)
   let doctor = await prisma.user.findFirst({
     where: { doctor_slug: slug, role: 'DOCTOR' } as any,
-    select: { id: true, name: true, doctor_slug: true, image: true, public_cover_image_url: true, public_page_template: true },
+    select: { id: true, name: true, doctor_slug: true, image: true, public_cover_image_url: true },
   });
 
   // Track clinic branding when resolving via clinic slug
@@ -51,17 +51,28 @@ export default async function DoctorProductsPage({ params, searchParams }: {
     if (clinic?.ownerId) {
       const owner = await prisma.user.findFirst({
         where: { id: clinic.ownerId, role: 'DOCTOR' } as any,
-        select: { id: true, name: true, doctor_slug: true, image: true, public_cover_image_url: true, public_page_template: true },
+        select: { id: true, name: true, doctor_slug: true, image: true, public_cover_image_url: true },
       });
       if (owner) doctor = owner as any;
     }
     if (!doctor && clinic) {
       const member = await prisma.clinicMember.findFirst({
         where: { clinicId: clinic.id, isActive: true, user: { role: 'DOCTOR' } } as any,
-        include: { user: { select: { id: true, name: true, doctor_slug: true, image: true, public_cover_image_url: true, public_page_template: true } } },
+        include: { user: { select: { id: true, name: true, doctor_slug: true, image: true, public_cover_image_url: true } } },
       });
       if (member?.user) doctor = member.user as any;
     }
+  }
+
+  // Fetch public page template via raw SQL since Prisma model ignores the column
+  let publicPageTemplate: string = 'DEFAULT';
+  if (doctor?.id) {
+    try {
+      const rows = await prisma.$queryRaw<{ tpl: string | null }[]>`
+        SELECT COALESCE(public_page_template, 'DEFAULT')::text as tpl FROM "User" WHERE id = ${doctor.id} LIMIT 1
+      `;
+      if (rows && rows[0] && rows[0].tpl) publicPageTemplate = rows[0].tpl;
+    } catch {}
   }
 
   // If neither doctor nor clinic resolved, use global Not Found page
@@ -136,7 +147,7 @@ export default async function DoctorProductsPage({ params, searchParams }: {
   }
   // Final dedup (defensive) after any filtering
   products = Array.from(new Map(products.map((p: any) => [String(p.id), p])).values());
-  const template = (doctor as any)?.public_page_template || 'DEFAULT';
+  const template = publicPageTemplate || 'DEFAULT';
   // Only use explicit public cover image; no fallback to profile image
   const coverUrl = (doctor as any)?.public_cover_image_url || null;
   // Branding: load clinic theme/colors by slug (works for doctor or clinic slugs; clinic rows only exist for clinic slugs)

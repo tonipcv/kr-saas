@@ -45,7 +45,7 @@ export default function EditOfferPage({ params }: PageProps) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [offer, setOffer] = useState<Offer | null>(null);
-  const [methods, setMethods] = useState<{ PIX: boolean; CARD: boolean }>({ PIX: true, CARD: true });
+  const [methods, setMethods] = useState<{ PIX: boolean; CARD: boolean; OPEN_FINANCE: boolean; OPEN_FINANCE_AUTOMATIC: boolean }>({ PIX: true, CARD: true, OPEN_FINANCE: false, OPEN_FINANCE_AUTOMATIC: false });
   const { currentClinic } = useClinic();
 
   const [form, setForm] = useState({
@@ -155,7 +155,9 @@ export default function EditOfferPage({ params }: PageProps) {
         });
         const pixOn = (found.paymentMethods || []).some(x => x.method === 'PIX' && x.active);
         const cardOn = (found.paymentMethods || []).some(x => x.method === 'CARD' && x.active);
-        setMethods({ PIX: pixOn, CARD: cardOn });
+        const ofOn = (found.paymentMethods || []).some(x => x.method === 'OPEN_FINANCE' && x.active);
+        const ofAutoOn = (found.paymentMethods || []).some(x => x.method === 'OPEN_FINANCE_AUTOMATIC' && x.active);
+        setMethods({ PIX: pixOn, CARD: cardOn, OPEN_FINANCE: ofOn, OPEN_FINANCE_AUTOMATIC: ofAutoOn });
       }
     } catch (e) {
       console.error(e);
@@ -200,7 +202,16 @@ export default function EditOfferPage({ params }: PageProps) {
       const res = await fetch(`/api/products/${productId}/offers/${offer.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error("Failed to save offer");
       // methods
-      await fetch(`/api/products/${productId}/offers/${offer.id}/methods`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ methods: [ { method: 'PIX', active: methods.PIX }, { method: 'CARD', active: methods.CARD } ] }) });
+      await fetch(`/api/products/${productId}/offers/${offer.id}/methods`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ methods: [
+          { method: 'PIX', active: methods.PIX },
+          { method: 'CARD', active: methods.CARD },
+          { method: 'OPEN_FINANCE', active: methods.OPEN_FINANCE },
+          { method: 'OPEN_FINANCE_AUTOMATIC', active: methods.OPEN_FINANCE_AUTOMATIC },
+        ] })
+      });
       await loadOffer(productId, offer.id);
     } catch (e) {
       console.error(e);
@@ -304,10 +315,18 @@ export default function EditOfferPage({ params }: PageProps) {
 
                   <div>
                     <Label className="text-gray-900 font-medium">Payment methods</Label>
-                    <div className="mt-2 flex gap-2">
-                      {(["PIX","CARD"] as const).map((m) => (
+                    <div className="mt-2 flex gap-2 flex-wrap">
+                      {(["PIX","CARD","OPEN_FINANCE"] as const).map((m) => (
                         <button key={m} type="button" onClick={() => setMethods(prev => ({ ...prev, [m]: !prev[m] }))} className={`px-3 py-1.5 rounded-lg text-xs border ${methods[m] ? 'bg-gray-100 border-gray-300 text-gray-800' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}>{m}</button>
                       ))}
+                      {form.isSubscription && (
+                        <button
+                          type="button"
+                          onClick={() => setMethods(prev => ({ ...prev, OPEN_FINANCE_AUTOMATIC: !prev.OPEN_FINANCE_AUTOMATIC }))}
+                          className={`px-3 py-1.5 rounded-lg text-xs border ${methods.OPEN_FINANCE_AUTOMATIC ? 'bg-gray-100 border-gray-300 text-gray-800' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                          title="OPEN_FINANCE_AUTOMATIC habilita Pix Automático na assinatura"
+                        >OPEN_FINANCE_AUTOMATIC</button>
+                      )}
                     </div>
                   </div>
 

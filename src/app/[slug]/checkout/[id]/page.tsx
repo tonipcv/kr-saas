@@ -1,6 +1,17 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+
+function getOsVersion(): string {
+  const ua = (typeof navigator !== 'undefined' ? navigator.userAgent : '') || '';
+  let m: RegExpMatchArray | null = null;
+  if (ua.includes('Mac OS X')) { m = ua.match(/Mac OS X (\d+[._]\d+(?:[._]\d+)?)/); if (m) return m[1].replace(/_/g, '.'); }
+  if (ua.includes('Windows NT')) { m = ua.match(/Windows NT (\d+\.\d+)/); if (m) return m[1]; }
+  if (ua.includes('Android')) { m = ua.match(/Android (\d+(?:\.\d+)?)/); if (m) return m[1]; }
+  if (ua.includes('iPhone OS') || ua.includes('iPad')) { m = ua.match(/OS (\d+[._]\d+(?:[._]\d+)?)/); if (m) return m[1].replace(/_/g, '.'); }
+  if (ua.includes('Linux')) return 'Linux';
+  return '14';
+}
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -37,7 +48,7 @@ export default function BrandedCheckoutPage() {
 
   const [branding, setBranding] = useState<ClinicBranding>({});
   const [product, setProduct] = useState<Product | null>(null);
-  type Offer = { id: string; name?: string; description?: string | null; priceCents: number; currency?: string; isSubscription?: boolean; intervalCount?: number|null; intervalUnit?: 'DAY'|'WEEK'|'MONTH'|'YEAR'|null; trialDays?: number|null; maxInstallments?: number|null; paymentMethods?: Array<{ method: 'PIX'|'CARD'; active: boolean }>; active?: boolean };
+  type Offer = { id: string; name?: string; description?: string | null; priceCents: number; currency?: string; isSubscription?: boolean; intervalCount?: number|null; intervalUnit?: 'DAY'|'WEEK'|'MONTH'|'YEAR'|null; trialDays?: number|null; maxInstallments?: number|null; paymentMethods?: Array<{ method: 'PIX'|'CARD'|'OPEN_FINANCE'|'OPEN_FINANCE_AUTOMATIC'; active: boolean }>; active?: boolean };
   const [offer, setOffer] = useState<Offer | null>(null);
   const [loading, setLoading] = useState(true);
   // Quantity fixed to 1 as requested
@@ -85,13 +96,30 @@ export default function BrandedCheckoutPage() {
   // Allowed methods derived from offer
   const pixAllowed = useMemo(() => (offer?.paymentMethods || []).some(x => x.method === 'PIX' && x.active), [offer?.paymentMethods]);
   const cardAllowed = useMemo(() => (offer?.paymentMethods || []).some(x => x.method === 'CARD' && x.active), [offer?.paymentMethods]);
+  const openFinanceAllowed = useMemo(() => (offer?.paymentMethods || []).some(x => x.method === 'OPEN_FINANCE' && x.active), [offer?.paymentMethods]);
+  const openFinanceAutoAllowed = useMemo(() => (offer?.paymentMethods || []).some(x => x.method === 'OPEN_FINANCE_AUTOMATIC' && x.active), [offer?.paymentMethods]);
+  // Open Finance participants (bank selection for pix_ob)
+  const [participants, setParticipants] = useState<any[]>([]);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
+  const [selectedOrg, setSelectedOrg] = useState<{ organisationId?: string; authorisationServerId?: string; name?: string } | null>(null);
 
   // Ensure selected method is allowed whenever offer changes
   useEffect(() => {
+    const isSub = !!offer?.isSubscription;
+    if (isSub) {
+      // Prefer OPEN_FINANCE_AUTOMATIC, then PIX, then CARD
+      if (openFinanceAutoAllowed) setPaymentMethod('pix_ob');
+      else if (pixAllowed) setPaymentMethod('pix');
+      else if (cardAllowed) setPaymentMethod('card');
+      else setPaymentMethod(null);
+      return;
+    }
+    // One-time: prefer CARD, then OPEN_FINANCE, then PIX
     if (cardAllowed) setPaymentMethod('card');
+    else if (openFinanceAllowed) setPaymentMethod('pix_ob');
     else if (pixAllowed) setPaymentMethod('pix');
     else setPaymentMethod(null);
-  }, [cardAllowed, pixAllowed]);
+  }, [cardAllowed, pixAllowed, openFinanceAllowed, openFinanceAutoAllowed, offer?.isSubscription]);
   // Checkout countdown (10 minutes)
   const [checkoutRemaining, setCheckoutRemaining] = useState<number>(600);
   // Minimalist approval modal
@@ -128,7 +156,7 @@ export default function BrandedCheckoutPage() {
       setBuyerName('João Teste');
       setBuyerEmail('joao+test@exemplo.com');
       setBuyerPhone('+5511999999999');
-      setBuyerDocument('06624289511');
+      setBuyerDocument('76109277673');
       // Address
       setAddrStreet('Av. Paulista');
       setAddrNumber('1000');
@@ -256,7 +284,19 @@ export default function BrandedCheckoutPage() {
               // Default payment method from offer
               const pixOn = (active.paymentMethods || []).some(x => x.method === 'PIX' && x.active);
               const cardOn = (active.paymentMethods || []).some(x => x.method === 'CARD' && x.active);
-              setPaymentMethod(cardOn ? 'card' : (pixOn ? 'pix' : null));
+              const ofOn = (active.paymentMethods || []).some(x => x.method === 'OPEN_FINANCE' && x.active);
+              const ofAutoOn = (active.paymentMethods || []).some(x => x.method === 'OPEN_FINANCE_AUTOMATIC' && x.active);
+              if (active.isSubscription) {
+                // Prefer OPEN_FINANCE_AUTOMATIC, then PIX, then CARD
+                if (ofAutoOn) setPaymentMethod('pix_ob');
+                else if (pixOn) setPaymentMethod('pix');
+                else setPaymentMethod(cardOn ? 'card' : null);
+              } else {
+                // One-time: prefer CARD, then OPEN_FINANCE, then PIX
+                if (cardOn) setPaymentMethod('card');
+                else if (ofOn) setPaymentMethod('pix_ob');
+                else setPaymentMethod(pixOn ? 'pix' : null);
+              }
             }
           }
         } catch (e) {
@@ -270,6 +310,27 @@ export default function BrandedCheckoutPage() {
     }
     if (productId) loadProduct();
   }, [productId, offerParam]);
+
+  // Load participants when using Open Finance Pix (pix_ob)
+  useEffect(() => {
+    let active = true;
+    async function loadParticipants() {
+      try {
+        setLoadingParticipants(true);
+        const res = await fetch('/api/open-finance/participants', { cache: 'no-store' });
+        const json = await res.json().catch(() => ({} as any));
+        if (!active) return;
+        const list = Array.isArray(json?.participants) ? json.participants : [];
+        setParticipants(list);
+      } catch {
+        if (active) setParticipants([]);
+      } finally {
+        if (active) setLoadingParticipants(false);
+      }
+    }
+    if (paymentMethod === 'pix_ob') loadParticipants();
+    return () => { active = false; };
+  }, [paymentMethod]);
 
   useEffect(() => {
     async function calc() {
@@ -297,6 +358,21 @@ export default function BrandedCheckoutPage() {
   const summaryDescription = useMemo(() => {
     return (offer?.description && offer.description.trim()) ? offer.description : (product?.description || '');
   }, [offer?.description, product?.description]);
+  // Recurrence text for subscription (e.g., "cada 3 meses")
+  const recurrenceText = useMemo(() => {
+    if (!offer?.isSubscription) return null as string | null;
+    const unit = (offer?.intervalUnit || 'MONTH').toString().toUpperCase();
+    const count = Number(offer?.intervalCount || 1);
+    const n = Math.max(1, isFinite(count) ? count : 1);
+    const mapUnit = (u: string, c: number) => {
+      if (u === 'YEAR') return c === 1 ? 'ano' : `${c} anos`;
+      if (u === 'WEEK') return c === 1 ? 'semana' : `${c} semanas`;
+      if (u === 'DAY') return c === 1 ? 'dia' : `${c} dias`;
+      // default MONTH
+      return c === 1 ? 'mês' : `${c} meses`;
+    };
+    return `cada ${mapUnit(unit, n)}`;
+  }, [offer?.isSubscription, offer?.intervalUnit, offer?.intervalCount]);
   // Build installment options using Price (APR mensal)
   const installmentOptions = useMemo(() => {
     if (!priceCents) return [] as { n: number; perCents: number }[];
@@ -395,67 +471,140 @@ export default function BrandedCheckoutPage() {
     if (paymentMethod === 'pix_ob') {
       try {
         setSubmitting(true);
-        const externalId = crypto.randomUUID();
-        const redirectUri = `${window.location.origin}/${slug}/checkout/${productId}`;
-        const ua = typeof navigator !== 'undefined' ? navigator.userAgent : 'browser';
-        const body = {
-          userId: externalId,
-          clinicId: null,
-          organisationId: undefined,
-          authorisationServerId: undefined,
-          redirectUri,
-          enrollment: {
-            document: buyerDocument.replace(/\D/g, ''),
-            deviceName: ua,
-            externalId
-          },
-          riskSignals: {
-            deviceId: externalId,
-            osVersion: '14',
-            userTimeZoneOffset: '-03',
-            language: (typeof navigator !== 'undefined' ? navigator.language : 'pt-BR').slice(0,2),
-            screenDimensions: { width: typeof window !== 'undefined' ? window.innerWidth : 1080, height: typeof window !== 'undefined' ? window.innerHeight : 1920 },
-            accountTenure: '2024-11-18',
-            isRootedDevice: false,
-            elapsedTimeSinceBoot: (typeof performance !== 'undefined' && typeof performance.now === 'function') ? Math.max(1, Math.floor(performance.now())) : 15555555,
-            screenBrightness: 1
-          }
-        } as any;
-        console.log('[pix_ob][request] POST /api/open-finance/enrollments', { body });
-        const res = await fetch('/api/open-finance/enrollments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        const raw = await res.text();
-        let js: any = null;
-        try { js = JSON.parse(raw); } catch {}
-        console.log('[pix_ob][response][raw]', { status: res.status, raw });
+        // Resolve user id (anonymous users may still have a profile)
+        let resolvedUserId = '';
+        try {
+          const meRes = await fetch('/api/profile', { cache: 'no-store' });
+          if (meRes.ok) { const me = await meRes.json(); resolvedUserId = me?.id || ''; }
+        } catch {}
+        // Require a selected bank (participants preloaded when pix_ob chosen)
+        const organisationId = selectedOrg?.organisationId || (selectedOrg as any)?.organizationId;
+        if (!organisationId) {
+          // Persist enrollment context + return URL and go to bank selection
+          try {
+            const externalId = crypto.randomUUID();
+            const payload = {
+              userId: resolvedUserId || externalId,
+              clinicId: null,
+              redirectUri: `${window.location.origin}/redirect`,
+              enrollment: {
+                document: (buyerDocument || '').replace(/\D/g, ''),
+                deviceName: (typeof navigator !== 'undefined' ? navigator.userAgent : 'browser'),
+                externalId,
+              },
+              riskSignals: {
+                deviceId: externalId,
+                osVersion: getOsVersion(),
+                userTimeZoneOffset: String(-(new Date().getTimezoneOffset()/60)).padStart(2,'0'),
+                language: (typeof navigator !== 'undefined' ? navigator.language : 'pt-BR').slice(0,2),
+                screenDimensions: { width: typeof window !== 'undefined' ? window.innerWidth : 1080, height: typeof window !== 'undefined' ? window.innerHeight : 1920 },
+                accountTenure: new Date(Date.now() - 365*24*60*60*1000).toISOString().slice(0,10),
+                isRootedDevice: false,
+                elapsedTimeSinceBoot: Date.now(),
+                screenBrightness: 1,
+              },
+              context: {
+                productId: product!.id,
+                amountCents: Number(totalCents || 0),
+                currency: 'BRL',
+                orderRef: `ORDER_${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
+              },
+            } as any;
+            window.sessionStorage.setItem('of_enroll', JSON.stringify(payload));
+            window.sessionStorage.setItem('of_return_to', window.location.href);
+          } catch {}
+          window.location.href = '/open-finance/select-bank';
+          return;
+        }
+        if (!resolvedUserId) {
+          try { window.sessionStorage.setItem('of_return_to', window.location.href); } catch {}
+          window.location.href = '/open-finance/select-bank';
+          return;
+        }
+
+        // Verify enrollment for selected organisation
+        const checkRes = await fetch('/api/v2/enrollments/check', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+          body: JSON.stringify({ userId: resolvedUserId, organisationId })
+        });
+        const check = await checkRes.json().catch(() => ({}));
+        if (!checkRes.ok) throw new Error(check?.error || 'Falha na verificação do vínculo');
+        if (check?.needsEnrollment) {
+          try {
+            const externalId = crypto.randomUUID();
+            const payload = {
+              userId: resolvedUserId,
+              clinicId: null,
+              redirectUri: `${window.location.origin}/redirect`,
+              enrollment: {
+                document: (buyerDocument || '').replace(/\D/g, ''),
+                deviceName: (typeof navigator !== 'undefined' ? navigator.userAgent : 'browser'),
+                externalId,
+              },
+              riskSignals: {
+                deviceId: externalId,
+                osVersion: getOsVersion(),
+                userTimeZoneOffset: String(-(new Date().getTimezoneOffset()/60)).padStart(2,'0'),
+                language: (typeof navigator !== 'undefined' ? navigator.language : 'pt-BR').slice(0,2),
+                screenDimensions: { width: typeof window !== 'undefined' ? window.innerWidth : 1080, height: typeof window !== 'undefined' ? window.innerHeight : 1920 },
+                accountTenure: new Date(Date.now() - 365*24*60*60*1000).toISOString().slice(0,10),
+                isRootedDevice: false,
+                elapsedTimeSinceBoot: Date.now(),
+                screenBrightness: 1,
+              },
+              context: {
+                productId: product!.id,
+                amountCents: Number(totalCents || 0),
+                currency: 'BRL',
+                orderRef: `ORDER_${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
+              },
+            } as any;
+            window.sessionStorage.setItem('of_enroll', JSON.stringify(payload));
+            window.sessionStorage.setItem('of_return_to', window.location.href);
+          } catch {}
+          window.location.href = '/open-finance/select-bank';
+          return;
+        }
+
+        const enrollmentId: string = String(check?.enrollmentId || '');
+        if (!enrollmentId) throw new Error('EnrollmentId ausente');
+
+        const cpfOnly = (buyerDocument || '').replace(/[^0-9]/g, '');
+        const orderRef = `ORDER_${Date.now()}_${Math.random().toString(36).slice(2,9)}`;
+        const res = await fetch('/api/open-finance/payments', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            productId: product!.id,
+            enrollmentId,
+            amount: Number(totalCents || 0),
+            currency: 'BRL',
+            payer: { name: buyerName, email: buyerEmail, cpf: cpfOnly },
+            orderRef,
+            userId: resolvedUserId,
+          })
+        });
         if (!res.ok) {
-          console.error('[pix_ob][response][error]', { status: res.status, json: js, raw });
-          const err0 = js?.providerResponse?.errors?.[0] || null;
-          const code = err0?.code || js?.status || res.status;
-          const title = err0?.title || js?.error || 'Falha ao criar enrollment';
-          const detail = err0?.detail || '';
-          const friendly = `Open Finance: ${title}${code ? ` (código ${code})` : ''}${detail ? ` — ${detail}` : ''}`;
-          setError(friendly);
-          return;
+          const j = await res.json().catch(() => ({}));
+          throw new Error(j?.error || 'Falha ao criar pagamento');
         }
-        const redirectUrl =
-          js?.redirectUrl ||
-          js?.providerResponse?.redirectUri ||
-          js?.providerResponse?.authorization_url ||
-          js?.providerResponse?.data?.redirectUrl ||
-          js?.providerResponse?.data?.authorization_url;
-        if (redirectUrl) {
-          console.log('[pix_ob][response][success] redirecting to', redirectUrl);
-          window.location.href = redirectUrl;
-          return;
-        }
-        console.warn('[pix_ob][response] no redirectUrl found', { json: js });
-        setError('Redirect não fornecido pelo provedor');
+        const j = await res.json();
+        const paymentLinkId: string = j?.paymentLinkId;
+        const redirect_uri: string = j?.redirect_uri;
+        if (!paymentLinkId || !redirect_uri) throw new Error('Resposta inválida do provedor');
+
+        try {
+          window.sessionStorage.setItem('of_payment_link_id', paymentLinkId);
+          window.sessionStorage.setItem('of_payment_product_id', product!.id);
+          window.sessionStorage.setItem('of_payment_order_ref', orderRef);
+        } catch {}
+
+        window.location.href = redirect_uri;
+        return;
       } catch (e: any) {
-        setError(e?.message || 'Erro no fluxo Open Finance');
+        setError(e?.message || 'Falha no Pix Open Finance');
       } finally {
         setSubmitting(false);
       }
-      return;
     }
     if (paymentMethod === 'card') {
       if (!cardNumber.trim() || !cardHolder.trim() || !cardExpMonth.trim() || !cardExpYear.trim() || !cardCvv.trim()) {
@@ -474,9 +623,15 @@ export default function BrandedCheckoutPage() {
       const subUnit = (offer?.intervalUnit || 'MONTH').toString().toUpperCase();
       const subCount = Number(offer?.intervalCount || 1);
       const subMonths = isSubscription ? (subUnit === 'YEAR' ? subCount * 12 : (subUnit === 'MONTH' ? subCount : (subUnit === 'WEEK' ? Math.ceil(subCount / 4) : 1))) : 0;
-      // Decide endpoint: if subscription with months > 1, use one-time create with installments=subMonths; else standard subscribe
-      const endpoint = (isSubscription && subMonths > 1) ? '/api/checkout/create' : (isSubscription ? '/api/checkout/subscribe' : '/api/checkout/create');
-      const body = (isSubscription && subMonths > 1) ? {
+      // Decide endpoint:
+      // - subscription + PIX: use one-time create with subscriptionPeriodMonths (supports monthly too)
+      // - subscription + CARD + subMonths>1: one-time create with installments=subMonths (prepaid)
+      // - subscription + CARD + subMonths<=1: standard subscribe
+      // - one-time: create
+      const endpoint = isSubscription
+        ? (paymentMethod === 'pix' ? '/api/checkout/create' : (subMonths > 1 ? '/api/checkout/create' : '/api/checkout/subscribe'))
+        : '/api/checkout/create';
+      const body = (endpoint === '/api/checkout/create' && isSubscription) ? {
         productId: product.id,
         productName: product.name,
         amountCents: priceCents, // base amount; backend embeds interest
@@ -516,7 +671,7 @@ export default function BrandedCheckoutPage() {
                 cvv: cardCvv,
               }
             }
-      } : (isSubscription ? {
+      } : (isSubscription && endpoint === '/api/checkout/subscribe' ? {
         productId: product.id,
         slug,
         offerId: offer?.id || null,
@@ -534,18 +689,16 @@ export default function BrandedCheckoutPage() {
             country: addrCountry || 'BR',
           }
         },
-        payment: paymentMethod === 'pix'
-          ? { method: 'pix' }
-          : {
-              method: 'card',
-              card: {
-                number: cardNumber,
-                holder_name: cardHolder,
-                exp_month: cardExpMonth,
-                exp_year: cardExpYear,
-                cvv: cardCvv,
-              }
-            }
+        payment: {
+          method: 'card',
+          card: {
+            number: cardNumber,
+            holder_name: cardHolder,
+            exp_month: cardExpMonth,
+            exp_year: cardExpYear,
+            cvv: cardCvv,
+          }
+        }
       } : {
         productId: product.id,
         productName: product.name,
@@ -980,7 +1133,6 @@ export default function BrandedCheckoutPage() {
                 {summaryDescription && (
                   <div className={`${theme==='DARK'?'text-gray-400':'text-gray-600'} text-sm mt-1`}>{summaryDescription}</div>
                 )}
-                {/* Subscription/Installments info removed per request */}
                 <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between">
                   <div className={`${theme==='DARK'?'text-gray-400':'text-gray-600'} text-sm`}>Total</div>
                   <div className="text-right">
@@ -991,6 +1143,9 @@ export default function BrandedCheckoutPage() {
                       </>
                     ) : (
                       <div className="text-base font-semibold">{formatBRL(displayPrice as number)}</div>
+                    )}
+                    {offer?.isSubscription && recurrenceText && (
+                      <div className={`text-[12px] ${theme==='DARK'?'text-gray-400':'text-gray-500'} mt-0.5`}>{recurrenceText}</div>
                     )}
                   </div>
                 </div>
@@ -1091,7 +1246,11 @@ export default function BrandedCheckoutPage() {
                         </div>
                       </button>
                     )}
-                    {pixAllowed && (
+                    {(() => {
+                      const isSub = !!offer?.isSubscription;
+                      const show = isSub ? openFinanceAutoAllowed : openFinanceAllowed;
+                      return show;
+                    })() && (
                       <button
                         type="button"
                         onClick={() => setPaymentMethod('pix_ob')}
@@ -1102,7 +1261,9 @@ export default function BrandedCheckoutPage() {
                         )}
                         <div className="flex items-center gap-2">
                           <img src="/pix.png" alt="Pix" className="h-4 w-4 object-contain" />
-                          <span className={`${paymentMethod==='pix_ob' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>Pix Automático</span>
+                          <span className={`${paymentMethod==='pix_ob' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>
+                            {offer?.isSubscription ? 'Pix Automático' : 'Open Finance'}
+                          </span>
                         </div>
                       </button>
                     )}
@@ -1283,6 +1444,9 @@ export default function BrandedCheckoutPage() {
                       </>
                     ) : (
                       <div className="text-base font-semibold">{formatBRL(displayPrice as number)}</div>
+                    )}
+                    {offer?.isSubscription && recurrenceText && (
+                      <div className={`text-[12px] ${theme==='DARK'?'text-gray-400':'text-gray-500'} mt-0.5`}>{recurrenceText}</div>
                     )}
                   </div>
                 </div>
