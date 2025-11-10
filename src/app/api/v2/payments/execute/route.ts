@@ -3,6 +3,10 @@ import { prisma } from '@/lib/prisma';
 
 export async function POST(req: Request) {
   try {
+    const PIX_OB_ENABLED = String(process.env.CHECKOUT_PIX_OB_ENABLED || '').toLowerCase() === 'true';
+    if (!PIX_OB_ENABLED) {
+      return NextResponse.json({ error: 'PIX Open Finance desativado' }, { status: 400 });
+    }
     const body = await req.json().catch(() => ({} as any));
     const consentId: string | undefined = body?.consentId;
     const amount = body?.amount; // e.g. { currency: 'BRL', amount: '100.00' }

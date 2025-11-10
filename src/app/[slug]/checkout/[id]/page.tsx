@@ -95,10 +95,11 @@ export default function BrandedCheckoutPage() {
   const redirectingRef = useRef<boolean>(false);
   const [cardPolling, setCardPolling] = useState<{ active: boolean; startedAt: number } | null>(null);
   // Allowed methods derived from offer
+  const PIX_OB_ENABLED = String(process.env.NEXT_PUBLIC_CHECKOUT_PIX_OB_ENABLED || '').toLowerCase() === 'true';
   const pixAllowed = useMemo(() => (offer?.paymentMethods || []).some(x => x.method === 'PIX' && x.active), [offer?.paymentMethods]);
   const cardAllowed = useMemo(() => (offer?.paymentMethods || []).some(x => x.method === 'CARD' && x.active), [offer?.paymentMethods]);
-  const openFinanceAllowed = useMemo(() => (offer?.paymentMethods || []).some(x => x.method === 'OPEN_FINANCE' && x.active), [offer?.paymentMethods]);
-  const openFinanceAutoAllowed = useMemo(() => (offer?.paymentMethods || []).some(x => x.method === 'OPEN_FINANCE_AUTOMATIC' && x.active), [offer?.paymentMethods]);
+  const openFinanceAllowed = useMemo(() => PIX_OB_ENABLED && (offer?.paymentMethods || []).some(x => x.method === 'OPEN_FINANCE' && x.active), [offer?.paymentMethods, PIX_OB_ENABLED]);
+  const openFinanceAutoAllowed = useMemo(() => PIX_OB_ENABLED && (offer?.paymentMethods || []).some(x => x.method === 'OPEN_FINANCE_AUTOMATIC' && x.active), [offer?.paymentMethods, PIX_OB_ENABLED]);
   // Open Finance participants (bank selection for pix_ob)
   const [participants, setParticipants] = useState<any[]>([]);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
@@ -591,6 +592,7 @@ export default function BrandedCheckoutPage() {
     if (!buyerPhone.trim()) { console.warn('Informe o telefone'); return; }
     if (!buyerDocument.trim()) { console.warn('Informe o CPF/CNPJ'); return; }
     if (paymentMethod === 'pix_ob') {
+      if (!PIX_OB_ENABLED) { setError('PIX Open Finance está desativado no momento'); return; }
       try {
         setSubmitting(true);
         // Resolve user id (anonymous users may still have a profile)

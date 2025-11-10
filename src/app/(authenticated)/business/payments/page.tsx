@@ -118,41 +118,6 @@ export default async function PaymentsDataPage({ searchParams }: { searchParams?
     ...params
   ).catch(() => []);
 
-  // KPIs
-  async function kpiCount(where: string, ps: any[]) {
-    const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT COUNT(*)::int AS c FROM checkout_sessions ${where}`, ...ps).catch(() => [{ c: 0 }]);
-    return Number(rows?.[0]?.c || 0);
-  }
-  const baseWhere = whereSql;
-  const baseParams = params;
-  const totalStarted = await kpiCount(baseWhere ? baseWhere + (baseWhere ? ' AND ' : ' WHERE ') + `status = 'started'` : `WHERE status = 'started'`, baseParams);
-  const totalPix = await kpiCount(baseWhere ? baseWhere + (baseWhere ? ' AND ' : ' WHERE ') + `status = 'pix_generated'` : `WHERE status = 'pix_generated'`, baseParams);
-  const totalPaid = await kpiCount(baseWhere ? baseWhere + (baseWhere ? ' AND ' : ' WHERE ') + `status = 'paid'` : `WHERE status = 'paid'`, baseParams);
-  const totalAbandoned = await kpiCount(baseWhere ? baseWhere + (baseWhere ? ' AND ' : ' WHERE ') + `status = 'abandoned'` : `WHERE status = 'abandoned'`, baseParams);
-  // Recovery (heurística mais rígida): considerar recuperadas apenas sessões que geraram PIX e foram pagas depois
-  const totalRecoveredRows = await prisma.$queryRawUnsafe<any[]>(
-    `SELECT COUNT(*)::int AS c
-       FROM checkout_sessions
-       ${baseWhere}
-       ${baseWhere ? ' AND ' : 'WHERE '} status = 'paid'
-         AND (
-           (pix_expires_at IS NOT NULL AND updated_at > pix_expires_at)
-           OR EXISTS (
-             SELECT 1 FROM checkout_sessions cs2
-              WHERE cs2.id = checkout_sessions.id AND cs2.status = 'abandoned'
-           )
-         )`,
-    ...baseParams
-  ).catch(() => [{ c: 0 }]);
-  const totalRecovered = Number(totalRecoveredRows?.[0]?.c || 0);
-  const abandonmentRate = (() => {
-    const denom = (totalPix + totalPaid + totalAbandoned) || 1; // ignora apenas 'started'
-    return (totalAbandoned / denom) * 100;
-  })();
-  const recoveryRate = (() => {
-    const denom = totalAbandoned || 1;
-    return (totalRecovered / denom) * 100;
-  })();
   // Sessions by utmSource (top 10)
   const byUtm = await prisma.$queryRawUnsafe<any[]>(
     `SELECT COALESCE(utm_source, '—') AS source, COUNT(*)::int AS c
@@ -284,38 +249,6 @@ export default async function PaymentsDataPage({ searchParams }: { searchParams?
               </TabsContent>
 
               <TabsContent value="sessions">
-                <div className="mb-3">
-                  <form method="get" className="flex flex-wrap gap-2 items-center">
-                    <input type="text" name="clinic" defaultValue={qClinic} className="h-8 px-2 rounded border text-sm placeholder:text-gray-400" placeholder="clinic_id" />
-                    <select name="status" defaultValue={qStatus} className="h-8 px-2 rounded border text-sm">
-                      <option value="">status</option>
-                      <option value="started">started</option>
-                      <option value="pix_generated">pix_generated</option>
-                      <option value="paid">paid</option>
-                      <option value="abandoned">abandoned</option>
-                      <option value="canceled">canceled</option>
-                    </select>
-                    <input type="datetime-local" name="from" defaultValue={qFrom} className="h-8 px-2 rounded border text-sm" placeholder="from" />
-                    <input type="datetime-local" name="to" defaultValue={qTo} className="h-8 px-2 rounded border text-sm" placeholder="to" />
-                    <button type="submit" className="h-8 px-3 rounded border text-sm bg-white hover:bg-gray-50">Filtrar</button>
-                  </form>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
-                  <div className="rounded-md border p-3">
-                    <div className="text-[11px] text-gray-500">Abandono</div>
-                    <div className="text-xl font-semibold leading-6">{abandonmentRate.toFixed(1)}%</div>
-                  </div>
-                  <div className="rounded-md border p-3">
-                    <div className="text-[11px] text-gray-500">Recuperação</div>
-                    <div className="text-xl font-semibold leading-6">{recoveryRate.toFixed(1)}%</div>
-                  </div>
-                  <div className="rounded-md border p-3">
-                    <div className="text-[11px] text-gray-500">Sessões (últimas 100)</div>
-                    <div className="text-xl font-semibold leading-6">{sessions.length}</div>
-                  </div>
-                </div>
-
                 <CheckoutSessionsTable sessions={sessions as any} />
               </TabsContent>
             </Tabs>
