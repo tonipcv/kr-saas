@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { validateIdToken } from '@/lib/jwks';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 
 export async function POST(req: Request) {
   try {
@@ -172,17 +174,45 @@ export async function POST(req: Request) {
         const amountCents = typeof meta?.amountCents === 'number' ? meta.amountCents : null;
         const currency = (meta?.currency as string) || 'BRL';
         const orderRef = (meta?.orderRef as string) || null;
+
+        // Enrich: resolve clinicId/patientProfileId from CheckoutSession by orderRef
+        let clinicId: string | null = null;
+        let patientProfileId: string | null = null;
+        if (orderRef) {
+          const cs = await prisma.checkoutSession.findFirst({ where: { orderId: orderRef }, select: { clinicId: true, patientProfileId: true } }).catch(() => null as any);
+          clinicId = (cs?.clinicId as any) || null;
+          patientProfileId = (cs?.patientProfileId as any) || null;
+        }
+        // Enrich: resolve doctorId from Product
+        let doctorId: string | null = null;
+        if (productId) {
+          const prod = await prisma.products.findUnique({ where: { id: productId }, select: { doctorId: true } }).catch(() => null as any);
+          doctorId = (prod?.doctorId as any) || null;
+        }
+        // Enrich: include minimal user info from session
+        let userName: string | null = null;
+        let userEmail: string | null = null;
+        try {
+          const session = await getServerSession(authOptions);
+          userName = (session?.user?.name as any) || null;
+          userEmail = (session?.user?.email as any) || null;
+        } catch {}
+
         const deterministicId = `${state}:${productId || 'na'}`;
         await prisma.paymentTransaction.upsert({
           where: { id: deterministicId },
           update: {
-            status: 'paid',
+            status: 'processing',
+            clinicId: clinicId || undefined,
+            patientProfileId: patientProfileId || undefined,
+            doctorId: doctorId || undefined,
             rawPayload: {
               state,
               orderRef,
               productId,
               amountCents,
               currency,
+              payer: { name: userName, email: userEmail },
               note: skipJwks ? 'dev-skip-jwks' : 'validated',
             } as any,
           },
@@ -194,13 +224,17 @@ export async function POST(req: Request) {
             amountCents: amountCents ?? 0,
             currency,
             productId: productId || undefined,
-            status: 'paid',
+            clinicId: clinicId || undefined,
+            patientProfileId: patientProfileId || undefined,
+            doctorId: doctorId || undefined,
+            status: 'processing',
             rawPayload: {
               state,
               orderRef,
               productId,
               amountCents,
               currency,
+              payer: { name: userName, email: userEmail },
               note: skipJwks ? 'dev-skip-jwks' : 'validated',
             } as any,
           },

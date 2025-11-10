@@ -211,17 +211,38 @@ export async function createRecurringPayment(payload: Record<string, any>, opts?
 // JSR-style endpoints (per cURL reference)
 export async function createJSRConsent(payload: Record<string, any>, opts?: CallOpts) {
   const url = `${BASE_URL}/api/v1/jsr/consents`;
-  const res = await fetch(url, { method: 'POST', headers: await authHeaders(opts), body: JSON.stringify(payload), cache: 'no-store' });
-  const text = await res.text();
-  let data: any = {};
-  try { data = JSON.parse(text); } catch {}
-  if (!res.ok) {
-    const msg = data?.message || data?.error || text || `Lina OB error ${res.status}`;
+  const maxAttempts = 4;
+  let attempt = 0;
+  while (true) {
+    attempt += 1;
+    const res = await fetch(url, { method: 'POST', headers: await authHeaders(opts), body: JSON.stringify(payload), cache: 'no-store' });
+    const text = await res.text();
+    let data: any = {}; try { data = JSON.parse(text); } catch {}
+    if (res.ok) return data;
+    const status = res.status;
+    const providerCode = data?.errors?.[0]?.code || data?.code;
+    const providerTitle = data?.errors?.[0]?.title || '';
+    const providerDetail = data?.errors?.[0]?.detail || '';
+    const shouldRetry = (
+      status === 424 ||
+      status === 429 ||
+      status === 422 ||
+      String(providerCode) === 'UNPROCESSABLE_ENTITY' ||
+      /STATUS_VINCULO_INVALIDO/i.test(providerTitle) ||
+      /STATUS_VINCULO_INVALIDO/i.test(providerDetail)
+    );
+    if (shouldRetry && attempt < maxAttempts) {
+      const waitMs = 1000 * attempt; // linear backoff 1s,2s,3s
+      // eslint-disable-next-line no-console
+      console.warn('[linaob.createJSRConsent][retry]', { attempt, status, providerCode, providerTitle, waitMs });
+      await new Promise(r => setTimeout(r, waitMs));
+      continue;
+    }
+    const msg = data?.message || data?.error || text || `Lina OB error ${status}`;
     const err: any = new Error(msg);
-    err.status = res.status; err.responseText = text; err.responseJson = data;
+    err.status = status; err.responseText = text; err.responseJson = data;
     throw err;
   }
-  return data;
 }
 
 export async function createJSRPayment(payload: Record<string, any>, opts?: CallOpts) {

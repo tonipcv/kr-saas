@@ -16,7 +16,7 @@ export async function POST(req: Request) {
       }
       return NextResponse.json({ error: 'Não autorizado', ...(isDev ? { details: { reason: 'no_session' } } : {}) }, { status: 401 });
     }
-    const { clinicId, legalInfo, bankAccount, splitPercent, platformFeeBps } = await req.json();
+    const { clinicId, legalInfo, bankAccount, splitPercent, platformFeeBps, transactionFeeCents, transactionFeeType } = await req.json();
     if (!clinicId) return NextResponse.json({ error: 'clinicId é obrigatório' }, { status: 400 });
 
     // Identify SUPER_ADMIN to allow bypassing clinic membership checks
@@ -65,7 +65,8 @@ export async function POST(req: Request) {
 
     let externalAccountId = merchant.externalAccountId || null;
     const useV5 = isV5();
-    if (!useV5 && bankAccount && Object.keys(bankAccount).length > 0) {
+    const feeOnlyUpdate = (!legalInfo || Object.keys(legalInfo || {}).length === 0) && (!bankAccount || Object.keys(bankAccount || {}).length === 0);
+    if (!useV5 && !feeOnlyUpdate && bankAccount && Object.keys(bankAccount).length > 0) {
       // v1 flow: create bank account resource first
       try {
         const ba = await pagarmeCreateBankAccount(bankAccount);
@@ -96,7 +97,7 @@ export async function POST(req: Request) {
     };
 
     let recipPayload: any;
-    if (useV5) {
+    if (!feeOnlyUpdate && useV5) {
       // v5 core payload (working schema)
       const docStr: string = String(legalInfo?.document_number ?? legalInfo?.document ?? '');
       const digitsDoc = docStr.replace(/\D/g, '');
@@ -213,7 +214,7 @@ export async function POST(req: Request) {
         transfer_settings,
         default_bank_account: defaultBank,
       });
-    } else {
+    } else if (!feeOnlyUpdate) {
       // v1 payload
       recipPayload = {
         transfer_enabled: true,
@@ -224,49 +225,55 @@ export async function POST(req: Request) {
     }
 
     let recipientId = merchant.recipientId || null;
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('[pagarme][recipient] Payload (v5:', useV5, ')', JSON.stringify(recipPayload));
-    }
-    if (recipientId) {
-      try {
-        const upd = await pagarmeUpdateRecipient(recipientId, recipPayload);
-        recipientId = upd?.id || upd?.recipient_id || recipientId;
-      } catch (err: any) {
-        // If remote recipient does not exist anymore, create a new one
-        if (err?.status === 404) {
-          try {
-            const created = await pagarmeCreateRecipient(recipPayload);
-            recipientId = created?.id || created?.recipient_id || null;
-          } catch (ce: any) {
-            // Handle duplicate external_id/code (412) by regenerating code once
-            if (ce?.status === 412) {
-              const orig = recipPayload?.code || `clinic-${clinicId}`;
-              recipPayload.code = `${orig}-${Math.random().toString(36).slice(2, 8)}`;
-              const created2 = await pagarmeCreateRecipient(recipPayload);
-              recipientId = created2?.id || created2?.recipient_id || null;
-            } else {
-              throw ce;
+    if (!feeOnlyUpdate) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[pagarme][recipient] Payload (v5:', useV5, ')', JSON.stringify(recipPayload));
+      }
+      if (recipientId) {
+        try {
+          const upd = await pagarmeUpdateRecipient(recipientId, recipPayload);
+          recipientId = upd?.id || upd?.recipient_id || recipientId;
+        } catch (err: any) {
+          // If remote recipient does not exist anymore, create a new one
+          if (err?.status === 404) {
+            try {
+              const created = await pagarmeCreateRecipient(recipPayload);
+              recipientId = created?.id || created?.recipient_id || null;
+            } catch (ce: any) {
+              // Handle duplicate external_id/code (412) by regenerating code once
+              if (ce?.status === 412) {
+                const orig = recipPayload?.code || `clinic-${clinicId}`;
+                recipPayload.code = `${orig}-${Math.random().toString(36).slice(2, 8)}`;
+                const created2 = await pagarmeCreateRecipient(recipPayload);
+                recipientId = created2?.id || created2?.recipient_id || null;
+              } else {
+                throw ce;
+              }
             }
+          } else {
+            throw err;
           }
-        } else {
-          throw err;
         }
-      }
-    } else {
-      try {
-        const created = await pagarmeCreateRecipient(recipPayload);
-        recipientId = created?.id || created?.recipient_id || null;
-      } catch (ce: any) {
-        if (ce?.status === 412) {
-          const orig = recipPayload?.code || `clinic-${clinicId}`;
-          recipPayload.code = `${orig}-${Math.random().toString(36).slice(2, 8)}`;
-          const created2 = await pagarmeCreateRecipient(recipPayload);
-          recipientId = created2?.id || created2?.recipient_id || null;
-        } else {
-          throw ce;
+      } else {
+        try {
+          const created = await pagarmeCreateRecipient(recipPayload);
+          recipientId = created?.id || created?.recipient_id || null;
+        } catch (ce: any) {
+          if (ce?.status === 412) {
+            const orig = recipPayload?.code || `clinic-${clinicId}`;
+            recipPayload.code = `${orig}-${Math.random().toString(36).slice(2, 8)}`;
+            const created2 = await pagarmeCreateRecipient(recipPayload);
+            recipientId = created2?.id || created2?.recipient_id || null;
+          } else {
+            throw ce;
+          }
         }
       }
     }
+
+    // Basic guards
+    const txFeeCents = typeof transactionFeeCents === 'number' ? Math.max(0, Math.floor(transactionFeeCents)) : undefined;
+    const txFeeType = typeof transactionFeeType === 'string' ? String(transactionFeeType) : undefined;
 
     const updated = await prisma.merchant.update({
       where: { clinicId },
@@ -275,6 +282,8 @@ export async function POST(req: Request) {
         externalAccountId,
         splitPercent: typeof splitPercent === 'number' ? splitPercent : merchant.splitPercent,
         platformFeeBps: typeof platformFeeBps === 'number' ? platformFeeBps : merchant.platformFeeBps,
+        transactionFeeCents: txFeeCents !== undefined ? txFeeCents : merchant.transactionFeeCents,
+        transactionFeeType: txFeeType || merchant.transactionFeeType,
         status: recipientId ? 'ACTIVE' : 'PENDING',
         lastSyncAt: new Date(),
       }

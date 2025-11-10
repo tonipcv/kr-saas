@@ -31,7 +31,7 @@ export async function GET(
       include: {
         owner: { select: { id: true, name: true, email: true } },
         members: { include: { user: { select: { id: true, name: true, email: true } } } },
-        merchant: { select: { recipientId: true, status: true, splitPercent: true, platformFeeBps: true, lastSyncAt: true } },
+        merchant: { select: { recipientId: true, status: true, splitPercent: true, platformFeeBps: true, transactionFeeCents: true, transactionFeeType: true, lastSyncAt: true } },
         subscriptions: {
           where: {
             status: { in: ['ACTIVE', 'TRIAL'] }

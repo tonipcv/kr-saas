@@ -955,15 +955,37 @@ export async function POST(req: Request) {
         const methodType = payment?.method === 'pix' ? 'pix' : 'credit_card';
         const orderId = order?.id || null;
         try { console.log('[checkout][create] inserting payment_transactions row', { txId, orderId, methodType }); } catch {}
+        // Compute clinic/platform amounts from merchant.splitPercent (fallback 70) and hybrid fees (platformFeeBps + transactionFeeCents)
+        let clinicSplitPercent = 70;
+        let platformFeeBps = 0;
+        let transactionFeeCents = 0;
+        try {
+          if (clinic?.id) {
+            const m = await prisma.merchant.findFirst({ where: { clinicId: String(clinic.id) }, select: { splitPercent: true, platformFeeBps: true, transactionFeeCents: true } });
+            if (m && m.splitPercent != null) clinicSplitPercent = Math.max(0, Math.min(100, Number(m.splitPercent)));
+            if (m && m.platformFeeBps != null) platformFeeBps = Math.max(0, Number(m.platformFeeBps));
+            if (m && m.transactionFeeCents != null) transactionFeeCents = Math.max(0, Number(m.transactionFeeCents));
+          }
+        } catch {}
+        const grossCents = Number(amountCents);
+        const clinicShare = Math.round(grossCents * (clinicSplitPercent / 100));
+        const feePercent = Math.round(grossCents * (platformFeeBps / 10000));
+        const feeFlat = transactionFeeCents;
+        const platformFeeTotal = Math.max(0, feePercent + feeFlat);
+        const clinicAmountCents = Math.max(0, clinicShare - platformFeeTotal);
+        const platformAmountCents = Math.max(0, grossCents - clinicAmountCents);
         await prisma.$executeRawUnsafe(
-          `INSERT INTO payment_transactions (id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, product_id, amount_cents, currency, installments, payment_method_type, status, raw_payload)
-           VALUES ($1, 'pagarme', $2, $3, $4, $5, $6, $7, 'BRL', $8, $9, 'processing', $10::jsonb)
+          `INSERT INTO payment_transactions (id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, product_id, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, installments, payment_method_type, status, raw_payload)
+           VALUES ($1, 'pagarme', $2, $3, $4, $5, $6, $7, $8, $9, $10, 'BRL', $11, $12, 'processing', $13::jsonb)
            ON CONFLICT (provider, provider_order_id) DO UPDATE
              SET doctor_id = COALESCE(payment_transactions.doctor_id, EXCLUDED.doctor_id),
                  patient_profile_id = COALESCE(payment_transactions.patient_profile_id, EXCLUDED.patient_profile_id),
                  clinic_id = COALESCE(payment_transactions.clinic_id, EXCLUDED.clinic_id),
                  product_id = COALESCE(payment_transactions.product_id, EXCLUDED.product_id),
-                 amount_cents = CASE WHEN payment_transactions.amount_cents = 0 THEN EXCLUDED.amount_cents ELSE payment_transactions.amount_cents END`,
+                 amount_cents = CASE WHEN payment_transactions.amount_cents = 0 THEN EXCLUDED.amount_cents ELSE payment_transactions.amount_cents END,
+                 clinic_amount_cents = COALESCE(payment_transactions.clinic_amount_cents, EXCLUDED.clinic_amount_cents),
+                 platform_amount_cents = COALESCE(payment_transactions.platform_amount_cents, EXCLUDED.platform_amount_cents),
+                 platform_fee_cents = COALESCE(payment_transactions.platform_fee_cents, EXCLUDED.platform_fee_cents)`,
           txId,
           orderId,
           String(doctorId),
@@ -971,6 +993,9 @@ export async function POST(req: Request) {
           clinic?.id ? String(clinic.id) : null,
           String(productId),
           Number(amountCents),
+          clinicAmountCents,
+          platformAmountCents,
+          platformFeeTotal,
           Number(payment?.installments || 1),
           methodType,
           JSON.stringify({ payload })

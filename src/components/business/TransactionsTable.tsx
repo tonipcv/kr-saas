@@ -17,6 +17,9 @@ type TxRow = {
   product_id: string | null;
   product_name?: string | null;
   amount_cents: number | null;
+  clinic_amount_cents?: number | null;
+  platform_amount_cents?: number | null;
+  refunded_cents?: number | null;
   currency: string | null;
   installments: number | null;
   payment_method_type: string | null;
@@ -189,7 +192,14 @@ export default function TransactionsTable({ transactions }: { transactions: TxRo
                 <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.clinic_name || t.clinic_id}</td>
                 <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.doctor_name || t.doctor_id}</td>
                 <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.product_name || t.product_id}</td>
-                <td className="px-2 py-2 text-right whitespace-nowrap">{formatAmount(t.amount_cents as any, t.currency)}</td>
+                <td className="px-2 py-2 text-right whitespace-nowrap">
+                  <div className="flex flex-col items-end leading-tight">
+                    <div className="font-medium">{formatAmount((t.clinic_amount_cents ?? t.amount_cents) as any, t.currency)}</div>
+                    {typeof t.clinic_amount_cents === 'number' && t.amount_cents != null && t.clinic_amount_cents !== t.amount_cents && (
+                      <div className="text-[11px] text-gray-500">Bruto: {formatAmount(t.amount_cents as any, t.currency)}</div>
+                    )}
+                  </div>
+                </td>
                 <td className="px-2 py-2 whitespace-nowrap">{t.currency}</td>
                 <td className="px-2 py-2 whitespace-nowrap">{t.installments}</td>
                 <td className="px-2 py-2 whitespace-nowrap">{methodBadge(t.payment_method_type, t.installments as any)}</td>
@@ -217,7 +227,26 @@ export default function TransactionsTable({ transactions }: { transactions: TxRo
                 <div><span className="text-gray-500">Charge:</span> {selected.provider_charge_id || '—'}</div>
                 <div><span className="text-gray-500">Método:</span> {(selected.payment_method_type || '—').toUpperCase()}</div>
                 <div className="flex items-center gap-2"><span className="text-gray-500">Status:</span> {badgeFor(selected.status)}</div>
-                <div><span className="text-gray-500">Valor:</span> {formatAmount(selected.amount_cents as any, selected.currency)}</div>
+                <div className="col-span-2 grid grid-cols-2 gap-2">
+                  <div><span className="text-gray-500">Valor (bruto):</span> {formatAmount(selected.amount_cents as any, selected.currency)}</div>
+                  <div>
+                    <span className="text-gray-500">Valor (clínica):</span>{' '}
+                    {(() => {
+                      const hasClinic = typeof selected.clinic_amount_cents === 'number';
+                      const hasPlatform = typeof selected.platform_amount_cents === 'number';
+                      const hasAmount = typeof selected.amount_cents === 'number';
+                      const fallback = hasAmount && hasPlatform
+                        ? (selected.amount_cents as number) - (selected.platform_amount_cents as number)
+                        : undefined;
+                      const value = hasClinic
+                        ? (selected.clinic_amount_cents as number)
+                        : (typeof fallback === 'number' ? fallback : undefined);
+                      return typeof value === 'number'
+                        ? formatAmount(value as any, selected.currency)
+                        : '—';
+                    })()}
+                  </div>
+                </div>
                 <div><span className="text-gray-500">Parcelas:</span> {selected.installments || '—'}</div>
                 <div><span className="text-gray-500">Cliente:</span> {selected.patient_name || selected.patient_profile_id || '—'}</div>
                 <div><span className="text-gray-500">Email:</span> {selected.patient_email || '—'}</div>

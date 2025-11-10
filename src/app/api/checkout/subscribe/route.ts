@@ -335,9 +335,28 @@ export async function POST(req: Request) {
         if (doctorId && tableExists) {
           const txId = crypto.randomUUID();
           const amountCents = (selectedOffer ? Number(selectedOffer.priceCents || 0) : Math.round(Number(product?.price as any) * 100)) || 0;
+          // Estimate split for initial row; webhook will adjust if needed (hybrid fees)
+          let clinicSplitPercent = 70;
+          let platformFeeBps = 0;
+          let transactionFeeCents = 0;
+          try {
+            if (clinic?.id) {
+              const m = await prisma.merchant.findFirst({ where: { clinicId: String(clinic.id) }, select: { splitPercent: true, platformFeeBps: true, transactionFeeCents: true } });
+              if (m && m.splitPercent != null) clinicSplitPercent = Math.max(0, Math.min(100, Number(m.splitPercent)));
+              if (m && m.platformFeeBps != null) platformFeeBps = Math.max(0, Number(m.platformFeeBps));
+              if (m && m.transactionFeeCents != null) transactionFeeCents = Math.max(0, Number(m.transactionFeeCents));
+            }
+          } catch {}
+          const grossCents = Number(amountCents);
+          const clinicShare = Math.round(grossCents * (clinicSplitPercent / 100));
+          const feePercent = Math.round(grossCents * (platformFeeBps / 10000));
+          const feeFlat = transactionFeeCents;
+          const platformFeeTotal = Math.max(0, feePercent + feeFlat);
+          const clinicAmountCents = Math.max(0, clinicShare - platformFeeTotal);
+          const platformAmountCents = Math.max(0, grossCents - clinicAmountCents);
           await prisma.$executeRawUnsafe(
-            `INSERT INTO payment_transactions (id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, product_id, amount_cents, currency, installments, payment_method_type, status, raw_payload)
-             VALUES ($1, 'pagarme', $2, $3, $4, $5, $6, $7, 'BRL', $8, $9, 'processing', $10::jsonb)`,
+            `INSERT INTO payment_transactions (id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, product_id, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, installments, payment_method_type, status, raw_payload)
+             VALUES ($1, 'pagarme', $2, $3, $4, $5, $6, $7, $8, $9, $10, 'BRL', $11, $12, 'processing', $13::jsonb)`,
             txId,
             subscriptionId ? String(subscriptionId) : null,
             String(doctorId),
@@ -345,6 +364,9 @@ export async function POST(req: Request) {
             clinic?.id ? String(clinic.id) : null,
             String(productId),
             Number(amountCents),
+            clinicAmountCents,
+            platformAmountCents,
+            platformFeeTotal,
             1,
             'credit_card',
             JSON.stringify({ payload })

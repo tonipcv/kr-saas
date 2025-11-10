@@ -59,7 +59,7 @@ interface DoctorInfo {
 
 // Contexto para compartilhar o role do usuário
 interface UserRoleContextType {
-  userRole: 'DOCTOR' | 'PATIENT' | 'SUPER_ADMIN' | null;
+  userRole: 'DOCTOR' | 'PATIENT' | 'SUPER_ADMIN' | 'ADMIN' | null;
   isLoadingRole: boolean;
 }
 
@@ -71,7 +71,7 @@ export const UserRoleContext = createContext<UserRoleContextType>({
 // Provider do contexto de role
 export function UserRoleProvider({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
-  const [userRole, setUserRole] = useState<'DOCTOR' | 'PATIENT' | 'SUPER_ADMIN' | null>(null);
+  const [userRole, setUserRole] = useState<'DOCTOR' | 'PATIENT' | 'SUPER_ADMIN' | 'ADMIN' | null>(null);
   const [isLoadingRole, setIsLoadingRole] = useState(true);
 
   useEffect(() => {
@@ -121,7 +121,7 @@ export function useUserRole() {
 }
 
 // Hook para buscar informações do médico dos protocolos ativos
-function useDoctorInfo(effectiveRole?: 'DOCTOR' | 'PATIENT' | 'SUPER_ADMIN' | null) {
+function useDoctorInfo(effectiveRole?: 'DOCTOR' | 'PATIENT' | 'SUPER_ADMIN' | 'ADMIN' | null) {
   const [doctorInfo, setDoctorInfo] = useState<DoctorInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -428,6 +428,12 @@ export default function Navigation() {
           description: 'Manage subscription plans'
         },
         {
+          href: '/admin/fees',
+          label: 'Payments Split',
+          icon: CreditCardIcon,
+          description: 'Define split and platform fees per clinic'
+        },
+        {
           href: '/clinic/subscription',
           label: 'Business Subscription',
           icon: ShieldCheckIcon,
@@ -478,19 +484,19 @@ export default function Navigation() {
   
   // Determinar tema baseado no role do usuário e na URL
   // /doctor-info sempre usa tema escuro (paciente), mesmo que o usuário seja médico
-  const shouldUseLightTheme = !isDoctorInfoPage && ((isDoctorPage || isAdminPage) || (effectiveRole === 'DOCTOR' || effectiveRole === 'SUPER_ADMIN')) && !pathname?.startsWith('/patient');
+  const shouldUseLightTheme = !isDoctorInfoPage && ((isDoctorPage || isAdminPage) || (effectiveRole === 'DOCTOR' || effectiveRole === 'SUPER_ADMIN' || effectiveRole === 'ADMIN')) && !pathname?.startsWith('/patient');
 
   // Selecionar navegação baseada no role - memoizada
   const navSections = useMemo(() => {
     if (isDoctorInfoPage) return patientNavSections;
-    if (effectiveRole === 'SUPER_ADMIN') return superAdminNavSections;
+    if (effectiveRole === 'SUPER_ADMIN' || effectiveRole === 'ADMIN') return superAdminNavSections;
     if (effectiveRole === 'DOCTOR') return doctorNavSections;
     return patientNavSections;
   }, [effectiveRole, isDoctorInfoPage, patientNavSections, doctorNavSections, superAdminNavSections]);
 
   // Profile URL - memoizada
   const profileUrl = useMemo(() => {
-    if (effectiveRole === 'DOCTOR' || effectiveRole === 'SUPER_ADMIN') return '/business/profile';
+    if (effectiveRole === 'DOCTOR' || effectiveRole === 'SUPER_ADMIN' || effectiveRole === 'ADMIN') return '/business/profile';
     // Patient
     return currentSlug ? `/${currentSlug}/profile` : '/patient/profile';
   }, [effectiveRole, currentSlug]);

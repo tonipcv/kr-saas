@@ -263,6 +263,45 @@ export async function POST(req: Request) {
         return 'processing';
       })();
 
+      // Compute split amounts (best-effort) to persist clinic/platform shares when possible (hybrid fees)
+      let splitClinicAmount: number | null = null;
+      let splitPlatformAmount: number | null = null;
+      let splitPlatformFeeCents: number | null = null;
+      try {
+        const eventAmountCentsForSplit = Number(
+          event?.data?.amount
+          || event?.data?.order?.amount
+          || event?.order?.amount
+          || event?.data?.charge?.amount
+          || event?.data?.charges?.[0]?.amount
+          || 0
+        ) || 0;
+        if (eventAmountCentsForSplit > 0) {
+          const orderMeta0 = event?.data?.metadata || event?.data?.order?.metadata || event?.order?.metadata || event?.metadata || {};
+          const clinicId0: string | null = orderMeta0?.clinicId || null;
+          let clinicSplitPercent = 70;
+          let platformFeeBps = 0;
+          let transactionFeeCents = 0;
+          if (clinicId0) {
+            try {
+              const m = await prisma.merchant.findFirst({ where: { clinicId: String(clinicId0) }, select: { splitPercent: true, platformFeeBps: true, transactionFeeCents: true } });
+              if (m && m.splitPercent != null) clinicSplitPercent = Math.max(0, Math.min(100, Number(m.splitPercent)));
+              if (m && m.platformFeeBps != null) platformFeeBps = Math.max(0, Number(m.platformFeeBps));
+              if (m && m.transactionFeeCents != null) transactionFeeCents = Math.max(0, Number(m.transactionFeeCents));
+            } catch {}
+          }
+          const clinicShare = Math.round(eventAmountCentsForSplit * (clinicSplitPercent / 100));
+          const feePercent = Math.round(eventAmountCentsForSplit * (platformFeeBps / 10000));
+          const feeFlat = transactionFeeCents;
+          const platformFeeTotal = Math.max(0, feePercent + feeFlat);
+          const clinic = Math.max(0, clinicShare - platformFeeTotal);
+          const platform = Math.max(0, eventAmountCentsForSplit - clinic);
+          splitClinicAmount = clinic;
+          splitPlatformAmount = platform;
+          splitPlatformFeeCents = platformFeeTotal;
+        }
+      } catch {}
+
       // Update by provider_order_id; create if not exists (webhooks may arrive before checkout/create)
       if (orderId) {
         try {
@@ -280,13 +319,19 @@ export async function POST(req: Request) {
                  raw_payload = $3::jsonb,
                  payment_method_type = COALESCE($4::text, payment_method_type),
                  installments = COALESCE($5::int, installments),
+                 clinic_amount_cents = COALESCE(clinic_amount_cents, $6::bigint),
+                 platform_amount_cents = COALESCE(platform_amount_cents, $7::bigint),
+                 platform_fee_cents = COALESCE(platform_fee_cents, $8::bigint),
                  updated_at = NOW()
              WHERE provider = 'pagarme' AND provider_order_id = $1`,
             String(orderId),
             mapped || null,
             JSON.stringify(event),
             paymentMethodType,
-            installmentsVal
+            installmentsVal,
+            splitClinicAmount,
+            splitPlatformAmount,
+            splitPlatformFeeCents
           );
           // If UPDATE affected 0 rows, INSERT a placeholder row for webhooks that arrive early
           if (result === 0) {
@@ -306,12 +351,13 @@ export async function POST(req: Request) {
               console.log('[pagarme][webhook] created early row by orderId', { orderId, status: placeholderStatus });
             } catch {}
           } else {
-            console.log('[pagarme][webhook] updated by orderId', { orderId, status: mapped || 'unchanged', affected: result });
+            console.log('[pagarme][webhook] updated by orderId', { orderId, status: mapped || 'unchanged' });
           }
         } catch (e) {
           console.warn('[pagarme][webhook] update by orderId failed', { orderId, err: e instanceof Error ? e.message : e });
         }
       }
+
       // Update by provider_charge_id if we have it (and set charge id on row)
       if (chargeId) {
         try {
@@ -330,6 +376,9 @@ export async function POST(req: Request) {
                  raw_payload = $3::jsonb,
                  payment_method_type = COALESCE($5::text, payment_method_type),
                  installments = COALESCE($6::int, installments),
+                 clinic_amount_cents = COALESCE(clinic_amount_cents, $7::bigint),
+                 platform_amount_cents = COALESCE(platform_amount_cents, $8::bigint),
+                 platform_fee_cents = COALESCE(platform_fee_cents, $9::bigint),
                  updated_at = NOW()
              WHERE provider = 'pagarme' AND (provider_charge_id = $1 OR provider_order_id = $4)`,
             String(chargeId),
@@ -337,7 +386,10 @@ export async function POST(req: Request) {
             JSON.stringify(event),
             orderId ? String(orderId) : null,
             paymentMethodType,
-            installmentsVal
+            installmentsVal,
+            splitClinicAmount,
+            splitPlatformAmount,
+            splitPlatformFeeCents
           );
           if (result2 === 0 && !orderId) {
             // No row matched; create placeholder by charge id to ensure visibility in listings
@@ -627,8 +679,8 @@ export async function POST(req: Request) {
                   const txId = crypto.randomUUID();
                   // Try to use a conflict target if DB has unique indexes; fallback will still work without them
                   await prisma.$executeRawUnsafe(
-                    `INSERT INTO payment_transactions (id, provider, provider_order_id, provider_charge_id, doctor_id, patient_profile_id, clinic_id, product_id, amount_cents, currency, installments, payment_method_type, status, raw_payload)
-                     VALUES ($1, 'pagarme', $2, $3, $4, $5, $6, $7, $8, 'BRL', $9, $10, 'paid', $11::jsonb)`,
+                    `INSERT INTO payment_transactions (id, provider, provider_order_id, provider_charge_id, doctor_id, patient_profile_id, clinic_id, product_id, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, installments, payment_method_type, status, raw_payload)
+                     VALUES ($1, 'pagarme', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'BRL', $12, $13, 'paid', $14::jsonb)`,
                     txId,
                     orderId ? String(orderId) : null,
                     chargeId ? String(chargeId) : null,
@@ -637,6 +689,9 @@ export async function POST(req: Request) {
                     backfillClinicId ? String(backfillClinicId) : null,
                     backfillProductId ? String(backfillProductId) : null,
                     Number(eventAmountCents || 0),
+                    splitClinicAmount,
+                    splitPlatformAmount,
+                    splitPlatformFeeCents,
                     installmentsVal,
                     paymentMethodType,
                     JSON.stringify(event)

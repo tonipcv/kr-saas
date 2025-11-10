@@ -9,9 +9,42 @@ export default function RedirectPage() {
   useEffect(() => {
     (async () => {
       try {
-      const paymentLinkId = typeof window !== 'undefined' ? window.sessionStorage.getItem('of_payment_link_id') : null;
+      const mirror = async (tag: string, data: any) => {
+        try {
+          await fetch('/api/debug/log', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tag, data })
+          });
+        } catch {}
+      };
+      // Prefer backend source-of-truth for resuming old redirect-based payments
+      let paymentLinkId: string | null = null;
+      try {
+        const latest = await fetch('/api/open-finance/payment-requests/latest', { cache: 'no-store' });
+        const lj = await latest.json().catch(() => ({}));
+        if (latest.ok && lj?.found && lj?.paymentLinkId) paymentLinkId = String(lj.paymentLinkId);
+        try { console.log('🔎 [redirect] init', { hasPaymentLinkId: !!paymentLinkId, via: 'backend.latest' }); } catch {}
+        mirror('redirect.init', { hasPaymentLinkId: !!paymentLinkId, via: 'backend.latest' });
+      } catch {
+        const ss = typeof window !== 'undefined' ? window.sessionStorage.getItem('of_payment_link_id') : null;
+        paymentLinkId = ss;
+        try { console.log('🔎 [redirect] init (fallback sessionStorage)', { hasPaymentLinkId: !!paymentLinkId }); } catch {}
+        mirror('redirect.init', { hasPaymentLinkId: !!paymentLinkId, via: 'sessionStorage' });
+      }
       if (paymentLinkId) {
+        // If backend has redirectUri and the payment is still PENDING, immediately send user to bank
+        try {
+          const latest2 = await fetch('/api/open-finance/payment-requests/latest', { cache: 'no-store' });
+          const lj2 = await latest2.json().catch(() => ({}));
+          if (latest2.ok && lj2?.found && String(lj2?.paymentLinkId) === String(paymentLinkId) && String(lj2?.status || '').toUpperCase() === 'PENDING' && lj2?.redirectUri) {
+            setStatus('Redirecionando ao banco para autorizar o pagamento...');
+            mirror('redirect.fallback.redirect', { redirectUri: lj2.redirectUri, paymentLinkId });
+            window.location.href = String(lj2.redirectUri);
+            return;
+          }
+        } catch {}
         setStatus('Verificando status do pagamento...');
+        mirror('redirect.poll.payment.start', { paymentLinkId });
         let attempts = 0;
         const maxAttempts = 40; // ~120s window
         const poll = async (): Promise<void> => {
@@ -20,9 +53,11 @@ export default function RedirectPage() {
           if (!res.ok) throw new Error('Falha ao consultar status do pagamento');
           const data = await res.json();
           const st = String(data?.status || '').toUpperCase();
+          mirror('redirect.poll.payment.tick', { attempts, st, transactionId: data?.transactionId });
           if (st === 'COMPLETED') {
             const productId = typeof window !== 'undefined' ? window.sessionStorage.getItem('of_payment_product_id') : null;
             const orderRef = typeof window !== 'undefined' ? window.sessionStorage.getItem('of_payment_order_ref') : null;
+            mirror('redirect.poll.payment.completed', { productId, orderRef, transactionId: data?.transactionId });
             // Clear session markers
             try {
               window.sessionStorage.removeItem('of_payment_link_id');
@@ -45,21 +80,25 @@ export default function RedirectPage() {
               order_id: String(orderRef || ''),
               transaction_id: String(data?.transactionId || ''),
             });
+            mirror('redirect.success.redirect', { destBase, query: Object.fromEntries(q.entries()) });
             window.location.replace(`${destBase}?${q.toString()}`);
             return;
           }
           if (st === 'PENDING' || st === 'PROCESSING') {
             setStatus('Pagamento em processamento...');
+            mirror('redirect.poll.payment.processing', { attempts });
             if (attempts < maxAttempts) {
               setTimeout(poll, 3000);
               return;
             }
             setStatus('Ainda processando. Você receberá um email quando concluir.');
+            mirror('redirect.poll.payment.timeout', {});
             return;
           }
           if (st === 'REJECTED' || st === 'CANCELLED' || st === 'EXPIRED') {
             setStatus(st === 'REJECTED' ? 'Pagamento rejeitado pelo banco.' : st === 'CANCELLED' ? 'Pagamento cancelado.' : 'Sessão de pagamento expirada.');
             const productId = typeof window !== 'undefined' ? window.sessionStorage.getItem('of_payment_product_id') : null;
+            mirror('redirect.poll.payment.terminal', { st, productId });
             setTimeout(() => { window.location.replace(`/checkout/${productId || ''}`); }, 2000);
             return;
           }
@@ -75,6 +114,7 @@ export default function RedirectPage() {
       const state = params.get("state");
       const asError = params.get("error");
       const error_description = params.get("error_description");
+      mirror('redirect.url.params', { hasCode: !!code, hasState: !!state, asError, error_description });
         console.time('[debug][redirect.flow] total');
         console.log('[debug][redirect.start]', {
           hasSearch: !!search, hasHash: !!hash,
@@ -97,6 +137,7 @@ export default function RedirectPage() {
           body: JSON.stringify({ state, error: asError, error_description }),
         });
         const data = await res.json().catch(() => ({}));
+        mirror('redirect.oauth.error', { status: res.status, data });
         setError(`${asError}${data?.message ? `: ${data.message}` : ''}`);
         setStatus("Pagamento não autorizado.");
         return;
@@ -117,6 +158,7 @@ export default function RedirectPage() {
         });
         const devOpts = await devOptsRes.json().catch(() => ({}));
         console.log('[debug][device.options] response', { status: devOptsRes.status, ok: devOptsRes.ok, body: devOpts });
+        mirror('redirect.device.options', { status: devOptsRes.status, ok: devOptsRes.ok });
         try {
           const pk0: any = devOpts?.data?.publicKey || devOpts?.data || devOpts?.PublicKey || devOpts;
           const algs = Array.isArray(pk0?.pubKeyCredParams) ? pk0.pubKeyCredParams.map((x: any) => x?.alg) : [];
@@ -203,6 +245,7 @@ export default function RedirectPage() {
           body: devRegJson,
           payloadMeta: { id: payload?.id, responseKeys: Object.keys(payload?.response || {}) }
         });
+        mirror('redirect.device.register', { status: devRegRes.status, ok: devRegRes.ok });
         if (!devRegRes.ok) {
           throw new Error(devRegJson?.error || 'Falha ao registrar dispositivo');
         }
@@ -226,6 +269,7 @@ export default function RedirectPage() {
       });
       const validateData = await validateRes.json().catch(() => ({}));
       console.log('[redirect] validate response', { status: validateRes.status, body: validateData });
+      mirror('redirect.oauth.validate', { status: validateRes.status, ok: validateRes.ok });
       if (!validateRes.ok) {
         setStatus(`Falha na validação (${validateRes.status})`);
         setError(validateData?.message || 'Falha na validação');
@@ -238,6 +282,7 @@ export default function RedirectPage() {
           window.sessionStorage.setItem('of_enrollment_complete', '1');
           let ctxStr = window.sessionStorage.getItem('of_enroll_ctx');
           console.log('[redirect] read of_enroll_ctx(raw):', ctxStr);
+          mirror('redirect.ctx.read', { hasCtx: !!ctxStr });
           let ctx: any = null; try { ctx = JSON.parse(ctxStr || '{}'); } catch {}
           console.log('[redirect] parsed enroll ctx:', { keys: Object.keys(ctx || {}), enrollmentId: ctx?.enrollmentId, productId: ctx?.productId });
           // Fallback: derive minimal product context via state-meta if needed
@@ -268,109 +313,179 @@ export default function RedirectPage() {
                 body: JSON.stringify({ enrollmentId: ctx.enrollmentId })
               });
               console.log('[redirect] activate response', { status: actRes.status, ok: actRes.ok });
+              mirror('redirect.enroll.activate', { status: actRes.status, ok: actRes.ok });
             } catch (e) { console.warn('[redirect] activate call failed (continuing)', e); }
             // Ensure link is ACTIVE before trying to create payment (backend rejects PENDING)
+            let linkActive = false;
             try {
               if (ctx?.userId && ctx?.organisationId) {
                 setStatus('Aguardando ativação do vínculo com o banco...');
-                let ok = false; let tries = 0; const max = 6; // ~12-18s total
-                while (!ok && tries < max) {
+                let tries = 0; const max = 6; // ~12-18s total
+                while (!linkActive && tries < max) {
                   tries += 1;
                   const chkRes = await fetch('/api/v2/enrollments/check', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
                     body: JSON.stringify({ userId: ctx.userId, organisationId: ctx.organisationId })
                   });
                   const chk = await chkRes.json().catch(() => ({}));
-                  if (chkRes.ok && chk?.needsEnrollment === false && (chk?.linkStatus || '').toUpperCase() === 'ACTIVE') {
-                    ok = true; break;
+                  try { console.log('🔍 [redirect] Check response:', chk); } catch {}
+                  mirror('redirect.check', chk);
+                  if (chkRes.ok && chk?.needsEnrollment === false) {
+                    linkActive = true;
+                    try { console.log('✅ [redirect] Enrollment ACTIVE confirmado!'); } catch {}
+                    break;
                   }
-                  await new Promise(r => setTimeout(r, 2000));
+                  if (tries < max) {
+                    try { console.log(`⏳ [redirect] Tentativa ${tries}/${max}, aguardando...`); } catch {}
+                    await new Promise(r => setTimeout(r, 2000));
+                  }
                 }
               }
             } catch {}
-            const orderRef = ctx.orderRef || `ORDER_${Date.now()}_${Math.random().toString(36).slice(2,9)}`;
-            const payRes = await fetch('/api/open-finance/payments', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                productId: ctx.productId,
-                enrollmentId: ctx.enrollmentId,
-                amount: Number(ctx.amountCents || 0),
-                currency: ctx.currency || 'BRL',
-                payer: { name: profile?.name || 'Cliente', email: profile?.email || undefined, cpf: (ctx?.document || '').replace(/[^0-9]/g, '') || undefined },
-                orderRef,
-                userId: ctx?.userId || profile?.id || undefined,
-              })
-            });
-            const payJson = await payRes.json().catch(() => ({}));
-            if (payRes.ok && (payJson?.redirect_uri || payJson?.redirectUrl)) {
-              const paymentLinkId = payJson?.paymentLinkId || payJson?.payment_request_id || payJson?.paymentRequestId || payJson?.id;
-              try {
-                if (paymentLinkId) window.sessionStorage.setItem('of_payment_link_id', String(paymentLinkId));
-                if (ctx?.productId) window.sessionStorage.setItem('of_payment_product_id', String(ctx.productId));
-                window.sessionStorage.setItem('of_payment_order_ref', String(orderRef));
-              } catch {}
-              const redirectUri = payJson?.redirect_uri || payJson?.redirectUrl;
-              // Open HPP in a new tab and keep this page polling until completion
-              try { window.open(redirectUri, '_blank', 'noopener,noreferrer'); } catch {}
-              setStatus('Redirecionando ao banco... Você pode autorizar na nova aba. Aguardando confirmação...');
-              // Start local polling loop for status until COMPLETED
-              try {
-                let attempts = 0; const maxAttempts = 40;
-                const pollOnce = async () => {
-                  attempts += 1;
-                  const pr = String(paymentLinkId || '');
-                  if (!pr) return;
-                  const res2 = await fetch(`/api/open-finance/payment-requests/${encodeURIComponent(pr)}`, { cache: 'no-store' });
-                  if (res2.ok) {
-                    const dj = await res2.json().catch(() => ({}));
-                    const st = String(dj?.status || '').toUpperCase();
-                    if (st === 'COMPLETED') {
-                      const productId = typeof window !== 'undefined' ? window.sessionStorage.getItem('of_payment_product_id') : null;
-                      const orderRef2 = typeof window !== 'undefined' ? window.sessionStorage.getItem('of_payment_order_ref') : null;
-                      try {
-                        window.sessionStorage.removeItem('of_payment_link_id');
-                        window.sessionStorage.removeItem('of_payment_product_id');
-                        window.sessionStorage.removeItem('of_payment_order_ref');
-                      } catch {}
-                      let destBase = '/checkout/success';
-                      try {
-                        if (productId) {
-                          const pRes = await fetch(`/api/products/public/${encodeURIComponent(productId)}`, { cache: 'no-store' });
-                          const p = await pRes.json().catch(() => ({}));
-                          const slug = p?.clinic?.slug;
-                          if (pRes.ok && slug) destBase = `/${slug}/checkout/success`;
-                        }
-                      } catch {}
-                      const q = new URLSearchParams({
-                        product_id: String(productId || ''),
-                        method: 'pix_ob',
-                        order_id: String(orderRef2 || ''),
-                        transaction_id: String(dj?.transactionId || ''),
-                      });
-                      window.location.replace(`${destBase}?${q.toString()}`);
-                      return;
-                    }
-                    if (st === 'PENDING' || st === 'PROCESSING') {
-                      if (attempts < maxAttempts) { setTimeout(pollOnce, 3000); return; }
-                      setStatus('Ainda processando. Você receberá um email quando concluir.');
-                      return;
-                    }
-                    if (st === 'REJECTED' || st === 'CANCELLED' || st === 'EXPIRED') {
-                      setStatus(st === 'REJECTED' ? 'Pagamento rejeitado pelo banco.' : st === 'CANCELLED' ? 'Pagamento cancelado.' : 'Sessão de pagamento expirada.');
-                      const productId = typeof window !== 'undefined' ? window.sessionStorage.getItem('of_payment_product_id') : null;
-                      setTimeout(() => { window.location.replace(`/checkout/${productId || ''}`); }, 2000);
-                      return;
-                    }
-                  }
-                  // unknown or error: retry a bit
-                  if (attempts < maxAttempts) { setTimeout(pollOnce, 3000); return; }
-                  setStatus('Não foi possível confirmar o pagamento agora. Verifique seu email mais tarde.');
-                };
-                pollOnce();
-              } catch {}
+
+            // Log final polling outcome and bail out early if not ACTIVE
+            try { console.log('🔍 [redirect] Resultado do polling:', { active: linkActive }); } catch {}
+            mirror('redirect.polling.result', { active: linkActive });
+            if (!linkActive) {
+              console.error('❌ [redirect] Polling falhou - enrollment não ficou ACTIVE');
+              setStatus('Falha ao ativar vínculo. Tente novamente.');
+              setError('Timeout aguardando ativação do vínculo');
               return;
             }
-            console.warn('[redirect][auto-pay] criação de pagamento falhou', { status: payRes.status, body: payJson });
+            try { console.log('✅ [redirect] Enrollment ACTIVE confirmado, iniciando JSR'); } catch {}
+            mirror('redirect.active', { active: true });
+            // Small delay to allow provider to settle enrollment state before consent
+            try { console.log('⏳ [redirect] Aguardando 5 segundos antes de criar consent...'); } catch {}
+            await new Promise(r => setTimeout(r, 5000));
+            try { console.log('✅ [redirect] Delay concluído, criando consent'); } catch {}
+
+            // Embedded JSR flow with fallback
+            const orderRef = ctx.orderRef || `ORDER_${Date.now()}_${Math.random().toString(36).slice(2,9)}`;
+            try {
+              setStatus('Criando autorização de pagamento...');
+              console.log('[redirect] Criando consent JSR');
+              mirror('redirect.jsr.consent.start', { enrollmentId: ctx.enrollmentId, amountCents: ctx.amountCents });
+              const consentRes = await fetch('/api/open-finance/jsr/consents', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  enrollmentId: ctx.enrollmentId,
+                  organisationId: ctx.organisationId,
+                  authorisationServerId: ctx.authorisationServerId,
+                  payment: {
+                    details: `Pagamento - Produto ${ctx.productId}`,
+                    externalId: orderRef,
+                    value: Number(ctx.amountCents || 0) / 100,
+                    cpfCnpj: (ctx?.document || '').replace(/[^0-9]/g, ''),
+                    creditor: {
+                      name: process.env.NEXT_PUBLIC_CREDITOR_NAME || 'Mock Recebedor Sandbox',
+                      personType: 'PESSOA_NATURAL',
+                      cpfCnpj: '11111111111',
+                      accountNumber: '123456',
+                      accountIssuer: '1774',
+                      accountPixKey: 'sandbox@linaob.com.br',
+                      accountIspb: '60701190',
+                      accountType: 'CACC',
+                    },
+                  },
+                })
+              });
+              const consentData = await consentRes.json().catch(() => ({}));
+              console.log('[redirect] Consent criado:', { ok: consentRes.ok, hasPublicKey: !!consentData?.publicKey });
+              mirror('redirect.jsr.consent.res', { ok: consentRes.ok, status: consentRes.status, hasPublicKey: !!consentData?.publicKey });
+              if (!consentRes.ok) throw new Error(consentData?.error || 'Falha ao criar consent');
+
+              const paymentRequestId = consentData?.paymentRequestId;
+              const publicKey = consentData?.publicKey;
+
+              setStatus('Autorizando pagamento (biometria)...');
+              console.log('[redirect] Solicitando WebAuthn');
+              mirror('redirect.jsr.webauthn.start', {});
+              const { getPaymentAssertion } = await import('@/lib/webauthn');
+              const fidoAssertion = await getPaymentAssertion(publicKey);
+              console.log('[redirect] WebAuthn assinado com sucesso');
+              mirror('redirect.jsr.webauthn.ok', {});
+
+              setStatus('Finalizando pagamento...');
+              console.log('[redirect] Finalizando pagamento JSR');
+              mirror('redirect.jsr.pay.start', { paymentRequestId });
+              const paymentRes = await fetch('/api/open-finance/jsr/payments', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  paymentRequestId,
+                  enrollmentId: ctx.enrollmentId,
+                  fidoAssertion,
+                  riskSignals: {
+                    deviceId: ctx.deviceId || crypto.randomUUID(),
+                    osVersion: '10.15.7',
+                    userTimeZoneOffset: String(-(new Date().getTimezoneOffset()/60)).padStart(2,'0'),
+                    language: (typeof navigator !== 'undefined' ? navigator.language : 'pt-BR').slice(0,2),
+                    screenDimensions: { width: typeof window !== 'undefined' ? window.innerWidth : 1080, height: typeof window !== 'undefined' ? window.innerHeight : 1920 },
+                    accountTenure: ctx.accountTenure || new Date(Date.now() - 365*24*60*60*1000).toISOString().slice(0,10),
+                  },
+                  productId: ctx.productId,
+                  amountCents: Number(ctx.amountCents || 0),
+                  clinicId: ctx.clinicId || undefined,
+                  metadata: { orderRef },
+                })
+              });
+              const paymentData = await paymentRes.json().catch(() => ({}));
+              console.log('[redirect] Pagamento finalizado:', { ok: paymentRes.ok, status: paymentData?.status });
+              mirror('redirect.jsr.pay.res', { ok: paymentRes.ok, status: paymentData?.status, providerStatus: paymentData?.providerResponse?.status });
+              if (!paymentRes.ok) throw new Error(paymentData?.error || 'Falha ao finalizar pagamento');
+
+              if (String(paymentData?.status || '').toUpperCase() === 'COMPLETED' || String(paymentData?.providerResponse?.status || '').toUpperCase() === 'COMPLETED') {
+                setStatus('Pagamento concluído com sucesso!');
+                let destBase = '/checkout/success';
+                try {
+                  if (ctx.productId) {
+                    const pRes = await fetch(`/api/products/public/${encodeURIComponent(ctx.productId)}`, { cache: 'no-store' });
+                    const p = await pRes.json().catch(() => ({}));
+                    const slug = p?.clinic?.slug;
+                    if (pRes.ok && slug) destBase = `/${slug}/checkout/success`;
+                  }
+                } catch {}
+                const q = new URLSearchParams({
+                  product_id: String(ctx.productId || ''),
+                  method: 'pix_ob',
+                  order_id: String(orderRef || ''),
+                  transaction_id: String(paymentData?.paymentId || ''),
+                });
+                window.location.replace(`${destBase}?${q.toString()}`);
+                return;
+              }
+              throw new Error(`Status inesperado: ${paymentData?.status || paymentData?.providerResponse?.status}`);
+            } catch (err) {
+              console.warn('[redirect][embedded-jsr] falhou, usando fallback redirect-based', err);
+              mirror('redirect.jsr.fallback', { error: String((err as any)?.message || err) });
+              const payRes = await fetch('/api/open-finance/payments', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  productId: ctx.productId,
+                  enrollmentId: ctx.enrollmentId,
+                  amount: Number(ctx.amountCents || 0),
+                  currency: ctx.currency || 'BRL',
+                  payer: { name: profile?.name || 'Cliente', email: profile?.email || undefined, cpf: (ctx?.document || '').replace(/[^0-9]/g, '') || undefined },
+                  orderRef,
+                  userId: ctx?.userId || profile?.id || undefined,
+                })
+              });
+              const payJson = await payRes.json().catch(() => ({}));
+              const redirectUri = payJson?.data?.redirectUrl || payJson?.data?.redirect_uri || payJson?.redirectUrl || payJson?.redirect_uri;
+              const paymentLinkId = payJson?.data?.id || payJson?.paymentLinkId || payJson?.payment_request_id || payJson?.paymentRequestId || payJson?.id;
+              if (payRes.ok && redirectUri && paymentLinkId) {
+                try {
+                  window.sessionStorage.setItem('of_payment_link_id', String(paymentLinkId));
+                  if (ctx?.productId) window.sessionStorage.setItem('of_payment_product_id', String(ctx.productId));
+                  window.sessionStorage.setItem('of_payment_order_ref', String(orderRef));
+                } catch {}
+                setStatus('Redirecionando ao banco...');
+                mirror('redirect.fallback.redirect', { redirectUri, paymentLinkId });
+                window.location.href = redirectUri;
+                return;
+              }
+              console.warn('[redirect][auto-pay] criação de pagamento falhou', { status: payRes.status, body: payJson });
+              mirror('redirect.fallback.error', { status: payRes.status, body: payJson });
+            }
           }
           // Fallback: redirect back to checkout to let user click Pagar
           let back = window.sessionStorage.getItem('of_return_to');
