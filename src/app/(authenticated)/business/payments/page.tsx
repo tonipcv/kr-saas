@@ -1,10 +1,12 @@
 import React from 'react';
 import TransactionsTable from '@/components/business/TransactionsTable';
+import CheckoutSessionsTable from '@/components/business/CheckoutSessionsTable';
 import { prisma } from '@/lib/prisma';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Server component: lists latest records from payment_* tables
-export default async function PaymentsDataPage() {
+
+export default async function PaymentsDataPage({ searchParams }: { searchParams?: Promise<{ [k: string]: string | string[] | undefined }> }) {
   // Fetch data server-side using raw SQL, since these tables are not in Prisma schema
   const [customers, methods, transactions] = await Promise.all([
     prisma.$queryRawUnsafe<any[]>(
@@ -83,6 +85,81 @@ export default async function PaymentsDataPage() {
     )
   ]);
 
+  // Checkout Sessions: filters (await Next.js dynamic searchParams)
+  const sp = (searchParams ? await searchParams : {}) as { [k: string]: string | string[] | undefined };
+  const qClinic = (typeof sp?.clinic === 'string' ? sp?.clinic : Array.isArray(sp?.clinic) ? sp?.clinic?.[0] : '')?.trim() || '';
+  const qStatus = (typeof sp?.status === 'string' ? sp?.status : Array.isArray(sp?.status) ? sp?.status?.[0] : '')?.trim() || '';
+  const qFrom = (typeof sp?.from === 'string' ? sp?.from : Array.isArray(sp?.from) ? sp?.from?.[0] : '')?.trim() || '';
+  const qTo = (typeof sp?.to === 'string' ? sp?.to : Array.isArray(sp?.to) ? sp?.to?.[0] : '')?.trim() || '';
+
+  // Build WHERE dynamically and parameters list to avoid injection
+  const whereParts: string[] = [];
+  const params: any[] = [];
+  if (qClinic) { whereParts.push(`clinic_id = $${params.length + 1}`); params.push(qClinic); }
+  if (qStatus) { whereParts.push(`status = $${params.length + 1}`); params.push(qStatus); }
+  if (qFrom) { whereParts.push(`started_at >= $${params.length + 1}`); params.push(new Date(qFrom)); }
+  if (qTo) { whereParts.push(`started_at <= $${params.length + 1}`); params.push(new Date(qTo)); }
+  const whereSql = whereParts.length ? ('WHERE ' + whereParts.join(' AND ')) : '';
+
+  // Sessions list (limit 100 newest)
+  const sessions = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT id, started_at, updated_at, status, email, phone,
+            (CASE WHEN jsonb_typeof(metadata) IS NOT NULL THEN metadata->>'buyerName' ELSE NULL END) AS buyer_name,
+            product_id, offer_id, pix_expires_at, order_id,
+            utm_source, utm_medium, utm_campaign, utm_term, utm_content,
+            origin, created_by, last_step, last_heartbeat_at, referrer
+       FROM checkout_sessions
+       ${whereSql}
+    ORDER BY updated_at DESC NULLS LAST, started_at DESC
+       LIMIT 100`,
+    ...params
+  ).catch(() => []);
+
+  // KPIs
+  async function kpiCount(where: string, ps: any[]) {
+    const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT COUNT(*)::int AS c FROM checkout_sessions ${where}`, ...ps).catch(() => [{ c: 0 }]);
+    return Number(rows?.[0]?.c || 0);
+  }
+  const baseWhere = whereSql;
+  const baseParams = params;
+  const totalStarted = await kpiCount(baseWhere ? baseWhere + (baseWhere ? ' AND ' : ' WHERE ') + `status = 'started'` : `WHERE status = 'started'`, baseParams);
+  const totalPix = await kpiCount(baseWhere ? baseWhere + (baseWhere ? ' AND ' : ' WHERE ') + `status = 'pix_generated'` : `WHERE status = 'pix_generated'`, baseParams);
+  const totalPaid = await kpiCount(baseWhere ? baseWhere + (baseWhere ? ' AND ' : ' WHERE ') + `status = 'paid'` : `WHERE status = 'paid'`, baseParams);
+  const totalAbandoned = await kpiCount(baseWhere ? baseWhere + (baseWhere ? ' AND ' : ' WHERE ') + `status = 'abandoned'` : `WHERE status = 'abandoned'`, baseParams);
+  // Recovery (heurística mais rígida): considerar recuperadas apenas sessões que geraram PIX e foram pagas depois
+  const totalRecoveredRows = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT COUNT(*)::int AS c
+       FROM checkout_sessions
+       ${baseWhere}
+       ${baseWhere ? ' AND ' : 'WHERE '} status = 'paid'
+         AND (
+           (pix_expires_at IS NOT NULL AND updated_at > pix_expires_at)
+           OR EXISTS (
+             SELECT 1 FROM checkout_sessions cs2
+              WHERE cs2.id = checkout_sessions.id AND cs2.status = 'abandoned'
+           )
+         )`,
+    ...baseParams
+  ).catch(() => [{ c: 0 }]);
+  const totalRecovered = Number(totalRecoveredRows?.[0]?.c || 0);
+  const abandonmentRate = (() => {
+    const denom = (totalPix + totalPaid + totalAbandoned) || 1; // ignora apenas 'started'
+    return (totalAbandoned / denom) * 100;
+  })();
+  const recoveryRate = (() => {
+    const denom = totalAbandoned || 1;
+    return (totalRecovered / denom) * 100;
+  })();
+  // Sessions by utmSource (top 10)
+  const byUtm = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT COALESCE(utm_source, '—') AS source, COUNT(*)::int AS c
+       FROM checkout_sessions ${whereSql}
+      GROUP BY COALESCE(utm_source, '—')
+      ORDER BY c DESC
+      LIMIT 10`,
+    ...params
+  ).catch(() => []);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="lg:ml-64">
@@ -102,6 +179,7 @@ export default async function PaymentsDataPage() {
                 <TabsTrigger value="transactions">Transactions</TabsTrigger>
                 <TabsTrigger value="customers">Customers</TabsTrigger>
                 <TabsTrigger value="methods">Methods</TabsTrigger>
+                <TabsTrigger value="sessions">Checkout Sessions</TabsTrigger>
               </TabsList>
 
               <TabsContent value="transactions">
@@ -201,6 +279,42 @@ export default async function PaymentsDataPage() {
                   </table>
                 </div>
               </TabsContent>
+
+              <TabsContent value="sessions">
+                <div className="mb-3">
+                  <form method="get" className="flex flex-wrap gap-2 items-center">
+                    <input type="text" name="clinic" defaultValue={qClinic} className="h-8 px-2 rounded border text-sm placeholder:text-gray-400" placeholder="clinic_id" />
+                    <select name="status" defaultValue={qStatus} className="h-8 px-2 rounded border text-sm">
+                      <option value="">status</option>
+                      <option value="started">started</option>
+                      <option value="pix_generated">pix_generated</option>
+                      <option value="paid">paid</option>
+                      <option value="abandoned">abandoned</option>
+                      <option value="canceled">canceled</option>
+                    </select>
+                    <input type="datetime-local" name="from" defaultValue={qFrom} className="h-8 px-2 rounded border text-sm" placeholder="from" />
+                    <input type="datetime-local" name="to" defaultValue={qTo} className="h-8 px-2 rounded border text-sm" placeholder="to" />
+                    <button type="submit" className="h-8 px-3 rounded border text-sm bg-white hover:bg-gray-50">Filtrar</button>
+                  </form>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+                  <div className="rounded-md border p-3">
+                    <div className="text-[11px] text-gray-500">Abandono</div>
+                    <div className="text-xl font-semibold leading-6">{abandonmentRate.toFixed(1)}%</div>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <div className="text-[11px] text-gray-500">Recuperação</div>
+                    <div className="text-xl font-semibold leading-6">{recoveryRate.toFixed(1)}%</div>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <div className="text-[11px] text-gray-500">Sessões (últimas 100)</div>
+                    <div className="text-xl font-semibold leading-6">{sessions.length}</div>
+                  </div>
+                </div>
+
+                <CheckoutSessionsTable sessions={sessions as any} />
+              </TabsContent>
             </Tabs>
           </div>
         </div>
@@ -226,5 +340,17 @@ function formatAmount(amountCents?: number | string | null, currency?: string | 
     return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'USD' }).format(value);
   } catch {
     return `${value} ${currency || ''}`.trim();
+  }
+}
+
+function badgeClass(status: string) {
+  const base = 'bg-gray-100 text-gray-700 border border-gray-200';
+  switch (status) {
+    case 'PAID': return 'bg-green-50 text-green-700 border border-green-200';
+    case 'STARTED': return 'bg-blue-50 text-blue-700 border border-blue-200';
+    case 'PIX_GENERATED': return 'bg-amber-50 text-amber-700 border border-amber-200';
+    case 'ABANDONED': return 'bg-red-50 text-red-700 border border-red-200';
+    case 'CANCELED': return 'bg-gray-200 text-gray-700 border border-gray-300';
+    default: return base;
   }
 }

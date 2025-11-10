@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 type Product = { id: string; name: string; imageUrl?: string; price?: number; originalPrice?: number; discountPrice?: number };
 
-export default function SuccessPage() {
+function SuccessInner() {
   const sp = useSearchParams();
   const productId = sp.get('product_id');
   const orderId = sp.get('order_id');
@@ -72,5 +72,13 @@ export default function SuccessPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SuccessPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center p-4"><div className="text-sm text-gray-600">Carregando...</div></div>}>
+      <SuccessInner />
+    </Suspense>
   );
 }

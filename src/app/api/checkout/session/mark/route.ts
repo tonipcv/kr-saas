@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 
-function isEnabled() {
-  return String(process.env.CHECKOUT_SESSIONS_ENABLED || '').toLowerCase() === 'true';
-}
+function isEnabled() { return true; }
 
 function safeStr(v: any) { return typeof v === 'string' ? v : (v == null ? null : String(v)); }
 
@@ -12,7 +10,7 @@ const allowed = new Set(['started','pix_generated','paid','abandoned','canceled'
 
 export async function POST(req: Request) {
   try {
-    if (!isEnabled()) return NextResponse.json({ error: 'disabled' }, { status: 404 });
+    if (!isEnabled()) return NextResponse.json({ error: 'disabled' }, { status: 200 });
     const body = await req.json().catch(() => ({}));
     const resumeToken = safeStr(body.resumeToken);
     const status = safeStr(body.status);
@@ -23,7 +21,7 @@ export async function POST(req: Request) {
     const pixExpiresAt = body.pixExpiresAt ? new Date(body.pixExpiresAt) : undefined;
     const paymentTransactionId = safeStr(body.paymentTransactionId) || undefined;
 
-    const sess = await prisma.checkoutSession.findUnique({ where: { resumeToken } });
+    const sess = await prisma.checkoutSession.findUnique({ where: { resumeToken }, select: { id: true, status: true } });
     if (!sess) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
     // Transition rules: avoid downgrades from paid

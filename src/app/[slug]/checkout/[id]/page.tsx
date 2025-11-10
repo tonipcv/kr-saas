@@ -25,6 +25,7 @@ type ClinicBranding = {
   buttonTextColor?: string | null;
   name?: string | null;
   logo?: string | null;
+  clinicId?: string | null;
 };
 
 type Product = {
@@ -102,6 +103,84 @@ export default function BrandedCheckoutPage() {
   const [participants, setParticipants] = useState<any[]>([]);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState<{ organisationId?: string; authorisationServerId?: string; name?: string } | null>(null);
+
+  // Lightweight session tracking (always enabled)
+  const SESS_EN = true;
+  const [resumeToken, setResumeToken] = useState<string | null>(null);
+  const upsertDebounceRef = useRef<any>(null);
+
+  async function sessionUpsert(partial?: any) {
+    try {
+      if (!SESS_EN) return;
+      const token = resumeToken || (typeof window !== 'undefined' ? window.localStorage.getItem('krx_checkout_resume_token') : null);
+      const utm = {
+        utmSource: sp?.get('utm_source') || sp?.get('utmSource') || null,
+        utmMedium: sp?.get('utm_medium') || sp?.get('utmMedium') || null,
+        utmCampaign: sp?.get('utm_campaign') || sp?.get('utmCampaign') || null,
+        utmTerm: sp?.get('utm_term') || sp?.get('utmTerm') || null,
+        utmContent: sp?.get('utm_content') || sp?.get('utmContent') || null,
+      };
+      const payload = {
+        resumeToken: token || undefined,
+        slug,
+        clinicId: branding?.clinicId || undefined,
+        productId,
+        offerId: offerParam,
+        email: buyerEmail || undefined,
+        phone: buyerPhone || undefined,
+        document: buyerDocument || undefined,
+        paymentMethod: paymentMethod || undefined,
+        selectedInstallments: installments || undefined,
+        paymentMethodsAllowed: offer?.paymentMethods || undefined,
+        origin: 'checkout',
+        createdBy: 'checkout-ui',
+        ...utm,
+        referrer: (typeof document !== 'undefined' ? document.referrer : '') || undefined,
+        metadata: { buyerName: buyerName || undefined },
+        ...(partial || {}),
+      } as any;
+      try { console.log('[checkout][session][upsert]', { email: payload.email, phone: payload.phone, document: payload.document, buyerName: payload?.metadata?.buyerName, status: partial?.status, lastStep: partial?.lastStep }); } catch {}
+      const res = await fetch('/api/checkout/session/upsert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const js = await res.json().catch(() => ({}));
+      try { console.log('[checkout][session][upsert][res]', { ok: res.ok, status: res.status, body: js }); } catch {}
+      if (res.ok && js?.resumeToken) {
+        setResumeToken(js.resumeToken);
+        try { if (typeof window !== 'undefined') window.localStorage.setItem('krx_checkout_resume_token', js.resumeToken); } catch {}
+      }
+    } catch {}
+  }
+
+  async function sessionHeartbeat(step?: string | null) {
+    try {
+      if (!SESS_EN) return;
+      const token = resumeToken || (typeof window !== 'undefined' ? window.localStorage.getItem('krx_checkout_resume_token') : null);
+      if (!token) return;
+      const body = { resumeToken: token, lastStep: step || undefined };
+      // Prefer sendBeacon for unload; fallback to fetch here for general calls
+      if (typeof navigator !== 'undefined' && 'sendBeacon' in navigator) {
+        const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
+        (navigator as any).sendBeacon('/api/checkout/session/heartbeat', blob);
+        return;
+      }
+      const res = await fetch('/api/checkout/session/heartbeat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const js = await res.json().catch(() => ({}));
+      try { console.log('[checkout][session][heartbeat][res]', { ok: res.ok, status: res.status, body: js }); } catch {}
+    } catch {}
+  }
+
+  async function sessionMarkPixGenerated(args: { orderId?: string | null; expiresAt?: string | null }) {
+    try {
+      if (!SESS_EN) return;
+      const token = resumeToken || (typeof window !== 'undefined' ? window.localStorage.getItem('krx_checkout_resume_token') : null);
+      if (!token) return;
+      const body: any = { resumeToken: token, status: 'pix_generated' };
+      if (args?.orderId) body.orderId = args.orderId;
+      if (args?.expiresAt) body.pixExpiresAt = args.expiresAt;
+      const res = await fetch('/api/checkout/session/mark', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const js = await res.json().catch(() => ({}));
+      try { console.log('[checkout][session][mark][res]', { ok: res.ok, status: res.status, body: js }); } catch {}
+    } catch {}
+  }
 
   // Ensure selected method is allowed whenever offer changes
   useEffect(() => {
@@ -231,6 +310,7 @@ export default function BrandedCheckoutPage() {
               theme: cj.clinic.theme,
               buttonColor: cj.clinic.buttonColor,
               buttonTextColor: cj.clinic.buttonTextColor,
+              clinicId: cj.clinic.id || null,
             });
           }
         }
@@ -238,6 +318,48 @@ export default function BrandedCheckoutPage() {
     }
     if (slug) loadBranding();
   }, [slug]);
+
+  // Init resume token and initial upsert once on mount
+  useEffect(() => {
+    if (!SESS_EN) return;
+    try {
+      const existing = (typeof window !== 'undefined') ? window.localStorage.getItem('krx_checkout_resume_token') : null;
+      const token = existing || (typeof crypto !== 'undefined' ? crypto.randomUUID() : null);
+      if (token) {
+        setResumeToken(token);
+        if (!existing) try { window.localStorage.setItem('krx_checkout_resume_token', token); } catch {}
+      }
+    } catch {}
+    // Perform initial upsert
+    sessionUpsert({ lastStep: 'init' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [SESS_EN]);
+
+  // Debounced upsert when key fields change
+  useEffect(() => {
+    if (!SESS_EN) return;
+    if (upsertDebounceRef.current) clearTimeout(upsertDebounceRef.current);
+    upsertDebounceRef.current = setTimeout(() => {
+      sessionUpsert({ lastStep: 'form_update' });
+    }, 600);
+    return () => { if (upsertDebounceRef.current) clearTimeout(upsertDebounceRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buyerName, buyerEmail, buyerPhone, buyerDocument, paymentMethod, installments, offerParam]);
+
+  // Heartbeat when leaving the page (if not paid yet)
+  useEffect(() => {
+    if (!SESS_EN) return;
+    const onHide = () => {
+      if (success || paid) return;
+      sessionHeartbeat('page_hide');
+    };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onHide);
+    if (typeof window !== 'undefined') window.addEventListener('pagehide', onHide);
+    return () => {
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onHide);
+      if (typeof window !== 'undefined') window.removeEventListener('pagehide', onHide);
+    };
+  }, [SESS_EN, success, paid]);
 
   useEffect(() => {
     async function loadProduct() {
@@ -767,6 +889,10 @@ export default function BrandedCheckoutPage() {
         setPixExpiresAt(pix?.expires_at || null);
         setPixOpen(true);
         setPaid(false);
+        // Mark session as pix_generated (non-blocking)
+        if (SESS_EN) {
+          sessionMarkPixGenerated({ orderId: data?.order?.id || null, expiresAt: pix?.expires_at || null });
+        }
       }
       // Handle CARD response like Stripe (inline feedback)
       if (paymentMethod === 'card' && data?.card) {

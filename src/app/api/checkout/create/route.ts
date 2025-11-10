@@ -722,6 +722,23 @@ export async function POST(req: Request) {
           } catch {}
         }
         pix = basePix;
+
+        // Optional: mark checkout session as pix_generated when feature flag enabled
+        try {
+          const SESS_ENABLED = String(process.env.CHECKOUT_SESSIONS_ENABLED || '').toLowerCase() === 'true';
+          if (SESS_ENABLED) {
+            const hdrToken = (req.headers as any).get?.('x-checkout-resume-token') || (req.headers as any).get?.('X-Checkout-Resume-Token') || null;
+            const bodyToken = (body as any)?.resumeToken || (body as any)?.resume_token || null;
+            const resumeToken = String(hdrToken || bodyToken || '').trim();
+            if (resumeToken) {
+              const expAt: Date | null = basePix?.expires_at ? new Date(String(basePix.expires_at)) : (typeof basePix?.expires_in === 'number' ? new Date(Date.now() + Number(basePix.expires_in) * 1000) : null);
+              await prisma.checkoutSession.update({
+                where: { resumeToken },
+                data: { status: 'pix_generated' as any, orderId: order?.id || undefined, pixOrderId: (ch?.id || tx?.id || null) || undefined, pixExpiresAt: expAt || undefined },
+              }).catch(() => null);
+            }
+          }
+        } catch {}
       }
       if (payment?.method === 'card') {
         const status = (tx?.status || pay?.status || ch?.status || order?.status || 'processing').toString().toLowerCase();

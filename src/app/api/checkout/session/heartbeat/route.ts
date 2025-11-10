@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 
-function isEnabled() {
-  return String(process.env.CHECKOUT_SESSIONS_ENABLED || '').toLowerCase() === 'true';
-}
+function isEnabled() { return true; }
 
 function safeStr(v: any) { return typeof v === 'string' ? v : (v == null ? null : String(v)); }
 
 export async function POST(req: Request) {
   try {
-    if (!isEnabled()) return NextResponse.json({ error: 'disabled' }, { status: 404 });
+    if (!isEnabled()) return NextResponse.json({ error: 'disabled' }, { status: 200 });
     const body = await req.json().catch(() => ({}));
     const resumeToken = safeStr(body.resumeToken);
     const lastStep = safeStr(body.lastStep) || null;
