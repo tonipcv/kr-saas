@@ -3,11 +3,74 @@ import TransactionsTable from '@/components/business/TransactionsTable';
 import CheckoutSessionsTable from '@/components/business/CheckoutSessionsTable';
 import { prisma } from '@/lib/prisma';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 
 // Server component: lists latest records from payment_* tables
 
 export default async function PaymentsDataPage({ searchParams }: { searchParams?: Promise<{ [k: string]: string | string[] | undefined }> }) {
-  // Fetch data server-side using raw SQL, since these tables are not in Prisma schema
+  // Determine current clinic for the logged-in user
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="lg:ml-64"><div className="p-4 pt-[88px]">Unauthorized</div></div>
+      </div>
+    );
+  }
+
+  const clinicRow = await prisma.$queryRawUnsafe<any[]>(
+    `WITH user_clinics AS (
+        SELECT c.*,
+               CASE WHEN c."ownerId" = $1 THEN 1 ELSE 0 END as is_owner
+        FROM clinics c
+        WHERE c."isActive" = true
+          AND (
+            c."ownerId" = $1 OR EXISTS (
+              SELECT 1 FROM clinic_members cm
+              WHERE cm."clinicId" = c.id AND cm."userId" = $1 AND cm."isActive" = true
+            )
+          )
+      ), latest_sub AS (
+        SELECT cs.*,
+               ROW_NUMBER() OVER (PARTITION BY cs.clinic_id ORDER BY cs.created_at DESC) AS rn
+        FROM clinic_subscriptions cs
+      ), ranked AS (
+        SELECT 
+          uc.id,
+          uc.name,
+          uc.slug,
+          ls.status::text as status,
+          cp.monthly_price,
+          CASE 
+            WHEN ls.status = 'ACTIVE' AND cp.monthly_price IS NOT NULL AND cp.monthly_price > 0 THEN 3
+            WHEN ls.status = 'ACTIVE' THEN 2
+            WHEN ls.status = 'TRIAL' THEN 1
+            ELSE 0
+          END AS priority,
+          uc.is_owner,
+          uc."createdAt" as clinic_created_at,
+          ls.created_at as sub_created_at
+        FROM user_clinics uc
+        LEFT JOIN latest_sub ls ON ls.clinic_id = uc.id AND ls.rn = 1
+        LEFT JOIN clinic_plans cp ON cp.id = ls.plan_id
+      )
+      SELECT id, name, slug
+      FROM ranked
+      ORDER BY priority DESC, is_owner DESC, COALESCE(sub_created_at, clinic_created_at) DESC
+      LIMIT 1`,
+    session.user.id as any
+  );
+  const currentClinicId = clinicRow?.[0]?.id as string | undefined;
+  if (!currentClinicId) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="lg:ml-64"><div className="p-4 pt-[88px]">Nenhuma clínica selecionada.</div></div>
+      </div>
+    );
+  }
+
+  // Fetch data server-side filtered by current clinic
   const [customers, methods, transactions] = await Promise.all([
     prisma.$queryRawUnsafe<any[]>(
       `SELECT pc.id,
@@ -25,8 +88,10 @@ export default async function PaymentsDataPage({ searchParams }: { searchParams?
     LEFT JOIN patient_profiles pp ON pp.id = pc.patient_profile_id
     LEFT JOIN "User" pu ON pu.id = pp.user_id
     LEFT JOIN clinics c ON c.id = pc.clinic_id
+        WHERE pc.clinic_id = $1
         ORDER BY pc.created_at DESC
-        LIMIT 50`
+        LIMIT 50`,
+      currentClinicId
     ),
     prisma.$queryRawUnsafe<any[]>(
       `SELECT pm.id,
@@ -51,8 +116,10 @@ export default async function PaymentsDataPage({ searchParams }: { searchParams?
     LEFT JOIN patient_profiles pp ON pp.id = pc.patient_profile_id
     LEFT JOIN "User" pu ON pu.id = pp.user_id
     LEFT JOIN clinics c ON c.id = pc.clinic_id
+        WHERE pc.clinic_id = $1
         ORDER BY pm.created_at DESC
-        LIMIT 50`
+        LIMIT 50`,
+      currentClinicId
     ),
     prisma.$queryRawUnsafe<any[]>(
       `SELECT pt.id,
@@ -83,14 +150,16 @@ export default async function PaymentsDataPage({ searchParams }: { searchParams?
     LEFT JOIN "User" pu ON pu.id = pp.user_id
     LEFT JOIN clinics c ON c.id = pt.clinic_id
     LEFT JOIN products p ON p.id = pt.product_id
+        WHERE pt.clinic_id = $1
         ORDER BY pt.updated_at DESC NULLS LAST, pt.created_at DESC
-        LIMIT 50`
+        LIMIT 50`,
+      currentClinicId
     )
   ]);
 
   // Checkout Sessions: filters (await Next.js dynamic searchParams)
   const sp = (searchParams ? await searchParams : {}) as { [k: string]: string | string[] | undefined };
-  const qClinic = (typeof sp?.clinic === 'string' ? sp?.clinic : Array.isArray(sp?.clinic) ? sp?.clinic?.[0] : '')?.trim() || '';
+  const qClinic = ((typeof sp?.clinic === 'string' ? sp?.clinic : Array.isArray(sp?.clinic) ? sp?.clinic?.[0] : '')?.trim() || currentClinicId);
   const qStatus = (typeof sp?.status === 'string' ? sp?.status : Array.isArray(sp?.status) ? sp?.status?.[0] : '')?.trim() || '';
   const qFrom = (typeof sp?.from === 'string' ? sp?.from : Array.isArray(sp?.from) ? sp?.from?.[0] : '')?.trim() || '';
   const qTo = (typeof sp?.to === 'string' ? sp?.to : Array.isArray(sp?.to) ? sp?.to?.[0] : '')?.trim() || '';

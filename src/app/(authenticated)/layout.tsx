@@ -5,6 +5,10 @@ import { ClinicProvider } from '@/contexts/clinic-context';
 import { useClinic } from '@/contexts/clinic-context';
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
 export default function AuthenticatedLayout({
   children,
@@ -20,11 +24,14 @@ export default function AuthenticatedLayout({
 
 function EnforceSubscription({ children }: { children: React.ReactNode }) {
   const { currentClinic, availableClinics, isLoading, switchClinic } = useClinic();
+  const { data: session } = useSession();
   const router = useRouter();
   const pathname = usePathname();
   const [showBlocker, setShowBlocker] = useState(false);
+  const [showAccessModal, setShowAccessModal] = useState(false);
   const isDoctorArea = pathname?.startsWith('/doctor') || pathname?.startsWith('/clinic');
   const isSubscriptionPage = pathname?.startsWith('/clinic/subscription') || pathname?.startsWith('/clinic/planos-trial');
+  const isMerchantApplication = pathname?.startsWith('/business/merchant-application');
 
   useEffect(() => {
     if (isLoading) return;
@@ -109,12 +116,62 @@ function EnforceSubscription({ children }: { children: React.ReactNode }) {
     return !anyPaid;
   }, [availableClinics]);
 
+  // Intercept clicks globally when access is pending to show modal instead of navigating
+  useEffect(() => {
+    if ((session?.user as any)?.accessGranted !== false) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const anchor = target.closest('a') as HTMLAnchorElement | null;
+      if (!anchor) return;
+      const href = anchor.getAttribute('href') || '';
+      const isInternal = href.startsWith('/') && !href.startsWith('/auth') && !href.startsWith('/admin') && !href.startsWith('/business/merchant-application');
+      if (isInternal) {
+        e.preventDefault();
+        setShowAccessModal(true);
+      }
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [session?.user]);
+
   return (
     <div className="min-h-[100dvh] h-full">
       <Navigation />
       <main className="h-full">
         {children}
       </main>
+
+      {/* Global access gating modal (client-side) */}
+      <Dialog
+        open={((session?.user as any)?.accessGranted === false) && !isMerchantApplication && !pathname?.startsWith('/admin')}
+        onOpenChange={(open) => setShowAccessModal(open)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{(typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('pt')) ? 'Complete seu cadastro' : 'Complete your registration'}</DialogTitle>
+            <DialogDescription>
+              {(typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('pt'))
+                ? 'Para acessar os recursos, finalize seu cadastro com os dados do negócio e documentos necessários.'
+                : 'To access features, please complete your onboarding with business details and required documents.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="sm:justify-start">
+            <div className="flex gap-2">
+              <Link href="/business/merchant-application" className="w-full">
+                <Button className="w-full">{(typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('pt')) ? 'Preencher dados' : 'Fill details'}</Button>
+              </Link>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => signOut({ callbackUrl: '/auth/signin' })}
+              >
+                {(typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('pt')) ? 'Sair' : 'Sign out'}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Blocking modal when clinic is Free or without active paid plan */}
       {showBlocker && isDoctorArea && !pathname?.startsWith('/admin') && !isSubscriptionPage && (

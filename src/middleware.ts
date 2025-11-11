@@ -244,6 +244,8 @@ export default async function middleware(request: NextRequestWithAuth) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 
+  // Client-side modal handles access gating; no redirect here to avoid navigation loops
+
   // Legacy path handling (removed slugging for doctor): keep '/doctor/*' global. No automatic slug injection.
 
   // Note: Detailed role/tenant checks are done in route handlers (server runtime) to avoid DB in Edge.

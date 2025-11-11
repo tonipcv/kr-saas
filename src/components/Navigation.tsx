@@ -323,12 +323,6 @@ export default function Navigation() {
           description: 'Manage clients'
         },
         {
-          href: '/business/clinic',
-          label: 'Team',
-          icon: BuildingOfficeIcon,
-          description: 'Manage clinics and team'
-        },
-        {
           href: '/business/products',
           label: 'Products',
           icon: DocumentTextIcon,
@@ -347,26 +341,8 @@ export default function Navigation() {
           description: 'Manage recurring subscriptions'
         },
         {
-          href: '/business/referrals',
-          label: 'Referrals',
-          icon: UserPlusIcon,
-          description: 'Manage received referrals'
-        },
-        {
-          href: '/business/coupon-templates',
-          label: 'Cupons',
-          icon: TagIcon,
-          description: 'Gerenciar modelos de cupons'
-        },
-        {
-          href: '/business/rewards',
-          label: 'Rewards',
-          icon: GiftIcon,
-          description: 'Configure rewards'
-        },
-        {
           href: '/business/integrations',
-          label: 'Integrations',
+          label: 'Apps',
           icon: CogIcon,
           description: 'Connect external tools'
         },
@@ -432,6 +408,12 @@ export default function Navigation() {
           label: 'Payments Split',
           icon: CreditCardIcon,
           description: 'Define split and platform fees per clinic'
+        },
+        {
+          href: '/admin/merchant-applications',
+          label: 'Merchant Applications',
+          icon: DocumentTextIcon,
+          description: 'Review and approve KYC applications'
         },
         {
           href: '/clinic/subscription',

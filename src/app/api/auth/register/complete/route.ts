@@ -197,33 +197,37 @@ export async function POST(req: Request) {
     const now = new Date();
     const trialEnd = resolvedTrialDays > 0 ? new Date(now.getTime() + resolvedTrialDays * 24 * 60 * 60 * 1000) : null;
 
-    // Criar assinatura Free (legado) - nível CLÍNICA via SQL; tolera plan_id nulo quando tabela de planos não existe
-    // Evitar duplicar assinatura se já existir alguma ativa/trial
-    const legacySub = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT id FROM unified_subscriptions 
-       WHERE type::text = 'CLINIC' 
-         AND subscriber_id = $1 
-         AND status::text IN ('ACTIVE','TRIAL') 
-       LIMIT 1`,
-      clinic.id
-    );
-    if (!legacySub || !legacySub[0]) {
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO unified_subscriptions (
-           id, type, subscriber_id, plan_id, status, start_date, end_date, trial_end_date, auto_renew, created_at, updated_at
-         ) VALUES (
-           $1, $2::subscription_type, $3, $4, $5::subscription_status, $6, $7, $8, $9, NOW(), NOW()
-         )`,
-        uuidv4(),
-        'CLINIC',
-        clinic.id,
-        freePlanId,
-        'ACTIVE',
-        now,
-        null,
-        trialEnd,
-        true
+    // Criar assinatura Free (legado) - opcional. Se tabelas legadas não existirem, ignorar silenciosamente
+    try {
+      // Evitar duplicar assinatura se já existir alguma ativa/trial
+      const legacySub = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT id FROM unified_subscriptions 
+         WHERE type::text = 'CLINIC' 
+           AND subscriber_id = $1 
+           AND status::text IN ('ACTIVE','TRIAL') 
+         LIMIT 1`,
+        clinic.id
       );
+      if (!legacySub || !legacySub[0]) {
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO unified_subscriptions (
+             id, type, subscriber_id, plan_id, status, start_date, end_date, trial_end_date, auto_renew, created_at, updated_at
+           ) VALUES (
+             $1, $2::subscription_type, $3, $4, $5::subscription_status, $6, $7, $8, $9, NOW(), NOW()
+           )`,
+          uuidv4(),
+          'CLINIC',
+          clinic.id,
+          freePlanId,
+          'ACTIVE',
+          now,
+          null,
+          trialEnd,
+          true
+        );
+      }
+    } catch (e) {
+      // Tabelas legadas (unified_subscriptions) podem não existir neste ambiente. Seguir sem criar.
     }
 
     return NextResponse.json({

@@ -266,11 +266,11 @@ export default function PatientsPage() {
         console.log('✅ Patients loaded:', transformedPatients.length);
       } else {
         console.error('❌ Error loading patients:', data.error);
-        toast.error(data.error || 'Erro ao carregar pacientes');
+        toast.error(data.error || 'Failed to load clients');
       }
     } catch (error) {
       console.error('❌ Error in loadPatients:', error);
-      toast.error('Erro ao carregar pacientes');
+      toast.error('Failed to load clients');
     } finally {
       setIsLoading(false);
     }
@@ -315,7 +315,7 @@ export default function PatientsPage() {
 
   const updatePatient = async () => {
     if (!newPatient.name.trim() || !newPatient.email.trim() || !patientToEdit) {
-      toast.error('Nome e email são obrigatórios');
+      toast.error('Name and email are required');
       return;
     }
 
@@ -351,7 +351,7 @@ export default function PatientsPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Erro ao atualizar cliente');
+        throw new Error(data.error || 'Failed to update client');
       }
 
       // Reload clients list
@@ -359,10 +359,10 @@ export default function PatientsPage() {
       resetForm();
       setShowEditPatient(false);
       setPatientToEdit(null);
-      toast.success('Cliente atualizado com sucesso!');
+      toast.success('Client updated successfully!');
     } catch (error: any) {
       console.error('Error updating patient:', error);
-      toast.error(error.message || 'Erro ao atualizar cliente');
+      toast.error(error.message || 'Failed to update client');
     } finally {
       setIsEditingPatient(false);
     }
@@ -370,7 +370,7 @@ export default function PatientsPage() {
 
   const addPatient = async () => {
     if (!newPatient.name.trim() || !newPatient.email.trim()) {
-      toast.error('Nome e email são obrigatórios');
+      toast.error('Name and email are required');
       return;
     }
 
@@ -406,7 +406,7 @@ export default function PatientsPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Erro ao criar paciente');
+        throw new Error(result.error || 'Failed to create client');
       }
 
       // Optionally send access email immediately
@@ -416,14 +416,14 @@ export default function PatientsPage() {
         }
       } catch {}
 
-      toast.success('Cliente criado com sucesso!');
+      toast.success('Client created successfully!');
       loadPatients();
       setShowAddPatient(false);
       resetForm();
       setSendAccessNow(false);
     } catch (err) {
       console.error('Error creating patient:', err);
-      toast.error(err instanceof Error ? err.message : 'Erro ao criar paciente');
+      toast.error(err instanceof Error ? err.message : 'Failed to create client');
     } finally {
       setIsAddingPatient(false);
     }
@@ -440,14 +440,14 @@ export default function PatientsPage() {
       if (response.ok) {
         // Reload clients list
         await loadPatients();
-        toast.success(`Cliente ${patientName} foi removido com sucesso`);
+        toast.success(`Client ${patientName} removed successfully`);
       } else {
         const error = await response.json();
-        toast.error(error.error ? `Erro ao remover: ${error.error}` : 'Erro ao deletar cliente');
+        toast.error(error.error ? `Failed to remove: ${error.error}` : 'Failed to delete client');
       }
     } catch (error) {
       console.error('Error deleting client:', error);
-      toast.error('Erro ao deletar cliente');
+      toast.error('Failed to delete client');
     } finally {
       setDeletingPatientId(null);
       setShowDeleteConfirm(false);
@@ -468,8 +468,8 @@ export default function PatientsPage() {
 
   const openWhatsAppDialog = (patient: Patient) => {
     setWaPatientId(patient.id);
-    setWaPatientName(patient.name || 'Cliente');
-    setWaMessage('Olá! Aqui é da clínica, tudo bem?');
+    setWaPatientName(patient.name || 'Client');
+    setWaMessage('Hello! This is the clinic, how are you?');
     setWaDialogOpen(true);
   };
 
@@ -480,14 +480,14 @@ export default function PatientsPage() {
       const res = await fetch('/api/integrations/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clinicId: currentClinic.id, patientId: waPatientId, message: waMessage || 'Olá!' })
+        body: JSON.stringify({ clinicId: currentClinic.id, patientId: waPatientId, message: waMessage || 'Hello!' })
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Falha ao enviar WhatsApp');
-      toast.success('Mensagem enviada no WhatsApp');
+      if (!res.ok) throw new Error(data.error || 'Failed to send WhatsApp');
+      toast.success('Message sent on WhatsApp');
       setWaDialogOpen(false);
     } catch (e: any) {
-      toast.error(e?.message || 'Erro ao enviar WhatsApp');
+      toast.error(e?.message || 'Error sending WhatsApp');
     } finally {
       setWaSending(false);
     }
@@ -506,15 +506,15 @@ export default function PatientsPage() {
 
       if (response.ok) {
         const result = await response.json();
-        toast.success(`Email de redefinição de senha enviado para ${patientEmail} com sucesso!`);
+        toast.success(`Password reset email sent to ${patientEmail} successfully!`);
         console.log('Reset URL (for testing):', result.resetUrl);
       } else {
         const error = await response.json();
-        toast.error(error.error ? `Erro ao enviar email de redefinição de senha: ${error.error}` : 'Erro ao enviar email de redefinição de senha');
+        toast.error(error.error ? `Failed to send password reset email: ${error.error}` : 'Failed to send password reset email');
       }
     } catch (error) {
       console.error('Error sending password reset email:', error);
-      toast.error('Erro ao enviar email de redefinição de senha');
+      toast.error('Failed to send password reset email');
     } finally {
       setSendingEmailId(null);
     }
@@ -863,16 +863,6 @@ export default function PatientsPage() {
                 <p className="text-sm text-gray-500 mt-1">Manage your clients and their protocols</p>
               </div>
               <div className="flex items-center gap-2">
-                <Link href="/doctor/membership">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-gray-700 hover:bg-gray-50"
-                    title="Configure membership levels"
-                  >
-                    Membership Levels
-                  </Button>
-                </Link>
                 <Button
                   variant="outline"
                   size="sm"
@@ -929,20 +919,20 @@ export default function PatientsPage() {
       <Dialog open={waDialogOpen} onOpenChange={setWaDialogOpen}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>Enviar WhatsApp</DialogTitle>
-            <DialogDescription>Mensagem para {waPatientName}</DialogDescription>
+            <DialogTitle>Send WhatsApp</DialogTitle>
+            <DialogDescription>Message to {waPatientName}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <Label htmlFor="wa_message">Mensagem</Label>
-            <Textarea id="wa_message" value={waMessage} onChange={(e) => setWaMessage(e.target.value)} placeholder="Digite sua mensagem" rows={5} />
-            <p className="text-xs text-gray-500">O envio usa a integração oficial do WhatsApp configurada em Doctor → Integrations.</p>
+            <Label htmlFor="wa_message">Message</Label>
+            <Textarea id="wa_message" value={waMessage} onChange={(e) => setWaMessage(e.target.value)} placeholder="Type your message" rows={5} />
+            <p className="text-xs text-gray-500">Messages use the official WhatsApp integration configured in Business → Apps.</p>
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setWaDialogOpen(false)} disabled={waSending}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setWaDialogOpen(false)} disabled={waSending}>Cancel</Button>
             <Button
               className="bg-black hover:bg-gray-900 text-white"
               onClick={sendWhatsAppToPatient} disabled={waSending || !waMessage.trim()}>
-              {waSending ? 'Enviando...' : 'Enviar'}
+              {waSending ? 'Sending...' : 'Send'}
             </Button>
           </div>
         </DialogContent>

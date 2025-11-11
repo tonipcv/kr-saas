@@ -132,7 +132,7 @@ export function ClinicSelector({ currentClinic, onClinicChange, userId }: Clinic
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="font-medium text-gray-900 truncate">
-                  {currentClinic?.name || 'Selecionar Clínica'}
+                  {currentClinic?.name || 'Select Business'}
                 </span>
                 {currentClinic?.subscription && (
                   <span className={`text-xs px-2 py-0.5 rounded-full ${getPlanBadgeColor(currentClinic.subscription.status)}`}>
@@ -149,16 +149,16 @@ export function ClinicSelector({ currentClinic, onClinicChange, userId }: Clinic
       
       <DropdownMenuContent align="start" className="w-80 p-2">
         <DropdownMenuLabel className="text-xs font-medium text-gray-500 uppercase tracking-wide px-2">
-          Suas Clínicas
+          Your Businesses
         </DropdownMenuLabel>
         
         {loading ? (
           <div className="p-4 text-center text-sm text-gray-500">
-            Carregando clínicas...
+            Loading businesses...
           </div>
         ) : clinics.length === 0 ? (
           <div className="p-4 text-center text-sm text-gray-500">
-            Nenhuma clínica encontrada
+            No businesses found
           </div>
         ) : (
           clinics.map((clinic) => (
@@ -204,7 +204,7 @@ export function ClinicSelector({ currentClinic, onClinicChange, userId }: Clinic
                     <span className="text-xs text-gray-300">•</span>
                     <div className="flex items-center gap-1 text-xs text-gray-500">
                       <Users className="h-3 w-3" />
-                      {clinic.members.length} membro{clinic.members.length !== 1 ? 's' : ''}
+                      {clinic.members.length} {clinic.members.length === 1 ? 'member' : 'members'}
                     </div>
                   </div>
                   
@@ -233,10 +233,7 @@ export function ClinicSelector({ currentClinic, onClinicChange, userId }: Clinic
               <Plus className="h-5 w-5 text-blue-600" />
             </div>
             <div>
-              <span className="font-medium">Criar nova clínica</span>
-              <div className="text-xs text-gray-500">
-                Comece uma nova clínica do zero
-              </div>
+              <span className="font-medium">Add Business</span>
             </div>
           </div>
         </DropdownMenuItem>

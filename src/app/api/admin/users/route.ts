@@ -21,27 +21,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Fetch all users that can be clinic owners (excluding super admins)
-    const users = await prisma.user.findMany({
+    // Fetch only doctors (only doctors can have this access flag)
+    const rows = await prisma.user.findMany({
       where: {
-        role: {
-          not: 'SUPER_ADMIN'
-        }
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true
+        role: 'DOCTOR'
       },
       orderBy: {
         name: 'asc'
       }
     });
 
-    return NextResponse.json({ 
+    const users = rows.map((u: any) => ({
+      id: u.id,
+      name: u.name ?? null,
+      email: u.email ?? null,
+      role: u.role,
+      accessGranted: Boolean(u.accessGranted)
+    }));
+
+    return NextResponse.json({
       users,
-      total: users.length 
+      total: users.length
     });
 
   } catch (error) {

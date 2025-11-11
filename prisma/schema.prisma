@@ -157,6 +157,7 @@ model Clinic {
   couponTemplates CouponTemplate[]
   referralRewards ReferralReward[]
   merchant        Merchant?
+  merchantApplication MerchantApplication?
 
   @@index([ownerId])
   @@index([slug])
@@ -182,6 +183,49 @@ model Merchant {
   @@map("merchants")
 }
 
+/// Application for merchant onboarding per clinic, with data and documents
+model MerchantApplication {
+  id             String             @id @default(cuid())
+  clinicId       String             @unique @map("clinic_id")
+  type           MerchantType       @default(INDIVIDUAL)
+  businessName   String?
+  fullName       String?
+  documentNumber String?
+  email          String?
+  phone          String?
+  address        Json?
+  bankAccount    Json?
+  recipientId    String?            @map("recipient_id")
+  status         MerchantAppStatus  @default(DRAFT)
+  reviewNotes    String?
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  clinic    Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  documents MerchantDocument[]
+
+  @@map("merchant_applications")
+}
+
+/// Documents uploaded for merchant application (e.g., ID, address proof)
+model MerchantDocument {
+  id            String            @id @default(cuid())
+  applicationId String            @map("application_id")
+  type          DocumentType
+  fileUrl       String            @map("file_url")
+  status        DocumentStatus    @default(PENDING)
+  notes         String?
+  uploadedAt    DateTime          @default(now()) @map("uploaded_at")
+  reviewedAt    DateTime?         @map("reviewed_at")
+
+  application MerchantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@map("merchant_documents")
+}
+
 enum ClinicRole {
   OWNER // Dono do negócio
   MANAGER // Gerente com acesso administrativo
@@ -199,6 +243,36 @@ enum MerchantStatus {
   ACTIVE
   REJECTED
   DISABLED
+}
+
+enum MerchantType {
+  INDIVIDUAL
+  COMPANY
+}
+
+enum MerchantAppStatus {
+  DRAFT
+  PENDING_DOCUMENTS
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum DocumentType {
+  ID_FRONT
+  ID_BACK
+  SELFIE
+  CNPJ_CARD
+  ADDRESS_PROOF
+  CONTRACT_SOCIAL
+  BANK_STATEMENT
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 model ClinicMember {
@@ -438,6 +512,7 @@ model User {
   notes                    String?
   google_review_link       String?
   stripe_connect_id        String?
+  accessGranted            Boolean   @default(false) @map("access_granted")
   accounts                 Account[]
 
   sessions Session[]

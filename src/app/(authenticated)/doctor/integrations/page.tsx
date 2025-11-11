@@ -11,8 +11,10 @@ import { useClinic } from '@/contexts/clinic-context';
 import { Input } from '@/components/ui/input';
 import { toast } from 'react-hot-toast';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import Image from 'next/image';
 
 export default function IntegrationsPage() {
+  const ENABLE_XASE = false;
   const router = useRouter();
   const pathname = usePathname();
   const isBusinessRoute = typeof pathname === 'string' && pathname.includes('/business/');
@@ -61,8 +63,10 @@ export default function IntegrationsPage() {
   const [emailStatusLoading, setEmailStatusLoading] = useState(false);
   const [verifiedEmail, setVerifiedEmail] = useState<string>('');
 
-  // Page loading while both integrations status are being fetched
-  const pageLoading = isLoading || statusLoading || waStatusLoading;
+  // Add Integration dialog and search state
+  const [addOpen, setAddOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState<'all' | 'payments' | 'messaging' | 'email'>('all');
 
   // Onboarding wizard state (Business → WABA → Number)
   const [waWizardOpen, setWaWizardOpen] = useState(false);
@@ -108,6 +112,15 @@ export default function IntegrationsPage() {
   // Allow editing recipient id directly
   const [pgNewRecipientId, setPgNewRecipientId] = useState<string>('');
   
+  // Derived connection states (depends on waStatus, pgStatus, emailStatus declared above)
+  const waConnected = waStatus === 'CONNECTED';
+  const pgConnected = pgStatus === 'ACTIVE';
+  const emailVerified = emailStatus === 'VERIFIED';
+  const hasAnyConnected = waConnected || pgConnected || emailVerified;
+
+  // Page loading while integrations status are being fetched
+  const pageLoading = isLoading || waStatusLoading || pgLoading || emailStatusLoading;
+
 
   // (SEO card removed — SEO is automatic and not shown here)
 
@@ -131,7 +144,7 @@ export default function IntegrationsPage() {
       }
     } catch (e: any) {
       console.error('Load status error', e);
-      toast.error(e.message || 'Erro ao carregar status');
+      toast.error(e.message || 'Failed to load status');
     } finally {
       setStatusLoading(false);
     }
@@ -147,10 +160,10 @@ export default function IntegrationsPage() {
       setWaBusinesses([]);
       const res = await fetch(`/api/integrations/whatsapp/onboarding?type=businesses&clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao listar Businesses');
+      if (!res.ok) throw new Error(data.error || 'Failed to list Businesses');
       setWaBusinesses(Array.isArray(data?.data?.data) ? data.data.data : []);
     } catch (e: any) {
-      toast.error(e.message || 'Erro ao listar Businesses');
+      toast.error(e.message || 'Failed to list Businesses');
     } finally {
       setWaBizLoading(false);
     }
@@ -163,10 +176,10 @@ export default function IntegrationsPage() {
       setWaWabas([]);
       const res = await fetch(`/api/integrations/whatsapp/onboarding?type=wabas&business_id=${encodeURIComponent(businessId)}&clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao listar WABAs');
+      if (!res.ok) throw new Error(data.error || 'Failed to list WABAs');
       setWaWabas(Array.isArray(data?.data?.data) ? data.data.data : []);
     } catch (e: any) {
-      toast.error(e.message || 'Erro ao listar WABAs');
+      toast.error(e.message || 'Failed to list WABAs');
     } finally {
       setWaWabaLoading(false);
     }
@@ -179,10 +192,10 @@ export default function IntegrationsPage() {
       setWaNumbers([]);
       const res = await fetch(`/api/integrations/whatsapp/onboarding?type=numbers&waba_id=${encodeURIComponent(wabaId)}&clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao listar números');
+      if (!res.ok) throw new Error(data.error || 'Failed to list numbers');
       setWaNumbers(Array.isArray(data?.data?.data) ? data.data.data : []);
     } catch (e: any) {
-      toast.error(e.message || 'Erro ao listar números');
+      toast.error(e.message || 'Failed to list numbers');
     } finally {
       setWaNumLoading(false);
     }
@@ -201,7 +214,7 @@ export default function IntegrationsPage() {
   const finalizeWizard = async () => {
     if (!currentClinic?.id) return;
     if (!waSelectedNumber) {
-      toast.error('Selecione um número');
+      toast.error('Select a number');
       return;
     }
     try {
@@ -213,19 +226,21 @@ export default function IntegrationsPage() {
         body: JSON.stringify({ clinicId: currentClinic.id, phoneNumberId: waSelectedNumber, wabaId: waSelectedWaba, meta })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Falha ao conectar');
-      toast.success('WhatsApp conectado com sucesso');
+      if (!res.ok) throw new Error(data.error || 'Failed to connect');
+      toast.success('WhatsApp connected successfully');
       setWaWizardOpen(false);
       await loadWaStatus();
     } catch (e: any) {
-      toast.error(e.message || 'Erro ao finalizar conexão');
+      toast.error(e.message || 'Failed to finish connection');
     } finally {
       setWaFinishing(false);
     }
   };
 
   useEffect(() => {
-    loadStatus();
+    if (ENABLE_XASE) {
+      loadStatus();
+    }
   }, [currentClinic?.id]);
 
   // Pagar.me status loader
@@ -235,7 +250,7 @@ export default function IntegrationsPage() {
       setPgLoading(true);
       const res = await fetch(`/api/payments/pagarme/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Erro ao carregar status do Pagar.me');
+      if (!res.ok) throw new Error(data?.error || 'Failed to load payments status');
       const connected = !!data?.connected;
       setPgRecipientId(data?.recipientId || null);
       setPgNewRecipientId(data?.recipientId || '');
@@ -277,7 +292,7 @@ export default function IntegrationsPage() {
       }
     } catch (e: any) {
       console.error('WA Load status error', e);
-      toast.error(e.message || 'Erro ao carregar status WhatsApp');
+      toast.error(e.message || 'Failed to load WhatsApp status');
     } finally {
       setWaStatusLoading(false);
     }
@@ -294,7 +309,7 @@ export default function IntegrationsPage() {
       setEmailStatusLoading(true);
       const res = await fetch(`/api/integrations/email/senders/by-clinic?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Erro ao carregar status do email');
+      if (!res.ok) throw new Error(data?.error || 'Failed to load email status');
       if (data?.exists) {
         const normalized = String(data.status || 'UNKNOWN').toUpperCase();
         setEmailStatus(normalized as any);
@@ -313,7 +328,7 @@ export default function IntegrationsPage() {
       }
     } catch (e: any) {
       console.error('Email Load status error', e);
-      toast.error(e?.message || 'Erro ao carregar status do email');
+      toast.error(e?.message || 'Failed to load email status');
     } finally {
       setEmailStatusLoading(false);
     }
@@ -331,10 +346,10 @@ export default function IntegrationsPage() {
     const reason = url.searchParams.get('reason');
     if (oauth) {
       if (oauth === 'ok') {
-        toast.success('Facebook conectado. Selecione o WABA e o número.');
+        toast.success('Facebook connected. Select the WABA and the number.');
       } else {
         // Try to parse Graph error JSON for better diagnostics
-        let message = reason || 'desconhecido';
+        let message = reason || 'unknown';
         try {
           const parsed = JSON.parse(reason || '');
           const err = parsed?.error || {};
@@ -349,7 +364,7 @@ export default function IntegrationsPage() {
         } catch {
           console.error('[WA OAuth] Error during token exchange:', reason);
         }
-        toast.error(`Erro no OAuth: ${message}`);
+        toast.error(`OAuth error: ${message}`);
       }
       url.searchParams.delete('wa_oauth');
       url.searchParams.delete('reason');
@@ -371,13 +386,13 @@ export default function IntegrationsPage() {
         body: JSON.stringify({ clinicId: currentClinic.id, accessToken: waAccessToken.trim(), phoneNumberId: waPhoneNumberId.trim(), wabaId: waWabaId.trim() || undefined })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Falha ao conectar WhatsApp');
-      toast.success('WhatsApp conectado');
+      if (!res.ok) throw new Error(data.error || 'Failed to connect WhatsApp');
+      toast.success('WhatsApp connected');
       setWaPhone(data.phone || null);
       setWaStatus((data.status || 'CONNECTED').toUpperCase());
       setWaAccessToken('');
     } catch (e: any) {
-      toast.error(e.message || 'Erro ao conectar WhatsApp');
+      toast.error(e.message || 'Failed to connect WhatsApp');
     } finally {
       setConnecting(false);
     }
@@ -386,7 +401,7 @@ export default function IntegrationsPage() {
   const sendWaTest = async () => {
     if (!currentClinic?.id) return;
     if (!waTestTo.trim()) {
-      toast.error('Informe o número destino (+5511999999999)');
+      toast.error('Enter destination number (+5511999999999)');
       return;
     }
     try {
@@ -397,10 +412,10 @@ export default function IntegrationsPage() {
         body: JSON.stringify({ clinicId: currentClinic.id, to: waTestTo.trim(), message: waTestMsg })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Falha ao enviar');
-      toast.success('Mensagem enviada via WhatsApp');
+      if (!res.ok) throw new Error(data.error || 'Failed to send');
+      toast.success('Message sent via WhatsApp');
     } catch (e: any) {
-      toast.error(e.message || 'Erro ao enviar mensagem');
+      toast.error(e.message || 'Failed to send message');
     } finally {
       setWaTesting(false);
     }
@@ -464,526 +479,219 @@ export default function IntegrationsPage() {
       <div className="lg:ml-64">
         <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
           {/* Header */}
-          <div className="mb-6">
-            <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Integrações</h1>
-            <p className="text-sm text-gray-500">Conecte suas ferramentas para habilitar automações e disparos.</p>
+          <div className="mb-6 flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Apps</h1>
+              <p className="text-sm text-gray-500">Connect your tools to enable automations and triggers.</p>
+            </div>
+            <Button onClick={() => setAddOpen(true)} className="h-9 rounded-lg">Add Integration</Button>
           </div>
 
           {/* Free plan note */}
           {isFree && (
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white text-gray-700 px-3 py-1 text-xs">
-              <LockClosedIcon className="h-4 w-4" /> Plano Free — integrações limitadas. <Link href="/clinic/subscription" className="underline hover:text-gray-900">Ver planos</Link>
+              <LockClosedIcon className="h-4 w-4" /> Free Plan — limited integrations. <Link href="/clinic/subscription" className="underline hover:text-gray-900">View plans</Link>
             </div>
           )}
 
-          {/* Cards (minimal headers; click to view details) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Pagar.me Payments (hidden on business route) */}
-            {!isBusinessRoute && (
-            <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
-              {blocked && (
-                <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-1 text-xs">
-                  <LockClosedIcon className="h-3.5 w-3.5" /> Locked
-                </div>
-              )}
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    Pagamentos
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <div className="text-xs">
-                      {pgLoading ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200">Carregando…</span>
-                      ) : pgStatus === 'ACTIVE' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Conectado</span>
-                      ) : pgStatus === 'PENDING' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700 ring-1 ring-inset ring-yellow-200">Pendente</span>
-                      ) : pgStatus === 'DISABLED' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Desconectado</span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">{pgStatus}</span>
-                      )}
-                    </div>
-                    <Button size="sm" variant="outline" className="h-7" onClick={() => setPgExpanded(v => !v)}>
-                      {pgExpanded ? 'Ocultar' : 'Ver detalhes'}
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              {pgExpanded && (
-                <CardContent>
-                  <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <div className="text-gray-500">Status</div>
-                        <div className="font-medium text-gray-900">{pgStatus}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">Recipient</div>
-                        <div className="font-mono text-xs text-gray-800 break-all">{pgRecipientId || '-'}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">Split % (negócio)</div>
-                        <div className="font-medium text-gray-900">{pgSplitPercent}%</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">Taxa plataforma (bps)</div>
-                        <div className="font-medium text-gray-900">{pgPlatformFeeBps}</div>
-                      </div>
-                      <div className="col-span-2">
-                        <div className="text-gray-500">Última sincronização</div>
-                        <div className="text-gray-900">{pgLastSyncAt ? new Date(pgLastSyncAt).toLocaleString() : '-'}</div>
+          {/* Loading skeleton to avoid flicker */}
+          {pageLoading && (
+            <div className="bg-white rounded-xl border border-gray-200">
+              <div className="grid grid-cols-3 gap-4 text-xs text-gray-500 px-6 py-3 border-b border-gray-200">
+                <div>Name</div>
+                <div>Category</div>
+                <div>Status</div>
+              </div>
+              <div className="px-6 py-12 flex flex-col items-center justify-center">
+                <div className="w-10 h-10 rounded-full border-2 border-gray-200 border-t-gray-400 animate-spin mb-3" />
+                <div className="text-sm text-gray-600">Loading integrations…</div>
+              </div>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!pageLoading && !hasAnyConnected && (
+            <div className="bg-white rounded-xl border border-gray-200">
+              {/* Header row */}
+              <div className="grid grid-cols-3 gap-4 text-xs text-gray-500 px-6 py-3 border-b border-gray-200">
+                <div className="flex items-center gap-1">Name</div>
+                <div className="flex items-center gap-1">Category</div>
+                <div className="flex items-center gap-1">Status</div>
+              </div>
+              {/* Body empty */}
+              <div className="px-6 py-16 flex flex-col items-center justify-center">
+                <div className="w-12 h-12 rounded-md bg-gray-100 mb-3" />
+                <div className="text-gray-800 font-semibold">No integrations available</div>
+                <div className="text-sm text-gray-600">To start, select <button className="underline" onClick={() => setAddOpen(true)}>Add integration</button></div>
+              </div>
+            </div>
+          )}
+
+          {/* Connected table */}
+          {!pageLoading && hasAnyConnected && (
+            <div className="bg-white rounded-xl border border-gray-200">
+              <div className="grid grid-cols-3 gap-4 text-xs text-gray-500 px-6 py-3 border-b border-gray-200">
+                <div className="flex items-center gap-1">Name</div>
+                <div className="flex items-center gap-1">Category</div>
+                <div className="flex items-center gap-1">Status</div>
+              </div>
+              <div className="divide-y">
+                {/* Row: KRX Pay */}
+                {pgConnected && (
+                  <div className="px-6 py-3 grid grid-cols-3 items-center gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Image src="/krxpay.png" alt="KRX Pay" width={20} height={20} className="invert" />
+                      <div className="truncate">
+                        <div className="text-sm font-semibold text-gray-900 truncate">KRX Pay</div>
+                        <div className="text-[11px] text-gray-500 truncate">Best gateway with AI.</div>
                       </div>
                     </div>
-                    {/* Edit recipient id */}
-                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <Input
-                        value={pgNewRecipientId}
-                        onChange={(e) => setPgNewRecipientId(e.target.value)}
-                        placeholder="re_... (recipient id)"
-                        className="h-8 text-sm font-mono"
-                      />
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                          onClick={async () => {
-                            if (!currentClinic?.id) return;
-                            const rid = pgNewRecipientId.trim();
-                            if (!rid) { toast.error('Informe o recipient_id'); return; }
-                            if (!/^re_[A-Za-z0-9]+$/.test(rid)) { toast.error('ID inválido. Deve iniciar com re_'); return; }
-                            try {
-                              setPgSaving(true);
-                              const res = await fetch('/api/payments/pagarme/recipient/set', {
-                                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ clinicId: currentClinic.id, recipientId: rid, verify: true })
-                              });
-                              const data = await res.json();
-                              if (!res.ok || !data?.ok) throw new Error(data?.error || 'Falha ao salvar recipient');
-                              toast.success('Recipient atualizado');
-                              await loadPgStatus();
-                            } catch (e: any) {
-                              toast.error(e?.message || 'Erro ao salvar recipient');
-                            } finally {
-                              setPgSaving(false);
-                            }
-                          }}
-                          disabled={pgSaving || !pgNewRecipientId.trim()}
-                          className="h-8 rounded-md text-xs px-3"
-                        >{pgSaving ? 'Salvando…' : 'Salvar recipient'}</Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => setPgNewRecipientId(pgRecipientId || '')}
-                          className="h-8 rounded-md text-xs px-3"
-                        >Repor atual</Button>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      {pgDetails && (
-                        <div className="w-full mt-1 rounded-lg border border-gray-200 p-3">
-                          <div className="text-xs font-semibold text-gray-700 mb-2">Recebedor</div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                            <div className="flex items-center justify-between">
-                              <span className="text-gray-500">Nome</span>
-                              <span className="font-medium text-gray-900">{pgDetails.name || '-'}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-gray-500">Documento</span>
-                              <span className="font-medium text-gray-900">{pgDetails.document || '-'}</span>
-                            </div>
-                            <div className="md:col-span-2 flex items-center justify-between">
-                              <span className="text-gray-500">Conta bancária</span>
-                              <span className="text-gray-900">
-                                {pgDetails.bank_account ? (
-                                  <>
-                                    {pgDetails.bank_account.bank || '—'} · ag {pgDetails.bank_account.branch_number || '—'}{pgDetails.bank_account.branch_check_digit ? `-${pgDetails.bank_account.branch_check_digit}` : ''}
-                                    {' '}· conta {pgDetails.bank_account.account_number || '—'}{pgDetails.bank_account.account_check_digit ? `-${pgDetails.bank_account.account_check_digit}` : ''}
-                                    {' '}· {pgDetails.bank_account.type || '—'}
-                                  </>
-                                ) : '—'}
-                              </span>
-                            </div>
-                            <div className="md:col-span-2 flex items-center justify-between">
-                              <span className="text-gray-500">Transferências</span>
-                              <span className="text-gray-900">
-                                {pgDetails.transfer_settings ? (
-                                  <>
-                                    {pgDetails.transfer_settings.transfer_enabled ? 'Ativadas' : 'Desativadas'} · {pgDetails.transfer_settings.transfer_interval || '-'}{typeof pgDetails.transfer_settings.transfer_day === 'number' ? ` · dia ${pgDetails.transfer_settings.transfer_day}` : ''}
-                                  </>
-                                ) : '—'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      <Button
-                        onClick={async () => {
-                          if (!currentClinic?.id) return;
-                          try {
-                            const res = await fetch('/api/payments/pagarme/onboard', {
-                              method: 'POST', headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ clinicId: currentClinic.id })
-                            });
-                            const data = await res.json();
-                            if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
-                            router.push('/doctor/integrations/payments/setup');
-                          } catch (e: any) {
-                            toast.error(e?.message || 'Erro ao iniciar onboarding');
-                          }
-                        }}
-                        className="h-8 rounded-md text-xs px-3"
-                      >
-                        {pgRecipientId ? 'Reconfigurar' : 'Conectar'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={async () => {
-                          if (!currentClinic?.id) return;
-                          try {
-                            const res = await fetch('/api/payments/pagarme/refresh', {
-                              method: 'POST', headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ clinicId: currentClinic.id })
-                            });
-                            const data = await res.json();
-                            if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
-                            toast.success('Status atualizado');
-                            await loadPgStatus();
-                          } catch (e: any) {
-                            toast.error(e?.message || 'Erro ao atualizar status');
-                          }
-                        }}
-                        className="h-8 rounded-md text-xs px-3"
-                      >
-                        Atualizar
-                      </Button>
-                      {pgRecipientId && (
-                        <Button
-                          variant="outline"
-                          onClick={async () => {
-                            if (!currentClinic?.id) return;
-                            const ok = confirm('Desconectar pagamentos deste negócio?');
-                            if (!ok) return;
-                            try {
-                              const res = await fetch('/api/payments/pagarme/disconnect', {
-                                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ clinicId: currentClinic.id })
-                              });
-                              const data = await res.json();
-                              if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
-                              toast.success('Integração desconectada');
-                              await loadPgStatus();
-                            } catch (e: any) {
-                              toast.error(e?.message || 'Erro ao desconectar');
-                            }
-                          }}
-                          className="h-8 rounded-md text-xs px-3"
-                        >
-                          Desconectar
-                        </Button>
-                      )}
+                    <div className="text-sm text-gray-700">Payments</div>
+                    <div className="flex items-center justify-end">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200 text-xs">Conectado</span>
                     </div>
                   </div>
-                </CardContent>
-              )}
-            </Card>
-            )}
-            {/* SEO card removed */}
-            {/* WhatsApp (Xase.ai) */}
-            <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
-              {blocked && (
-                <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-1 text-xs">
-                  <LockClosedIcon className="h-3.5 w-3.5" /> Locked
-                </div>
-              )}
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    WhatsApp (Xase.ai)
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <div className="text-xs">
-                      {statusLoading ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200">Carregando…</span>
-                      ) : status === 'CONNECTED' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Conectado</span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Desconectado</span>
-                      )}
-                    </div>
-                    <Button size="sm" variant="outline" className="h-7" onClick={() => setXaseExpanded(v => !v)}>
-                      {xaseExpanded ? 'Ocultar' : 'Ver detalhes'}
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              {xaseExpanded && (
-                <CardContent>
-                  <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Xase API Key" className="h-8 text-sm" />
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button onClick={connect} disabled={connecting || !apiKey.trim()} className="h-8 rounded-md w-full sm:w-auto text-xs px-3">
-                          {connecting ? 'Conectando…' : 'Conectar'}
-                        </Button>
-                        <Button variant="outline" onClick={loadStatus} disabled={statusLoading} className="h-8 rounded-md w-full sm:w-auto text-xs px-3">Atualizar</Button>
+                )}
+                {/* Row: WhatsApp */}
+                {waConnected && (
+                  <div className="px-6 py-3 grid grid-cols-3 items-center gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Image src="/zap.png" alt="WhatsApp" width={20} height={20} />
+                      <div className="truncate">
+                        <div className="text-sm font-semibold text-gray-900 truncate">WhatsApp</div>
+                        <div className="text-[11px] text-gray-500 truncate">Official WhatsApp Business API.</div>
                       </div>
                     </div>
-                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <div className="text-gray-500">Status</div>
-                        <div className="font-medium text-gray-900">{status}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">Número</div>
-                        <div className="font-medium text-gray-900">{phone || '-'}</div>
-                      </div>
-                      <div className="col-span-2">
-                        <div className="text-gray-500">Instance</div>
-                        <div className="font-mono text-xs text-gray-800 break-all">{instanceId || '-'}</div>
-                      </div>
-                      <div className="col-span-2">
-                        <div className="text-gray-500">Última conexão</div>
-                        <div className="text-gray-900">{lastSeenAt ? new Date(lastSeenAt).toLocaleString() : '-'}</div>
-                      </div>
-                    </div>
-                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <Input value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="Destino (+5511999999999)" className="h-8 text-sm" />
-                      <Input value={testMsg} onChange={(e) => setTestMsg(e.target.value)} placeholder="Mensagem" className="h-8 text-sm" />
-                      <Button onClick={sendTest} disabled={testing || status !== 'CONNECTED'} className="h-8 rounded-md w-full sm:w-auto text-xs px-3">
-                        {testing ? 'Enviando…' : 'Enviar teste'}
-                      </Button>
+                    <div className="text-sm text-gray-700">Messaging</div>
+                    <div className="flex items-center justify-end">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200 text-xs">Conectado</span>
                     </div>
                   </div>
-                </CardContent>
-              )}
-            </Card>
-            {/* Email (SendPulse) – Intermediado pela Zuzz */}
-            <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
-              {blocked && (
-                <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-1 text-xs">
-                  <LockClosedIcon className="h-3.5 w-3.5" /> Locked
-                </div>
-              )}
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    E-mail
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <div className="text-xs">
-                      {emailStatus === 'VERIFIED' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Conectado</span>
-                      ) : emailStatus === 'PENDING' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700 ring-1 ring-inset ring-yellow-200">Pendente</span>
-                      ) : emailStatus === 'DISCONNECTED' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Desconectado</span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">{emailStatus}</span>
-                      )}
+                )}
+              </div>
+            </div>
+          )}
+          {/* Add Integration Dialog */}
+          <Dialog open={addOpen} onOpenChange={setAddOpen}>
+            <DialogContent className="sm:max-w-[900px]">
+              <DialogHeader>
+                <DialogTitle>Add integration</DialogTitle>
+                <DialogDescription>Integrate your account with apps to supercharge your data.</DialogDescription>
+              </DialogHeader>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Sidebar */}
+                <div className="md:col-span-1">
+                  <div className="mb-3">
+                    <div className="relative">
+                      <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search" className="pr-8" />
+                      <LinkIcon className="h-4 w-4 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2" />
                     </div>
-                    <Button size="sm" variant="outline" className="h-7" onClick={() => setEmailExpanded(v => !v)}>
-                      {emailExpanded ? 'Ocultar' : 'Ver detalhes'}
-                    </Button>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <label className="flex items-center gap-2">
+                      <input type="radio" name="cat" checked={category==='all'} onChange={() => setCategory('all')} />
+                      All categories
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input type="radio" name="cat" checked={category==='payments'} onChange={() => setCategory('payments')} />
+                      Payments
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input type="radio" name="cat" checked={category==='messaging'} onChange={() => setCategory('messaging')} />
+                      Messaging
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input type="radio" name="cat" checked={category==='email'} onChange={() => setCategory('email')} />
+                      Email
+                    </label>
                   </div>
                 </div>
-              </CardHeader>
-              {emailExpanded && (
-                <CardContent>
-                  <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                      <Input value={senderName} onChange={(e) => setSenderName(e.target.value)} placeholder="Nome do remetente (ex.: Negócio Zuzz)" className="h-8 text-sm" />
-                      <Input value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} placeholder="Email do remetente (ex.: contato@negocio.com)" className="h-8 text-sm" />
-                      <div className="flex items-center gap-2">
-                        <Button
-                          onClick={async () => {
-                            if (!currentClinic?.id) return toast.error('Selecione um negócio');
-                            if (!senderEmail.trim()) return toast.error('Informe o email do remetente');
-                            try {
-                              setEmailConnecting(true);
-                              const res = await fetch('/api/integrations/email/senders/request-verification', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ clinicId: currentClinic.id, email: senderEmail.trim(), name: senderName.trim() || undefined })
-                              });
-                              const data = await res.json().catch(() => ({}));
-                              if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
-                              toast.success('Enviamos um email de confirmação para o seu remetente');
-                              setEmailStatus('PENDING');
-                              if (data?.sessionToken) setEmailSession(String(data.sessionToken));
-                              setVerifyMsg('');
-                              setVerifiedEmail('');
-                            } catch (e: any) {
-                              toast.error(e?.message || 'Falha ao solicitar verificação');
-                            } finally {
-                              setEmailConnecting(false);
-                            }
-                          }}
-                          disabled={emailConnecting || !senderEmail.trim()}
-                          className="h-8 rounded-md w-full md:w-auto text-xs px-3"
-                        >
-                          {emailConnecting ? 'Enviando…' : 'Solicitar confirmação'}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={loadEmailDbStatus}
-                          disabled={emailStatusLoading}
-                          className="h-8 rounded-md w-full md:w-auto text-xs px-3"
-                        >
-                          {emailStatusLoading ? 'Carregando…' : 'Atualizar'}
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="mt-3 grid grid-cols-1 gap-2 text-sm">
-                      <div>
-                        <div className="text-gray-500">Status</div>
-                        <div className="text-gray-900 font-medium">
-                          {emailStatus === 'VERIFIED' ? 'Conectado' : emailStatus === 'PENDING' ? 'Pendente' : emailStatus === 'DISCONNECTED' ? 'Desconectado' : emailStatus}
+                {/* Results */}
+                <div className="md:col-span-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* KRX Pay (Pagar.me) */}
+                    <button
+                      className="text-left rounded-xl border border-gray-200 bg-white hover:bg-gray-50 p-4"
+                      onClick={async () => {
+                        setAddOpen(false);
+                        if (!currentClinic?.id) return toast.error('Select a clinic');
+                        try {
+                          const res = await fetch('/api/payments/pagarme/onboard', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ clinicId: currentClinic.id })
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
+                          router.push('/doctor/integrations/payments/setup');
+                        } catch (e: any) {
+                          toast.error(e?.message || 'Failed to start KRX Pay onboarding');
+                        }
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Image src="/krxpay.png" alt="KRX Pay" width={40} height={40} className="invert" />
+                        <div>
+                          <div className="font-semibold text-gray-900">KRX Pay</div>
+                          <div className="text-xs text-gray-600">Best gateway with AI.</div>
                         </div>
                       </div>
-                      <div>
-                        <div className="text-gray-500">Remetente verificado</div>
-                        <div className="text-gray-900 font-medium break-all">{verifiedEmail || '-'}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">Nome do remetente</div>
-                        <div className="text-gray-900 font-medium break-all">{senderName || '-'}</div>
-                      </div>
-                      {emailStatus === 'PENDING' && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
-                          <Input value={verifyCode} onChange={(e) => setVerifyCode(e.target.value)} placeholder="Código de 6 dígitos" className="h-8 text-sm" />
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="secondary"
-                              onClick={async () => {
-                                if (!emailSession) return toast.error('Sessão não encontrada, solicite novamente');
-                                if (!verifyCode.trim()) return toast.error('Informe o código recebido por email');
-                                try {
-                                  setVerifying(true);
-                                  setVerifyMsg('');
-                                  const res = await fetch('/api/integrations/email/senders/confirm', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ token: emailSession, code: verifyCode.trim() })
-                                  });
-                                  const data = await res.json().catch(() => ({}));
-                                  if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
-                                  setEmailStatus('VERIFIED');
-                                  setVerifyMsg('Remetente verificado com sucesso.');
-                                  // Refresh from DB to retrieve verified email
-                                  await loadEmailDbStatus();
-                                } catch (e: any) {
-                                  setVerifyMsg(e?.message || 'Erro ao verificar código');
-                                } finally {
-                                  setVerifying(false);
-                                }
-                              }}
-                              disabled={verifying || !verifyCode.trim()}
-                              className="h-8 rounded-md w-full md:w-auto text-xs px-3"
-                            >
-                              {verifying ? 'Verificando…' : 'Confirmar código'}
-                            </Button>
-                          </div>
-                          {verifyMsg && <div className="md:col-span-3 text-[12px] text-gray-600">{verifyMsg}</div>}
+                    </button>
+                    {/* WhatsApp Official */}
+                    <button
+                      className="text-left rounded-xl border border-gray-200 bg-white hover:bg-gray-50 p-4"
+                      onClick={() => {
+                        setAddOpen(false);
+                        if (!currentClinic?.id) return toast.error('Select a clinic');
+                        const returnTo = '/doctor/integrations';
+                        window.location.href = `/api/integrations/whatsapp/oauth/start?clinicId=${encodeURIComponent(currentClinic.id)}&returnTo=${encodeURIComponent(returnTo)}`;
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Image src="/zap.png" alt="WhatsApp" width={40} height={40} />
+                        <div>
+                          <div className="font-semibold text-gray-900">WhatsApp</div>
+                          <div className="text-xs text-gray-600">Send messages and templates via the official WhatsApp API.</div>
                         </div>
-                      )}
-                      <div>
-                        <div className="text-gray-500">Webhook (interno)</div>
-                        <div className="font-mono text-xs text-gray-800 break-all">/api/webhooks/sendpulse</div>
                       </div>
-                      <p className="text-[12px] text-gray-500">A Zuzz intermedia a integração. Você só confirma o seu email e usamos as nossas credenciais para enviar. Depois podemos configurar domínio (SPF/DKIM) para melhor entregabilidade.</p>
-                    </div>
-                  </div>
-                </CardContent>
-              )}
-            </Card>
-            {/* WhatsApp (Oficial) */}
-            <Card className="relative bg-white border border-gray-200 rounded-2xl shadow-sm">
-              {blocked && (
-                <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2 py-1 text-xs">
-                  <LockClosedIcon className="h-3.5 w-3.5" /> Locked
-                </div>
-              )}
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    WhatsApp (Oficial)
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <div className="text-xs">
-                      {waStatusLoading ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-200">Carregando…</span>
-                      ) : waStatus === 'CONNECTED' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Conectado</span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Desconectado</span>
-                      )}
-                    </div>
-                    <Button size="sm" variant="outline" className="h-7" onClick={() => setWaExpanded(v => !v)}>
-                      {waExpanded ? 'Ocultar' : 'Ver detalhes'}
-                    </Button>
+                    </button>
+                    {/* Stripe (placeholder) */}
+                    <button
+                      className="text-left rounded-xl border border-gray-200 bg-white hover:bg-gray-50 p-4"
+                      onClick={() => {
+                        setAddOpen(false);
+                        toast('Stripe coming soon');
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Image src="/stripe.svg" alt="Stripe" width={40} height={40} />
+                        <div>
+                          <div className="font-semibold text-gray-900">Stripe</div>
+                          <div className="text-xs text-gray-600">Connect payments and view sales in the Stripe dashboard.</div>
+                        </div>
+                      </div>
+                    </button>
+                    {/* PayPal (placeholder) */}
+                    <button
+                      className="text-left rounded-xl border border-gray-200 bg-white hover:bg-gray-50 p-4"
+                      onClick={() => {
+                        setAddOpen(false);
+                        toast('PayPal coming soon');
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Image src="/paypal.png" alt="PayPal" width={40} height={40} />
+                        <div>
+                          <div className="font-semibold text-gray-900">PayPal</div>
+                          <div className="text-xs text-gray-600">Accept payments via PayPal. Coming soon.</div>
+                        </div>
+                      </div>
+                    </button>
                   </div>
                 </div>
-              </CardHeader>
-              {waExpanded && (
-                <CardContent>
-                  <div className={blocked ? 'opacity-50 blur-[1px] select-none pointer-events-none' : ''}>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                      <Input value={waAccessToken} onChange={(e) => setWaAccessToken(e.target.value)} placeholder="Access Token" className="h-8 text-sm" />
-                      <Input value={waPhoneNumberId} onChange={(e) => setWaPhoneNumberId(e.target.value)} placeholder="Phone Number ID" className="h-8 text-sm" />
-                      <Input value={waWabaId} onChange={(e) => setWaWabaId(e.target.value)} placeholder="WABA ID (opcional)" className="h-8 text-sm" />
-                      <div className="flex items-center gap-2">
-                        <Button onClick={connectWa} disabled={connecting || !waAccessToken.trim() || !waPhoneNumberId.trim()} className="h-8 rounded-md w-full md:w-auto text-xs px-3">
-                          {connecting ? 'Conectando…' : 'Conectar'}
-                        </Button>
-                        <Button variant="outline" onClick={loadWaStatus} disabled={waStatusLoading} className="h-8 rounded-md w-full md:w-auto text-xs px-3">Atualizar</Button>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <Button
-                        variant="outline"
-                        className="h-9 rounded-lg border-gray-200"
-                        onClick={() => {
-                          if (!currentClinic?.id) return toast.error('Selecione uma clínica');
-                          const returnTo = '/doctor/integrations';
-                          window.location.href = `/api/integrations/whatsapp/oauth/start?clinicId=${encodeURIComponent(currentClinic.id)}&returnTo=${encodeURIComponent(returnTo)}`;
-                        }}
-                      >
-                        Conectar Facebook
-                      </Button>
-                      <Button variant="secondary" className="h-9 rounded-lg" onClick={openWizard}>Wizard de número</Button>
-                      <Link href="/doctor/integrations/whatsapp/templates">
-                        <Button variant="secondary" className="h-9 rounded-lg" disabled={waStatus !== 'CONNECTED'}>Templates</Button>
-                      </Link>
-                    </div>
-                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <div className="text-gray-500">Status</div>
-                        <div className="font-medium text-gray-900">{waStatus}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">Número</div>
-                        <div className="font-medium text-gray-900">{waPhone || '-'}</div>
-                      </div>
-                      <div className="col-span-2">
-                        <div className="text-gray-500">Phone Number ID</div>
-                        <div className="font-mono text-xs text-gray-800 break-all">{waPhoneNumberId || '-'}</div>
-                      </div>
-                      <div className="col-span-2">
-                        <div className="text-gray-500">WABA ID</div>
-                        <div className="font-mono text-xs text-gray-800 break-all">{waWabaId || '-'}</div>
-                      </div>
-                    </div>
-                    <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
-                      <Input value={waTestTo} onChange={(e) => setWaTestTo(e.target.value)} placeholder="Destino (+5511999999999)" className="h-8 text-sm" />
-                      <Input value={waTestMsg} onChange={(e) => setWaTestMsg(e.target.value)} placeholder="Mensagem" className="h-8 text-sm" />
-                      <Button onClick={sendWaTest} disabled={waTesting || waStatus !== 'CONNECTED'} className="h-8 rounded-md w-full md:w-auto text-xs px-3">
-                        {waTesting ? 'Enviando…' : 'Enviar teste'}
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              )}
-            </Card>
-          </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
           {/* WhatsApp Onboarding Wizard */}
           <Dialog open={waWizardOpen} onOpenChange={setWaWizardOpen}>
             <DialogContent className="sm:max-w-[680px]">

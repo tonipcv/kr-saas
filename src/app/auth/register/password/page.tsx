@@ -98,7 +98,7 @@ function RegisterPasswordInner() {
       setIsSuccess(true);
       const createdClinicId: string | undefined = data?.clinicId;
 
-      // Try to automatically sign the user in and then navigate to plans for the created clinic
+      // Try to automatically sign the user in and then navigate to the business dashboard
       try {
         const result = await signIn('credentials', {
           email: emailParam || '',
@@ -108,8 +108,8 @@ function RegisterPasswordInner() {
 
         if (result?.ok) {
           const target = createdClinicId
-            ? `/clinic/planos-trial?clinicId=${encodeURIComponent(createdClinicId)}&newClinic=1`
-            : '/clinic/planos-trial';
+            ? `/business/dashboard?clinicId=${encodeURIComponent(createdClinicId)}&newClinic=1`
+            : '/business/dashboard';
           router.push(target);
           router.refresh();
         } else {
@@ -147,19 +147,19 @@ function RegisterPasswordInner() {
               </div>
               <h1 className="text-xl font-medium text-gray-900 mt-4">Registration complete!</h1>
               <p className="text-sm text-gray-600">
-                Your account has been created and your 14-day trial is active.
+                Your account has been created successfully.
               </p>
             </div>
 
             <div className="mt-6">
               <p className="text-center text-sm text-gray-600 mb-4">
-                Finalizing your account and redirecting to your plan selection...
+                Finalizing your account and redirecting to your dashboard...
               </p>
               <Link
-                href="/clinic/planos-trial"
+                href="/business/dashboard"
                 className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-black hover:bg-gray-900 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
               >
-                Go to plans
+                Go to dashboard
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </div>

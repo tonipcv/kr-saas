@@ -17,6 +17,7 @@ declare module "next-auth" {
       role?: string | null;
       activeDoctorSlug?: string | null;
       activeDoctorId?: string | null;
+      accessGranted?: boolean | null;
     }
   }
 
@@ -35,6 +36,7 @@ declare module "next-auth/jwt" {
     role?: string | null;
     activeDoctorSlug?: string | null;
     activeDoctorId?: string | null;
+    accessGranted?: boolean | null;
   }
 }
 
@@ -131,6 +133,7 @@ export const authOptions: AuthOptions = {
       token.role = token.role ?? null;
       token.activeDoctorSlug = token.activeDoctorSlug ?? null;
       token.activeDoctorId = token.activeDoctorId ?? null;
+      token.accessGranted = token.accessGranted ?? null;
 
       if (user) {
         token.role = user.role;
@@ -138,15 +141,22 @@ export const authOptions: AuthOptions = {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { id: user.id },
-            select: { id: true, role: true, doctor_slug: true },
+            select: { id: true, role: true, doctor_slug: true, accessGranted: true },
           });
           if (dbUser?.role === 'DOCTOR' && dbUser.doctor_slug) {
             token.activeDoctorSlug = dbUser.doctor_slug;
             token.activeDoctorId = dbUser.id;
           }
+          token.accessGranted = dbUser?.accessGranted ?? false;
         } catch (e) {
           // noop: avoid breaking auth on lookup errors
         }
+      }
+      if (!user && token?.sub && (token.accessGranted == null)) {
+        try {
+          const dbUser = await prisma.user.findUnique({ where: { id: token.sub }, select: { accessGranted: true } });
+          token.accessGranted = dbUser?.accessGranted ?? false;
+        } catch {}
       }
       return token;
     },
@@ -156,12 +166,13 @@ export const authOptions: AuthOptions = {
         session.user.role = token.role;
         session.user.activeDoctorSlug = token.activeDoctorSlug ?? null;
         session.user.activeDoctorId = token.activeDoctorId ?? null;
+        session.user.accessGranted = token.accessGranted ?? false;
 
         // Always refresh basic user fields from DB to reflect latest profile updates
         try {
           const dbUser = await prisma.user.findUnique({
             where: { id: token.sub! },
-            select: { name: true, email: true, image: true, role: true, doctor_slug: true, id: true },
+            select: { name: true, email: true, image: true, role: true, doctor_slug: true, id: true, accessGranted: true },
           });
           if (dbUser) {
             session.user.name = dbUser.name ?? session.user.name;
@@ -174,6 +185,9 @@ export const authOptions: AuthOptions = {
             if (dbUser.role === 'DOCTOR' && dbUser.doctor_slug) {
               session.user.activeDoctorSlug = dbUser.doctor_slug;
               session.user.activeDoctorId = dbUser.id;
+            }
+            if (typeof dbUser.accessGranted === 'boolean') {
+              session.user.accessGranted = dbUser.accessGranted;
             }
           }
         } catch (e) {

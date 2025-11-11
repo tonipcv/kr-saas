@@ -7,6 +7,8 @@ import TransactionsTable from '@/components/business/TransactionsTable';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 const ApexChart = dynamic(() => import('react-apexcharts'), { ssr: false }) as any;
 
@@ -57,10 +59,10 @@ function RevenueLineChart({ series, height = 220 }: { series: Array<[number, num
   }), []);
 
   if (!hasData || data.length === 0) {
-    return <div className="flex items-center justify-center text-sm text-gray-500" style={{ height: `${height}px` }}>Sem dados para o período</div>;
+    return <div className="flex items-center justify-center text-sm text-gray-500" style={{ height: `${height}px` }}>No data for the period</div>;
   }
 
-  return <ApexChart type="area" height={height} options={options} series={[{ name: 'Receita', data }]} />;
+  return <ApexChart type="area" height={height} options={options} series={[{ name: 'Revenue', data }]} />;
 }
 
 function DonutBreakdown({ title, data, palette }: { title: string; data: Array<[string, number]>; palette?: string[] }) {
@@ -86,7 +88,7 @@ function DonutBreakdown({ title, data, palette }: { title: string; data: Array<[
       {hasData ? (
         <ApexChart type="donut" height={240} series={values} options={options as any} />
       ) : (
-        <div className="h-[220px] flex items-center justify-center text-sm text-gray-500">Sem dados</div>
+        <div className="h-[220px] flex items-center justify-center text-sm text-gray-500">No data</div>
       )}
     </div>
   );
@@ -233,8 +235,40 @@ export default function BusinessDashboard() {
   // While checking payments, avoid flicker
   if (paymentsReady === null) return null;
 
+  // Locale-aware strings for the access gating modal
+  const isPT = typeof navigator !== 'undefined' && navigator.language && navigator.language.toLowerCase().startsWith('pt');
+  const i18n = {
+    title: isPT ? 'Complete seu cadastro' : 'Complete your registration',
+    description: isPT
+      ? 'Para acessar o dashboard, finalize seu cadastro com os dados do negócio e documentos necessários.'
+      : 'To access the dashboard, please complete your onboarding with business details and required documents.',
+    primary: isPT ? 'Preencher dados' : 'Fill details',
+    secondary: isPT ? 'Sair' : 'Sign out',
+  };
+
   return (
     <div className="min-h-screen bg-white">
+      {/* Access gating modal */}
+      <Dialog open={session?.user?.accessGranted === false} onOpenChange={() => { /* block closing */ }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{i18n.title}</DialogTitle>
+            <DialogDescription>
+              {i18n.description}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="sm:justify-start">
+            <div className="flex gap-2">
+              <Link href="/business/merchant-application" className="w-full">
+                <Button className="w-full">{i18n.primary}</Button>
+              </Link>
+              <Link href="/auth/signout" className="w-full">
+                <Button variant="outline" className="w-full">{i18n.secondary}</Button>
+              </Link>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="lg:ml-64">
         <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 bg-gray-50">
           {/* Header */}
@@ -249,7 +283,7 @@ export default function BusinessDashboard() {
                 onChange={(e) => setDateFrom(e.target.value)}
                 className="h-8 rounded-md border border-gray-300 bg-white px-2 text-sm"
               />
-              <span className="text-gray-500 text-sm">até</span>
+              <span className="text-gray-500 text-sm">to</span>
               <input
                 type="date"
                 value={dateTo}
@@ -262,15 +296,15 @@ export default function BusinessDashboard() {
           {/* KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
             <div className="rounded-2xl border border-gray-200 bg-white p-3">
-              <div className="text-[11px] text-gray-500">Receita</div>
+              <div className="text-[11px] text-gray-500">Revenue</div>
               <div className="text-[22px] font-semibold text-gray-900">{formatBRL(summary.total)}</div>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-3">
-              <div className="text-[11px] text-gray-500">Transações</div>
+              <div className="text-[11px] text-gray-500">Transactions</div>
               <div className="text-[22px] font-semibold text-gray-900">{summary.purchasesCount}</div>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-3">
-              <div className="text-[11px] text-gray-500">Ticket médio</div>
+              <div className="text-[11px] text-gray-500">Average order value</div>
               <div className="text-[22px] font-semibold text-gray-900">{formatBRL(summary.aov)}</div>
             </div>
           </div>
@@ -279,14 +313,14 @@ export default function BusinessDashboard() {
           <div className="space-y-3 mb-4">
             <div className="rounded-2xl border border-gray-200 bg-white p-3">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-sm font-medium text-gray-900">Receita por dia</div>
-                <div className="text-xs text-gray-500">{revenueSeries.length} dias</div>
+                <div className="text-sm font-medium text-gray-900">Revenue per day</div>
+                <div className="text-xs text-gray-500">{revenueSeries.length} days</div>
               </div>
               <RevenueLineChart series={revenueSeries} height={260} />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="rounded-2xl border border-gray-200 bg-white p-3">
-                <DonutBreakdown title="Métodos" data={methodBreakdown} palette={["#22C55E", "#60A5FA", "#F59E0B", "#9CA3AF"]} />
+                <DonutBreakdown title="Methods" data={methodBreakdown} palette={["#22C55E", "#60A5FA", "#F59E0B", "#9CA3AF"]} />
               </div>
               <div className="rounded-2xl border border-gray-200 bg-white p-3">
                 <DonutBreakdown title="Status" data={statusBreakdown} palette={["#16A34A", "#F59E0B", "#EF4444", "#93C5FD", "#A78BFA"]} />
@@ -298,13 +332,13 @@ export default function BusinessDashboard() {
           <div className="rounded-2xl border border-gray-200 bg-white p-3">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <div className="text-sm font-medium text-gray-900">Transações recentes</div>
-                <div className="text-xs text-gray-500">Mostrando {Math.min(transactions.length, visibleCount)} de {transactions.length}</div>
+                <div className="text-sm font-medium text-gray-900">Recent transactions</div>
+                <div className="text-xs text-gray-500">Showing {Math.min(transactions.length, visibleCount)} of {transactions.length}</div>
               </div>
               <Link
                 href="/business/payments"
                 className="inline-flex items-center h-8 px-3 rounded-md text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
-              >Ver mais</Link>
+              >View more</Link>
             </div>
             <TransactionsTable transactions={visibleTransactions as any} />
           </div>

@@ -26,6 +26,20 @@ function RegisterSlugInner() {
   const [baseDomain] = useState<string>(
     (typeof window !== 'undefined' && (process.env.NEXT_PUBLIC_APP_BASE_DOMAIN || 'zuzz.vu')) || 'zuzz.vu'
   );
+  const displayDomain = (() => {
+    try {
+      const raw = (baseDomain || '').trim();
+      if (!raw) return 'example.com';
+      const cleaned = raw.replace(/^\.+/, '').replace(/\/+$/, '');
+      if (/^https?:\/\//i.test(cleaned)) {
+        const u = new URL(cleaned);
+        return u.host;
+      }
+      return cleaned;
+    } catch {
+      return 'example.com';
+    }
+  })();
 
   // Redirecionar se não tiver email ou token
   useEffect(() => {
@@ -242,7 +256,7 @@ function RegisterSlugInner() {
 
             <div>
               <label htmlFor="subdomain" className="block text-sm font-medium text-gray-700 mb-2">
-                Business subdomain
+                Slug
               </label>
               <div className="relative">
                 <input
@@ -252,16 +266,13 @@ function RegisterSlugInner() {
                   onChange={handleSubdomainChange}
                   required
                   autoComplete="off"
-                  className="w-full pr-[90px] pl-4 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900"
-                  placeholder="name"
+                  className="w-full pr-10 pl-4 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900"
+                  placeholder="unique-name"
                   minLength={3}
                   maxLength={30}
                 />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                  <span className="text-gray-500">.{baseDomain}</span>
-                </div>
                 {subdomain && (
-                  <div className="absolute inset-y-0 right-20 flex items-center pr-2">
+                  <div className="absolute inset-y-0 right-3 flex items-center">
                     {isChecking ? (
                       <div className="h-4 w-4 border-2 border-t-blue-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></div>
                     ) : isAvailable === true ? (
@@ -273,14 +284,11 @@ function RegisterSlugInner() {
                 )}
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                Your link will look like: <span className="font-medium text-gray-700">{subdomain || 'name'}.{baseDomain}</span>
-              </p>
-              <p className="mt-1 text-xs text-gray-500">
                 Use only lowercase letters, numbers and hyphen. Minimum of 3 characters.
               </p>
               {isAvailable === false && (
                 <p className="mt-1 text-xs text-red-500">
-                  This subdomain is already in use. Please choose another.
+                  This slug is already in use. Please choose another.
                 </p>
               )}
             </div>
