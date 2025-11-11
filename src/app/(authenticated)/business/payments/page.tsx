@@ -2,6 +2,7 @@ import React from 'react';
 import TransactionsTable from '@/components/business/TransactionsTable';
 import CheckoutSessionsTable from '@/components/business/CheckoutSessionsTable';
 import { prisma } from '@/lib/prisma';
+import Link from 'next/link';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -70,8 +71,8 @@ export default async function PaymentsDataPage({ searchParams }: { searchParams?
     );
   }
 
-  // Fetch data server-side filtered by current clinic
-  const [customers, methods, transactions] = await Promise.all([
+  // Fetch data server-side filtered by current clinic using a single connection
+  const [customers, methods, transactions] = await prisma.$transaction([
     prisma.$queryRawUnsafe<any[]>(
       `SELECT pc.id,
               pc.provider_customer_id,
@@ -163,6 +164,19 @@ export default async function PaymentsDataPage({ searchParams }: { searchParams?
   const qStatus = (typeof sp?.status === 'string' ? sp?.status : Array.isArray(sp?.status) ? sp?.status?.[0] : '')?.trim() || '';
   const qFrom = (typeof sp?.from === 'string' ? sp?.from : Array.isArray(sp?.from) ? sp?.from?.[0] : '')?.trim() || '';
   const qTo = (typeof sp?.to === 'string' ? sp?.to : Array.isArray(sp?.to) ? sp?.to?.[0] : '')?.trim() || '';
+  const qTabRaw = (typeof sp?.tab === 'string' ? sp.tab : Array.isArray(sp?.tab) ? sp.tab?.[0] : '')?.trim() || '';
+  const allowedTabs = new Set(['transactions','customers','methods','sessions']);
+  const currentTab = allowedTabs.has(qTabRaw) ? qTabRaw : 'transactions';
+
+  const mkHref = (tab: string) => {
+    const qs = new URLSearchParams();
+    qs.set('tab', tab);
+    if (qClinic) qs.set('clinic', qClinic);
+    if (qStatus) qs.set('status', qStatus);
+    if (qFrom) qs.set('from', qFrom);
+    if (qTo) qs.set('to', qTo);
+    return `/business/payments?${qs.toString()}`;
+  };
 
   // Build WHERE dynamically and parameters list to avoid injection
   const whereParts: string[] = [];
@@ -211,12 +225,12 @@ export default async function PaymentsDataPage({ searchParams }: { searchParams?
           </div>
 
           <div className="rounded-2xl border border-gray-200 bg-white p-3">
-            <Tabs defaultValue="transactions">
+            <Tabs defaultValue={currentTab}>
               <TabsList className="mb-3">
-                <TabsTrigger value="transactions">Transactions</TabsTrigger>
-                <TabsTrigger value="customers">Customers</TabsTrigger>
-                <TabsTrigger value="methods">Methods</TabsTrigger>
-                <TabsTrigger value="sessions">Checkout Sessions</TabsTrigger>
+                <TabsTrigger value="transactions" asChild><Link href={mkHref('transactions')}>Transactions</Link></TabsTrigger>
+                <TabsTrigger value="customers" asChild><Link href={mkHref('customers')}>Customers</Link></TabsTrigger>
+                <TabsTrigger value="methods" asChild><Link href={mkHref('methods')}>Methods</Link></TabsTrigger>
+                <TabsTrigger value="sessions" asChild><Link href={mkHref('sessions')}>Checkout Sessions</Link></TabsTrigger>
               </TabsList>
 
               <TabsContent value="transactions">

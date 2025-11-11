@@ -20,10 +20,10 @@ export default function DoctorBroadcastPage() {
   // State – Channel & Composer
   const [channel, setChannel] = useState<'whatsapp'|'sms'|'email'>('whatsapp');
   const [subject, setSubject] = useState<string>("");
-  const [message, setMessage] = useState<string>("Olá! Esta é uma mensagem de teste.");
+  const [message, setMessage] = useState<string>("Hello! This is a test message.");
   const [useTemplate, setUseTemplate] = useState<boolean>(true);
   const [templateName, setTemplateName] = useState<string>("");
-  const [templateLanguage, setTemplateLanguage] = useState<string>("pt_BR");
+  const [templateLanguage, setTemplateLanguage] = useState<string>("en_US");
   const [loadingTemplates, setLoadingTemplates] = useState<boolean>(false);
   const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [approvedTemplates, setApprovedTemplates] = useState<Array<{ id: string; name: string; status: string; language: string; category?: string }>>([]);
@@ -94,7 +94,7 @@ export default function DoctorBroadcastPage() {
   const previewText = useMemo(() => {
     if (channel === 'whatsapp' && useTemplate && templateName) {
       const body = templateBody?.trim() || "";
-      if (templateLoading) return `Template: ${templateName} (${templateLanguage})\n\nCarregando conteúdo do template…`;
+      if (templateLoading) return `Template: ${templateName} (${templateLanguage})\n\nLoading template content…`;
       if (templateLoadError) return `Template: ${templateName} (${templateLanguage})\n\n${templateLoadError}`;
       if (body) return `Template: ${templateName} (${templateLanguage})\n\n${body}`;
       // fallback to free message if template body isn't available yet
@@ -186,9 +186,9 @@ export default function DoctorBroadcastPage() {
   }, [channel, audienceSample, to]);
 
   // Derived – Substitute variables {{1}}, {{2}} for preview
-  const sampleName = useMemo(() => (audienceSample?.[0]?.name || '').split(' ')[0] || 'João', [audienceSample]);
-  const sampleClinic = useMemo(() => currentClinic?.name || 'Sua clínica', [currentClinic]);
-  const sampleVars = useMemo(() => [sampleName, sampleClinic, 'https://exemplo.link', '1234'], [sampleName, sampleClinic]);
+  const sampleName = useMemo(() => (audienceSample?.[0]?.name || '').split(' ')[0] || 'John', [audienceSample]);
+  const sampleClinic = useMemo(() => currentClinic?.name || 'Your business', [currentClinic]);
+  const sampleVars = useMemo(() => [sampleName, sampleClinic, 'https://example.link', '1234'], [sampleName, sampleClinic]);
   const applyVars = (text?: string) => {
     if (!text) return '';
     return text.replace(/\{\{(\d+)\}\}/g, (_m, g1) => {

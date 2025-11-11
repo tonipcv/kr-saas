@@ -35,7 +35,7 @@ export default function AutomationPage() {
       }
       setList(Array.isArray(json?.data) ? json.data : []);
     } catch (e: any) {
-      setError(e?.message || 'Erro inesperado');
+      setError(e?.message || 'Unexpected error');
       setList([]);
     } finally {
       setLoading(false);
@@ -73,7 +73,7 @@ export default function AutomationPage() {
       if (!res.ok) { setError(json?.error || `HTTP ${res.status}`); return; }
       await load();
     } catch (e: any) {
-      setError(e?.message || 'Erro inesperado');
+      setError(e?.message || 'Unexpected error');
     }
   }
 
@@ -85,7 +85,7 @@ export default function AutomationPage() {
       if (!res.ok) { setError(json?.error || `HTTP ${res.status}`); setDeletingId(null); return; }
       await load();
     } catch (e: any) {
-      setError(e?.message || 'Erro inesperado');
+      setError(e?.message || 'Unexpected error');
     } finally {
       setDeletingId(null);
     }
@@ -98,33 +98,33 @@ export default function AutomationPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Automation</h1>
-              <p className="text-xs text-gray-500">Crie automações por trigger para executar ações automaticamente</p>
+              <p className="text-xs text-gray-500">Create trigger-based automations to execute actions automatically</p>
             </div>
             <div className="flex gap-2">
               <Link href="/doctor/automation/playbooks"><Button variant="outline" size="sm">Playbooks</Button></Link>
-              <Link href="/doctor/automation/new"><Button size="sm" className="h-8 bg-gray-900 hover:bg-black text-white">Nova automação</Button></Link>
+              <Link href="/doctor/automation/new"><Button size="sm" className="h-8 bg-gray-900 hover:bg-black text-white">New automation</Button></Link>
             </div>
           </div>
 
           {/* List */}
           <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
             <CardHeader className="px-4 py-3 border-b border-gray-100">
-              <CardTitle className="text-sm font-semibold text-gray-900">Minhas automações</CardTitle>
+              <CardTitle className="text-sm font-semibold text-gray-900">My automations</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4 pt-3">
-              {loading && <p className="text-sm text-gray-500">Carregando…</p>}
-              {!loading && list.length === 0 && <p className="text-sm text-gray-500">Nenhuma automação criada.</p>}
+              {loading && <p className="text-sm text-gray-500">Loading…</p>}
+              {!loading && list.length === 0 && <p className="text-sm text-gray-500">No automations yet.</p>}
               {list.length > 0 && (
                 <div className="overflow-x-auto overflow-visible relative">
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="text-left text-gray-600">
-                        <th className="py-2 pr-4">Nome</th>
+                        <th className="py-2 pr-4">Name</th>
                         <th className="py-2 pr-4">Trigger</th>
-                        <th className="py-2 pr-4">Ação</th>
+                        <th className="py-2 pr-4">Action</th>
                         <th className="py-2 pr-4">Status</th>
-                        <th className="py-2 pr-4">Criada em</th>
-                        <th className="py-2 pr-4">Ações</th>
+                        <th className="py-2 pr-4">Created at</th>
+                        <th className="py-2 pr-4">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -133,8 +133,8 @@ export default function AutomationPage() {
                           <td className="py-2 pr-4">{a.name}</td>
                           <td className="py-2 pr-4">{a.trigger_type}</td>
                           <td className="py-2 pr-4">{a.action_type}</td>
-                          <td className="py-2 pr-4">{a.is_active ? 'Ativa' : 'Pausada'}</td>
-                          <td className="py-2 pr-4">{new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(a.created_at))}</td>
+                          <td className="py-2 pr-4">{a.is_active ? 'Active' : 'Paused'}</td>
+                          <td className="py-2 pr-4">{new Intl.DateTimeFormat('en-US', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(a.created_at))}</td>
                           <td className="py-2 pr-4">
                             <div className="inline-block text-left" data-kebab-menu>
                               <Button
@@ -159,12 +159,12 @@ export default function AutomationPage() {
                                   data-kebab-menu
                                 >
                                   <div className="py-1 text-sm">
-                                    <Link href={`/doctor/automation/${encodeURIComponent(a.id)}/edit`} className="block px-3 py-2 hover:bg-gray-50" onClick={() => { setMenuOpenId(null); setMenuPos(null); }}>Editar</Link>
+                                    <Link href={`/doctor/automation/${encodeURIComponent(a.id)}/edit`} className="block px-3 py-2 hover:bg-gray-50" onClick={() => { setMenuOpenId(null); setMenuPos(null); }}>Edit</Link>
                                     <button className="block w-full text-left px-3 py-2 hover:bg-gray-50" onClick={() => { setMenuOpenId(null); setMenuPos(null); toggleAutomation(a.id); }}>
-                                      {a.is_active ? 'Pausar' : 'Ativar'}
+                                      {a.is_active ? 'Pause' : 'Activate'}
                                     </button>
                                     <button className="block w-full text-left px-3 py-2 text-red-600 hover:bg-red-50" onClick={() => { setMenuOpenId(null); setMenuPos(null); deleteAutomation(a.id); }} disabled={deletingId === a.id}>
-                                      {deletingId === a.id ? 'Excluindo…' : 'Excluir'}
+                                      {deletingId === a.id ? 'Deleting…' : 'Delete'}
                                     </button>
                                   </div>
                                 </div>
