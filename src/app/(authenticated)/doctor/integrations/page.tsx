@@ -686,6 +686,22 @@ export default function IntegrationsPage() {
                         </div>
                       </div>
                     </button>
+                    {/* Shopify (placeholder) */}
+                    <button
+                      className="text-left rounded-xl border border-gray-200 bg-white hover:bg-gray-50 p-4"
+                      onClick={() => {
+                        setAddOpen(false);
+                        toast('Shopify coming soon');
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Image src="/shopify.png" alt="Shopify" width={40} height={40} />
+                        <div>
+                          <div className="font-semibold text-gray-900">Shopify</div>
+                          <div className="text-xs text-gray-600">Sync products and orders. Coming soon.</div>
+                        </div>
+                      </div>
+                    </button>
                   </div>
                 </div>
               </div>

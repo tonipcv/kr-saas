@@ -114,7 +114,7 @@ export function SidebarClinicSelector() {
         <div className="absolute left-3 right-3 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
           <div className="p-2">
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide px-2 py-1">
-              Suas Clínicas
+              Your Businesses
             </div>
             
             {availableClinics.map((clinic) => (
@@ -157,7 +157,7 @@ export function SidebarClinicSelector() {
                   
                   <div className="flex items-center gap-1 text-xs text-gray-500">
                     <Users className="h-3 w-3" />
-                    {clinic.members.length} membro{clinic.members.length !== 1 ? 's' : ''}
+                    {clinic.members.length} {clinic.members.length === 1 ? 'member' : 'members'}
                     <span className="mx-1">•</span>
                     <button
                       type="button"
@@ -189,8 +189,7 @@ export function SidebarClinicSelector() {
                   <Plus className="h-4 w-4 text-blue-600" />
                 </div>
                 <div>
-                  <span className="font-medium text-sm">Criar novo negócio</span>
-                  <div className="text-xs text-gray-500">Defina o nome e o subdomínio antes de escolher o plano</div>
+                  <span className="font-medium text-sm">Add Business</span>
                 </div>
               </button>
             </div>
