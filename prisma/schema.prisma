@@ -2,6 +2,27 @@ generator client {
   provider = "prisma-client-js"
 }
 
+/// Normalized per-country pricing per offer and provider
+model OfferPrice {
+  id            String           @id @default(cuid())
+  offerId       String           @map("offer_id")
+  country       String           @db.VarChar(2)
+  currency      Currency
+  provider      PaymentProvider
+  amountCents   Int              @default(0) @map("amount_cents")
+  externalPriceId String?        @map("external_price_id")
+  active        Boolean          @default(true)
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  offer         Offer            @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@unique([offerId, country, currency, provider])
+  @@index([offerId])
+  @@index([country, currency])
+  @@map("offer_prices")
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -95,6 +116,8 @@ model products {
   coupons         Coupon[]               @relation("ProductCoupons")
   // New: Offers associated with this product (how it's sold)
   offers          Offer[]
+  // New: Provider integrations per product (Stripe, KRXPAY, etc)
+  integrations    ProductIntegration[]
 
   @@index([doctorId])
   @@index([categoryId])
@@ -179,6 +202,9 @@ model Merchant {
   createdAt         DateTime       @default(now()) @map("created_at")
   updatedAt         DateTime       @default(now()) @updatedAt @map("updated_at")
   clinic            Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  // Back-relations
+  integrations     MerchantIntegration[]
 
   @@map("merchants")
 }
@@ -762,6 +788,7 @@ enum Currency {
   BRL
   USD
   EUR
+  MXN
 }
 
 // Supported payment methods per offer
@@ -781,6 +808,8 @@ model Offer {
   description          String?
   currency             Currency       @default(BRL)
   priceCents           Int            @map("pricecents")
+  // Preferred provider override for routing hierarchy (optional)
+  preferredProvider    PaymentProvider? @map("preferred_provider")
   maxInstallments      Int?           @default(1) @map("maxinstallments")
   installmentMinCents  Int?           @map("installmentmincents")
   active               Boolean        @default(true)
@@ -789,16 +818,40 @@ model Offer {
   intervalUnit         SubscriptionInterval? @map("intervalunit")
   trialDays            Int?           @map("trialdays")
   checkoutUrl          String?        @map("checkouturl")
+  providerConfig       Json?          @map("provider_config")
+
   createdAt            DateTime       @default(now()) @map("createdat")
   updatedAt            DateTime       @updatedAt @map("updatedat")
 
   // Relations
   product              products       @relation(fields: [productId], references: [id], onDelete: Cascade)
   paymentMethods       OfferPaymentMethod[]
+  prices               OfferPrice[]
 
   @@index([productId])
   @@index([isSubscription])
   @@map("offers")
+}
+
+/// Merchant-scoped routing rule to select provider by location/method with optional product/offer scope
+model PaymentRoutingRule {
+  id          String           @id @default(cuid())
+  merchantId  String           @map("merchant_id")
+  productId   String?          @map("product_id")
+  offerId     String?          @map("offer_id")
+  country     String?          @db.VarChar(2)
+  method      PaymentMethod?
+  provider    PaymentProvider
+  priority    Int              @default(100)
+  isActive    Boolean          @default(true) @map("is_active")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  @@index([merchantId, isActive, priority])
+  @@index([merchantId, country, method])
+  @@index([productId])
+  @@index([offerId])
+  @@map("payment_routing_rules")
 }
 
 model OfferPaymentMethod {
@@ -814,6 +867,23 @@ model OfferPaymentMethod {
   @@map("offer_payment_methods")
 }
 
+/// Gateway integrations per product (e.g., Stripe Product, KRXPay Item)
+model ProductIntegration {
+  id                String           @id @default(cuid())
+  productId         String           @map("product_id")
+  provider          PaymentProvider
+  externalProductId String           @map("external_product_id")
+  metadata          Json?
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  product           products         @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, provider])
+  @@index([provider])
+  @@map("product_integrations")
+}
+
 model PaymentTransaction {
   id                 String   @id
   provider           String
@@ -822,12 +892,15 @@ model PaymentTransaction {
   doctorId           String?  @map("doctor_id")
   patientProfileId   String?  @map("patient_profile_id")
   clinicId           String?  @map("clinic_id")
+  merchantId         String?  @map("merchant_id")
   productId          String?  @map("product_id")
   amountCents        Int      @default(0) @map("amount_cents")
   currency           String   @default("BRL")
   installments       Int?
   paymentMethodType  String?  @map("payment_method_type")
   status             String   @default("processing")
+  // Progressive migration to unified enum-based status machine
+  status_v2          PaymentStatus?
   rawPayload         Json?    @map("raw_payload")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
@@ -835,12 +908,16 @@ model PaymentTransaction {
   // Optional back-relation to CheckoutSession
   checkoutSession    CheckoutSession? @relation("SessionPayment")
 
+  // New unified provider enum (progressive migration)
+  provider_v2        PaymentProvider?
+
   @@index([doctorId])
   @@index([productId])
   @@index([createdAt])
   @@index([providerOrderId])
   @@index([provider, providerChargeId])
   @@index([updatedAt])
+  @@index([merchantId])
   @@map("payment_transactions")
 }
 
@@ -936,6 +1013,10 @@ model CheckoutSession {
   productId              String?                 @map("product_id")
   offerId                String?                 @map("offer_id")
   slug                   String?
+  // Provider and localization (multi-gateway)
+  provider               PaymentProvider?
+  country                String?                 @db.VarChar(2)
+  locale                 String?                 @db.VarChar(10)
 
   // State
   status                 CheckoutSessionStatus   @default(started)
@@ -1323,11 +1404,27 @@ model WebhookEvent {
   attempts          Int?
   raw               Json
 
+  // Idempotency and retry strategy (extended)
+  provider_event_id String?   @map("provider_event_id")
+  processed         Boolean   @default(false) @map("processed")
+  processing_error  String?   @map("processing_error")
+  retry_count       Int       @default(0) @map("retry_count")
+  max_retries       Int       @default(3) @map("max_retries")
+  next_retry_at     DateTime? @map("next_retry_at")
+  last_retry_at     DateTime? @map("last_retry_at")
+  error_type        String?   @map("error_type")
+  is_retryable      Boolean   @default(true) @map("is_retryable")
+  moved_dead_letter Boolean   @default(false) @map("moved_dead_letter")
+  dead_letter_reason String?  @map("dead_letter_reason")
+
   @@unique([provider, hook_id], map: "webhook_events_provider_hook_id_key")
   @@index([type], map: "idx_webhook_events_type")
   @@index([resource_order_id], map: "idx_webhook_events_order")
   @@index([resource_charge_id], map: "idx_webhook_events_charge")
   @@index([received_at], map: "idx_webhook_events_received")
+  @@unique([provider, provider_event_id], map: "webhook_events_provider_event_unique")
+  @@index([provider, type, processed], map: "idx_webhook_events_processing")
+  @@index([processed, received_at], map: "idx_webhook_events_unprocessed")
   @@map("webhook_events")
 }
 
@@ -1548,4 +1645,53 @@ model PaymentCustomer {
   @@index([clinicId])
   @@index([document])
   @@map("payment_customers")
+}
+
+// ===== Payments: Provider enum and integrations =====
+
+enum PaymentProvider {
+  KRXPAY
+  STRIPE
+  ADYEN
+  PAYPAL
+  MERCADOPAGO
+  PAGARME
+  OPENFINANCE
+}
+
+model MerchantIntegration {
+  id           String          @id @default(cuid())
+  merchantId   String          @map("merchant_id")
+  provider     PaymentProvider
+  credentials  Json
+  config       Json?
+  isActive     Boolean         @default(true) @map("is_active")
+  isPrimary    Boolean         @default(false) @map("is_primary")
+  connectedAt  DateTime        @default(now()) @map("connected_at")
+  lastUsedAt   DateTime?       @map("last_used_at")
+  lastError    String?         @map("last_error")
+  lastErrorAt  DateTime?       @map("last_error_at")
+
+  merchant     Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, provider])
+  @@index([merchantId, isActive])
+  @@index([provider, isActive])
+  @@map("merchant_integrations")
+}
+
+// Unified payment status machine (progressive adoption via PaymentTransaction.status_v2)
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  REQUIRES_ACTION
+  SUCCEEDED
+  FAILED
+  CANCELED
+  EXPIRED
+  REFUNDING
+  REFUNDED
+  PARTIALLY_REFUNDED
+  CHARGEBACK
+  DISPUTED
 }

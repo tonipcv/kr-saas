@@ -20,6 +20,34 @@ import { useRouter } from 'next/navigation';
 import { useClinic } from '@/contexts/clinic-context';
 import { ProtocolImagePicker } from '@/components/protocol/protocol-image-picker';
 
+// Country helpers (ISO2 + English name) and flag renderer via regional indicators
+const COUNTRIES: Array<{ code: string; name: string }> = [
+  { code: 'BR', name: 'Brazil' },
+  { code: 'US', name: 'United States' },
+  { code: 'PT', name: 'Portugal' },
+  { code: 'ES', name: 'Spain' },
+  { code: 'MX', name: 'Mexico' },
+  { code: 'AR', name: 'Argentina' },
+  { code: 'CL', name: 'Chile' },
+  { code: 'CO', name: 'Colombia' },
+  { code: 'GB', name: 'United Kingdom' },
+  { code: 'FR', name: 'France' },
+  { code: 'DE', name: 'Germany' },
+  { code: 'IT', name: 'Italy' },
+  { code: 'CA', name: 'Canada' },
+  { code: 'AU', name: 'Australia' },
+  { code: 'JP', name: 'Japan' },
+  { code: 'CN', name: 'China' },
+  { code: 'IN', name: 'India' },
+];
+function flagEmoji(iso2: string) {
+  const code = (iso2 || '').toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return '🏳️';
+  const A = 0x1f1e6; // Regional Indicator Symbol Letter A
+  const chars = Array.from(code).map(c => String.fromCodePoint(A + (c.charCodeAt(0) - 65))).join('');
+  return chars;
+}
+
 export default function CreateProductPage() {
   const router = useRouter();
   const { currentClinic } = useClinic();
@@ -41,6 +69,29 @@ export default function CreateProductPage() {
     allowPIX: true,
     allowCARD: true,
   });
+
+  // Gateway por localização (MVP)
+  const [routingUsePlatformDefault, setRoutingUsePlatformDefault] = useState(true);
+  const [routingDefaultProvider, setRoutingDefaultProvider] = useState<'KRXPAY' | 'STRIPE'>('KRXPAY');
+  const [routingOverrides, setRoutingOverrides] = useState<Array<{ country: string; provider: 'KRXPAY'|'STRIPE' }>>([]);
+  const [merchantId, setMerchantId] = useState<string>('');
+  const [pgConnected, setPgConnected] = useState<boolean>(false);
+  const [stripeConnected, setStripeConnected] = useState<boolean>(false);
+
+  useEffect(() => {
+    const loadMerchantAndStatuses = async () => {
+      try {
+        if (!currentClinic?.id) return;
+        const m = await fetch(`/api/admin/integrations/merchant/by-clinic?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
+        if (m?.exists && m?.id) setMerchantId(String(m.id));
+        const pg = await fetch(`/api/payments/pagarme/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
+        setPgConnected(!!pg?.connected);
+        const st = await fetch(`/api/admin/integrations/stripe/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
+        setStripeConnected(!!st?.connected);
+      } catch {}
+    };
+    loadMerchantAndStatuses();
+  }, [currentClinic?.id]);
 
   const getBaseUrl = () => {
     const dom = (process.env.NEXT_PUBLIC_APP_BASE_DOMAIN || process.env.APP_BASE_DOMAIN) as string | undefined;
@@ -199,6 +250,26 @@ export default function CreateProductPage() {
             // If offer creation fails, still go to edit page
             router.push(`/business/products/${productId}/edit`);
           }
+          // Persist routing rules if configured
+          try {
+            if (merchantId && productId) {
+              // If not using platform default, create a default rule without country
+              if (!routingUsePlatformDefault) {
+                await fetch('/api/routing/rules', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ merchantId, productId, provider: routingDefaultProvider, priority: 100, isActive: true })
+                });
+              }
+              // Create overrides by country
+              for (const ov of routingOverrides) {
+                if (!ov.country || !ov.provider) continue;
+                await fetch('/api/routing/rules', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ merchantId, productId, country: ov.country.toUpperCase(), provider: ov.provider, priority: 50, isActive: true })
+                });
+              }
+            }
+          } catch {}
         } else {
           router.push('/business/products');
         }
@@ -480,6 +551,78 @@ export default function CreateProductPage() {
                     </div>
                     <Switch id="isActive" checked={formData.isActive} onCheckedChange={(checked) => handleInputChange('isActive', checked)} />
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Gateway por localização */}
+              <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-semibold text-gray-900">Gateway por localização</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-gray-900 font-medium">Usar padrão da plataforma</Label>
+                      <p className="text-xs text-gray-500">Padrão: BR → KRXPay, outros → Stripe</p>
+                    </div>
+                    <Switch checked={routingUsePlatformDefault} onCheckedChange={setRoutingUsePlatformDefault} />
+                  </div>
+                  {!routingUsePlatformDefault && (
+                    <>
+                      <div>
+                        <Label className="text-gray-900 font-medium">Default gateway</Label>
+                        <div className="mt-2 w-60">
+                          <Select value={routingDefaultProvider} onValueChange={(v: any) => setRoutingDefaultProvider(v)}>
+                            <SelectTrigger className="h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900">
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="KRXPAY" disabled={!pgConnected}>KRX Pay{!pgConnected ? ' (inativo)' : ''}</SelectItem>
+                              <SelectItem value="STRIPE" disabled={!stripeConnected}>Stripe{!stripeConnected ? ' (inativo)' : ''}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-gray-900 font-medium">Overrides por país</Label>
+                          <Button type="button" variant="outline" className="h-8" onClick={() => setRoutingOverrides(prev => ([...prev, { country: '', provider: 'KRXPAY' }]))}>Adicionar país</Button>
+                        </div>
+                        <div className="space-y-2">
+                          {routingOverrides.map((ov, idx) => (
+                            <div key={idx} className="flex gap-2 items-center">
+                              <div className="w-64">
+                                <Select value={(ov.country || '').toUpperCase()} onValueChange={(v: any) => {
+                                  setRoutingOverrides(list => list.map((x, i) => i === idx ? { ...x, country: v } : x));
+                                }}>
+                                  <SelectTrigger className="h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900">
+                                    <SelectValue placeholder="Select country" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {COUNTRIES.map(c => (
+                                      <SelectItem key={c.code} value={c.code}>
+                                        {flagEmoji(c.code)} {c.name} ({c.code})
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="w-52">
+                                <Select value={ov.provider} onValueChange={(v: any) => setRoutingOverrides(list => list.map((x, i) => i === idx ? { ...x, provider: v } : x))}>
+                                  <SelectTrigger className="h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900"><SelectValue placeholder="Gateway" /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="KRXPAY" disabled={!pgConnected}>KRX Pay{!pgConnected ? ' (inativo)' : ''}</SelectItem>
+                                    <SelectItem value="STRIPE" disabled={!stripeConnected}>Stripe{!stripeConnected ? ' (inativo)' : ''}</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <Button type="button" variant="ghost" className="h-8" onClick={() => setRoutingOverrides(list => list.filter((_, i) => i !== idx))}>Remover</Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 

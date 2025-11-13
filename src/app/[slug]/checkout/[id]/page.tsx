@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PhoneInput } from 'react-international-phone';
 import 'react-international-phone/style.css';
+import { getCurrencyForCountry, hasCurrencyMapping } from '@/lib/payments/countryCurrency';
 
 type ClinicBranding = {
   theme?: 'LIGHT' | 'DARK';
@@ -46,6 +47,10 @@ export default function BrandedCheckoutPage() {
   const productId = params.id;
   const sp = useSearchParams();
   const offerParam = useMemo(() => sp?.get('offer') || null, [sp]);
+  const countryParam = useMemo(() => {
+    const c = (sp?.get('country') || sp?.get('cc') || '').toUpperCase();
+    return c && c.length === 2 ? c : null;
+  }, [sp]);
 
   const [branding, setBranding] = useState<ClinicBranding>({});
   const [product, setProduct] = useState<Product | null>(null);
@@ -81,6 +86,74 @@ export default function BrandedCheckoutPage() {
   const [preview, setPreview] = useState<any>(null);
   const [pricing, setPricing] = useState<any>(null);
   const [cardStatus, setCardStatus] = useState<null | { approved: boolean; status?: string; message?: string; last4?: string; brand?: string }>(null);
+  // Provider config and country/currency
+  const [providerConfig, setProviderConfig] = useState<any>(null);
+  const [countryMenuOpen, setCountryMenuOpen] = useState(false);
+  // Lightweight i18n based on browser language
+  const isEN = useMemo(() => {
+    if (typeof navigator === 'undefined') return false;
+    const lang = (navigator.language || '').toLowerCase();
+    return lang.startsWith('en');
+  }, []);
+  const t = useMemo(() => {
+    const en = {
+      cardholder_name: 'Cardholder name',
+      cardholder_placeholder: 'Full name on card',
+      card_information: 'Card information',
+      installments: 'Installments',
+      country_region: 'Country or region',
+      buy_now: 'Pay now',
+      processing: 'Processing payment…',
+      approved: 'Payment approved',
+      order_summary: 'Order summary',
+      total: 'Total',
+      pay_with_pix: 'Pay with Pix',
+      expires_in: 'Expires in',
+      copy_code: 'Copy code',
+      close: 'Close',
+      pix_expired_hint: 'Time expired — generate a new Pix by clicking Pay now.',
+      dev_simulate: 'Simulate payment (dev)',
+      name_label: 'Name',
+      name_placeholder: 'Full name',
+      email_label: 'Email',
+      email_placeholder: 'email@domain.com',
+      phone_label: 'Phone',
+      phone_placeholder: 'Enter your phone',
+      document_label: 'Document (CPF/CNPJ)',
+      document_placeholder: 'Numbers only',
+      payment_method: 'Payment method',
+      stripe_missing_price: 'Card unavailable for this country/currency. Stripe price not linked.'
+    } as const;
+    const pt = {
+      cardholder_name: 'Nome no cartão',
+      cardholder_placeholder: 'Nome completo no cartão',
+      card_information: 'Informações do cartão',
+      installments: 'Parcelas',
+      country_region: 'País ou região',
+      buy_now: 'Comprar agora',
+      processing: 'Processando pagamento…',
+      approved: 'Pagamento aprovado',
+      order_summary: 'Resumo do pedido',
+      total: 'Total',
+      pay_with_pix: 'Pague com Pix',
+      expires_in: 'Expira em',
+      copy_code: 'Copiar código',
+      close: 'Fechar',
+      pix_expired_hint: 'Prazo expirado — gere um novo Pix clicando em Pagar agora.',
+      dev_simulate: 'Simular pagamento (dev)',
+      name_label: 'Nome',
+      name_placeholder: 'Nome completo',
+      email_label: 'Email',
+      email_placeholder: 'email@dominio.com',
+      phone_label: 'Telefone',
+      phone_placeholder: 'Digite seu telefone',
+      document_label: 'Documento (CPF/CNPJ)',
+      document_placeholder: 'Somente números',
+      payment_method: 'Forma de pagamento',
+      stripe_missing_price: 'Cartão indisponível para este país/moeda. price_id do Stripe não vinculado.'
+    } as const;
+    return isEN ? en : pt;
+  }, [isEN]);
   // PIX modal state
   const [pixOpen, setPixOpen] = useState(false);
   const [pixQrUrl, setPixQrUrl] = useState<string | null>(null);
@@ -96,10 +169,6 @@ export default function BrandedCheckoutPage() {
   const [cardPolling, setCardPolling] = useState<{ active: boolean; startedAt: number } | null>(null);
   // Allowed methods derived from offer
   const PIX_OB_ENABLED = String(process.env.NEXT_PUBLIC_CHECKOUT_PIX_OB_ENABLED || '').toLowerCase() === 'true';
-  const pixAllowed = useMemo(() => (offer?.paymentMethods || []).some(x => x.method === 'PIX' && x.active), [offer?.paymentMethods]);
-  const cardAllowed = useMemo(() => (offer?.paymentMethods || []).some(x => x.method === 'CARD' && x.active), [offer?.paymentMethods]);
-  const openFinanceAllowed = useMemo(() => PIX_OB_ENABLED && (offer?.paymentMethods || []).some(x => x.method === 'OPEN_FINANCE' && x.active), [offer?.paymentMethods, PIX_OB_ENABLED]);
-  const openFinanceAutoAllowed = useMemo(() => PIX_OB_ENABLED && (offer?.paymentMethods || []).some(x => x.method === 'OPEN_FINANCE_AUTOMATIC' && x.active), [offer?.paymentMethods, PIX_OB_ENABLED]);
   // Open Finance participants (bank selection for pix_ob)
   const [participants, setParticipants] = useState<any[]>([]);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
@@ -183,23 +252,26 @@ export default function BrandedCheckoutPage() {
     } catch {}
   }
 
-  // Ensure selected method is allowed whenever offer changes
+  // Ensure selected method is allowed whenever offer changes (baseline when no routing applies)
   useEffect(() => {
     const isSub = !!offer?.isSubscription;
+    const methods = offer?.paymentMethods || [];
+    const pixOn = methods.some(x => x.method === 'PIX' && x.active);
+    const cardOn = methods.some(x => x.method === 'CARD' && x.active);
+    const ofOn = PIX_OB_ENABLED && methods.some(x => x.method === 'OPEN_FINANCE' && x.active);
+    const ofAutoOn = PIX_OB_ENABLED && methods.some(x => x.method === 'OPEN_FINANCE_AUTOMATIC' && x.active);
     if (isSub) {
-      // Prefer OPEN_FINANCE_AUTOMATIC, then PIX, then CARD
-      if (openFinanceAutoAllowed) setPaymentMethod('pix_ob');
-      else if (pixAllowed) setPaymentMethod('pix');
-      else if (cardAllowed) setPaymentMethod('card');
+      if (ofAutoOn) setPaymentMethod('pix_ob');
+      else if (pixOn) setPaymentMethod('pix');
+      else if (cardOn) setPaymentMethod('card');
       else setPaymentMethod(null);
       return;
     }
-    // One-time: prefer CARD, then OPEN_FINANCE, then PIX
-    if (cardAllowed) setPaymentMethod('card');
-    else if (openFinanceAllowed) setPaymentMethod('pix_ob');
-    else if (pixAllowed) setPaymentMethod('pix');
+    if (cardOn) setPaymentMethod('card');
+    else if (ofOn) setPaymentMethod('pix_ob');
+    else if (pixOn) setPaymentMethod('pix');
     else setPaymentMethod(null);
-  }, [cardAllowed, pixAllowed, openFinanceAllowed, openFinanceAutoAllowed, offer?.isSubscription]);
+  }, [offer?.isSubscription, offer?.paymentMethods, PIX_OB_ENABLED]);
   // Checkout countdown (10 minutes)
   const [checkoutRemaining, setCheckoutRemaining] = useState<number>(600);
   // Minimalist approval modal
@@ -216,6 +288,339 @@ export default function BrandedCheckoutPage() {
       if (!addrCountry) setAddrCountry('BR');
     }
   }, [paymentMethod]);
+
+  // Load provider config for offer (per-country routing/prices)
+  useEffect(() => {
+    let active = true;
+    async function loadCfg() {
+      try {
+        if (!productId || !offer?.id) return;
+        const res = await fetch(`/api/products/${productId}/offers/${offer.id}/providers/config`, { cache: 'no-store' });
+        if (!active) return;
+        if (res.ok) {
+          const js = await res.json().catch(() => ({}));
+          setProviderConfig(js?.config || js || null);
+        } else {
+          setProviderConfig(null);
+        }
+      } catch {
+        if (active) setProviderConfig(null);
+      }
+    }
+    loadCfg();
+    return () => { active = false; };
+  }, [productId, offer?.id]);
+
+  // Current country/currency from address selection
+  const currentCountry = (addrCountry || 'BR').toUpperCase();
+  const currentCurrency = getCurrencyForCountry(currentCountry);
+  const locale = isEN ? 'en-US' : 'pt-BR';
+
+  function flagEmoji(cc: string) {
+    const s = (cc || '').toUpperCase();
+    if (s.length !== 2) return '🌐';
+    const chars = Array.from(s);
+    const codePoints = chars.map(c => 0x1F1E6 - 65 + c.charCodeAt(0));
+    return String.fromCodePoint(codePoints[0], codePoints[1]);
+  }
+  const countryOptions = [
+    { code: 'BR', name: 'Brasil' },
+    { code: 'US', name: 'United States' },
+    { code: 'PT', name: 'Portugal' },
+    { code: 'MX', name: 'México' },
+  ];
+
+  
+
+  // Initialize country: prefer URL param; otherwise keep default 'BR' (no auto-detect to avoid false US)
+  useEffect(() => {
+    try {
+      if (countryParam && hasCurrencyMapping(countryParam)) {
+        setAddrCountry(countryParam);
+      }
+    } catch {}
+  }, [countryParam]);
+
+  // Server-side geo fallback: try CDN headers via /api/geo/country
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        if (countryParam) return; // URL wins
+        if (addrCountry && addrCountry !== 'BR') return; // already set
+        const res = await fetch('/api/geo/country', { cache: 'no-store' });
+        const js = await res.json().catch(() => ({}));
+        const cc = (js?.country || '').toString().toUpperCase();
+        if (!active) return;
+        if (cc && hasCurrencyMapping(cc)) { setAddrCountry(cc); return; }
+      } catch {}
+    })();
+    return () => { active = false; };
+  }, [countryParam, addrCountry]);
+
+  // Safe auto-detect: only when no URL override and country is still at default 'BR'
+  useEffect(() => {
+    try {
+      if (countryParam) return; // explicit override wins
+      if (addrCountry && addrCountry !== 'BR') return; // already set by user/UI
+      const langs: string[] = (typeof navigator !== 'undefined' && Array.isArray((navigator as any).languages)) ? (navigator as any).languages : [];
+      const primary = (langs[0] || (typeof navigator !== 'undefined' ? navigator.language : '') || '').toString();
+      const parts = primary.split('-');
+      const cc = (parts[1] || '').toUpperCase();
+      if (cc && hasCurrencyMapping(cc)) { setAddrCountry(cc); return; }
+      // Fallback to default from providers config
+      const def = (providerConfig?.CHECKOUT_DEFAULT_COUNTRY || '').toUpperCase();
+      if (def && hasCurrencyMapping(def)) { setAddrCountry(def); return; }
+      // Fallback to first available country configured for this offer
+      if (Array.isArray(availableCountries) && availableCountries.length > 0) {
+        const first = String(availableCountries[0] || '').toUpperCase();
+        if (first && hasCurrencyMapping(first)) { setAddrCountry(first); return; }
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countryParam, providerConfig?.CHECKOUT_DEFAULT_COUNTRY]);
+
+  // Resolve routed provider and stripe price for country/currency
+  const routedProvider: 'KRXPAY'|'STRIPE'|null = useMemo(() => {
+    const ck = (providerConfig?.CHECKOUT || {}) as Record<string, any>;
+    const v = ck?.[currentCountry];
+    if (v === 'KRXPAY' || v === 'STRIPE') return v;
+    return null;
+  }, [providerConfig?.CHECKOUT, currentCountry]);
+
+  // Resolve Stripe price amount (unit_amount) when routed to Stripe
+  const [stripePriceCents, setStripePriceCents] = useState<number | null>(null);
+  const [stripePriceCurrency, setStripePriceCurrency] = useState<string | null>(null);
+  const [offerPriceCents, setOfferPriceCents] = useState<number | null>(null);
+  const [offerPriceRows, setOfferPriceRows] = useState<any[] | null>(null);
+  const [routingMap, setRoutingMap] = useState<{ methods?: Record<string, { provider: 'STRIPE'|'KRXPAY'|null }>, currency?: string } | null>(null);
+
+  // Countries from DB (routing + prices), no providerConfig dependency
+  const [availableCountries, setAvailableCountries] = useState<string[]>(['BR']);
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        if (!offer?.id) return;
+        const url = new URL('/api/payment-routing/countries', window.location.origin);
+        url.searchParams.set('offerId', offer.id);
+        const res = await fetch(url.toString(), { cache: 'no-store' });
+        const js = await res.json().catch(() => ({}));
+        const list = Array.isArray(js?.countries) ? js.countries.filter((x: any) => typeof x === 'string') : [];
+        if (active) setAvailableCountries(list.length ? list : ['BR']);
+      } catch {
+        if (active) setAvailableCountries(['BR']);
+      }
+    })();
+    return () => { active = false; };
+  }, [offer?.id]);
+  const stripePriceId = useMemo(() => {
+    const STR = (providerConfig?.STRIPE || {}) as Record<string, any>;
+    const byCountry = STR?.[currentCountry] || {};
+    const cur = (byCountry?.[currentCurrency] || {}) as any;
+    let pid = cur?.externalPriceId || cur?.price_id || '';
+    if (!pid && Array.isArray(offerPriceRows)) {
+      const row = offerPriceRows.find(r => String(r.provider).toUpperCase() === 'STRIPE');
+      if (row?.externalPriceId) pid = row.externalPriceId;
+    }
+    return typeof pid === 'string' ? pid : '';
+  }, [providerConfig?.STRIPE, currentCountry, currentCurrency, offerPriceRows]);
+
+  // Derive an effective provider if CHECKOUT is not set, using available OfferPrice rows
+  const effectiveProvider: 'KRXPAY'|'STRIPE'|null = useMemo(() => {
+    if (routedProvider) return routedProvider;
+    const rows = offerPriceRows || [];
+    const hasStripe = rows.some(r => String(r.provider).toUpperCase() === 'STRIPE');
+    const hasKrx = rows.some(r => String(r.provider).toUpperCase() === 'KRXPAY');
+    if (hasStripe) return 'STRIPE';
+    if (hasKrx) return 'KRXPAY';
+    return null;
+  }, [routedProvider, offerPriceRows]);
+
+  // Per-method providers from routing map (fallback to effectiveProvider if missing)
+  const cardProvider = useMemo(() => routingMap?.methods?.CARD?.provider ?? effectiveProvider, [routingMap, effectiveProvider]);
+  const pixProvider = useMemo(() => {
+    const routed = routingMap?.methods?.PIX?.provider ?? null;
+    if (routed) return routed;
+    if (currentCountry !== 'BR') return null;
+    return effectiveProvider === 'KRXPAY' ? 'KRXPAY' : null;
+  }, [routingMap, effectiveProvider, currentCountry]);
+  const ofProvider = useMemo(() => {
+    // Only respect explicit routing; otherwise do not infer provider
+    const routed = routingMap?.methods?.OPEN_FINANCE?.provider ?? null;
+    return routed || null;
+  }, [routingMap]);
+  const ofAutoProvider = useMemo(() => {
+    // Only respect explicit routing; otherwise do not infer provider
+    const routed = routingMap?.methods?.OPEN_FINANCE_AUTOMATIC?.provider ?? null;
+    return routed || null;
+  }, [routingMap]);
+  useEffect(() => {
+    let active = true;
+    async function fetchStripePrice() {
+      try {
+        if (cardProvider !== 'STRIPE' || !stripePriceId) { if (active) { setStripePriceCents(null); setStripePriceCurrency(null); } return; }
+        // Try known endpoints; fallback gracefully
+        const endpoints = [
+          `/api/stripe/price?id=${encodeURIComponent(stripePriceId)}`,
+          `/api/stripe/prices?id=${encodeURIComponent(stripePriceId)}`
+        ];
+        let data: any = null;
+        for (const url of endpoints) {
+          try {
+            const res = await fetch(url, { cache: 'no-store' });
+            if (res.ok) { data = await res.json().catch(() => ({})); break; }
+          } catch {}
+        }
+        const unit = Number(data?.unit_amount ?? data?.price?.unit_amount);
+        const cur = (data?.currency ?? data?.price?.currency ?? '').toUpperCase() || null;
+        if (active) {
+          setStripePriceCents(Number.isFinite(unit) ? unit : null);
+          setStripePriceCurrency(cur);
+        }
+      } catch {
+        if (active) { setStripePriceCents(null); setStripePriceCurrency(null); }
+      }
+    }
+    fetchStripePrice();
+    return () => { active = false; };
+  }, [cardProvider, stripePriceId]);
+
+  // Fetch normalized OfferPrice rows for current country/currency (any provider)
+  useEffect(() => {
+    let active = true;
+    async function fetchOfferPrice() {
+      try {
+        setOfferPriceCents(null);
+        setOfferPriceRows(null);
+        if (!offer?.id) return;
+        const url = new URL(`/api/offers/${offer.id}/prices`, window.location.origin);
+        url.searchParams.set('country', currentCountry);
+        url.searchParams.set('currency', currentCurrency);
+        const res = await fetch(url.toString(), { cache: 'no-store' });
+        const js = await res.json().catch(() => ({}));
+        const rows = Array.isArray(js?.prices) ? js.prices : [];
+        if (!active) return;
+        setOfferPriceRows(rows);
+      } catch {
+        if (active) { setOfferPriceRows(null); setOfferPriceCents(null); }
+      }
+    }
+    fetchOfferPrice();
+    return () => { active = false; };
+  }, [offer?.id, currentCountry, currentCurrency]);
+
+  // Fetch per-method routing for current country
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        setRoutingMap(null);
+        if (!offer?.id) return;
+        const url = new URL(`/api/payment-routing`, window.location.origin);
+        url.searchParams.set('offerId', offer.id);
+        url.searchParams.set('country', currentCountry);
+        const res = await fetch(url.toString(), { cache: 'no-store' });
+        const js = await res.json().catch(() => ({}));
+        if (active) setRoutingMap(js || null);
+      } catch {
+        if (active) setRoutingMap(null);
+      }
+    })();
+    return () => { active = false; };
+  }, [offer?.id, currentCountry]);
+
+  
+
+  // Pick amountCents from the row matching the card provider (display price)
+  useEffect(() => {
+    try {
+      const rows = offerPriceRows || [];
+      const row = rows.find(r => String(r.provider).toUpperCase() === cardProvider);
+      const cents = Number.isFinite(Number(row?.amountCents)) ? Number(row.amountCents) : null;
+      setOfferPriceCents(cents);
+    } catch {
+      setOfferPriceCents(null);
+    }
+  }, [offerPriceRows, cardProvider]);
+
+  // Compute price override from providerConfig when present (country/currency)
+  const priceOverrideCents: number | null = useMemo(() => {
+    try {
+      const stripeAmt = providerConfig?.STRIPE?.[currentCountry]?.[currentCurrency]?.amountCents;
+      const krxAmt = providerConfig?.KRXPAY?.[currentCountry]?.[currentCurrency]?.amountCents;
+      const sOk = Number.isFinite(Number(stripeAmt)) && Number(stripeAmt) > 0 ? Number(stripeAmt) : null;
+      const kOk = Number.isFinite(Number(krxAmt)) && Number(krxAmt) > 0 ? Number(krxAmt) : null;
+      if (cardProvider === 'STRIPE') return sOk ?? kOk;
+      if (cardProvider === 'KRXPAY') return kOk ?? sOk;
+      return sOk ?? kOk ?? null;
+    } catch {
+      return null;
+    }
+  }, [providerConfig, cardProvider, currentCountry, currentCurrency]);
+
+  // Resolve final price cents for display
+  const resolvedPriceCents: number = useMemo(() => {
+    if (cardProvider === 'STRIPE' && stripePriceCents != null) return stripePriceCents;
+    if (offerPriceCents != null) return offerPriceCents;
+    if (priceOverrideCents != null) return priceOverrideCents;
+    if (offer?.priceCents != null) return offer.priceCents;
+    // fallback legacy
+    const base = (product?.discountPrice ?? product?.originalPrice ?? 0);
+    return Math.round((Number(base) || 0) * 100);
+  }, [cardProvider, stripePriceCents, offerPriceCents, priceOverrideCents, offer?.priceCents, product]);
+
+  // Compute final allowed methods considering routing + offer methods
+  const cardAllowedRouted = useMemo(() => {
+    // DB-driven
+    // - STRIPE: needs a stripe price_id OR any price available for current country/currency
+    // - KRXPAY: needs an OfferPrice (DB) or an override amount
+    if (cardProvider === 'STRIPE') {
+      return !!(stripePriceId || (offerPriceCents != null) || (priceOverrideCents != null));
+    }
+    if (cardProvider === 'KRXPAY') {
+      // Accept DB price, override, or global base price
+      return !!(offerPriceCents != null || priceOverrideCents != null || (offer?.priceCents != null));
+    }
+    return false;
+  }, [cardProvider, stripePriceId, offerPriceCents, priceOverrideCents, offer?.priceCents]);
+
+  const pixAllowedRouted = useMemo(() => {
+    // PIX allowed when routed to KRXPAY regardless of offer flag; otherwise rely on offer flag
+    const offerPix = (offer?.paymentMethods || []).some(x => x.method === 'PIX' && x.active);
+    if (currentCountry !== 'BR') return false; // BR-only
+    if (pixProvider === 'KRXPAY') return true;
+    if (pixProvider === 'STRIPE') return false;
+    return offerPix;
+  }, [offer?.paymentMethods, pixProvider, currentCountry]);
+
+  const openFinanceAllowedRouted = useMemo(() => {
+    // Only when explicitly routed to KRXPAY in BR
+    if (currentCountry !== 'BR') return false;
+    return ofProvider === 'KRXPAY';
+  }, [ofProvider, currentCountry]);
+
+  const openFinanceAutoAllowedRouted = useMemo(() => {
+    // Only when explicitly routed to KRXPAY in BR
+    if (currentCountry !== 'BR') return false;
+    return ofAutoProvider === 'KRXPAY';
+  }, [ofAutoProvider, currentCountry]);
+
+  // Auto-adjust selected payment method when routing changes (per-method providers)
+  useEffect(() => {
+    const isSub = !!offer?.isSubscription;
+    // Prefer a method that is actually enabled for its provider
+    if (isSub && openFinanceAutoAllowedRouted && ofAutoProvider === 'KRXPAY') { setPaymentMethod('pix_ob'); return; }
+    if (pixAllowedRouted && pixProvider === 'KRXPAY') { setPaymentMethod('pix'); return; }
+    if (cardAllowedRouted && cardProvider === 'STRIPE') { setPaymentMethod('card'); return; }
+    // No routing: keep previous heuristics
+  }, [cardProvider, pixProvider, ofAutoProvider, cardAllowedRouted, pixAllowedRouted, openFinanceAutoAllowedRouted, offer?.isSubscription]);
+
+  // Aliases for UI code that still references these names
+  const pixAllowed = pixAllowedRouted;
+  const cardAllowed = cardAllowedRouted;
+  const openFinanceAllowed = openFinanceAllowedRouted;
+  const openFinanceAutoAllowed = openFinanceAutoAllowedRouted;
 
   function resetCardForm() {
     setCardNumber('');
@@ -290,13 +695,8 @@ export default function BrandedCheckoutPage() {
     ? 'bg-[#0f0f0f] border-gray-800 text-gray-100'
     : 'bg-gray-100 border-transparent text-gray-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
 
-  const displayPrice = useMemo(() => (
-    offer?.priceCents != null ? (offer.priceCents / 100) : (product?.discountPrice ?? product?.originalPrice ?? 0)
-  ), [offer?.priceCents, product]);
-  const priceCents = useMemo(() => {
-    if (offer?.priceCents != null) return offer.priceCents;
-    return Math.round((displayPrice || 0) * 100);
-  }, [offer?.priceCents, displayPrice]);
+  const displayPrice = useMemo(() => (resolvedPriceCents || 0) / 100, [resolvedPriceCents]);
+  const priceCents = useMemo(() => resolvedPriceCents, [resolvedPriceCents]);
 
   useEffect(() => {
     async function loadBranding() {
@@ -552,8 +952,8 @@ export default function BrandedCheckoutPage() {
     if (installments > maxN) setInstallments(maxN);
     if (installments < 1) setInstallments(1);
   }, [installmentOptions.length, offer?.id, offer?.isSubscription, offer?.intervalUnit, offer?.intervalCount]);
-  const formatBRL = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
-  const formatCents = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
+  const formatMoney = (cents: number, currency: string) => new Intl.NumberFormat(locale, { style: 'currency', currency: (currency || currentCurrency) }).format((cents || 0) / 100);
+  const formatCents = (cents: number) => formatMoney(cents, currentCurrency);
 
   // ===== Card preview helpers =====
   function detectBrand(num: string): string | null {
@@ -630,7 +1030,7 @@ export default function BrandedCheckoutPage() {
               context: {
                 productId: product!.id,
                 amountCents: Number(totalCents || 0),
-                currency: 'BRL',
+                currency: currentCurrency,
                 orderRef: `ORDER_${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
               },
             } as any;
@@ -1148,14 +1548,23 @@ export default function BrandedCheckoutPage() {
             <div className="lg:col-span-8">
               <div className={`bg-white border-gray-200 rounded-xl border p-5 shadow-sm`}>
                 {/* Buyer info */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className={`bg-gray-100 h-4 rounded-md w-20 mb-2 animate-pulse`} />
-                  <div className={`bg-gray-100 h-4 rounded-md w-20 mb-2 animate-pulse`} />
-                  <div className={`bg-gray-100 h-11 rounded-md col-span-1 animate-pulse`} />
-                  <div className={`bg-gray-100 h-11 rounded-md col-span-1 animate-pulse`} />
-                  <div className={`bg-gray-100 h-11 rounded-md col-span-1 animate-pulse`} />
-                  <div className={`bg-gray-100 h-11 rounded-md col-span-1 animate-pulse`} />
+                {(((process.env.NODE_ENV !== 'production') as any) || (sp.get('debug') === '1')) && (
+                <div className={`mb-4 ${theme==='DARK'?'bg-[#0f0f0f] border border-gray-800':'bg-yellow-50 border border-yellow-200'} rounded-lg p-3 text-xs`}> 
+                  <div className="font-semibold mb-1">Dev Debug</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                    <div>addrCountry: <span className="font-mono">{addrCountry}</span></div>
+                    <div>currentCountry: <span className="font-mono">{currentCountry}</span></div>
+                    <div>currentCurrency: <span className="font-mono">{currentCurrency}</span></div>
+                    <div>locale: <span className="font-mono">{locale}</span></div>
+                    <div>routedProvider: <span className="font-mono">{String(routedProvider || 'none')}</span></div>
+                    <div>stripePriceId: <span className="font-mono">{stripePriceId || '—'}</span></div>
+                    <div>stripePriceCents: <span className="font-mono">{stripePriceCents ?? '—'}</span></div>
+                    <div>cardAllowed: <span className="font-mono">{String(cardAllowed)}</span></div>
+                    <div>pixAllowed: <span className="font-mono">{String(pixAllowed)}</span></div>
+                    <div className={`bg-gray-100 h-11 rounded-md col-span-1 animate-pulse`} />
+                  </div>
                 </div>
+                )}
 
                 {/* Payment method */}
                 <div className="mt-6">
@@ -1246,11 +1655,60 @@ export default function BrandedCheckoutPage() {
             )}
           </div>
 
+          {(((process.env.NODE_ENV !== 'production') as any) || (sp.get('debug') === '1')) && (
+            <div className={`mb-4 ${theme==='DARK'?'bg-[#0f0f0f] border border-gray-800':'bg-yellow-50 border border-yellow-200'} rounded-lg p-3 text-xs`}> 
+              <div className="font-semibold mb-1">Dev Debug</div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
+                <div>addrCountry: <span className="font-mono">{addrCountry}</span></div>
+                <div>currentCountry: <span className="font-mono">{currentCountry}</span></div>
+                <div>currentCurrency: <span className="font-mono">{currentCurrency}</span></div>
+                <div>locale: <span className="font-mono">{locale}</span></div>
+                <div>routedProvider: <span className="font-mono">{String(routedProvider || 'none')}</span></div>
+                <div>stripePriceId: <span className="font-mono">{stripePriceId || '—'}</span></div>
+                <div>stripePriceCents: <span className="font-mono">{stripePriceCents ?? '—'}</span></div>
+                <div>cardAllowed: <span className="font-mono">{String(cardAllowed)}</span></div>
+                <div>pixAllowed: <span className="font-mono">{String(pixAllowed)}</span></div>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center justify-between max-w-7xl mx-auto px-1 md:px-0 mb-3">
+            <div />
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setCountryMenuOpen(v => !v)}
+                className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm ${theme==='DARK'?'bg-[#0f0f0f] border-gray-800 text-gray-100':'bg-white border-gray-300 text-gray-900'}`}
+              >
+                <span className="text-base">{flagEmoji(currentCountry)}</span>
+                <span>Alterar país</span>
+                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"/></svg>
+              </button>
+              {countryMenuOpen && (
+                <div className={`absolute right-0 mt-2 w-44 rounded-md shadow-lg z-20 ${theme==='DARK'?'bg-[#0f0f0f] border border-gray-800':'bg-white border border-gray-200'}`}>
+                  <ul className="py-1 text-sm">
+                    {availableCountries.map((cc) => (
+                      <li key={cc}>
+                        <button
+                          type="button"
+                          onClick={() => { setAddrCountry(cc); setCountryMenuOpen(false); }}
+                          className={`w-full px-3 py-2 flex items-center gap-2 text-left ${theme==='DARK'?'hover:bg-gray-900 text-gray-100':'hover:bg-gray-50 text-gray-900'}`}
+                        >
+                          <span className="text-base">{flagEmoji(cc)}</span>
+                          <span>{cc}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             {/* Mobile: Order Summary (visible only on small screens) */}
             <aside className="block lg:hidden">
               <div className={`rounded-xl ${theme==='DARK' ? 'bg-[#0f0f0f]' : 'bg-white'} p-4 w-full`}>
-                <div className="text-sm font-semibold mb-3">Resumo do pedido</div>
+                <div className="text-sm font-semibold mb-3">{t.order_summary}</div>
                 {product?.imageUrl && (
                   <div className="rounded-xl overflow-hidden border border-gray-200 mb-3">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1262,15 +1720,15 @@ export default function BrandedCheckoutPage() {
                   <div className={`${theme==='DARK'?'text-gray-400':'text-gray-600'} text-sm mt-1`}>{summaryDescription}</div>
                 )}
                 <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between">
-                  <div className={`${theme==='DARK'?'text-gray-400':'text-gray-600'} text-sm`}>Total</div>
+                  <div className={`${theme==='DARK'?'text-gray-400':'text-gray-600'} text-sm`}>{t.total}</div>
                   <div className="text-right">
                     {installmentOptions.length > 1 ? (
                       <>
                         <div className="text-base font-semibold">{`${installmentOptions[installmentOptions.length-1].n}x ${formatCents(installmentOptions[installmentOptions.length-1].perCents)}`}</div>
-                        <div className={`text-[12px] ${theme==='DARK'?'text-gray-400':'text-gray-500'}`}>{`ou ${formatBRL(displayPrice as number)}`}</div>
+                        <div className={`text-[12px] ${theme==='DARK'?'text-gray-400':'text-gray-500'}`}>{`ou ${formatCents(priceCents)}`}</div>
                       </>
                     ) : (
-                      <div className="text-base font-semibold">{formatBRL(displayPrice as number)}</div>
+                      <div className="text-base font-semibold">{formatCents(priceCents)}</div>
                     )}
                     {offer?.isSubscription && recurrenceText && (
                       <div className={`text-[12px] ${theme==='DARK'?'text-gray-400':'text-gray-500'} mt-0.5`}>{recurrenceText}</div>
@@ -1288,21 +1746,21 @@ export default function BrandedCheckoutPage() {
                 {/* Buyer info (Stripe order) */}
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>Nome</div>
-                    <Input value={buyerName} onChange={(e) => setBuyerName(e.target.value)} placeholder="Nome completo" className={`${inputClass} h-11 text-sm`} />
+                    <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>{t.name_label}</div>
+                    <Input value={buyerName} onChange={(e) => setBuyerName(e.target.value)} placeholder={t.name_placeholder} className={`${inputClass} h-11 text-sm`} />
                   </div>
                   <div>
-                    <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>Email</div>
-                    <Input value={buyerEmail} onChange={(e) => setBuyerEmail(e.target.value)} placeholder="email@dominio.com" className={`${inputClass} h-11 text-sm`} />
+                    <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>{t.email_label}</div>
+                    <Input value={buyerEmail} onChange={(e) => setBuyerEmail(e.target.value)} placeholder={t.email_placeholder} className={`${inputClass} h-11 text-sm`} />
                   </div>
                   <div>
-                    <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>Telefone</div>
+                    <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>{t.phone_label}</div>
                     <div className={`rounded-md ${theme==='DARK'?'bg-[#0f0f0f] border border-gray-800':'bg-gray-100 border border-transparent'} h-11 flex items-center px-2`}>
                       <PhoneInput
                         defaultCountry="br"
                         value={buyerPhone}
                         onChange={(val) => setBuyerPhone(val)}
-                        placeholder="Digite seu telefone"
+                        placeholder={t.phone_placeholder}
                         className="w-full"
                         inputClassName={`w-full h-10 !bg-transparent !border-0 !shadow-none !outline-none px-2 text-sm ${theme==='DARK'?'text-gray-100 placeholder:text-gray-500':'text-gray-900 placeholder:text-gray-500'}`}
                         countrySelectorStyleProps={{
@@ -1312,15 +1770,15 @@ export default function BrandedCheckoutPage() {
                     </div>
                   </div>
                   <div>
-                    <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>Documento (CPF/CNPJ)</div>
-                    <Input value={buyerDocument} onChange={(e) => setBuyerDocument(e.target.value)} placeholder="Somente números" className={`${inputClass} h-11 text-sm`} />
+                    <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>{t.document_label}</div>
+                    <Input value={buyerDocument} onChange={(e) => setBuyerDocument(e.target.value)} placeholder={t.document_placeholder} className={`${inputClass} h-11 text-sm`} />
                   </div>
                 </div>
 
                 {/* Payment method */}
                 <div className="mt-5">
                   <div className="flex items-center justify-between mb-2">
-                    <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'}`}>Forma de pagamento</div>
+                    <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'}`}>{t.payment_method}</div>
                     {/* Dev helper button to autofill test card and submit */}
                     {((process.env.NODE_ENV !== 'production') || (sp.get('testcard') === '1')) && (
                       <button
@@ -1353,6 +1811,11 @@ export default function BrandedCheckoutPage() {
                           </svg>
                           <span className={`${paymentMethod==='card' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>Cartão</span>
                         </div>
+                        {(routedProvider === 'STRIPE' && !stripePriceId) && (
+                          <div className={`mt-2 text-[12px] ${theme==='DARK'?'text-amber-300':'text-amber-700'}`}>
+                            {t.stripe_missing_price}
+                          </div>
+                        )}
                       </button>
                     )}
 
@@ -1404,7 +1867,7 @@ export default function BrandedCheckoutPage() {
                       <div className={`${theme==='DARK'?'text-gray-300':'text-gray-700'}`}>
                         <div><strong>Informações sobre o pagamento via pix:</strong></div>
                         <ul className="list-disc ml-5 mt-1 space-y-1">
-                          <li>Valor à vista: {formatBRL(displayPrice as number)}.</li>
+                          <li>Valor à vista: {formatCents(priceCents)}.</li>
                           <li>É simples, só usar o aplicativo de seu banco para pagar PIX.</li>
                           <li>Super seguro. O pagamento PIX foi desenvolvido pelo Banco Central para facilitar pagamentos.</li>
                         </ul>
@@ -1425,7 +1888,7 @@ export default function BrandedCheckoutPage() {
 
                                 {paymentMethod === 'card' && cardAllowed && (
                   <div className="mt-4 space-y-3">
-                    <div className={`text-[12px] ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'}`}>Card information</div>
+                    <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'}`}>{t.card_information}</div>
                     {/* Segmented row: number | MM/YY | CVC */}
                     <div className={`${theme==='DARK'?'bg-[#0f0f0f] border border-gray-800':'bg-gray-100 border border-transparent'} rounded-md h-12 flex items-stretch overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500`}>
                       {/* Number */}
@@ -1498,13 +1961,13 @@ export default function BrandedCheckoutPage() {
 
                     {/* Cardholder */}
                     <div>
-                      <div className={`text-[12px] ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Cardholder name</div>
-                      <Input value={cardHolder} onChange={(e) => setCardHolder(e.target.value)} placeholder="Full name on card" className={`${inputClass} h-12 text-base`} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
+                      <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1`}>{t.cardholder_name}</div>
+                      <Input value={cardHolder} onChange={(e) => setCardHolder(e.target.value)} placeholder={t.cardholder_placeholder} className={`${inputClass} h-12 text-base`} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
                     </div>
 
                     {/* Parcelas abaixo dos inputs do cartão */}
                     <div>
-                      <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>Parcelas</div>
+                      <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>{t.installments}</div>
                       <select value={installments} onChange={(e) => setInstallments(parseInt(e.target.value, 10))} className={`${selectClass} h-11 w-full rounded-md border px-3 text-sm`}>
                         {installmentOptions.map(({ n, perCents }) => (
                           <option key={n} value={n}>
@@ -1517,7 +1980,7 @@ export default function BrandedCheckoutPage() {
 
                     {/* País no final */}
                     <div>
-                      <div className={`text-sm ${theme==='DARK'?'text-gray-400':'text-gray-600'} mb-1.5`}>País ou região</div>
+                      <div className={`text-sm ${theme==='DARK'?'text-gray-400':'text-gray-600'} mb-1.5`}>{t.country_region}</div>
                       <select value={addrCountry} onChange={(e) => setAddrCountry(e.target.value)} className={`${selectClass} h-11 w-full rounded-md border px-3 text-sm`}>
                         <option value="BR">Brazil</option>
                       </select>
@@ -1539,7 +2002,7 @@ export default function BrandedCheckoutPage() {
                     onClick={onSubmit}
                     className="w-full h-12 rounded-md text-base font-medium transition-colors focus:outline-none bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-60"
                   >
-                    {submitting ? 'Processando…' : 'Comprar agora'}
+                    {submitting ? t.processing : t.buy_now}
                   </button>
                 </div>
               </div>
@@ -1548,7 +2011,7 @@ export default function BrandedCheckoutPage() {
             {/* Right: Order Summary (desktop) */}
             <aside className="hidden lg:block lg:col-span-4">
               <div className={`rounded-xl ${theme==='DARK' ? 'bg-[#0f0f0f]' : 'bg-white'} p-4 sticky top-6 w-full`}>
-                <div className="text-sm font-semibold mb-3">Resumo do pedido</div>
+                <div className="text-sm font-semibold mb-3">{t.order_summary}</div>
                 {product?.imageUrl && (
                   <div className="rounded-xl overflow-hidden border border-gray-200 mb-3">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1568,10 +2031,10 @@ export default function BrandedCheckoutPage() {
                     {installmentOptions.length > 1 ? (
                       <>
                         <div className="text-base font-semibold">{`${installmentOptions[installmentOptions.length-1].n}x ${formatCents(installmentOptions[installmentOptions.length-1].perCents)}`}</div>
-                        <div className={`text-[12px] ${theme==='DARK'?'text-gray-400':'text-gray-500'}`}>{`ou ${formatBRL(displayPrice as number)}`}</div>
+                        <div className={`text-[12px] ${theme==='DARK'?'text-gray-400':'text-gray-500'}`}>{`ou ${formatCents(priceCents)}`}</div>
                       </>
                     ) : (
-                      <div className="text-base font-semibold">{formatBRL(displayPrice as number)}</div>
+                      <div className="text-base font-semibold">{formatCents(priceCents)}</div>
                     )}
                     {offer?.isSubscription && recurrenceText && (
                       <div className={`text-[12px] ${theme==='DARK'?'text-gray-400':'text-gray-500'} mt-0.5`}>{recurrenceText}</div>

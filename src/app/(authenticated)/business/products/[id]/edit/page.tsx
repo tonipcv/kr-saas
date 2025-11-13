@@ -24,6 +24,37 @@ import { useRouter } from 'next/navigation';
 import { ProtocolImagePicker } from '@/components/protocol/protocol-image-picker';
 import { useClinic } from '@/contexts/clinic-context';
 
+function cryptoRandom() {
+  return 'tmp_' + Math.random().toString(36).slice(2, 10);
+}
+
+// Country helpers (subset) and flag renderer via regional indicators
+const COUNTRIES: Array<{ code: string; name: string }> = [
+  { code: 'BR', name: 'Brazil' },
+  { code: 'US', name: 'United States' },
+  { code: 'PT', name: 'Portugal' },
+  { code: 'ES', name: 'Spain' },
+  { code: 'MX', name: 'Mexico' },
+  { code: 'AR', name: 'Argentina' },
+  { code: 'CL', name: 'Chile' },
+  { code: 'CO', name: 'Colombia' },
+  { code: 'GB', name: 'United Kingdom' },
+  { code: 'FR', name: 'France' },
+  { code: 'DE', name: 'Germany' },
+  { code: 'IT', name: 'Italy' },
+  { code: 'CA', name: 'Canada' },
+  { code: 'AU', name: 'Australia' },
+  { code: 'JP', name: 'Japan' },
+  { code: 'CN', name: 'China' },
+  { code: 'IN', name: 'India' },
+];
+function flagEmoji(iso2: string) {
+  const code = (iso2 || '').toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return '🏳️';
+  const A = 0x1f1e6;
+  return Array.from(code).map(c => String.fromCodePoint(A + (c.charCodeAt(0) - 65))).join('');
+}
+
 interface Product {
   id: string;
   name: string;
@@ -94,6 +125,166 @@ export default function EditProductPage({ params }: PageProps) {
   const [newOffer, setNewOffer] = useState<{ name: string; price: string; currency: 'BRL'|'USD'|'EUR'; isSubscription: boolean; intervalUnit: 'DAY'|'WEEK'|'MONTH'|'YEAR'; intervalCount: string; trialDays: string; maxInstallments: string }>(
     { name: 'Nova oferta', price: '', currency: 'BRL', isSubscription: false, intervalUnit: 'MONTH', intervalCount: '1', trialDays: '0', maxInstallments: '1' }
   );
+
+  // Gateway por localização (edit)
+  const [merchantId, setMerchantId] = useState<string>('');
+  const [pgConnected, setPgConnected] = useState<boolean>(false);
+  const [stripeConnected, setStripeConnected] = useState<boolean>(false);
+  const [routingUsePlatformDefault, setRoutingUsePlatformDefault] = useState(true);
+  const [routingDefaultRuleId, setRoutingDefaultRuleId] = useState<string | null>(null);
+  const [routingDefaultProvider, setRoutingDefaultProvider] = useState<'KRXPAY'|'STRIPE'>('KRXPAY');
+  const [routingOverrides, setRoutingOverrides] = useState<Array<{ id: string; country: string | null; provider: 'KRXPAY'|'STRIPE'; priority: number }>>([]);
+
+  // Product integrations (gateway product IDs)
+  const [integrationsLoading, setIntegrationsLoading] = useState<boolean>(false);
+  const [stripeExtProductId, setStripeExtProductId] = useState<string>('');
+  const [krxExtProductId, setKrxExtProductId] = useState<string>('');
+  const [enabledGateways, setEnabledGateways] = useState<{ STRIPE: boolean; KRXPAY: boolean }>({ STRIPE: false, KRXPAY: false });
+  const [savingStripe, setSavingStripe] = useState(false);
+  const [savingKrx, setSavingKrx] = useState(false);
+  const [ensuringStripe, setEnsuringStripe] = useState(false);
+  const [ensuringKrx, setEnsuringKrx] = useState(false);
+  const [stripeList, setStripeList] = useState<Array<{ id: string; name: string }>>([]);
+  const [krxList, setKrxList] = useState<Array<{ id: string; name: string }>>([]);
+  const [stripeSearching, setStripeSearching] = useState(false);
+  const [krxSearching, setKrxSearching] = useState(false);
+  const [stripeEditMode, setStripeEditMode] = useState<boolean>(false);
+  const [krxEditMode, setKrxEditMode] = useState<boolean>(false);
+
+  useEffect(() => {
+    const loadMerchantAndStatuses = async () => {
+      try {
+        if (!currentClinic?.id) return;
+        const m = await fetch(`/api/admin/integrations/merchant/by-clinic?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
+        if (m?.exists && m?.id) setMerchantId(String(m.id));
+        const pg = await fetch(`/api/payments/pagarme/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
+        setPgConnected(!!pg?.connected);
+        const st = await fetch(`/api/admin/integrations/stripe/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
+        setStripeConnected(!!st?.connected);
+      } catch {}
+    };
+    loadMerchantAndStatuses();
+  }, [currentClinic?.id]);
+
+  const loadRoutingRules = async () => {
+    try {
+      if (!merchantId || !productId) return;
+      const res = await fetch(`/api/routing/rules?merchantId=${encodeURIComponent(merchantId)}&productId=${encodeURIComponent(productId)}`, { cache: 'no-store' });
+      if (!res.ok) return;
+      const js = await res.json();
+      const rules: any[] = Array.isArray(js?.rules) ? js.rules : [];
+      const defaultRule = rules.find(r => !r.country);
+      if (defaultRule) {
+        setRoutingUsePlatformDefault(false);
+        setRoutingDefaultRuleId(defaultRule.id);
+        setRoutingDefaultProvider(defaultRule.provider);
+      } else {
+        setRoutingUsePlatformDefault(true);
+        setRoutingDefaultRuleId(null);
+      }
+      const ovs = rules.filter(r => !!r.country).map((r: any) => ({ id: r.id, country: String(r.country).toUpperCase(), provider: r.provider, priority: r.priority }));
+      setRoutingOverrides(ovs);
+    } catch {}
+  };
+
+  const addGateway = async (provider: 'STRIPE'|'KRXPAY') => {
+    setEnabledGateways(prev => ({ ...prev, [provider]: true }));
+    // Prefetch lists
+    if (provider === 'STRIPE') { await searchStripeProducts(''); }
+    if (provider === 'KRXPAY') { await searchKrxItems(''); }
+  };
+
+  useEffect(() => {
+    loadRoutingRules();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [merchantId, productId]);
+
+  // Load product integrations
+  const loadIntegrations = async () => {
+    if (!productId) return;
+    try {
+      setIntegrationsLoading(true);
+      const res = await fetch(`/api/products/${productId}/integrations`, { cache: 'no-store' });
+      const js = await res.json().catch(() => ({}));
+      const mapping = js?.integrations || {};
+      setStripeExtProductId(mapping?.STRIPE?.externalProductId || '');
+      setKrxExtProductId(mapping?.KRXPAY?.externalProductId || '');
+      setEnabledGateways({ STRIPE: !!mapping?.STRIPE, KRXPAY: !!mapping?.KRXPAY });
+    } catch {}
+    finally { setIntegrationsLoading(false); }
+  };
+  useEffect(() => { loadIntegrations(); }, [productId]);
+
+  const saveIntegration = async (provider: 'STRIPE'|'KRXPAY', externalIdOverride?: string) => {
+    try {
+      if (!productId) return;
+      if (provider === 'STRIPE') setSavingStripe(true); else setSavingKrx(true);
+      const externalProductId = (externalIdOverride ?? (provider === 'STRIPE' ? stripeExtProductId : krxExtProductId)).trim();
+      const res = await fetch(`/api/products/${productId}/integrations`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, externalProductId })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err?.error || 'Falha ao salvar integração');
+      } else {
+        await loadIntegrations();
+      }
+    } catch (e) {
+      alert('Falha ao salvar integração');
+    } finally {
+      if (provider === 'STRIPE') setSavingStripe(false); else setSavingKrx(false);
+    }
+  };
+
+  const ensureProviderProduct = async (provider: 'STRIPE'|'KRXPAY') => {
+    try {
+      if (!productId) return;
+      if (provider === 'STRIPE') setEnsuringStripe(true); else setEnsuringKrx(true);
+      const url = provider === 'STRIPE'
+        ? '/api/integrations/stripe/products/ensure'
+        : '/api/integrations/krxpay/products/ensure';
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId }) });
+      const js = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(js?.error || 'Falha ao criar/garantir produto no gateway');
+        return;
+      }
+      const extId = js?.externalProductId || '';
+      if (provider === 'STRIPE') setStripeExtProductId(extId); else setKrxExtProductId(extId);
+      await saveIntegration(provider, extId);
+    } catch (e) {
+      alert('Falha ao criar/garantir produto no gateway');
+    } finally {
+      if (provider === 'STRIPE') setEnsuringStripe(false); else setEnsuringKrx(false);
+    }
+  };
+
+  const removeGateway = async (provider: 'STRIPE'|'KRXPAY') => {
+    try {
+      if (!productId) return;
+      await fetch(`/api/products/${productId}/integrations?provider=${provider}`, { method: 'DELETE' }).catch(() => {});
+      if (provider === 'STRIPE') setStripeExtProductId(''); else setKrxExtProductId('');
+      setEnabledGateways(prev => ({ ...prev, [provider]: false } as any));
+    } catch {}
+  };
+
+  const searchStripeProducts = async (q: string) => {
+    try { setStripeSearching(true);
+      const url = new URL('/api/integrations/stripe/products', window.location.origin);
+      if (q) url.searchParams.set('query', q);
+      const js = await fetch(url.toString(), { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
+      setStripeList(Array.isArray(js?.items) ? js.items : []);
+    } finally { setStripeSearching(false); }
+  };
+  const searchKrxItems = async (q: string) => {
+    try { setKrxSearching(true);
+      const url = new URL('/api/integrations/krxpay/items', window.location.origin);
+      if (q) url.searchParams.set('query', q);
+      const js = await fetch(url.toString(), { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
+      setKrxList(Array.isArray(js?.items) ? js.items : []);
+    } finally { setKrxSearching(false); }
+  };
 
   // Keep newOffer.isSubscription bound to product originalType
   useEffect(() => {
@@ -671,7 +862,7 @@ export default function EditProductPage({ params }: PageProps) {
                     </div>
 
                     <div>
-                      <Label htmlFor="category" className="text-gray-900 font-medium">Category (legacy)</Label>
+                      <Label htmlFor="category" className="text-gray-900 font-medium">Category</Label>
                       <div className="mt-2">
                         <Select value={formData.category || ''} onValueChange={(val) => { if (val === '__create__') { setCreatingCategory(true); return; } setCreatingCategory(false); handleInputChange('category', val); }}>
                           <SelectTrigger className="border-gray-300 focus:border-[#5154e7] focus:ring-[#5154e7] bg-white text-gray-700 rounded-xl h-10">
@@ -754,6 +945,153 @@ export default function EditProductPage({ params }: PageProps) {
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Full-width: Payment Gateways */}
+                <div className="md:col-span-2">
+                  <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base font-semibold text-gray-900">Payment Gateways</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-5">
+                      <div className="text-sm text-gray-600">Primeiro adicione o gateway que deseja usar. Em seguida selecione o Product/Item ID ou gere um novo.</div>
+
+                      {/* Add gateway */}
+                      <div className="flex flex-wrap gap-2">
+                        {!enabledGateways.STRIPE && (
+                          <Button type="button" variant="outline" onClick={() => addGateway('STRIPE')}>Adicionar Stripe</Button>
+                        )}
+                        {!enabledGateways.KRXPAY && (
+                          <Button type="button" variant="outline" onClick={() => addGateway('KRXPAY')}>Adicionar KRXPay</Button>
+                        )}
+                      </div>
+
+                      {/* Stripe block */}
+                      {enabledGateways.STRIPE && (
+                        <div className="border border-gray-200 rounded-xl p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-medium text-gray-900">Stripe</div>
+                            {(!stripeExtProductId || stripeEditMode) && (
+                              <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => removeGateway('STRIPE')}>Remover</button>
+                            )}
+                          </div>
+                          <div className="mt-3 grid grid-cols-1 gap-2">
+                            {(stripeExtProductId && !stripeEditMode) ? (
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 text-sm text-gray-700">
+                                  <span>Atual:</span>
+                                  <span className="font-sans text-gray-900 tracking-tight">{stripeExtProductId}</span>
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs text-green-700">
+                                    <CheckIcon className="h-3.5 w-3.5" />
+                                    Verificado
+                                  </span>
+                                </div>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button type="button" variant="secondary" size="icon" className="h-8 w-8">
+                                      <EllipsisHorizontalIcon className="h-5 w-5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-36">
+                                    <DropdownMenuItem onClick={() => setStripeEditMode(true)}>Editar</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => removeGateway('STRIPE')}>Remover</DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex gap-2 items-center">
+                                  <Input placeholder="Buscar produtos…" className="h-9" onChange={(e) => searchStripeProducts(e.target.value)} />
+                                  <Button type="button" variant="outline" size="sm" onClick={() => searchStripeProducts('')}>{stripeSearching ? 'Buscando…' : 'Atualizar'}</Button>
+                                  <Button type="button" size="sm" disabled={ensuringStripe} onClick={() => ensureProviderProduct('STRIPE')}>{ensuringStripe ? 'Gerando…' : 'Gerar Product ID'}</Button>
+                                  {stripeExtProductId && (
+                                    <Button type="button" variant="ghost" size="sm" onClick={() => setStripeEditMode(false)}>Minimal</Button>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 items-center">
+                                  <div>
+                                    <Label className="text-gray-900 font-medium">Selecionar Product</Label>
+                                    <Select value={stripeExtProductId || ''} onValueChange={(val: any) => { setStripeExtProductId(val); saveIntegration('STRIPE', val); }}>
+                                      <SelectTrigger className="mt-2 h-10"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                                      <SelectContent>
+                                        {(stripeList || []).map((it) => (
+                                          <SelectItem key={it.id} value={it.id}>{it.name || it.id}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="text-xs text-gray-600 mt-6">Atual: <span className="font-mono">{stripeExtProductId || '—'}</span></div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* KRXPay block */}
+                      {enabledGateways.KRXPAY && (
+                        <div className="border border-gray-200 rounded-xl p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-medium text-gray-900">KRXPay (Pagar.me)</div>
+                            {(!krxExtProductId || krxEditMode) && (
+                              <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => removeGateway('KRXPAY')}>Remover</button>
+                            )}
+                          </div>
+                          <div className="mt-3 grid grid-cols-1 gap-2">
+                            {(krxExtProductId && !krxEditMode) ? (
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 text-sm text-gray-700">
+                                  <span>Atual:</span>
+                                  <span className="font-sans text-gray-900 tracking-tight">{krxExtProductId}</span>
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs text-green-700">
+                                    <CheckIcon className="h-3.5 w-3.5" />
+                                    Verificado
+                                  </span>
+                                </div>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button type="button" variant="secondary" size="icon" className="h-8 w-8">
+                                      <EllipsisHorizontalIcon className="h-5 w-5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-36">
+                                    <DropdownMenuItem onClick={() => setKrxEditMode(true)}>Editar</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => removeGateway('KRXPAY')}>Remover</DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex gap-2 items-center">
+                                  <Input placeholder="Buscar itens…" className="h-9" onChange={(e) => searchKrxItems(e.target.value)} />
+                                  <Button type="button" variant="outline" size="sm" onClick={() => searchKrxItems('')}>{krxSearching ? 'Buscando…' : 'Atualizar'}</Button>
+                                  <Button type="button" size="sm" disabled={ensuringKrx} onClick={() => ensureProviderProduct('KRXPAY')}>{ensuringKrx ? 'Gerando…' : 'Gerar Item ID'}</Button>
+                                  {krxExtProductId && (
+                                    <Button type="button" variant="ghost" size="sm" onClick={() => setKrxEditMode(false)}>Minimal</Button>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 items-center">
+                                  <div>
+                                    <Label className="text-gray-900 font-medium">Selecionar Item</Label>
+                                    <Select value={krxExtProductId || ''} onValueChange={(val: any) => { setKrxExtProductId(val); saveIntegration('KRXPAY', val); }}>
+                                      <SelectTrigger className="mt-2 h-10"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                                      <SelectContent>
+                                        {(krxList || []).map((it) => (
+                                          <SelectItem key={it.id} value={it.id}>{it.name || it.id}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="text-xs text-gray-600 mt-6">Atual: <span className="font-mono">{krxExtProductId || '—'}</span></div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
               </div>
               )}
 
@@ -859,6 +1197,7 @@ export default function EditProductPage({ params }: PageProps) {
                   </div>
                 </CardContent>
               </Card>
+
               )}
 
               {/* Create/Edit Offer Modal */}

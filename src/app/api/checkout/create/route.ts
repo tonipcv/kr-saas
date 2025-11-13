@@ -9,12 +9,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/lib/events';
-import { EventActor, EventType, PaymentMethod } from '@prisma/client';
+import { EventActor, EventType, PaymentMethod, PaymentProvider } from '@prisma/client';
 import crypto from 'crypto';
 import { pagarmeCreateOrder, pagarmeGetOrder, isV5, pagarmeCreateCustomer, pagarmeCreateCustomerCard } from '@/lib/pagarme';
 import { sendEmail } from '@/lib/email';
 import { baseTemplate } from '@/email-templates/layouts/base';
 import { PRICING } from '@/lib/pricing';
+import { selectProvider } from '@/lib/payments/routing/selectProvider';
 
 function onlyDigits(s: string) { return (s || '').replace(/\D/g, ''); }
 
@@ -90,15 +91,8 @@ export async function POST(req: Request) {
         console.warn('[checkout][create] selected offer is subscription but no subscriptionPeriodMonths in body, rejecting', { offerId: selectedOffer?.id });
         return NextResponse.json({ error: 'Oferta de assinatura requer fluxo de checkout específico' }, { status: 400 });
       }
-      // Validate requested payment method against OfferPaymentMethod if we have an offer
+      // Use Offer only for price; routing rules will decide method/provider
       if (selectedOffer) {
-        const requested = (payment?.method === 'pix') ? PaymentMethod.PIX : PaymentMethod.CARD;
-        const allowed = Array.isArray(selectedOffer.paymentMethods)
-          ? selectedOffer.paymentMethods.some((m: any) => m.active && m.method === requested)
-          : true;
-        if (!allowed) {
-          return NextResponse.json({ error: 'Método de pagamento indisponível para esta oferta' }, { status: 400 });
-        }
         amountCents = Number(selectedOffer.priceCents || 0);
       } else {
         // Fallback to legacy product price if no offer exists
@@ -279,6 +273,39 @@ export async function POST(req: Request) {
       PM_HAS_UNIQUE = !!exists?.[0]?.pm_has_unique;
     } catch {}
 
+    // Decide provider (non-breaking: we still use current Pagar.me flow; provider is logged and attached to metadata)
+    let selectedProvider: PaymentProvider | null = null;
+    try {
+      const requestedMethod = (payment?.method === 'pix') ? PaymentMethod.PIX : (payment?.method === 'boleto' ? PaymentMethod.BOLETO : PaymentMethod.CARD);
+      selectedProvider = await selectProvider({
+        merchantId: String(merchant?.id || ''),
+        offerId: selectedOffer?.id || null,
+        productId: String(product?.id || productId || ''),
+        country: String(billingAddr.country || 'BR'),
+        method: requestedMethod,
+      });
+      try { console.log('[checkout][create] selected provider', { selectedProvider, country: billingAddr.country, productId: product?.id, offerId: selectedOffer?.id }); } catch {}
+    } catch (e) {
+      try { console.warn('[checkout][create] provider selection failed, falling back to default Pagar.me path', e instanceof Error ? e.message : e); } catch {}
+      selectedProvider = null;
+    }
+
+    // Enforce that the chosen provider has a ProductIntegration mapping
+    try {
+      if (selectedProvider) {
+        const integration = await prisma.productIntegration.findUnique({
+          where: { productId_provider: { productId: String(product?.id || productId || ''), provider: selectedProvider } },
+          select: { externalProductId: true },
+        });
+        if (!integration?.externalProductId) {
+          return NextResponse.json({ error: `Produto não está integrado ao provedor ${selectedProvider} para este país. Vincule ou gere o ID do produto no gateway.` }, { status: 400 });
+        }
+      }
+    } catch (e) {
+      // Defensive: if integration check fails unexpectedly, keep a clear error
+      return NextResponse.json({ error: 'Falha ao validar integração do produto com o provedor selecionado' }, { status: 500 });
+    }
+
     // Payments (v5)
     let payments: any[] = [];
     let paymentObject: any = null; // normalized single-method object to reuse in charges
@@ -446,7 +473,7 @@ export async function POST(req: Request) {
       payments = [paymentObject];
     }
 
-    // Apply recipient split when a clinic merchant recipient is available (behind feature flag)
+    // Apply recipient split only for Pagar.me (KRXPAY) when a clinic merchant recipient is available (behind feature flag)
     // CRITICAL: clear global variable to avoid reusing charges from previous requests
     (global as any).__charges_for_payload = null;
     let actualSplitApplied = false;
@@ -467,7 +494,8 @@ export async function POST(req: Request) {
       if (method === 'pix') SPLIT_STYLE = envStylePix || envStyleGlobal || 'payments_percentage';
       if (method === 'boleto') SPLIT_STYLE = envStyleBoleto || envStyleGlobal || 'payments_percentage';
       let charges: any[] | null = null;
-      const splitEnabled = ENABLE_SPLIT && !!clinicRecipientId && !!platformRecipientId;
+      // Only enable split if provider is KRXPAY (Pagar.me)
+      const splitEnabled = ENABLE_SPLIT && selectedProvider === PaymentProvider.KRXPAY && !!clinicRecipientId && !!platformRecipientId;
       if (splitEnabled) {
         const clinicPercent = Math.max(0, Math.min(100, Number(rawSplitPercent)));
         if (SPLIT_STYLE === 'payments_percentage') {
@@ -497,7 +525,7 @@ export async function POST(req: Request) {
             },
           ];
           payments = payments.map((p: any) => ({ ...p, split: paySplit }));
-          console.log('[checkout][create] applying split (payments percentage)', { method, platformRecipientId, clinicRecipientId, platformPercent, clinicPercent });
+          console.log('[checkout][create] applying split (payments percentage)', { provider: selectedProvider, method, platformRecipientId, clinicRecipientId, platformPercent, clinicPercent });
           charges = null; // keep payments-driven flow
           actualSplitApplied = true;
         } else {

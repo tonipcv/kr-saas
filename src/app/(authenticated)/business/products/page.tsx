@@ -60,6 +60,8 @@ export default function ProductsPage() {
   const { currentClinic } = useClinic();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [merchantId, setMerchantId] = useState<string>('');
+  const [defaultProviders, setDefaultProviders] = useState<Record<string, string>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -78,6 +80,14 @@ export default function ProductsPage() {
     const checkPlanAndLoad = async () => {
       if (!currentClinic) return;
       try {
+        // Resolve merchantId for routing rules lookups
+        try {
+          const mRes = await fetch(`/api/admin/integrations/merchant/by-clinic?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+          if (mRes.ok) {
+            const m = await mRes.json().catch(() => ({}));
+            if (m?.exists && m?.id) setMerchantId(String(m.id));
+          }
+        } catch {}
         const res = await fetch('/api/subscription/current', { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
@@ -110,6 +120,30 @@ export default function ProductsPage() {
       setIsLoading(false);
     }
   };
+
+  // Refresh default gateway per product whenever merchantId or products list changes
+  useEffect(() => {
+    let cancelled = false;
+    async function refreshDefaults() {
+      try {
+        if (!merchantId || !products || products.length === 0) { setDefaultProviders({}); return; }
+        const map: Record<string, string> = {};
+        await Promise.all(products.map(async (p) => {
+          try {
+            const r = await fetch(`/api/routing/rules?merchantId=${encodeURIComponent(merchantId)}&productId=${encodeURIComponent(p.id)}`, { cache: 'no-store' });
+            if (!r.ok) return;
+            const js = await r.json().catch(() => ({}));
+            const rules = Array.isArray(js?.rules) ? js.rules : [];
+            const def = rules.find((x: any) => !x.country);
+            if (def?.provider) map[p.id] = String(def.provider);
+          } catch {}
+        }));
+        if (!cancelled) setDefaultProviders(map);
+      } catch {}
+    }
+    refreshDefaults();
+    return () => { cancelled = true; };
+  }, [merchantId, products.map(p => p.id).join(',')]);
 
   const loadProductDetails = async (productId: string) => {
     try {
@@ -366,6 +400,7 @@ export default function ProductsPage() {
                     <tr className="text-left text-xs text-gray-600">
                       <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Name</th>
                       <th className="px-3 py-3.5 font-medium">Type</th>
+                      <th className="px-3 py-3.5 font-medium">Default gateway</th>
                       <th className="px-3 py-3.5 font-medium">ID</th>
                       <th className="px-3 py-3.5 font-medium">Status</th>
                       <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
@@ -402,6 +437,19 @@ export default function ProductsPage() {
                           ) : (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-800 text-white/90">Product</span>
                           )}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
+                          {defaultProviders[product.id]
+                            ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200">
+                                {defaultProviders[product.id]}
+                              </span>
+                            )
+                            : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">
+                                Platform default
+                              </span>
+                            )}
                         </td>
                         <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
                           <span title={product.id}>{product.id}</span>

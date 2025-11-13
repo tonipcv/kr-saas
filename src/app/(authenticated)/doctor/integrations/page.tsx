@@ -116,7 +116,26 @@ export default function IntegrationsPage() {
   const waConnected = waStatus === 'CONNECTED';
   const pgConnected = pgStatus === 'ACTIVE';
   const emailVerified = emailStatus === 'VERIFIED';
-  const hasAnyConnected = waConnected || pgConnected || emailVerified;
+  const [stripeConnected, setStripeConnected] = useState(false);
+  const [stripeVerified, setStripeVerified] = useState(false);
+  const [stripeStatusAccountId, setStripeStatusAccountId] = useState<string>('');
+  const [stripeStatusLastUsedAt, setStripeStatusLastUsedAt] = useState<string | null>(null);
+  const hasAnyConnected = waConnected || pgConnected || emailVerified || stripeConnected;
+
+  // Stripe (new, isolated)
+  const [stripeOpen, setStripeOpen] = useState(false);
+  const [stripeApiKey, setStripeApiKey] = useState('');
+  const [stripeAccountId, setStripeAccountId] = useState('');
+  const [stripeWebhookSecret, setStripeWebhookSecret] = useState('');
+  const [stripeSaving, setStripeSaving] = useState(false);
+  const [stripeTesting, setStripeTesting] = useState(false);
+  const [stripeTestAmount, setStripeTestAmount] = useState('10.00');
+  const [stripeTestCurrency, setStripeTestCurrency] = useState('USD');
+  const [stripeTestEmail, setStripeTestEmail] = useState('');
+  const [stripeMerchantId, setStripeMerchantId] = useState<string>('');
+  const [stripeWebhookUrl, setStripeWebhookUrl] = useState<string>('');
+  const [stripeReady, setStripeReady] = useState(false);
+  const [stripeVerifying, setStripeVerifying] = useState(false);
 
   // Page loading while integrations status are being fetched
   const pageLoading = isLoading || waStatusLoading || pgLoading || emailStatusLoading;
@@ -243,6 +262,15 @@ export default function IntegrationsPage() {
     }
   }, [currentClinic?.id]);
 
+  // Details modal state
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsProvider, setDetailsProvider] = useState<'KRXPAY' | 'STRIPE' | 'WHATSAPP' | ''>('');
+
+  const openDetails = (provider: 'KRXPAY' | 'STRIPE' | 'WHATSAPP') => {
+    setDetailsProvider(provider);
+    setDetailsOpen(true);
+  };
+
   // Pagar.me status loader
   const loadPgStatus = async () => {
     if (!currentClinic?.id) return;
@@ -270,6 +298,49 @@ export default function IntegrationsPage() {
   useEffect(() => {
     loadPgStatus();
   }, [currentClinic?.id]);
+
+  // Stripe status loader
+  const loadStripeStatus = async () => {
+    if (!currentClinic?.id) return;
+    try {
+      const res = await fetch(`/api/admin/integrations/stripe/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+      const data = await res.json();
+      setStripeConnected(!!data?.connected);
+      setStripeVerified(!!data?.verified);
+      setStripeStatusAccountId(String(data?.accountId || ''));
+      setStripeStatusLastUsedAt(data?.lastUsedAt || null);
+    } catch {
+      setStripeConnected(false);
+      setStripeVerified(false);
+      setStripeStatusAccountId('');
+      setStripeStatusLastUsedAt(null);
+    }
+  };
+
+  useEffect(() => {
+    loadStripeStatus();
+  }, [currentClinic?.id]);
+
+  // Compute webhook URL on client
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const origin = window.location.origin;
+        setStripeWebhookUrl(`${origin}/api/webhooks/stripe`);
+      } catch {}
+    }
+  }, []);
+
+  // Helper: resolve merchantId for current clinic (for Stripe setup/test)
+  const resolveMerchantId = async () => {
+    if (!currentClinic?.id) return '';
+    try {
+      const res = await fetch(`/api/admin/integrations/merchant/by-clinic?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (data?.exists && data?.id) return String(data.id);
+    } catch {}
+    return '';
+  };
 
   // WhatsApp (Official) handlers
   const loadWaStatus = async () => {
@@ -538,7 +609,7 @@ export default function IntegrationsPage() {
               <div className="divide-y">
                 {/* Row: KRX Pay */}
                 {pgConnected && (
-                  <div className="px-6 py-3 grid grid-cols-3 items-center gap-4">
+                  <div className="px-6 py-3 grid grid-cols-3 items-center gap-4 cursor-pointer" onDoubleClick={() => openDetails('KRXPAY')}>
                     <div className="flex items-center gap-3 min-w-0">
                       <Image src="/krxpay.png" alt="KRX Pay" width={20} height={20} className="invert" />
                       <div className="truncate">
@@ -548,13 +619,29 @@ export default function IntegrationsPage() {
                     </div>
                     <div className="text-sm text-gray-700">Payments</div>
                     <div className="flex items-center justify-end">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200 text-xs">Conectado</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200 text-xs">Connected</span>
+                    </div>
+                  </div>
+                )}
+                {/* Row: Stripe */}
+                {stripeConnected && (
+                  <div className="px-6 py-3 grid grid-cols-3 items-center gap-4 cursor-pointer" onDoubleClick={() => openDetails('STRIPE')}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Image src="/stripe.svg" alt="Stripe" width={20} height={20} />
+                      <div className="truncate">
+                        <div className="text-sm font-semibold text-gray-900 truncate">Stripe</div>
+                        <div className="text-[11px] text-gray-500 truncate">Payment processing</div>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-700">Payments</div>
+                    <div className="flex items-center justify-end">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200 text-xs">Connected</span>
                     </div>
                   </div>
                 )}
                 {/* Row: WhatsApp */}
                 {waConnected && (
-                  <div className="px-6 py-3 grid grid-cols-3 items-center gap-4">
+                  <div className="px-6 py-3 grid grid-cols-3 items-center gap-4 cursor-pointer" onDoubleClick={() => openDetails('WHATSAPP')}>
                     <div className="flex items-center gap-3 min-w-0">
                       <Image src="/zap.png" alt="WhatsApp" width={20} height={20} />
                       <div className="truncate">
@@ -654,19 +741,26 @@ export default function IntegrationsPage() {
                         </div>
                       </div>
                     </button>
-                    {/* Stripe (placeholder) */}
+                    {/* Stripe */}
                     <button
                       className="text-left rounded-xl border border-gray-200 bg-white hover:bg-gray-50 p-4"
-                      onClick={() => {
+                      onClick={async () => {
                         setAddOpen(false);
-                        toast('Stripe coming soon');
+                        const mid = await resolveMerchantId();
+                        if (!mid) {
+                          toast.error('Merchant not found for current clinic');
+                          return;
+                        }
+                        setStripeMerchantId(mid);
+                        setStripeReady(false);
+                        setStripeOpen(true);
                       }}
                     >
                       <div className="flex items-center gap-3">
                         <Image src="/stripe.svg" alt="Stripe" width={40} height={40} />
                         <div>
                           <div className="font-semibold text-gray-900">Stripe</div>
-                          <div className="text-xs text-gray-600">Connect payments and view sales in the Stripe dashboard.</div>
+                          <div className="text-xs text-gray-600">Connect payments. Minimal setup.</div>
                         </div>
                       </div>
                     </button>
@@ -702,6 +796,245 @@ export default function IntegrationsPage() {
                         </div>
                       </div>
                     </button>
+                  </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Integration Details Modal (double-click row) */}
+          <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+            <DialogContent className="sm:max-w-[560px]">
+              <DialogHeader>
+                <DialogTitle>
+                  {detailsProvider === 'KRXPAY' && 'KRX Pay — Details'}
+                  {detailsProvider === 'STRIPE' && 'Stripe — Details'}
+                  {detailsProvider === 'WHATSAPP' && 'WhatsApp — Details'}
+                </DialogTitle>
+                <DialogDescription>Connection and configuration summary.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 text-sm">
+                {detailsProvider === 'KRXPAY' && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between"><span className="text-gray-600">Status</span><span className="font-medium">Connected</span></div>
+                    <div className="flex items-center justify-between"><span className="text-gray-600">Recipient ID</span><span className="font-mono">{pgRecipientId || '—'}</span></div>
+                    <div className="flex items-center justify-between"><span className="text-gray-600">Split %</span><span className="font-medium">{pgSplitPercent ?? 100}%</span></div>
+                    <div className="flex items-center justify-between"><span className="text-gray-600">Platform fee (bps)</span><span className="font-medium">{pgPlatformFeeBps ?? 0}</span></div>
+                    <div className="flex items-center justify-between"><span className="text-gray-600">Last sync</span><span className="font-medium">{pgLastSyncAt || '—'}</span></div>
+                    {pgDetails && (
+                      <div className="pt-2">
+                        <div className="text-gray-600 mb-1">Details</div>
+                        <pre className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-[12px] overflow-auto max-h-48 whitespace-pre-wrap">{JSON.stringify(pgDetails, null, 2)}</pre>
+                      </div>
+                    )}
+                    <div className="pt-2 flex justify-end gap-2">
+                      <Button variant="secondary" onClick={() => setDetailsOpen(false)}>Close</Button>
+                      <Button onClick={() => { setDetailsOpen(false); router.push('/doctor/integrations/payments/setup'); }}>Edit</Button>
+                    </div>
+                  </div>
+                )}
+                {detailsProvider === 'STRIPE' && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between"><span className="text-gray-600">Status</span><span className="font-medium">Connected</span></div>
+                    <div className="flex items-center justify-between"><span className="text-gray-600">Verified</span><span className="font-medium">{stripeVerified ? 'Yes' : 'No'}</span></div>
+                    <div className="flex items-center justify-between"><span className="text-gray-600">Account ID</span><span className="font-mono">{stripeStatusAccountId || '—'}</span></div>
+                    <div className="flex items-center justify-between"><span className="text-gray-600">Verified at</span><span className="font-medium">{stripeStatusLastUsedAt || '—'}</span></div>
+                    <div>
+                      <div className="text-gray-600 mb-1">Webhook</div>
+                      <div className="flex gap-2 items-center">
+                        <Input value={stripeWebhookUrl} readOnly />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={async () => { try { await navigator.clipboard.writeText(stripeWebhookUrl); toast.success('Copied'); } catch {} }}
+                        >Copy</Button>
+                      </div>
+                    </div>
+                    <div className="pt-2 flex justify-end gap-2">
+                      <Button variant="secondary" onClick={() => setDetailsOpen(false)}>Close</Button>
+                      <Button onClick={() => { setDetailsOpen(false); setStripeOpen(true); }}>Edit</Button>
+                    </div>
+                  </div>
+                )}
+                {detailsProvider === 'WHATSAPP' && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between"><span className="text-gray-600">Status</span><span className="font-medium">Connected</span></div>
+                    <div className="flex items-center justify-between"><span className="text-gray-600">Phone</span><span className="font-medium">{waPhone || '—'}</span></div>
+                    <div className="flex items-center justify-between"><span className="text-gray-600">Phone Number ID</span><span className="font-mono">{waPhoneNumberId || '—'}</span></div>
+                    <div className="pt-2 flex justify-end gap-2">
+                      <Button variant="secondary" onClick={() => setDetailsOpen(false)}>Close</Button>
+                      <Button onClick={() => { setDetailsOpen(false); setWaWizardOpen(true); }}>Edit</Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Stripe Setup & Test Dialog (isolated, does not affect KRXPAY) */}
+          <Dialog open={stripeOpen} onOpenChange={setStripeOpen}>
+            <DialogContent className="sm:max-w-[560px]">
+              <DialogHeader>
+                <DialogTitle>Stripe — Connect, Confirm, Test</DialogTitle>
+                <DialogDescription>Step-by-step setup. Keep it simple.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="text-xs text-gray-500">Merchant: {stripeMerchantId || '—'}</div>
+                {/* Step 1 — Connect */}
+                <div className="text-[13px] font-medium text-gray-900">1) Connect</div>
+                <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <div className="text-sm text-gray-700 mb-1">Webhook endpoint</div>
+                    <div className="flex gap-2">
+                      <Input value={stripeWebhookUrl} readOnly />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={async () => { try { await navigator.clipboard.writeText(stripeWebhookUrl); toast.success('Copied'); } catch {} }}
+                      >Copy</Button>
+                    </div>
+                    <div className="text-[11px] text-gray-500 mt-1">Add this endpoint in Stripe Dashboard and copy the signing secret.</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-700 mb-1">API key (secret)</div>
+                    <Input value={stripeApiKey} onChange={(e) => setStripeApiKey(e.target.value)} placeholder="sk_test_..." />
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-700 mb-1">Account ID (optional)</div>
+                    <Input value={stripeAccountId} onChange={(e) => setStripeAccountId(e.target.value)} placeholder="acct_..." />
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-700 mb-1">Webhook signing secret (optional)</div>
+                    <Input value={stripeWebhookSecret} onChange={(e) => setStripeWebhookSecret(e.target.value)} placeholder="whsec_..." />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      disabled={stripeSaving || !stripeApiKey.trim() || !stripeMerchantId}
+                      onClick={async () => {
+                        if (!stripeMerchantId) return toast.error('Invalid merchant');
+                        try {
+                          setStripeSaving(true);
+                          const res = await fetch('/api/admin/integrations/stripe/upsert', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              merchantId: stripeMerchantId,
+                              credentials: {
+                                apiKey: stripeApiKey.trim(),
+                                accountId: stripeAccountId.trim() || undefined,
+                                webhookSecret: stripeWebhookSecret.trim() || undefined,
+                              },
+                            })
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data?.error || 'Failed to save credentials');
+                          setStripeReady(true);
+                          toast.success('Connected');
+                        } catch (e: any) {
+                          toast.error(e?.message || 'Save error');
+                        } finally {
+                          setStripeSaving(false);
+                        }
+                      }}
+                    >
+                      {stripeSaving ? 'Saving…' : 'Save credentials'}
+                    </Button>
+                  </div>
+                </div>
+                {/* Step 2 — Confirm */}
+                <Separator />
+                <div className="text-[13px] font-medium text-gray-900">2) Confirm</div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm text-gray-700">{stripeReady ? 'Verified. You can test now.' : 'Verify credentials before testing.'}</div>
+                  <Button
+                    variant="secondary"
+                    disabled={stripeVerifying || !stripeMerchantId || !stripeApiKey.trim()}
+                    onClick={async () => {
+                      if (!stripeMerchantId) return;
+                      try {
+                        setStripeVerifying(true);
+                        const res = await fetch('/api/admin/integrations/stripe/verify', {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ merchantId: stripeMerchantId })
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data?.verified) throw new Error(data?.error || 'Verification failed');
+                        setStripeReady(true);
+                        await loadStripeStatus();
+                        toast.success('Verified');
+                      } catch (e: any) {
+                        setStripeReady(false);
+                        toast.error(e?.message || 'Could not verify credentials');
+                      } finally {
+                        setStripeVerifying(false);
+                      }
+                    }}
+                  >
+                    {stripeVerifying ? 'Verifying…' : 'Verify'}
+                  </Button>
+                </div>
+                {/* Step 3 — Test */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <div className="text-sm text-gray-700 mb-1">Amount</div>
+                    <Input value={stripeTestAmount} onChange={(e) => setStripeTestAmount(e.target.value)} placeholder="10.00" />
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-700 mb-1">Currency</div>
+                    <select
+                      className="w-full border rounded-lg h-9 px-2 bg-white"
+                      value={stripeTestCurrency}
+                      onChange={(e) => setStripeTestCurrency(e.target.value)}
+                    >
+                      <option value="USD">USD</option>
+                      <option value="BRL">BRL</option>
+                      <option value="EUR">EUR</option>
+                      <option value="GBP">GBP</option>
+                      <option value="JPY">JPY</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-3">
+                    <div className="text-sm text-gray-700 mb-1">Customer email</div>
+                    <Input value={stripeTestEmail} onChange={(e) => setStripeTestEmail(e.target.value)} placeholder="customer@example.com" />
+                  </div>
+                  <div className="sm:col-span-3 flex justify-end">
+                    <Button
+                      disabled={stripeTesting || !stripeMerchantId || !stripeTestEmail.trim() || !stripeReady}
+                      onClick={async () => {
+                        if (!stripeMerchantId) return toast.error('Invalid merchant');
+                        try {
+                          setStripeTesting(true);
+                          const amount = (() => {
+                            const n = Number(String(stripeTestAmount).replace(',', '.'));
+                            return Number.isFinite(n) && n > 0 ? n : 10.0;
+                          })();
+                          const res = await fetch('/api/payments/create', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              merchantId: stripeMerchantId,
+                              provider: 'STRIPE',
+                              amount,
+                              currency: (stripeTestCurrency || 'USD').toUpperCase(),
+                              customerEmail: stripeTestEmail.trim(),
+                            })
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data?.error || 'Test failed');
+                          const cs = data?.payment?.clientSecret;
+                          if (cs) {
+                            toast.success('PaymentIntent created. clientSecret copied to clipboard.');
+                            try { await navigator.clipboard.writeText(String(cs)); } catch {}
+                          } else {
+                            toast('Created without clientSecret (check Stripe dashboard).');
+                          }
+                        } catch (e: any) {
+                          toast.error(e?.message || 'Could not create test payment');
+                        } finally {
+                          setStripeTesting(false);
+                        }
+                      }}
+                    >
+                      {stripeTesting ? 'Testing…' : 'Run test payment'}
+                    </Button>
                   </div>
                 </div>
               </div>
