@@ -124,6 +124,7 @@ export default async function PaymentsDataPage({ searchParams }: { searchParams?
     ),
     prisma.$queryRawUnsafe<any[]>(
       `SELECT pt.id,
+              pt.provider,
               pt.provider_order_id,
               pt.provider_charge_id,
               pt.doctor_id,
@@ -144,7 +145,9 @@ export default async function PaymentsDataPage({ searchParams }: { searchParams?
               pt.payment_method_type,
               pt.status,
               pt.created_at,
-              pt.raw_payload
+              pt.raw_payload,
+              pt.client_name,
+              pt.client_email
          FROM payment_transactions pt
     LEFT JOIN "User" d ON d.id = pt.doctor_id
     LEFT JOIN patient_profiles pp ON pp.id = pt.patient_profile_id

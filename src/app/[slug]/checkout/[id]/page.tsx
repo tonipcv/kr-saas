@@ -83,6 +83,13 @@ export default function BrandedCheckoutPage() {
   const [addrCountry, setAddrCountry] = useState('BR');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Stripe inline flow
+  const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
+  const [stripe, setStripe] = useState<any>(null);
+  const [stripeElements, setStripeElements] = useState<any>(null);
+  const [stripeCardElement, setStripeCardElement] = useState<any>(null);
+  const [stripeReady, setStripeReady] = useState(false);
+  const [stripeFlowActive, setStripeFlowActive] = useState(false);
   const [preview, setPreview] = useState<any>(null);
   const [pricing, setPricing] = useState<any>(null);
   const [cardStatus, setCardStatus] = useState<null | { approved: boolean; status?: string; message?: string; last4?: string; brand?: string }>(null);
@@ -154,6 +161,10 @@ export default function BrandedCheckoutPage() {
     } as const;
     return isEN ? en : pt;
   }, [isEN]);
+  // Debug flag stable
+  const debugOn = useMemo(() => {
+    try { return ((process.env.NODE_ENV !== 'production') as any) || (sp?.get('debug') === '1'); } catch { return (process.env.NODE_ENV !== 'production'); }
+  }, [sp]);
   // PIX modal state
   const [pixOpen, setPixOpen] = useState(false);
   const [pixQrUrl, setPixQrUrl] = useState<string | null>(null);
@@ -220,6 +231,8 @@ export default function BrandedCheckoutPage() {
     } catch {}
   }
 
+  // (moved below to access currentCurrency without lint errors)
+
   async function sessionHeartbeat(step?: string | null) {
     try {
       if (!SESS_EN) return;
@@ -276,6 +289,23 @@ export default function BrandedCheckoutPage() {
   const [checkoutRemaining, setCheckoutRemaining] = useState<number>(600);
   // Minimalist approval modal
   const [approveModal, setApproveModal] = useState<{ open: boolean; stage: 'loading' | 'success' }>({ open: false, stage: 'loading' });
+  const approveTimerRef = useRef<any>(null);
+  function openApproveLoading() {
+    try { if (approveTimerRef.current) { clearTimeout(approveTimerRef.current); approveTimerRef.current = null; } } catch {}
+    setApproveModal({ open: true, stage: 'loading' });
+  }
+  function openApproveLoadingThenSuccess(delayMs: number = 500) {
+    try { if (approveTimerRef.current) { clearTimeout(approveTimerRef.current); } } catch {}
+    setApproveModal({ open: true, stage: 'loading' });
+    approveTimerRef.current = setTimeout(() => {
+      setApproveModal({ open: true, stage: 'success' });
+      approveTimerRef.current = null;
+    }, Math.max(0, delayMs));
+  }
+  function closeApproveModal() {
+    try { if (approveTimerRef.current) { clearTimeout(approveTimerRef.current); approveTimerRef.current = null; } } catch {}
+    setApproveModal({ open: false, stage: 'loading' });
+  }
 
   // Auto-preencher endereço padrão quando for cartão (não há entrega)
   useEffect(() => {
@@ -315,6 +345,27 @@ export default function BrandedCheckoutPage() {
   const currentCountry = (addrCountry || 'BR').toUpperCase();
   const currentCurrency = getCurrencyForCountry(currentCountry);
   const locale = isEN ? 'en-US' : 'pt-BR';
+
+  // Debounced session upsert on form changes (prevents spamming the API)
+  useEffect(() => {
+    if (!SESS_EN) return;
+    const id = setTimeout(() => {
+      sessionUpsert({ lastStep: 'form_update' });
+    }, 600);
+    return () => clearTimeout(id);
+    // Include clinic and currency to track context changes as well
+  }, [
+    SESS_EN,
+    buyerName,
+    buyerEmail,
+    buyerPhone,
+    buyerDocument,
+    paymentMethod,
+    installments,
+    offerParam,
+    branding?.clinicId,
+    currentCurrency,
+  ]);
 
   function flagEmoji(cc: string) {
     const s = (cc || '').toUpperCase();
@@ -391,6 +442,9 @@ export default function BrandedCheckoutPage() {
   // Resolve Stripe price amount (unit_amount) when routed to Stripe
   const [stripePriceCents, setStripePriceCents] = useState<number | null>(null);
   const [stripePriceCurrency, setStripePriceCurrency] = useState<string | null>(null);
+  const [stripeProductId, setStripeProductId] = useState<string | null>(null);
+  const [stripePriceActive, setStripePriceActive] = useState<boolean | null>(null);
+  const [stripeProductActive, setStripeProductActive] = useState<boolean | null>(null);
   const [offerPriceCents, setOfferPriceCents] = useState<number | null>(null);
   const [offerPriceRows, setOfferPriceRows] = useState<any[] | null>(null);
   const [routingMap, setRoutingMap] = useState<{ methods?: Record<string, { provider: 'STRIPE'|'KRXPAY'|null }>, currency?: string } | null>(null);
@@ -477,6 +531,9 @@ export default function BrandedCheckoutPage() {
         if (active) {
           setStripePriceCents(Number.isFinite(unit) ? unit : null);
           setStripePriceCurrency(cur);
+          setStripeProductId((data?.product || null) as any);
+          setStripePriceActive(typeof data?.active === 'boolean' ? data.active : (typeof data?.price?.active === 'boolean' ? data.price.active : null));
+          try { console.log('[checkout][stripe][price]', { stripePriceId, unit, cur, product: data?.product, active: data?.active ?? data?.price?.active }); } catch {}
         }
       } catch {
         if (active) { setStripePriceCents(null); setStripePriceCurrency(null); }
@@ -485,6 +542,26 @@ export default function BrandedCheckoutPage() {
     fetchStripePrice();
     return () => { active = false; };
   }, [cardProvider, stripePriceId]);
+
+  // Fetch Stripe product active status when we know the product id
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        if (!stripeProductId) { if (alive) setStripeProductActive(null); return; }
+        const res = await fetch(`/api/stripe/product?id=${encodeURIComponent(stripeProductId)}`, { cache: 'no-store' });
+        const js = await res.json().catch(() => ({}));
+        if (!alive) return;
+        if (res.ok) {
+          setStripeProductActive(!!js?.active);
+          try { console.log('[checkout][stripe][product]', { productId: stripeProductId, active: !!js?.active }); } catch {}
+        } else {
+          setStripeProductActive(null);
+        }
+      } catch { if (alive) setStripeProductActive(null); }
+    })();
+    return () => { alive = false };
+  }, [stripeProductId]);
 
   // Fetch normalized OfferPrice rows for current country/currency (any provider)
   useEffect(() => {
@@ -564,11 +641,8 @@ export default function BrandedCheckoutPage() {
     if (cardProvider === 'STRIPE' && stripePriceCents != null) return stripePriceCents;
     if (offerPriceCents != null) return offerPriceCents;
     if (priceOverrideCents != null) return priceOverrideCents;
-    if (offer?.priceCents != null) return offer.priceCents;
-    // fallback legacy
-    const base = (product?.discountPrice ?? product?.originalPrice ?? 0);
-    return Math.round((Number(base) || 0) * 100);
-  }, [cardProvider, stripePriceCents, offerPriceCents, priceOverrideCents, offer?.priceCents, product]);
+    return 0;
+  }, [cardProvider, stripePriceCents, offerPriceCents, priceOverrideCents]);
 
   // Compute final allowed methods considering routing + offer methods
   const cardAllowedRouted = useMemo(() => {
@@ -579,11 +653,11 @@ export default function BrandedCheckoutPage() {
       return !!(stripePriceId || (offerPriceCents != null) || (priceOverrideCents != null));
     }
     if (cardProvider === 'KRXPAY') {
-      // Accept DB price, override, or global base price
-      return !!(offerPriceCents != null || priceOverrideCents != null || (offer?.priceCents != null));
+      // Accept only DB price or override
+      return !!(offerPriceCents != null || priceOverrideCents != null);
     }
     return false;
-  }, [cardProvider, stripePriceId, offerPriceCents, priceOverrideCents, offer?.priceCents]);
+  }, [cardProvider, stripePriceId, offerPriceCents, priceOverrideCents]);
 
   const pixAllowedRouted = useMemo(() => {
     // PIX allowed when routed to KRXPAY regardless of offer flag; otherwise rely on offer flag
@@ -632,6 +706,55 @@ export default function BrandedCheckoutPage() {
     setCardStatus(null);
     setError(null);
   }
+
+  // Standalone Stripe mount (no client_secret) to keep a single Card Element UI
+  const stripeStandaloneMountedRef = useRef<boolean>(false);
+  async function ensureStripeMountedStandalone() {
+    const pk = (process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '').toString();
+    if (!pk) throw new Error('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY não configurada');
+    if (stripeStandaloneMountedRef.current && stripeCardElement) return;
+    const StripeCtor = await loadStripeJs();
+    const stripe = StripeCtor(pk);
+    const elements = stripe.elements();
+    const existing = elements.getElement('card');
+    const card = existing || elements.create('card');
+    // wait for mount target
+    let mountTarget: HTMLElement | null = null;
+    for (let i = 0; i < 10; i++) {
+      mountTarget = document.getElementById('stripe-card-element');
+      if (mountTarget) break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    if (!mountTarget) throw new Error('stripe-card-element não encontrado');
+    // Micro-tick to ensure DOM paint before mount
+    await new Promise((r) => setTimeout(r, 0));
+    try { if ((card as any)._mounted !== true) card.mount(mountTarget); } catch {}
+    setStripe(stripe);
+    setStripeElements(elements);
+    setStripeCardElement(card);
+    setStripeReady(true);
+    stripeStandaloneMountedRef.current = true;
+    // Make card UI visible after standalone mount (this does NOT confirm or create PI)
+    setStripeFlowActive(true);
+  }
+
+  useEffect(() => {
+    const routedToStripe = cardProvider === 'STRIPE';
+    const wantsCard = paymentMethod === 'card';
+    if (!routedToStripe || !cardAllowed || !wantsCard) return;
+    let stopped = false;
+    (async () => {
+      try {
+        await ensureStripeMountedStandalone();
+      } catch (e: any) {
+        if (stopped) return;
+        setError(e?.message || 'Falha ao preparar Stripe');
+        setStripeFlowActive(false);
+        setStripeClientSecret(null);
+      }
+    })();
+    return () => { stopped = true; };
+  }, [cardProvider, cardAllowed, paymentMethod]);
 
   // Dev helper: prefill test data and submit
   async function payNowTest() {
@@ -916,13 +1039,12 @@ export default function BrandedCheckoutPage() {
     const capBase = intervalCap || businessMax;
     const maxN = Math.max(1, Math.min(capBase, maxOfferN || capBase));
     const out: { n: number; perCents: number }[] = [];
-    const pricePer = (P: number, i: number, n: number) => {
-      if (n <= 1 || i <= 0) return Math.round(P);
-      const factor = Math.pow(1 + i, n);
+    const calculateInstallment = (principal: number, rate: number, periods: number) => {
+      if (periods === 1 || rate <= 0) return Math.round(principal);
+      const factor = Math.pow(1 + rate, periods);
       const denom = factor - 1;
-      if (denom <= 0) return Math.ceil(P / n);
-      const A = (P * i * factor) / denom;
-      return Math.round(A);
+      if (denom <= 0) return Math.ceil(principal / periods);
+      return Math.round((principal * rate * factor) / denom);
     };
 
   // Build success URL helper
@@ -935,7 +1057,7 @@ export default function BrandedCheckoutPage() {
     return `/${s}/checkout/success?${params.toString()}`;
   }
     for (let n = 1; n <= maxN; n++) {
-      const per = pricePer(priceCents, apr, n);
+      const per = calculateInstallment(priceCents, apr, n);
       out.push({ n, perCents: per });
     }
     return out;
@@ -984,7 +1106,15 @@ export default function BrandedCheckoutPage() {
     expiry: formatExpiryPreview(cardExpMonth, cardExpYear),
   };
 
+  // Keep last Stripe PI metadata to enrich success redirect (status page may expect KRXPAY order)
+  const stripeMetaRef = useRef<{ currency?: string; amount_minor?: number } | null>(null);
+
   async function onSubmit() {
+    // If Stripe flow is active AND we already have a client_secret, confirm immediately
+    if (stripeFlowActive && !!stripeClientSecret) {
+      await confirmStripePayment();
+      return;
+    }
     setError(null);
     if (!product) return;
     if (!buyerName.trim()) { console.warn('Informe o nome'); return; }
@@ -1130,7 +1260,7 @@ export default function BrandedCheckoutPage() {
         setSubmitting(false);
       }
     }
-    if (paymentMethod === 'card') {
+    if (paymentMethod === 'card' && !stripeFlowActive) {
       if (!cardNumber.trim() || !cardHolder.trim() || !cardExpMonth.trim() || !cardExpYear.trim() || !cardCvv.trim()) {
         console.warn('Preencha todos os dados do cartão');
         return;
@@ -1155,6 +1285,30 @@ export default function BrandedCheckoutPage() {
       const endpoint = isSubscription
         ? (paymentMethod === 'pix' ? '/api/checkout/create' : (subMonths > 1 ? '/api/checkout/create' : '/api/checkout/subscribe'))
         : '/api/checkout/create';
+      // If KRXPAY card, tokenize first to avoid sending PAN/CVV to checkout endpoint
+      let savedCardId: string | null = null;
+      if (paymentMethod === 'card' && cardProvider === 'KRXPAY') {
+        try {
+          const tokRes = await fetch('/api/payments/tokenize', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              buyer: {
+                name: buyerName,
+                email: buyerEmail,
+                document: buyerDocument,
+                address: { street: addrStreet, number: addrNumber, zip_code: addrZip, city: addrCity, state: addrState, country: addrCountry || 'BR' },
+              },
+              card: { number: cardNumber, holder_name: cardHolder, exp_month: cardExpMonth, exp_year: cardExpYear, cvv: cardCvv },
+            })
+          });
+          const tok = await tokRes.json().catch(() => ({}));
+          if (!tokRes.ok || !tok?.cardId) throw new Error(tok?.error || 'Falha ao tokenizar cartão');
+          savedCardId = String(tok.cardId);
+        } catch (e: any) {
+          throw new Error(e?.message || 'Tokenização indisponível');
+        }
+      }
+
       const body = (endpoint === '/api/checkout/create' && isSubscription) ? {
         productId: product.id,
         productName: product.name,
@@ -1178,23 +1332,35 @@ export default function BrandedCheckoutPage() {
         subscriptionPeriodMonths: subMonths,
         payment: paymentMethod === 'pix'
           ? { method: 'pix' }
-          : {
-              method: 'card',
-              // IMPORTANT: respect user's selection; clamp to subscription months, offer cap and platform cap
-              installments: Math.max(1, Math.min(
-                Number(installments || 1),
-                Number(subMonths || 1),
-                Number(offer?.maxInstallments || 12),
-                12
-              )),
-              card: {
-                number: cardNumber,
-                holder_name: cardHolder,
-                exp_month: cardExpMonth,
-                exp_year: cardExpYear,
-                cvv: cardCvv,
-              }
-            }
+          : (savedCardId && cardProvider === 'KRXPAY'
+              ? {
+                  method: 'card',
+                  installments: Math.max(1, Math.min(
+                    Number(installments || 1),
+                    Number(subMonths || 1),
+                    Number(offer?.maxInstallments || 12),
+                    12
+                  )),
+                  saved_card_id: savedCardId,
+                }
+              : {
+                  method: 'card',
+                  // IMPORTANT: respect user's selection; clamp to subscription months, offer cap and platform cap
+                  installments: Math.max(1, Math.min(
+                    Number(installments || 1),
+                    Number(subMonths || 1),
+                    Number(offer?.maxInstallments || 12),
+                    12
+                  )),
+                  card: {
+                    number: cardNumber,
+                    holder_name: cardHolder,
+                    exp_month: cardExpMonth,
+                    exp_year: cardExpYear,
+                    cvv: cardCvv,
+                  }
+                }
+            )
       } : (isSubscription && endpoint === '/api/checkout/subscribe' ? {
         productId: product.id,
         slug,
@@ -1213,16 +1379,9 @@ export default function BrandedCheckoutPage() {
             country: addrCountry || 'BR',
           }
         },
-        payment: {
-          method: 'card',
-          card: {
-            number: cardNumber,
-            holder_name: cardHolder,
-            exp_month: cardExpMonth,
-            exp_year: cardExpYear,
-            cvv: cardCvv,
-          }
-        }
+        payment: savedCardId && cardProvider === 'KRXPAY'
+          ? { method: 'card', saved_card_id: savedCardId }
+          : { method: 'card', card: { number: cardNumber, holder_name: cardHolder, exp_month: cardExpMonth, exp_year: cardExpYear, cvv: cardCvv } }
       } : {
         productId: product.id,
         productName: product.name,
@@ -1245,17 +1404,10 @@ export default function BrandedCheckoutPage() {
         slug,
         payment: paymentMethod === 'pix'
           ? { method: 'pix' }
-          : {
-              method: 'card',
-              installments,
-              card: {
-                number: cardNumber,
-                holder_name: cardHolder,
-                exp_month: cardExpMonth,
-                exp_year: cardExpYear,
-                cvv: cardCvv,
-              }
-            }
+          : (savedCardId && cardProvider === 'KRXPAY'
+              ? { method: 'card', installments, saved_card_id: savedCardId }
+              : { method: 'card', installments, card: { number: cardNumber, holder_name: cardHolder, exp_month: cardExpMonth, exp_year: cardExpYear, cvv: cardCvv } }
+            )
       });
       // Debug the outgoing payload
       try { 
@@ -1269,11 +1421,36 @@ export default function BrandedCheckoutPage() {
           sentInstallments: (body as any)?.payment?.installments 
         }); 
       } catch {}
+      // Guarantee Stripe client+element are ready before creating PI to avoid TDZ/race on first submit
+      if (paymentMethod === 'card' && cardProvider === 'STRIPE') {
+        try { await ensureStripeMountedStandalone(); } catch (e: any) { console.warn('[stripe][ensureStandalone][submit]', e?.message || e); }
+      }
       const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
       // Reset card UI status before handling
       setCardStatus(null);
+      // Handle STRIPE branch: backend returned client_secret for PaymentIntent
+      if (paymentMethod === 'card' && data?.provider === 'STRIPE' && data?.client_secret) {
+        try {
+          // Preserve amount/currency for success page
+          stripeMetaRef.current = { currency: data?.currency, amount_minor: data?.amount_minor };
+          setStripeClientSecret(String(data.client_secret));
+          // Reuse the already mounted standalone Card Element
+          setStripeFlowActive(true);
+          setError(null);
+          // Immediately confirm to avoid a second click and Incomplete PIs
+          await confirmStripePayment(String(data.client_secret));
+          return;
+        } catch (e: any) {
+          // Cleanup Stripe flow on mount failure
+          setStripeFlowActive(false);
+          setStripeClientSecret(null);
+          setError(e?.message || 'Falha ao inicializar Stripe');
+          return;
+        }
+      }
+
       // Handle PIX modal (only for one-time flow)
       if (paymentMethod === 'pix' && data?.order) {
         setOrderId(data.order?.id || null);
@@ -1312,10 +1489,10 @@ export default function BrandedCheckoutPage() {
         if (data?.order_id && !approvedStrict && !isTerminalFail) {
           setCardPolling({ active: true, startedAt: Date.now() });
           // show loading modal while processing
-          setApproveModal({ open: true, stage: 'loading' });
+          openApproveLoading();
         } else {
           // Terminal non-approved response: ensure modal is closed
-          setApproveModal({ open: false, stage: 'loading' });
+          closeApproveModal();
         }
         if (!approvedStrict) {
           // Only show error for terminal failures; for approved/authorized/captured keep UI clean and let polling redirect
@@ -1356,6 +1533,109 @@ export default function BrandedCheckoutPage() {
       }
     } catch (e: any) {
       setError(e?.message || 'Erro ao criar checkout');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // Stripe client helpers (loaded only when backend routes to STRIPE)
+  const STRIPE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
+  async function loadStripeJs(): Promise<any> {
+    if ((window as any).Stripe) return (window as any).Stripe;
+    await new Promise<void>((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://js.stripe.com/v3';
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Failed to load Stripe.js'));
+      document.head.appendChild(s);
+    });
+    return (window as any).Stripe;
+  }
+  async function ensureStripeMounted(clientSecret: string) {
+    if (!STRIPE_PUBLISHABLE_KEY) throw new Error('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY não configurada');
+    const StripeCtor = await loadStripeJs();
+    const stripe = StripeCtor(String(STRIPE_PUBLISHABLE_KEY));
+    const elements = stripe.elements({ clientSecret });
+    const existing = elements.getElement('card');
+    const card = existing || elements.create('card');
+    // Retry a few times to let React render the mount target
+    let mountTarget: HTMLElement | null = null;
+    for (let i = 0; i < 10; i++) {
+      mountTarget = document.getElementById('stripe-card-element');
+      if (mountTarget) break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    if (!mountTarget) throw new Error('stripe-card-element não encontrado');
+    if ((card as any)._mounted !== true) {
+      card.mount(mountTarget);
+    }
+    setStripe(stripe);
+    setStripeElements(elements);
+    setStripeCardElement(card);
+    setStripeReady(true);
+  }
+  async function confirmStripePayment(secretOverride?: string) {
+    try {
+      if (!stripe || !stripeElements) {
+        try { console.warn('[stripe][confirm] missing client, trying to mount standalone'); } catch {}
+        try { await ensureStripeMountedStandalone(); } catch {}
+      }
+      const clientSecret = String(secretOverride || stripeClientSecret || '');
+      if (!stripe || !stripeElements || !clientSecret) throw new Error('Stripe não inicializado');
+      setSubmitting(true);
+      try { console.log('[stripe][confirm][start]', { hasStripe: !!stripe, hasElements: !!stripeElements, hasSecret: !!clientSecret }); } catch {}
+      const billing_details: any = {
+        name: buyerName,
+        email: buyerEmail,
+        address: {
+          line1: addrStreet,
+          line2: '',
+          postal_code: addrZip,
+          city: addrCity,
+          state: addrState,
+          country: addrCountry,
+        }
+      };
+      let cardEl = stripeCardElement || (stripeElements && stripeElements.getElement && stripeElements.getElement('card'));
+      if (!cardEl) {
+        try { console.warn('[stripe][confirm] card element missing, re-mounting standalone'); } catch {}
+        try { await ensureStripeMountedStandalone(); } catch {}
+        cardEl = stripeCardElement || (stripeElements && stripeElements.getElement && stripeElements.getElement('card'));
+      }
+      if (!cardEl) throw new Error('Stripe Card Element não está disponível');
+      const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: cardEl,
+          billing_details,
+        },
+      });
+      try { console.log('[stripe][confirm][res]', { error: stripeError?.message, status: paymentIntent?.status, id: paymentIntent?.id }); } catch {}
+      if (stripeError) {
+        setError(stripeError.message || 'Pagamento não aprovado');
+        return;
+      }
+      if (paymentIntent && (paymentIntent.status === 'succeeded' || paymentIntent.status === 'requires_capture' || paymentIntent.status === 'processing')) {
+        // Best-effort: ensure we persist a payment_transactions row when webhooks are flaky
+        try {
+          await fetch('/api/checkout/stripe/record', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ payment_intent_id: paymentIntent.id, productId, slug }),
+          });
+        } catch {}
+        const q = new URLSearchParams();
+        q.set('order_id', paymentIntent.id);
+        q.set('method', 'card');
+        q.set('product_id', productId);
+        if (stripeMetaRef.current?.currency) q.set('currency', String(stripeMetaRef.current.currency));
+        if (stripeMetaRef.current?.amount_minor != null) q.set('amount_minor', String(stripeMetaRef.current.amount_minor));
+        const to = `/${slug}/checkout/success?${q.toString()}`;
+        showApprovedAndRedirect(to);
+        return;
+      }
+      setError('Pagamento não concluído');
+    } catch (e: any) {
+      setError(e?.message || 'Falha ao processar Stripe');
     } finally {
       setSubmitting(false);
     }
@@ -1433,7 +1713,7 @@ export default function BrandedCheckoutPage() {
             if (isTerminalFail) {
               // Terminal non-approved: stop polling and close modal
               setCardPolling(null);
-              setApproveModal({ open: false, stage: 'loading' });
+              closeApproveModal();
               return;
             }
             // For intermediary statuses (approved/authorized/captured not yet paid), keep polling
@@ -1445,7 +1725,7 @@ export default function BrandedCheckoutPage() {
       } else {
         // Timeout: stop polling and close modal to avoid infinite loader
         setCardPolling(null);
-        setApproveModal({ open: false, stage: 'loading' });
+        closeApproveModal();
       }
     };
     tick();
@@ -1464,27 +1744,15 @@ export default function BrandedCheckoutPage() {
       if (hasRedirected || redirectingRef.current) return;
       redirectingRef.current = true;
       try { localStorage.setItem(LOCAL_REDIRECT_KEY, to); } catch {}
-      setApproveModal({ open: true, stage: 'loading' });
-      setTimeout(() => setApproveModal({ open: true, stage: 'success' }), 500);
+      openApproveLoadingThenSuccess(500);
       setTimeout(() => {
-        try {
-          setHasRedirected(true);
-          // Prefer replace to avoid history back to checkout
-          window.location.replace(to);
-        } catch {
-          window.location.href = to;
-        }
-        // Last-resort: if still not navigated, force after extra delay
-        setTimeout(() => {
-          try {
-            if (!document.hidden) {
-              window.location.href = to;
-            }
-          } catch {}
-        }, 1800);
+        setHasRedirected(true);
+        // Single redirect strategy: replace to avoid history back
+        window.location.replace(to);
       }, 1200);
     } catch {
-      window.location.href = to;
+      // Fallback to a single replace as well
+      window.location.replace(to);
     }
   }
 
@@ -1547,24 +1815,7 @@ export default function BrandedCheckoutPage() {
             {/* Left card */}
             <div className="lg:col-span-8">
               <div className={`bg-white border-gray-200 rounded-xl border p-5 shadow-sm`}>
-                {/* Buyer info */}
-                {(((process.env.NODE_ENV !== 'production') as any) || (sp.get('debug') === '1')) && (
-                <div className={`mb-4 ${theme==='DARK'?'bg-[#0f0f0f] border border-gray-800':'bg-yellow-50 border border-yellow-200'} rounded-lg p-3 text-xs`}> 
-                  <div className="font-semibold mb-1">Dev Debug</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-                    <div>addrCountry: <span className="font-mono">{addrCountry}</span></div>
-                    <div>currentCountry: <span className="font-mono">{currentCountry}</span></div>
-                    <div>currentCurrency: <span className="font-mono">{currentCurrency}</span></div>
-                    <div>locale: <span className="font-mono">{locale}</span></div>
-                    <div>routedProvider: <span className="font-mono">{String(routedProvider || 'none')}</span></div>
-                    <div>stripePriceId: <span className="font-mono">{stripePriceId || '—'}</span></div>
-                    <div>stripePriceCents: <span className="font-mono">{stripePriceCents ?? '—'}</span></div>
-                    <div>cardAllowed: <span className="font-mono">{String(cardAllowed)}</span></div>
-                    <div>pixAllowed: <span className="font-mono">{String(pixAllowed)}</span></div>
-                    <div className={`bg-gray-100 h-11 rounded-md col-span-1 animate-pulse`} />
-                  </div>
-                </div>
-                )}
+                {/* Buyer info (skeleton) */}
 
                 {/* Payment method */}
                 <div className="mt-6">
@@ -1614,6 +1865,7 @@ export default function BrandedCheckoutPage() {
             </div>
           </div>
         </div>
+        {/* no sticky debug in loading */}
       </div>
     );
   }
@@ -1655,22 +1907,6 @@ export default function BrandedCheckoutPage() {
             )}
           </div>
 
-          {(((process.env.NODE_ENV !== 'production') as any) || (sp.get('debug') === '1')) && (
-            <div className={`mb-4 ${theme==='DARK'?'bg-[#0f0f0f] border border-gray-800':'bg-yellow-50 border border-yellow-200'} rounded-lg p-3 text-xs`}> 
-              <div className="font-semibold mb-1">Dev Debug</div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
-                <div>addrCountry: <span className="font-mono">{addrCountry}</span></div>
-                <div>currentCountry: <span className="font-mono">{currentCountry}</span></div>
-                <div>currentCurrency: <span className="font-mono">{currentCurrency}</span></div>
-                <div>locale: <span className="font-mono">{locale}</span></div>
-                <div>routedProvider: <span className="font-mono">{String(routedProvider || 'none')}</span></div>
-                <div>stripePriceId: <span className="font-mono">{stripePriceId || '—'}</span></div>
-                <div>stripePriceCents: <span className="font-mono">{stripePriceCents ?? '—'}</span></div>
-                <div>cardAllowed: <span className="font-mono">{String(cardAllowed)}</span></div>
-                <div>pixAllowed: <span className="font-mono">{String(pixAllowed)}</span></div>
-              </div>
-            </div>
-          )}
           <div className="flex items-center justify-between max-w-7xl mx-auto px-1 md:px-0 mb-3">
             <div />
             <div className="relative">
@@ -1862,7 +2098,7 @@ export default function BrandedCheckoutPage() {
                   {paymentMethod === 'card' && cardAllowed && (
                     <div>{/* Parcelas e País serão exibidos após os campos do cartão */}</div>
                   )}
-                  {paymentMethod === 'pix' && (
+                  {addrCountry === 'BR' && paymentMethod === 'pix' && (
                     <div className="mt-2 text-sm">
                       <div className={`${theme==='DARK'?'text-gray-300':'text-gray-700'}`}>
                         <div><strong>Informações sobre o pagamento via pix:</strong></div>
@@ -1889,102 +2125,100 @@ export default function BrandedCheckoutPage() {
                                 {paymentMethod === 'card' && cardAllowed && (
                   <div className="mt-4 space-y-3">
                     <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'}`}>{t.card_information}</div>
-                    {/* Segmented row: number | MM/YY | CVC */}
-                    <div className={`${theme==='DARK'?'bg-[#0f0f0f] border border-gray-800':'bg-gray-100 border border-transparent'} rounded-md h-12 flex items-stretch overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500`}>
-                      {/* Number */}
-                      <div className="relative flex-1 flex items-center">
-                        <input
-                          value={cardNumber}
-                          onChange={(e) => setCardNumber(e.target.value)}
-                          placeholder="1234 1234 1234 1234"
-                          className={`w-full h-full px-3 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 placeholder:text-gray-500':'text-gray-900 placeholder:text-gray-400'}`}
-                          autoComplete="off"
-                          inputMode="numeric"
-                          autoCorrect="off"
-                          autoCapitalize="off"
-                          spellCheck={false}
-                        />
-                        {/* Brand badge (dynamic) */}
-                        <div className="absolute right-2 inset-y-0 flex items-center">
-                          {(() => {
-                            const b = detectBrand(cardNumber);
-                            if (b === 'VISA') {
-                              return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#1a1f71]">VISA</span>;
-                            }
-                            if (b === 'MASTERCARD') {
-                              return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#eb001b]">MC</span>;
-                            }
-                            if (b === 'AMEX') {
-                              return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#0a2540]">AMEX</span>;
-                            }
-                            if (b === 'DISCOVER') {
-                              return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#ff6000]">DISC</span>;
-                            }
-                            return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-gray-500">CARD</span>;
-                          })()}
+                    <div id="stripe-card-element" className="bg-white border border-gray-300 rounded-md p-3" style={{ display: stripeFlowActive ? 'block' : 'none' }} />
+                    {!stripeFlowActive && (
+                      <>
+                        {/* Segmented row: number | MM/YY | CVC */}
+                        <div className={`${theme==='DARK'?'bg-[#0f0f0f] border border-gray-800':'bg-gray-100 border border-transparent'} rounded-md h-12 flex items-stretch overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500`}>
+                          {/* Number */}
+                          <div className="relative flex-1 flex items-center">
+                            <input
+                              value={cardNumber}
+                              onChange={(e) => setCardNumber(e.target.value)}
+                              placeholder="1234 1234 1234 1234"
+                              className={`w-full h-full px-3 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 placeholder:text-gray-500':'text-gray-900 placeholder:text-gray-400'}`}
+                              autoComplete="off"
+                              inputMode="numeric"
+                              autoCorrect="off"
+                              autoCapitalize="off"
+                              spellCheck={false}
+                            />
+                            {/* Brand badge (dynamic) */}
+                            <div className="absolute right-2 inset-y-0 flex items-center">
+                              {(() => {
+                                const b = detectBrand(cardNumber);
+                                if (b === 'VISA') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#1a1f71]">VISA</span>;
+                                if (b === 'MASTERCARD') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#eb001b]">MC</span>;
+                                if (b === 'AMEX') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#0a2540]">AMEX</span>;
+                                if (b === 'DISCOVER') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#ff6000]">DISC</span>;
+                                return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-gray-500">CARD</span>;
+                              })()}
+                            </div>
+                          </div>
+                          {/* Divider */}
+                          <div className={`${theme==='DARK'?'bg-gray-800':'bg-gray-300'} w-px`} />
+                          {/* Mês/Ano */}
+                          <div className="w-40 flex items-center gap-2 px-2">
+                            <select value={cardExpMonth} onChange={(e) => setCardExpMonth(e.target.value)} className={`w-1/2 h-8 rounded-md px-2 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 border border-gray-800':'text-gray-900'}`}>
+                              <option value="" disabled>Mês</option>
+                              {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                                <option key={m} value={String(m).padStart(2,'0')}>{String(m).padStart(2,'0')}</option>
+                              ))}
+                            </select>
+                            <select value={cardExpYear} onChange={(e) => setCardExpYear(e.target.value)} className={`w-1/2 h-8 rounded-md px-2 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 border border-gray-800':'text-gray-900'}`}>
+                              <option value="" disabled>Ano</option>
+                              {Array.from({ length: 12 }, (_, i) => i).map(delta => {
+                                const year = new Date().getFullYear() % 100 + delta;
+                                return <option key={year} value={String(year).padStart(2,'0')}>{String(year).padStart(2,'0')}</option>;
+                              })}
+                            </select>
+                          </div>
+                          {/* Divider */}
+                          <div className={`${theme==='DARK'?'bg-gray-800':'bg-gray-300'} w-px`} />
+                          {/* CVC */}
+                          <div className="w-24 flex items-center">
+                            <input
+                              value={cardCvv}
+                              onChange={(e) => setCardCvv(e.target.value)}
+                              placeholder="Cód. segurança"
+                              className={`w-full h-full px-3 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 placeholder:text-gray-500':'text-gray-900 placeholder:text-gray-400'}`}
+                              autoComplete="off"
+                              autoCorrect="off"
+                              autoCapitalize="off"
+                              spellCheck={false}
+                            />
+                          </div>
                         </div>
-                      </div>
-                      {/* Divider */}
-                      <div className={`${theme==='DARK'?'bg-gray-800':'bg-gray-300'} w-px`} />
-                      {/* Mês/Ano */}
-                      <div className="w-40 flex items-center gap-2 px-2">
-                        <select value={cardExpMonth} onChange={(e) => setCardExpMonth(e.target.value)} className={`w-1/2 h-8 rounded-md px-2 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 border border-gray-800':'text-gray-900'}`}>
-                          <option value="" disabled>Mês</option>
-                          {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                            <option key={m} value={String(m).padStart(2,'0')}>{String(m).padStart(2,'0')}</option>
-                          ))}
-                        </select>
-                        <select value={cardExpYear} onChange={(e) => setCardExpYear(e.target.value)} className={`w-1/2 h-8 rounded-md px-2 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 border border-gray-800':'text-gray-900'}`}>
-                          <option value="" disabled>Ano</option>
-                          {Array.from({ length: 12 }, (_, i) => i).map(delta => {
-                            const year = new Date().getFullYear() % 100 + delta; // two digits
-                            return <option key={year} value={String(year).padStart(2,'0')}>{String(year).padStart(2,'0')}</option>;
-                          })}
-                        </select>
-                      </div>
-                      {/* Divider */}
-                      <div className={`${theme==='DARK'?'bg-gray-800':'bg-gray-300'} w-px`} />
-                      {/* CVC */}
-                      <div className="w-24 flex items-center">
-                        <input
-                          value={cardCvv}
-                          onChange={(e) => setCardCvv(e.target.value)}
-                          placeholder="Cód. segurança"
-                          className={`w-full h-full px-3 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 placeholder:text-gray-500':'text-gray-900 placeholder:text-gray-400'}`}
-                          autoComplete="off"
-                          autoCorrect="off"
-                          autoCapitalize="off"
-                          spellCheck={false}
-                        />
-                      </div>
-                    </div>
 
-                    {/* Cardholder */}
-                    <div>
-                      <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1`}>{t.cardholder_name}</div>
-                      <Input value={cardHolder} onChange={(e) => setCardHolder(e.target.value)} placeholder={t.cardholder_placeholder} className={`${inputClass} h-12 text-base`} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
-                    </div>
+                        {/* Cardholder */}
+                        <div>
+                          <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1`}>{t.cardholder_name}</div>
+                          <Input value={cardHolder} onChange={(e) => setCardHolder(e.target.value)} placeholder={t.cardholder_placeholder} className={`${inputClass} h-12 text-base`} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
+                        </div>
 
-                    {/* Parcelas abaixo dos inputs do cartão */}
-                    <div>
-                      <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>{t.installments}</div>
-                      <select value={installments} onChange={(e) => setInstallments(parseInt(e.target.value, 10))} className={`${selectClass} h-11 w-full rounded-md border px-3 text-sm`}>
-                        {installmentOptions.map(({ n, perCents }) => (
-                          <option key={n} value={n}>
-                            {n === 1 ? `${n}x ${formatCents(priceCents)}` : `${n}x de ${formatCents(perCents)}`}
-                          </option>
-                        ))}
-                      </select>
-                      {/* Per-installment preview removed per request */}
-                    </div>
+                        {/* Parcelas abaixo dos inputs do cartão (somente BR e sem Stripe) */}
+                        {addrCountry === 'BR' && !stripeFlowActive && (
+                          <div>
+                            <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>{t.installments}</div>
+                            <select value={installments} onChange={(e) => setInstallments(parseInt(e.target.value, 10))} className={`${selectClass} h-11 w-full rounded-md border px-3 text-sm`}>
+                              {installmentOptions.map(({ n, perCents }) => (
+                                <option key={n} value={n}>
+                                  {n === 1 ? `${n}x ${formatCents(priceCents)}` : `${n}x de ${formatCents(perCents)}`}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
 
-                    {/* País no final */}
-                    <div>
-                      <div className={`text-sm ${theme==='DARK'?'text-gray-400':'text-gray-600'} mb-1.5`}>{t.country_region}</div>
-                      <select value={addrCountry} onChange={(e) => setAddrCountry(e.target.value)} className={`${selectClass} h-11 w-full rounded-md border px-3 text-sm`}>
-                        <option value="BR">Brazil</option>
-                      </select>
-                    </div>
+                        {/* País no final */}
+                        <div>
+                          <div className={`text-sm ${theme==='DARK'?'text-gray-400':'text-gray-600'} mb-1.5`}>{t.country_region}</div>
+                          <select value={addrCountry} onChange={(e) => setAddrCountry(e.target.value)} className={`${selectClass} h-11 w-full rounded-md border px-3 text-sm`}>
+                            <option value="BR">Brazil</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 

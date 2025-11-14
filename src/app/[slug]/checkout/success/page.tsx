@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import StatusClient from './StatusClient';
+import { headers } from 'next/headers';
 
 function formatBRL(value: number) {
   try {
@@ -6,6 +8,15 @@ function formatBRL(value: number) {
   } catch {
     return `R$ ${(value || 0).toFixed(2)}`;
   }
+}
+
+function formatMoney(value: number, currency: string | null | undefined, locale: string) {
+  const curRaw = typeof currency === 'string' ? currency.trim() : '';
+  if (!curRaw) return `${(value || 0).toFixed(2)}`;
+  const cur = curRaw.toUpperCase();
+  const loc = locale || (cur === 'BRL' ? 'pt-BR' : 'en-US');
+  try { return new Intl.NumberFormat(loc, { style: 'currency', currency: cur }).format(value || 0); }
+  catch { return `${cur} ${(value || 0).toFixed(2)}`; }
 }
 
 function getBaseUrl() {
@@ -64,13 +75,26 @@ async function getOrder(orderId: string) {
   }
 }
 
-export default async function SuccessPage({ params, searchParams }: { params: Promise<{ slug: string }>, searchParams: Promise<{ order_id?: string, method?: string, product_id?: string, installments?: string }> }) {
+export default async function SuccessPage({ params, searchParams }: { params: Promise<{ slug: string }>, searchParams: Promise<{ order_id?: string, method?: string, product_id?: string, installments?: string, currency?: string, amount_minor?: string }> }) {
   const { slug } = await params;
   const sp = await searchParams;
+  const hdrs = await headers();
+  const acceptLang = hdrs.get('accept-language') || '';
+  const detectedLocale = (() => {
+    const first = acceptLang.split(',')[0]?.trim() || '';
+    if (!first) return 'pt-BR';
+    // normalize simple tags
+    if (/^pt(\-|$)/i.test(first)) return 'pt-BR';
+    if (/^en(\-|$)/i.test(first)) return 'en-US';
+    if (/^es(\-|$)/i.test(first)) return 'es-ES';
+    return first;
+  })();
   const orderId = sp?.order_id || '';
   const urlMethod = (sp?.method || '').toLowerCase(); // URL hint, not source of truth
   const urlProductId = sp?.product_id || '';
   const urlInstallments = (() => { try { const n = Number(sp?.installments); return Number.isFinite(n) && n > 0 ? n : null; } catch { return null; } })();
+  const urlCurrency = (sp?.currency && String(sp.currency).trim()) ? String(sp.currency).toUpperCase() : null;
+  const urlAmountMinor = (() => { try { const n = Number(sp?.amount_minor); return Number.isFinite(n) ? n : null; } catch { return null; } })();
   
   // Log all inputs
   console.log('[checkout][success] input params', { slug, orderId, urlMethod, urlProductId });
@@ -95,14 +119,16 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
     return null;
   };
   const orderObj = (orderInfo as any)?.order || null;
+  const normalized = (orderInfo as any)?.normalized || null;
   // Infer product data from order first; then fall back to product fetch
   const order = (orderInfo as any)?.order || null;
   const ch = Array.isArray(order?.charges) ? order.charges[0] : null;
   const pay = Array.isArray(order?.payments) ? order.payments[0] : null;
   const tx = ch?.last_transaction || pay?.last_transaction || null;
-  const status = (tx?.status || ch?.status || order?.status || '').toString();
+  const normalizedStatus = (typeof normalized?.status === 'string' && normalized.status.trim()) ? String(normalized.status).toLowerCase() : '';
+  const status = (normalizedStatus || (tx?.status || ch?.status || order?.status || '')).toString();
   const statusLower = status.toLowerCase();
-  const isPaid = statusLower === 'paid';
+  const isPaid = (statusLower === 'paid' || statusLower === 'succeeded' || statusLower === 'authorized');
   // CRITICAL: derive actual payment method from order data, NOT from URL param
   const actualMethodRaw = (tx?.payment_method || ch?.payment_method || pay?.payment_method || '').toString().toLowerCase();
   const normalizedActualMethod = actualMethodRaw === 'credit_card' ? 'card' : actualMethodRaw;
@@ -161,7 +187,10 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
   } catch {}
   console.log('[checkout][success] final product data', { productName, productImage, productAmount, fromDirectFetch: !!productData, fromMetadata: !!meta });
 
+  // Prefer normalized amount from DB (webhook-updated), fallback to provider payload
   let amountCents = (
+    (typeof normalized?.amount_minor === 'number' && Number.isFinite(normalized?.amount_minor)) ? Number(normalized.amount_minor) : null
+  ) ?? (
     num(ch?.paid_amount) ??
     num(tx?.paid_amount) ??
     num(ch?.amount) ??
@@ -170,6 +199,7 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
     num(pay?.amount) ??
     num(orderObj?.amount_paid) ??
     num(orderObj?.amount) ??
+    (urlAmountMinor != null ? urlAmountMinor : null) ??
     paidOrOrderAmountCents ??
     null
   );
@@ -184,6 +214,8 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
   // Preferir metadado definido no checkout.create (fonte de verdade)
   const metaEffInst = num((meta as any)?.effectiveInstallments);
   const installmentsCount = (
+    (typeof normalized?.installments === 'number' && normalized?.installments > 0) ? Number(normalized.installments) : null
+  ) ?? (
     (urlInstallments != null ? urlInstallments : null) ??
     metaEffInst ??
     num((tx as any)?.credit_card?.installments) ??
@@ -199,7 +231,7 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
     num((ch as any)?.installments) ??
     num((ch as any)?.installment_count) ??
     null
-  ) || 1;
+  ) ?? 1;
   const providerPerInstallment = (
     num((tx as any)?.credit_card?.installment_amount) ??
     num((tx as any)?.card?.installment_amount) ??
@@ -215,6 +247,30 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
         ? providerPerInstallment
         : (amountCents ? Math.round(amountCents / installmentsCount) : null))
     : null;
+
+  // Derive paid currency from provider payloads (charge/payment/tx/order/metadata)
+  const paidCurrency = (() => {
+    const norm = (normalized && typeof normalized.currency === 'string' && normalized.currency.trim()) ? normalized.currency : null;
+    if (norm) return String(norm).toUpperCase();
+    if (urlCurrency) return urlCurrency;
+    const c = (
+      (tx as any)?.currency ||
+      (ch as any)?.currency ||
+      (pay as any)?.currency ||
+      (order as any)?.currency ||
+      (order?.metadata as any)?.currency ||
+      null
+    );
+    if (typeof c === 'string' && c.trim()) return c.toUpperCase();
+    return 'BRL';
+  })();
+
+  // Offer currency (for display of catalog/offer price)
+  const offerCurrency = (() => {
+    const c = (meta as any)?.currency || null;
+    if (typeof c === 'string' && c.trim()) return String(c).toUpperCase();
+    return 'BRL';
+  })();
 
   const primaryBg = clinic.buttonColor || '#111827';
   const primaryFg = clinic.buttonTextColor || '#ffffff';
@@ -254,6 +310,27 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
     return null;
   })();
 
+  // Translations (minimal)
+  const t = (() => {
+    const isPT = detectedLocale.toLowerCase().startsWith('pt');
+    const isES = detectedLocale.toLowerCase().startsWith('es');
+    if (isPT) return {
+      approved: 'Pagamento aprovado', processing: 'Pagamento em processamento', pixConfirmed: 'Pix confirmado', pixWaiting: 'Pix gerado — aguardando pagamento',
+      thanks: 'Obrigado! Enviamos a confirmação para o seu e-mail.', finishPix: 'Finalize o pagamento via PIX. Assim que o provedor confirmar, enviaremos a confirmação por e-mail.',
+      order: 'Pedido', method: 'Método', card: 'Cartão de crédito', pix: 'Pix', paidValue: 'Valor pago', installments: 'Parcelamento', upfront: 'À vista',
+    };
+    if (isES) return {
+      approved: 'Pago aprobado', processing: 'Pago en procesamiento', pixConfirmed: 'Pix confirmado', pixWaiting: 'Pix generado — esperando pago',
+      thanks: '¡Gracias! Enviamos la confirmación a tu correo.', finishPix: 'Finaliza el pago por PIX. Al confirmar, te enviaremos un correo.',
+      order: 'Pedido', method: 'Método', card: 'Tarjeta de crédito', pix: 'Pix', paidValue: 'Valor pagado', installments: 'Cuotas', upfront: 'Al contado',
+    };
+    return {
+      approved: 'Payment approved', processing: 'Payment processing', pixConfirmed: 'Pix confirmed', pixWaiting: 'Pix generated — awaiting payment',
+      thanks: 'Thanks! We sent the confirmation to your email.', finishPix: 'Complete the payment via PIX. Once confirmed, you will receive an email.',
+      order: 'Order', method: 'Method', card: 'Credit card', pix: 'Pix', paidValue: 'Paid amount', installments: 'Installments', upfront: 'Upfront',
+    };
+  })();
+
   return (
     <div className={`min-h-screen bg-[#eff1f3] text-gray-900 flex flex-col`}>
       <div className="flex-1 w-full p-4 sm:p-6">
@@ -274,22 +351,23 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
 
           <div className={`border-gray-200 bg-white rounded-2xl border shadow-sm overflow-hidden`}>
             {/* Header */}
-            <div className={`bg-white px-5 sm:px-6 pt-8 pb-6 border-b border-gray-200 text-center`}>
+            <div className={`bg-white px-5 sm:px-6 pt-8 pb-4 border-b border-gray-200 text-center`}>
               <div className="mt-0 flex items-center justify-center gap-2">
-                <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs ${isPaid ? 'bg-emerald-50 text-emerald-700 border border-emerald-300' : 'bg-amber-50 text-amber-700 border border-amber-300'}`}>{isPaid ? '✓' : '•'}</div>
+                {isPaid && (
+                  <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs bg-emerald-50 text-emerald-700 border border-emerald-300`}>✓</div>
+                )}
                 <div className="text-[18px] sm:text-[20px] font-semibold leading-none">
                   {method === 'card'
-                    ? (isPaid ? 'Cartão aprovado' : 'Pagamento em processamento')
-                    : (isPaid ? 'Pix confirmado' : 'Pix gerado — aguardando pagamento')}
+                    ? (isPaid ? t.approved : t.processing)
+                    : (isPaid ? t.pixConfirmed : t.pixWaiting)}
                 </div>
               </div>
               <div className="mt-2 text-xs text-gray-600">
                 {isPaid
-                  ? 'Obrigado! Enviamos a confirmação para o seu e-mail.'
-                  : (method === 'pix'
-                      ? 'Finalize o pagamento via PIX. Assim que o provedor confirmar, enviaremos a confirmação por e-mail.'
-                      : 'Seu pagamento está sendo processado. Assim que for confirmado, você receberá um e-mail.')}
+                  ? t.thanks
+                  : (method === 'pix' ? t.finishPix : t.processing)}
               </div>
+              {!!orderId && (<StatusClient orderId={orderId} />)}
             </div>
 
             {/* Body */}
@@ -306,7 +384,6 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
                 )}
                 <div className="mt-3">
                   <div className="text-base sm:text-[15px] font-semibold">{productName || 'Produto'}</div>
-                  <div className="text-sm text-gray-600">Valor da oferta: {formatBRL(productAmount)}</div>
                   {!!productDescription && (
                     <div className="text-sm text-gray-600 mt-2">{productDescription}</div>
                   )}
@@ -315,31 +392,18 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border`}>
-                  <div className={`text-xs text-gray-600`}>Pedido</div>
+                  <div className={`text-xs text-gray-600`}>{t.order}</div>
                   <div className="text-sm font-medium break-all">{orderId || '-'}</div>
                 </div>
                 <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border`}>
-                  <div className={`text-xs text-gray-600`}>Método</div>
-                  <div className="text-sm font-medium capitalize">{method === 'card' ? 'Cartão de crédito' : 'Pix'}</div>
+                  <div className={`text-xs text-gray-600`}>{t.method}</div>
+                  <div className="text-sm font-medium capitalize">{method === 'card' ? t.card : t.pix}</div>
                 </div>
                 <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border`}>
-                  <div className={`text-xs text-gray-600`}>Valor da oferta</div>
-                  <div className="text-sm font-medium">{formatBRL(productAmount)}</div>
+                  <div className={`text-xs text-gray-600`}>{t.paidValue}</div>
+                  <div className="text-sm font-semibold">{formatMoney(amount, paidCurrency, detectedLocale)}</div>
                 </div>
-                <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border`}>
-                  <div className={`text-xs text-gray-600`}>Valor pago</div>
-                  <div className="text-sm font-semibold">{formatBRL(amount)}</div>
-                </div>
-                {method === 'card' && (
-                  <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border`}>
-                    <div className={`text-xs text-gray-600`}>Parcelamento</div>
-                    <div className="text-sm font-medium">
-                      {installmentsCount > 1 && displayedPerInstallmentCents != null
-                        ? `${installmentsCount}x de ${formatBRL(displayedPerInstallmentCents / 100)}`
-                        : 'À vista'}
-                    </div>
-                  </div>
-                )}
+                {/* Installments card intentionally removed for a more minimal success UI */}
                 {method === 'card' && (cardBrand || cardLast4) && (
                   <div className={`bg-gray-50 border-gray-200 rounded-xl p-4 border sm:col-span-2`}>
                     <div className={`text-xs text-gray-600`}>Cartão</div>

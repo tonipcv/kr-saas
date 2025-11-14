@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 
 type TxRow = {
   id: string;
+  provider?: string | null;
   provider_order_id: string | null;
   provider_charge_id: string | null;
   doctor_id: string | null;
@@ -26,6 +27,8 @@ type TxRow = {
   status: string | null;
   created_at: string | Date | null;
   raw_payload?: any;
+  client_name?: string | null;
+  client_email?: string | null;
 };
 
 function formatAmount(amountCents?: number | string | null, currency?: string | null) {
@@ -175,6 +178,7 @@ export default function TransactionsTable({ transactions }: { transactions: TxRo
               <th className="px-2 py-2 text-left">Business</th>
               <th className="px-2 py-2 text-left">Staff</th>
               <th className="px-2 py-2 text-left">Product</th>
+              <th className="px-2 py-2 text-left">Gateway</th>
               <th className="px-2 py-2 text-right">Amount</th>
               <th className="px-2 py-2 text-left">Curr</th>
               <th className="px-2 py-2 text-left">Installments</th>
@@ -187,11 +191,19 @@ export default function TransactionsTable({ transactions }: { transactions: TxRo
           <tbody className="divide-y divide-gray-100">
             {transactions.map((t) => (
               <tr key={t.id} className="hover:bg-gray-50 cursor-zoom-in" onDoubleClick={() => onRowDoubleClick(t)}>
-                <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.patient_name || t.patient_profile_id}</td>
-                <td className="px-2 py-2 whitespace-nowrap max-w-[180px] truncate">{t.patient_email || ''}</td>
+                <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.client_name || t.patient_name || t.patient_profile_id}</td>
+                <td className="px-2 py-2 whitespace-nowrap max-w-[180px] truncate">{t.client_email || t.patient_email || ''}</td>
                 <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.clinic_name || t.clinic_id}</td>
                 <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.doctor_name || t.doctor_id}</td>
                 <td className="px-2 py-2 whitespace-nowrap max-w-[160px] truncate">{t.product_name || t.product_id}</td>
+                <td className="px-2 py-2 whitespace-nowrap">
+                  {(() => {
+                    const p = String(t.provider || '').toLowerCase();
+                    const name = p === 'pagarme' ? 'KRXPAY' : (p ? p.toUpperCase() : '—');
+                    const cls = 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border';
+                    return <span className={`${cls} bg-gray-100 text-gray-800 border-gray-300`}>{name}</span>;
+                  })()}
+                </td>
                 <td className="px-2 py-2 text-right whitespace-nowrap">
                   <div className="flex flex-col items-end leading-tight">
                     <div className="font-medium">{formatAmount((t.clinic_amount_cents ?? t.amount_cents) as any, t.currency)}</div>
@@ -225,6 +237,7 @@ export default function TransactionsTable({ transactions }: { transactions: TxRo
               <div className="grid grid-cols-2 gap-2">
                 <div><span className="text-gray-500">Order:</span> {selected.provider_order_id || '—'}</div>
                 <div><span className="text-gray-500">Charge:</span> {selected.provider_charge_id || '—'}</div>
+                <div><span className="text-gray-500">Gateway:</span> {(() => { const p = String(selected?.provider || '').toLowerCase(); return p === 'pagarme' ? 'KRXPAY' : (p ? p.toUpperCase() : '—'); })()}</div>
                 <div><span className="text-gray-500">Método:</span> {(selected.payment_method_type || '—').toUpperCase()}</div>
                 <div className="flex items-center gap-2"><span className="text-gray-500">Status:</span> {badgeFor(selected.status)}</div>
                 <div className="col-span-2 grid grid-cols-2 gap-2">
@@ -248,8 +261,8 @@ export default function TransactionsTable({ transactions }: { transactions: TxRo
                   </div>
                 </div>
                 <div><span className="text-gray-500">Parcelas:</span> {selected.installments || '—'}</div>
-                <div><span className="text-gray-500">Cliente:</span> {selected.patient_name || selected.patient_profile_id || '—'}</div>
-                <div><span className="text-gray-500">Email:</span> {selected.patient_email || '—'}</div>
+                <div><span className="text-gray-500">Cliente:</span> {selected.client_name || selected.patient_name || selected.patient_profile_id || '—'}</div>
+                <div><span className="text-gray-500">Email:</span> {selected.client_email || selected.patient_email || '—'}</div>
                 <div><span className="text-gray-500">Business:</span> {selected.clinic_name || selected.clinic_id || '—'}</div>
                 <div><span className="text-gray-500">Staff:</span> {selected.doctor_name || selected.doctor_id || '—'}</div>
                 <div><span className="text-gray-500">Criado em:</span> {formatDate(selected.created_at)}</div>

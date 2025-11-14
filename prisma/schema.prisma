@@ -905,6 +905,13 @@ model PaymentTransaction {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
+  // Audit fields (optional)
+  paidAt             DateTime? @map("paid_at")
+  capturedAt         DateTime? @map("captured_at")
+  refundStatus       String?   @map("refund_status")
+  refundedAt         DateTime? @map("refunded_at")
+  routedProvider     String?   @map("routed_provider")
+
   // Optional back-relation to CheckoutSession
   checkoutSession    CheckoutSession? @relation("SessionPayment")
 
@@ -918,6 +925,9 @@ model PaymentTransaction {
   @@index([provider, providerChargeId])
   @@index([updatedAt])
   @@index([merchantId])
+  @@index([status])
+  @@index([paidAt])
+  @@index([routedProvider])
   @@map("payment_transactions")
 }
 

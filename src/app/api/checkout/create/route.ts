@@ -16,6 +16,8 @@ import { sendEmail } from '@/lib/email';
 import { baseTemplate } from '@/email-templates/layouts/base';
 import { PRICING } from '@/lib/pricing';
 import { selectProvider } from '@/lib/payments/routing/selectProvider';
+import Stripe from 'stripe';
+import { getCurrencyForCountry } from '@/lib/payments/countryCurrency';
 
 function onlyDigits(s: string) { return (s || '').replace(/\D/g, ''); }
 
@@ -37,6 +39,8 @@ export async function POST(req: Request) {
     let baseAmountCents = 0; // price before any interest embedding
     let doctorId: string | null = null;
     let selectedOffer: any = null;
+    // Hoist resolvedOfferPrice so later metadata access is safe even if DB block fails
+    let resolvedOfferPrice: any = null;
     try {
       // Load product
       product = await prisma.products.findUnique({ where: { id: String(productId) } });
@@ -91,8 +95,34 @@ export async function POST(req: Request) {
         console.warn('[checkout][create] selected offer is subscription but no subscriptionPeriodMonths in body, rejecting', { offerId: selectedOffer?.id });
         return NextResponse.json({ error: 'Oferta de assinatura requer fluxo de checkout específico' }, { status: 400 });
       }
-      // Use Offer only for price; routing rules will decide method/provider
+      // Resolve price by country, prioritizing KRXPAY OfferPrice for the checkout amount
+      // Priority order:
+      //  1) OfferPrice(offerId, country=desiredCountry, provider=KRXPAY, active=true)
+      //  2) OfferPrice(offerId, country=desiredCountry, active=true) [any provider]
+      //  3) selectedOffer.priceCents (fallback)
+      let desiredCountry = 'BR';
+      try {
+        desiredCountry = String(((buyer as any)?.address?.country) || clinic?.country || 'BR').toUpperCase();
+      } catch {}
       if (selectedOffer) {
+        try {
+          resolvedOfferPrice = await prisma.offerPrice.findFirst({
+            where: { offerId: String(selectedOffer.id), country: desiredCountry, provider: PaymentProvider.KRXPAY, active: true },
+            orderBy: { updatedAt: 'desc' },
+          });
+          if (!resolvedOfferPrice) {
+            resolvedOfferPrice = await prisma.offerPrice.findFirst({
+              where: { offerId: String(selectedOffer.id), country: desiredCountry, active: true },
+              orderBy: { updatedAt: 'desc' },
+            });
+          }
+        } catch (e) {
+          try { console.warn('[checkout][create] OfferPrice lookup failed, using offer price', e instanceof Error ? e.message : e); } catch {}
+        }
+      }
+      if (resolvedOfferPrice?.amountCents != null && Number(resolvedOfferPrice.amountCents) > 0) {
+        amountCents = Number(resolvedOfferPrice.amountCents);
+      } else if (selectedOffer) {
         amountCents = Number(selectedOffer.priceCents || 0);
       } else {
         // Fallback to legacy product price if no offer exists
@@ -100,6 +130,7 @@ export async function POST(req: Request) {
         amountCents = Math.round((price || 0) * 100);
       }
       baseAmountCents = amountCents;
+      try { console.log('[checkout][create] pricing resolved', { desiredCountry, offerId: selectedOffer?.id, amountCents, from: resolvedOfferPrice ? 'offer_price' : 'offer_base' }); } catch {}
       // Resolve doctorId early for persistence (prefer clinic owner, fallback to product.doctorId)
       doctorId = clinic?.ownerId || (product as any)?.doctorId || null;
     } catch (dbErr: any) {
@@ -115,6 +146,13 @@ export async function POST(req: Request) {
     if (!amountCents || amountCents <= 0) return NextResponse.json({ error: 'Preço inválido' }, { status: 400 });
 
     // Determine effective installments from request (for CARD only), clamped by offer/platform/business rules
+    // Country flag used in business rules (no default to BR here)
+    const isBR = (() => {
+      try {
+        const c = String((((buyer as any)?.address)?.country) || clinic?.country || '').toUpperCase();
+        return c === 'BR';
+      } catch { return false; }
+    })();
     const requestedInstallments: number = (payment?.method === 'card') ? Number(payment?.installments || 1) : 1;
     const maxByOffer = selectedOffer?.maxInstallments ? Number(selectedOffer.maxInstallments) : PRICING.INSTALLMENT_MAX_INSTALLMENTS;
     const platformMax = PRICING.INSTALLMENT_MAX_INSTALLMENTS;
@@ -124,7 +162,10 @@ export async function POST(req: Request) {
       : null;
     let effectiveInstallments = 1;
     if (payment?.method === 'card') {
-      if (subMonths && subMonths > 1) {
+      // Country rule: only Brazil supports installments in our orchestration
+      if (!isBR) {
+        effectiveInstallments = 1;
+      } else if (subMonths && subMonths > 1) {
         // Subscription-prepaid: ignore the R$97 threshold, but respect the user's selection
         // Clamp to [1 .. min(subMonths, maxByOffer, platformMax)]. If UI didn't send, default to 1 (à vista).
         const subCap = Math.min(subMonths, maxByOffer, platformMax);
@@ -150,7 +191,7 @@ export async function POST(req: Request) {
         effectiveInstallments_preAPR: effectiveInstallments,
       });
     } catch {}
-    if (payment?.method === 'card' && effectiveInstallments > 1) {
+    if (payment?.method === 'card' && effectiveInstallments > 1 && isBR) {
       const P = Number(baseAmountCents);
       const i = PRICING.INSTALLMENT_CUSTOMER_APR_MONTHLY;
       const n = effectiveInstallments;
@@ -210,6 +251,11 @@ export async function POST(req: Request) {
       address: billingAddr,
       metadata: {},
     };
+    // isBR already computed above based on requested country; do not redeclare here
+    // PIX is only available in BR
+    if (payment?.method === 'pix' && !isBR) {
+      return NextResponse.json({ error: 'PIX indisponível no país selecionado' }, { status: 400 });
+    }
 
     // Items (v5 requires a code for some gateways)
     const itemCode = String((product as any)?.code || product?.id || productId || 'prod_checkout');
@@ -289,10 +335,16 @@ export async function POST(req: Request) {
       try { console.warn('[checkout][create] provider selection failed, falling back to default Pagar.me path', e instanceof Error ? e.message : e); } catch {}
       selectedProvider = null;
     }
+    // Enforce KRXPAY (Pagar.me) only in BR
+    if (selectedProvider === PaymentProvider.KRXPAY && !isBR) {
+      return NextResponse.json({ error: 'KRXPAY indisponível fora do Brasil' }, { status: 400 });
+    }
 
-    // Enforce that the chosen provider has a ProductIntegration mapping
+    // Enforce that the chosen provider has a ProductIntegration mapping (external providers only)
+    const needsCatalog = !!(selectedProvider === PaymentProvider.STRIPE && !!selectedOffer?.isSubscription);
+    try { console.log('[checkout][create] needsCatalog decision', { selectedProvider, isSubscription: !!selectedOffer?.isSubscription, needsCatalog }); } catch {}
     try {
-      if (selectedProvider) {
+      if (selectedProvider && needsCatalog) {
         const integration = await prisma.productIntegration.findUnique({
           where: { productId_provider: { productId: String(product?.id || productId || ''), provider: selectedProvider } },
           select: { externalProductId: true },
@@ -304,6 +356,99 @@ export async function POST(req: Request) {
     } catch (e) {
       // Defensive: if integration check fails unexpectedly, keep a clear error
       return NextResponse.json({ error: 'Falha ao validar integração do produto com o provedor selecionado' }, { status: 500 });
+    }
+
+    // If routed to STRIPE and method is card, create a Stripe PaymentIntent and return client_secret
+    if (selectedProvider === PaymentProvider.STRIPE && payment?.method === 'card') {
+      // Resolve Stripe credentials from MerchantIntegration
+      const integ = await prisma.merchantIntegration.findUnique({
+        where: { merchantId_provider: { merchantId: String(merchant?.id || ''), provider: 'STRIPE' as any } },
+        select: { isActive: true, credentials: true },
+      });
+      if (!integ || !integ.isActive) {
+        return NextResponse.json({ error: 'Stripe não está ativo para este merchant' }, { status: 400 });
+      }
+      const creds = (integ.credentials || {}) as any;
+      const apiKey: string | undefined = creds?.apiKey;
+      const accountId: string | undefined = creds?.accountId || undefined;
+      if (!apiKey) {
+        return NextResponse.json({ error: 'Credenciais da Stripe ausentes' }, { status: 400 });
+      }
+      const stripe = new Stripe(apiKey);
+      const currency = getCurrencyForCountry(String(billingAddr.country || 'US'));
+      if (!currency || !String(currency).trim()) {
+        return NextResponse.json({ error: 'Moeda indisponível para o país selecionado.' }, { status: 400 });
+      }
+      // Stripe nunca parcela: garantir 1x e usar o preço base (sem juros embutidos)
+      const stripeInstallments = 1;
+      const baseForStripe = Number(baseAmountCents);
+      // amountCents é em centavos (minor units). Para moedas zero-decimais (p.ex. JPY), converter.
+      const zeroDecimal = new Set(['JPY', 'KRW', 'VND']);
+      const amountMinor = zeroDecimal.has(currency) ? Math.max(0, Math.round(baseForStripe / 100)) : Math.max(0, Math.round(baseForStripe));
+      // Ensure/create customer for better acceptance
+      const stripeCustomer = await stripe.customers.create({
+        email: String(buyer?.email || ''),
+        name: String(buyer?.name || ''),
+        phone: String(buyer?.phone || ''),
+        metadata: { clinicId: String(clinic?.id || ''), productId: String(product?.id || productId || ''), offerId: String(selectedOffer?.id || '') },
+      }, accountId ? { stripeAccount: accountId } : undefined);
+      const intent = await stripe.paymentIntents.create({
+        amount: amountMinor,
+        currency: currency.toLowerCase(),
+        customer: stripeCustomer.id,
+        metadata: {
+          clinicId: String(clinic?.id || ''),
+          productId: String(product?.id || productId || ''),
+          offerId: String(selectedOffer?.id || ''),
+          effectiveInstallments: String(stripeInstallments),
+        },
+        automatic_payment_methods: { enabled: true },
+      }, accountId ? { stripeAccount: accountId } : undefined);
+
+      // Persist lightweight payment_transactions row for STRIPE
+      try {
+        if (HAS_PT && doctorId) {
+          const txId = crypto.randomUUID();
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO payment_transactions (
+               id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, product_id,
+               amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency,
+               installments, payment_method_type, status, raw_payload, routed_provider
+             ) VALUES (
+               $1, 'stripe', $2, $3, $4, $5, $6,
+               $7, NULL, NULL, NULL, $8,
+               $9, $10, 'processing', $11::jsonb, $12
+             )
+             ON CONFLICT (provider, provider_order_id) DO NOTHING`,
+            txId,
+            String(intent.id),
+            String(doctorId),
+            null,
+            String(clinic?.id || ''),
+            String(product?.id || productId || ''),
+            Number(intent.amount),
+            String(intent.currency).toUpperCase(),
+            Number(stripeInstallments),
+            'credit_card',
+            JSON.stringify({ provider: 'stripe', payment_intent_id: intent.id, buyer: { name: String((buyer as any)?.name || ''), email: String((buyer as any)?.email || '') } }),
+            'STRIPE'
+          );
+        }
+      } catch (e) {
+        console.warn('[checkout][create] persist stripe payment_transactions failed:', e instanceof Error ? e.message : e);
+      }
+
+      // Respond to client so it can confirm the PaymentIntent via Stripe Elements
+      return NextResponse.json({
+        success: true,
+        provider: 'STRIPE',
+        payment_provider: 'stripe',
+        payment_intent_id: intent.id,
+        client_secret: intent.client_secret,
+        currency,
+        amount_minor: amountMinor,
+        installments: Number(stripeInstallments),
+      });
     }
 
     // Payments (v5)
@@ -494,8 +639,8 @@ export async function POST(req: Request) {
       if (method === 'pix') SPLIT_STYLE = envStylePix || envStyleGlobal || 'payments_percentage';
       if (method === 'boleto') SPLIT_STYLE = envStyleBoleto || envStyleGlobal || 'payments_percentage';
       let charges: any[] | null = null;
-      // Only enable split if provider is KRXPAY (Pagar.me)
-      const splitEnabled = ENABLE_SPLIT && selectedProvider === PaymentProvider.KRXPAY && !!clinicRecipientId && !!platformRecipientId;
+      // Enable split whenever using Pagar.me gateway (this checkout path), independent of selectedProvider label
+      const splitEnabled = ENABLE_SPLIT && !!clinicRecipientId && !!platformRecipientId;
       if (splitEnabled) {
         const clinicPercent = Math.max(0, Math.min(100, Number(rawSplitPercent)));
         if (SPLIT_STYLE === 'payments_percentage') {
@@ -594,7 +739,9 @@ export async function POST(req: Request) {
       metadata: {
         clinicId: clinic?.id || null,
         buyerEmail: String(buyer?.email || customer?.email || ''),
+        buyerName: String(buyer?.name || customer?.name || ''),
         productId: String(product?.id || productId || ''),
+        currency: (resolvedOfferPrice && (resolvedOfferPrice as any)?.currency) ? String((resolvedOfferPrice as any).currency).toUpperCase() : undefined,
         patientUserId: patientUserIdVal || null,
         subscriptionPeriodMonths: (typeof body?.subscriptionPeriodMonths === 'number' && body.subscriptionPeriodMonths > 0) ? Number(body.subscriptionPeriodMonths) : null,
         // Product display data (Pagar.me doesn't preserve item.metadata)
@@ -609,7 +756,9 @@ export async function POST(req: Request) {
       metadata: {
         clinicId: clinic?.id || null,
         buyerEmail: String(buyer?.email || customer?.email || ''),
+        buyerName: String(buyer?.name || customer?.name || ''),
         productId: String(product?.id || productId || ''),
+        currency: String((resolvedOfferPrice as any)?.currency || 'BRL').toUpperCase(),
         patientUserId: patientUserIdVal || null,
         subscriptionPeriodMonths: (typeof body?.subscriptionPeriodMonths === 'number' && body.subscriptionPeriodMonths > 0) ? Number(body.subscriptionPeriodMonths) : null,
         // Product display data (Pagar.me doesn't preserve item.metadata)
@@ -664,6 +813,13 @@ export async function POST(req: Request) {
           items_count: payload.items?.length || 0,
           metadata: payload.metadata
         }, null, 2));
+      }
+    } catch {}
+    // Guard: KRXPAY requires explicit offer currency. Do not create order if missing.
+    try {
+      const cur = (resolvedOfferPrice && (resolvedOfferPrice as any)?.currency) ? String((resolvedOfferPrice as any).currency).trim() : '';
+      if (!cur) {
+        return NextResponse.json({ error: 'Moeda ausente para a oferta/país. Configure OfferPrice.currency.' }, { status: 400 });
       }
     } catch {}
     let order = await pagarmeCreateOrder(payload);
@@ -1003,8 +1159,8 @@ export async function POST(req: Request) {
         const clinicAmountCents = Math.max(0, clinicShare - platformFeeTotal);
         const platformAmountCents = Math.max(0, grossCents - clinicAmountCents);
         await prisma.$executeRawUnsafe(
-          `INSERT INTO payment_transactions (id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, product_id, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, installments, payment_method_type, status, raw_payload)
-           VALUES ($1, 'pagarme', $2, $3, $4, $5, $6, $7, $8, $9, $10, 'BRL', $11, $12, 'processing', $13::jsonb)
+          `INSERT INTO payment_transactions (id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, product_id, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, installments, payment_method_type, status, raw_payload, routed_provider)
+           VALUES ($1, 'pagarme', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'processing', $14::jsonb, 'KRXPAY')
            ON CONFLICT (provider, provider_order_id) DO UPDATE
              SET doctor_id = COALESCE(payment_transactions.doctor_id, EXCLUDED.doctor_id),
                  patient_profile_id = COALESCE(payment_transactions.patient_profile_id, EXCLUDED.patient_profile_id),
@@ -1024,6 +1180,7 @@ export async function POST(req: Request) {
           clinicAmountCents,
           platformAmountCents,
           platformFeeTotal,
+          (resolvedOfferPrice && (resolvedOfferPrice as any)?.currency) ? String((resolvedOfferPrice as any).currency).toUpperCase() : null,
           Number(payment?.installments || 1),
           methodType,
           JSON.stringify({ payload })

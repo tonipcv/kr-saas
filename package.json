@@ -7,6 +7,7 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
+    "worker:webhooks": "tsx workers/webhook-processor.ts",
     "seed:plans": "node scripts/seed-plans.js --apply",
     "migrate:public-template": "node scripts/migrate-public-page-template.js",
     "audit:schema-models": "node scripts/audit-prisma-schema-models.js",

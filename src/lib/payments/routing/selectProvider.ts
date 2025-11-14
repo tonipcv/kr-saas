@@ -30,6 +30,14 @@ export async function selectProvider(params: SelectProviderInput): Promise<Payme
   const country = params.country || null
   const method = params.method || null
 
+  // BR-first policy: KRXPAY is internal. For Brazil and supported methods, prefer KRXPAY
+  try {
+    const c = (country || '').toUpperCase()
+    if (c === 'BR' && (method === PaymentMethod.CARD || method === PaymentMethod.PIX)) {
+      return PaymentProvider.KRXPAY
+    }
+  } catch {}
+
   if (offerId) {
     const offer = await prisma.offer.findUnique({ where: { id: offerId }, select: { preferredProvider: true, productId: true } })
     if (offer?.preferredProvider) {

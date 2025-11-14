@@ -31,6 +31,127 @@ export async function POST(req: NextRequest) {
 
   try {
     switch (event.type) {
+      case 'payment_intent.succeeded': {
+        const pi = event.data.object as Stripe.PaymentIntent;
+        const intentId = String(pi.id);
+        const amount = Number(pi.amount || 0);
+        const currency = String(pi.currency || '').toUpperCase();
+        try {
+          await prisma.$executeRawUnsafe(
+            `UPDATE payment_transactions
+               SET status = 'paid',
+                   amount_cents = CASE WHEN amount_cents = 0 OR amount_cents IS NULL THEN $2 ELSE amount_cents END,
+                   currency = CASE WHEN currency IS NULL OR currency = '' THEN $3 ELSE currency END,
+                   paid_at = COALESCE(paid_at, NOW()),
+                   raw_payload = COALESCE(raw_payload, '{}'::jsonb) || jsonb_build_object('pi', $4::text)
+             WHERE provider = 'stripe' AND provider_order_id = $1`,
+            intentId,
+            amount,
+            currency,
+            intentId
+          );
+        } catch (e) {
+          console.error('[stripe][webhook] update payment_intent.succeeded failed', e);
+        }
+        break;
+      }
+
+      case 'payment_intent.payment_failed': {
+        const pi = event.data.object as Stripe.PaymentIntent;
+        const intentId = String(pi.id);
+        const lastError = (pi.last_payment_error?.message || pi.last_payment_error?.code || '').toString();
+        try {
+          await prisma.$executeRawUnsafe(
+            `UPDATE payment_transactions
+               SET status = 'failed',
+                   raw_payload = COALESCE(raw_payload, '{}'::jsonb) || jsonb_build_object('pi_failed', jsonb_build_object('id', $1::text, 'error', $2::text))
+             WHERE provider = 'stripe' AND provider_order_id = $1`,
+            intentId,
+            lastError
+          );
+        } catch (e) {
+          console.error('[stripe][webhook] update payment_intent.payment_failed failed', e);
+        }
+        break;
+      }
+
+      case 'charge.succeeded': {
+        const ch = event.data.object as Stripe.Charge;
+        const chargeId = String(ch.id);
+        const intentId = (ch.payment_intent ? String(ch.payment_intent) : '') || '';
+        const amount = Number(ch.amount || 0);
+        const currency = String(ch.currency || '').toUpperCase();
+        const status = ch.paid ? (ch.captured ? 'captured' : 'paid') : 'processing';
+        try {
+          if (intentId) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE payment_transactions
+                 SET provider_charge_id = $1,
+                     status = $4,
+                     amount_cents = CASE WHEN amount_cents = 0 OR amount_cents IS NULL THEN $2 ELSE amount_cents END,
+                     currency = CASE WHEN currency IS NULL OR currency = '' THEN $3 ELSE currency END,
+                     refunded_cents = COALESCE(refunded_cents, 0),
+                     raw_payload = COALESCE(raw_payload, '{}'::jsonb) || jsonb_build_object('ch', $5::text)
+               WHERE provider = 'stripe' AND provider_order_id = $6`,
+              chargeId,
+              amount,
+              currency,
+              status,
+              chargeId,
+              intentId
+            );
+          }
+        } catch (e) {
+          console.error('[stripe][webhook] update charge.succeeded failed', e);
+        }
+        break;
+      }
+
+      case 'charge.captured': {
+        const ch = event.data.object as Stripe.Charge;
+        const chargeId = String(ch.id);
+        const intentId = (ch.payment_intent ? String(ch.payment_intent) : '') || '';
+        try {
+          if (intentId) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE payment_transactions
+                 SET status = 'captured', provider_charge_id = COALESCE(provider_charge_id, $1), captured_at = NOW()
+               WHERE provider = 'stripe' AND provider_order_id = $2`,
+              chargeId,
+              intentId
+            );
+          }
+        } catch (e) {
+          console.error('[stripe][webhook] update charge.captured failed', e);
+        }
+        break;
+      }
+
+      case 'charge.refunded': {
+        const ch = event.data.object as Stripe.Charge;
+        const intentId = (ch.payment_intent ? String(ch.payment_intent) : '') || '';
+        const refunded = Number(ch.amount_refunded || 0);
+        const total = Number(ch.amount || 0);
+        const status = refunded >= total && total > 0 ? 'refunded' : 'paid';
+        try {
+          if (intentId) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE payment_transactions
+                 SET refunded_cents = $1,
+                     status = $2,
+                     refund_status = 'refunded',
+                     refunded_at = NOW()
+               WHERE provider = 'stripe' AND provider_order_id = $3`,
+              refunded,
+              status,
+              intentId
+            );
+          }
+        } catch (e) {
+          console.error('[stripe][webhook] update charge.refunded failed', e);
+        }
+        break;
+      }
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const clinicId = (session.client_reference_id as string) || session.metadata?.clinicId;

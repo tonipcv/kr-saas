@@ -38,8 +38,8 @@ export async function POST(req: Request) {
     try {
       if (hookId) {
         await prisma.$executeRawUnsafe(
-          `INSERT INTO webhook_events (provider, hook_id, type, status, raw)
-           VALUES ('pagarme', $1, $2, $3, $4::jsonb)
+          `INSERT INTO webhook_events (provider, hook_id, provider_event_id, type, status, raw)
+           VALUES ('pagarme', $1, $1, $2, $3, $4::jsonb)
            ON CONFLICT (provider, hook_id) DO NOTHING`,
           String(hookId),
           String(type),
@@ -57,6 +57,18 @@ export async function POST(req: Request) {
       };
       console.log('[pagarme][webhook] received', basic);
     } catch {}
+
+    // If async processing is enabled, enqueue (signal via next_retry_at) and return 200.
+    const ASYNC = String(process.env.WEBHOOK_ASYNC || '').toLowerCase() === 'true';
+    if (ASYNC && hookId) {
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE webhook_events SET next_retry_at = NOW() WHERE provider = 'pagarme' AND hook_id = $1`,
+          String(hookId)
+        );
+      } catch {}
+      return NextResponse.json({ received: true, enqueued: true });
+    }
 
     // Example handlers (adjust to actual Pagar.me event schema)
     if (type.includes('recipient')) {
@@ -338,8 +350,8 @@ export async function POST(req: Request) {
             const webhookTxId = `wh_${orderId}_${Date.now()}`;
             try {
               await prisma.$executeRawUnsafe(
-                `INSERT INTO payment_transactions (id, provider, provider_order_id, status, payment_method_type, installments, amount_cents, currency, raw_payload, created_at)
-                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, 0, 'BRL', $6::jsonb, NOW())
+                `INSERT INTO payment_transactions (id, provider, provider_order_id, status, payment_method_type, installments, amount_cents, currency, raw_payload, created_at, routed_provider)
+                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, 0, 'BRL', $6::jsonb, NOW(), 'KRXPAY')
                  ON CONFLICT DO NOTHING`,
                 webhookTxId,
                 String(orderId),
@@ -396,8 +408,8 @@ export async function POST(req: Request) {
             const webhookTxId2 = `wh_${chargeId}_${Date.now()}`;
             try {
               await prisma.$executeRawUnsafe(
-                `INSERT INTO payment_transactions (id, provider, provider_charge_id, status, payment_method_type, installments, amount_cents, currency, raw_payload, created_at)
-                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, 0, 'BRL', $6::jsonb, NOW())
+                `INSERT INTO payment_transactions (id, provider, provider_charge_id, status, payment_method_type, installments, amount_cents, currency, raw_payload, created_at, routed_provider)
+                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, 0, 'BRL', $6::jsonb, NOW(), 'KRXPAY')
                  ON CONFLICT DO NOTHING`,
                 webhookTxId2,
                 String(chargeId),
@@ -679,8 +691,8 @@ export async function POST(req: Request) {
                   const txId = crypto.randomUUID();
                   // Try to use a conflict target if DB has unique indexes; fallback will still work without them
                   await prisma.$executeRawUnsafe(
-                    `INSERT INTO payment_transactions (id, provider, provider_order_id, provider_charge_id, doctor_id, patient_profile_id, clinic_id, product_id, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, installments, payment_method_type, status, raw_payload)
-                     VALUES ($1, 'pagarme', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'BRL', $12, $13, 'paid', $14::jsonb)`,
+                    `INSERT INTO payment_transactions (id, provider, provider_order_id, provider_charge_id, doctor_id, patient_profile_id, clinic_id, product_id, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, installments, payment_method_type, status, raw_payload, routed_provider)
+                     VALUES ($1, 'pagarme', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'BRL', $12, $13, 'paid', $14::jsonb, 'KRXPAY')`,
                     txId,
                     orderId ? String(orderId) : null,
                     chargeId ? String(chargeId) : null,
@@ -688,12 +700,12 @@ export async function POST(req: Request) {
                     String(backfillProfileId),
                     backfillClinicId ? String(backfillClinicId) : null,
                     backfillProductId ? String(backfillProductId) : null,
-                    Number(eventAmountCents || 0),
+                    eventAmountCents,
                     splitClinicAmount,
                     splitPlatformAmount,
                     splitPlatformFeeCents,
-                    installmentsVal,
-                    paymentMethodType,
+                    installmentsVal || 1,
+                    paymentMethodType || 'credit_card',
                     JSON.stringify(event)
                   );
                   try { console.log('[pagarme][webhook] backfilled payment_transactions'); } catch {}

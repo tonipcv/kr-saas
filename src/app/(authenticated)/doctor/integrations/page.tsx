@@ -321,6 +321,22 @@ export default function IntegrationsPage() {
     loadStripeStatus();
   }, [currentClinic?.id]);
 
+  // Prefill Stripe dialog when opening
+  useEffect(() => {
+    if (!stripeOpen) return;
+    // hydrate accountId from status
+    if (stripeStatusAccountId && !stripeAccountId) {
+      setStripeAccountId(stripeStatusAccountId);
+    }
+    // resolve merchant id for actions
+    (async () => {
+      if (!stripeMerchantId) {
+        const mid = await resolveMerchantId();
+        if (mid) setStripeMerchantId(mid);
+      }
+    })();
+  }, [stripeOpen]);
+
   // Compute webhook URL on client
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -372,6 +388,26 @@ export default function IntegrationsPage() {
   useEffect(() => {
     loadWaStatus();
   }, [currentClinic?.id]);
+
+  // Prefill Pagar.me recipient dialog when opening using loaded status/details
+  useEffect(() => {
+    if (!pgDialogOpen) return;
+    try {
+      const d = pgDetails || {};
+      const legal = d.legalInfo || d.legal || d.legal_info || {};
+      const bank = d.bankAccount || d.bank_account || {};
+      if (typeof legal.name === 'string' && !pgLegalName) setPgLegalName(legal.name);
+      if (typeof legal.document_number === 'string' && !pgDocument) setPgDocument(legal.document_number);
+      if (typeof legal.email === 'string' && !pgEmail) setPgEmail(legal.email);
+      if (typeof legal.phone_number === 'string' && !pgPhone) setPgPhone(legal.phone_number);
+      if (typeof bank.bank_code === 'string' && !pgBankCode) setPgBankCode(bank.bank_code);
+      if (typeof bank.agencia === 'string' && !pgAgency) setPgAgency(bank.agencia);
+      if (typeof bank.branch_check_digit === 'string' && !pgAgencyDigit) setPgAgencyDigit(bank.branch_check_digit);
+      if (typeof bank.conta === 'string' && !pgAccount) setPgAccount(bank.conta);
+      if (typeof bank.account_check_digit === 'string' && !pgAccountDigit) setPgAccountDigit(bank.account_check_digit);
+      if (typeof bank.type === 'string' && !pgAccountType) setPgAccountType(bank.type);
+    } catch {}
+  }, [pgDialogOpen, pgDetails]);
 
   // Email status loader (DB-backed)
   const loadEmailDbStatus = async () => {
