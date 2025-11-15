@@ -36,7 +36,7 @@ interface Offer {
   intervalUnit?: 'DAY'|'WEEK'|'MONTH'|'YEAR' | null;
   trialDays?: number | null;
   checkoutUrl?: string | null;
-  paymentMethods?: Array<{ method: 'PIX'|'CARD'; active: boolean }>
+  paymentMethods?: Array<{ method: 'PIX'|'CARD'|'OPEN_FINANCE'|'OPEN_FINANCE_AUTOMATIC'; active: boolean }>
   createdAt?: string | Date;
   updatedAt?: string | Date;
 }
@@ -70,14 +70,14 @@ export default function EditOfferPage({ params }: PageProps) {
   const [addingCountry, setAddingCountry] = useState<boolean>(false);
   const [addingCountryCode, setAddingCountryCode] = useState<string>('US');
   const [addingCountryMethod, setAddingCountryMethod] = useState<'CARD'|'PIX'|'OPEN_FINANCE'|'OPEN_FINANCE_AUTOMATIC'|''>('');
-  const [addingCountryProvider, setAddingCountryProvider] = useState<'STRIPE'|'KRXPAY'|''>('');
+  const [addingCountryProvider, setAddingCountryProvider] = useState<'STRIPE'|'KRXPAY'|'APPMAX'|''>('');
   
   const [addingRegion, setAddingRegion] = useState<boolean>(false);
   const [addingRegionKey, setAddingRegionKey] = useState<string>('');
-  const [routing, setRouting] = useState<Record<string, { CARD: 'STRIPE'|'KRXPAY'|null; PIX: 'STRIPE'|'KRXPAY'|null; OPEN_FINANCE: 'STRIPE'|'KRXPAY'|null; OPEN_FINANCE_AUTOMATIC: 'STRIPE'|'KRXPAY'|null }>>({});
+  const [routing, setRouting] = useState<Record<string, { CARD: 'STRIPE'|'KRXPAY'|'APPMAX'|null; PIX: 'STRIPE'|'KRXPAY'|'APPMAX'|null; OPEN_FINANCE: 'STRIPE'|'KRXPAY'|'APPMAX'|null; OPEN_FINANCE_AUTOMATIC: 'STRIPE'|'KRXPAY'|'APPMAX'|null }>>({});
   const [addRouteOpenFor, setAddRouteOpenFor] = useState<string>('');
   const [addRouteMethod, setAddRouteMethod] = useState<'CARD'|'PIX'|'OPEN_FINANCE'|'OPEN_FINANCE_AUTOMATIC' | ''>('');
-  const [addRouteProvider, setAddRouteProvider] = useState<'STRIPE'|'KRXPAY' | ''>('');
+  const [addRouteProvider, setAddRouteProvider] = useState<'STRIPE'|'KRXPAY'|'APPMAX' | ''>('');
   const [createStripeOpenFor, setCreateStripeOpenFor] = useState<{ country: string, currency: string } | null>(null);
   const [createStripeAmount, setCreateStripeAmount] = useState<string>('');
   const [editingCountry, setEditingCountry] = useState<Record<string, boolean>>({});
@@ -97,13 +97,16 @@ export default function EditOfferPage({ params }: PageProps) {
     try {
       setSaving(true);
       const cur = currencyForCountry(cc);
-      // Save KRXPAY amount when in edit mode and custom price enabled
-      if (routing[cc]?.CARD === 'KRXPAY' && !!overrideEnabled[cc]) {
-        const cents = parseAmountToCents(overridePrice[cc] || '0');
-        await fetch(`/api/offers/${offer.id}/prices`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ country: cc, currency: cur, provider: 'KRXPAY', amountCents: cents })
-        });
+      // Save custom amount when enabled for non-STRIPE providers (KRXPAY or APPMAX)
+      if (!!overrideEnabled[cc]) {
+        const provider = (routing[cc]?.CARD || null) as ('STRIPE'|'KRXPAY'|'APPMAX'|null);
+        if (provider && provider !== 'STRIPE') {
+          const cents = parseAmountToCents(overridePrice[cc] || '0');
+          await fetch(`/api/offers/${offer.id}/prices`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ country: cc, currency: cur, provider, amountCents: cents })
+          });
+        }
       }
       // BR installments
       if (cc === 'BR') {
@@ -296,6 +299,7 @@ export default function EditOfferPage({ params }: PageProps) {
       const cfg: any = { ...(cfgBase || {}) };
       cfg.STRIPE = cfg.STRIPE || {};
       cfg.KRXPAY = cfg.KRXPAY || {};
+      cfg.APPMAX = cfg.APPMAX || {};
       for (const r of rows) {
         const cc = String(r.country || '').toUpperCase();
         const cur = String(r.currency || '').toUpperCase();
@@ -310,6 +314,10 @@ export default function EditOfferPage({ params }: PageProps) {
           cfg.KRXPAY[cc] = cfg.KRXPAY[cc] || {};
           cfg.KRXPAY[cc][cur] = cfg.KRXPAY[cc][cur] || {};
           if (typeof r.amountCents === 'number') cfg.KRXPAY[cc][cur].amountCents = r.amountCents;
+        } else if (prov === 'APPMAX') {
+          cfg.APPMAX[cc] = cfg.APPMAX[cc] || {};
+          cfg.APPMAX[cc][cur] = cfg.APPMAX[cc][cur] || {};
+          if (typeof r.amountCents === 'number') cfg.APPMAX[cc][cur].amountCents = r.amountCents;
         }
       }
       setProviderConfig(cfg);
@@ -332,9 +340,10 @@ export default function EditOfferPage({ params }: PageProps) {
           const cur = currencyForCountry(cc);
           const sAmt = cfg?.STRIPE?.[cc]?.[cur]?.amountCents;
           const kAmt = cfg?.KRXPAY?.[cc]?.[cur]?.amountCents;
-          const amt = typeof sAmt === 'number' ? sAmt : (typeof kAmt === 'number' ? kAmt : null);
+          const aAmt = cfg?.APPMAX?.[cc]?.[cur]?.amountCents;
+          const amt = typeof sAmt === 'number' ? sAmt : (typeof aAmt === 'number' ? aAmt : (typeof kAmt === 'number' ? kAmt : null));
           if (typeof amt === 'number') pr[cc] = String((amt/100).toFixed(2));
-          en[cc] = !!cfg?.STRIPE?.[cc]?.[cur]?.externalPriceId || typeof sAmt === 'number' || typeof kAmt === 'number';
+          en[cc] = !!cfg?.STRIPE?.[cc]?.[cur]?.externalPriceId || typeof sAmt === 'number' || typeof aAmt === 'number' || typeof kAmt === 'number';
         }
         setOverrideEnabled(en);
         setOverridePrice(pr);
@@ -364,10 +373,36 @@ export default function EditOfferPage({ params }: PageProps) {
     } catch {}
   };
 
-  const saveRouting = async (oid: string, cc: string, method: 'CARD'|'PIX'|'OPEN_FINANCE'|'OPEN_FINANCE_AUTOMATIC', provider: 'STRIPE'|'KRXPAY'|null) => {
+  const saveRouting = async (oid: string, cc: string, method: 'CARD'|'PIX'|'OPEN_FINANCE'|'OPEN_FINANCE_AUTOMATIC', provider: 'STRIPE'|'KRXPAY'|'APPMAX'|null) => {
     try {
       if (!provider) return;
-      await fetch(`/api/payment-routing`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ offerId: oid, country: cc, method, provider, priority: 10, isActive: true }) });
+      const payload = { offerId: oid, country: cc, method, provider, priority: 10, isActive: true } as const;
+      console.log('[routing][saveRouting][req]', payload);
+      const res = await fetch(`/api/payment-routing`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      let body: any = null;
+      try { body = await res.clone().json(); } catch { body = await res.text().catch(() => ''); }
+      console.log('[routing][saveRouting][res]', { ok: res.ok, status: res.status, body });
+      if (!res.ok) return;
+      await loadRoutingForCountry(oid, cc);
+    } catch {}
+  };
+
+  const removeRouting = async (oid: string, cc: string, method: 'CARD'|'PIX'|'OPEN_FINANCE'|'OPEN_FINANCE_AUTOMATIC') => {
+    try {
+      // Use current provider to target the rule update; API requires provider value
+      const current = (routing[cc]?.[method] || null) as ('STRIPE'|'KRXPAY'|'APPMAX'|null);
+      if (!current) return;
+      const payload = { offerId: oid, country: cc, method, provider: current, priority: 10, isActive: false } as const;
+      console.log('[routing][removeRouting][req]', payload);
+      const res = await fetch(`/api/payment-routing`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      let body: any = null;
+      try { body = await res.clone().json(); } catch { body = await res.text().catch(() => ''); }
+      console.log('[routing][removeRouting][res]', { ok: res.ok, status: res.status, body });
+      if (!res.ok) return;
       await loadRoutingForCountry(oid, cc);
     } catch {}
   };
@@ -398,8 +433,8 @@ export default function EditOfferPage({ params }: PageProps) {
       const cents = Math.round(Math.max(0, Number(priceStr.replace(',', '.')) * 100));
       const cur = currencyForCountry(country);
       // Align provider with routed CARD provider (fallback STRIPE)
-      const routed = (routing[country]?.CARD || null) as ('STRIPE'|'KRXPAY'|null);
-      const provider = (routed || 'STRIPE') as 'STRIPE'|'KRXPAY';
+      const routed = (routing[country]?.CARD || null) as ('STRIPE'|'KRXPAY'|'APPMAX'|null);
+      const provider = (routed || 'STRIPE') as 'STRIPE'|'KRXPAY'|'APPMAX';
       const body = { country, currency: cur, provider, amountCents: cents } as any;
       const res = await fetch(`/api/offers/${offer.id}/prices`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (res.ok) await loadProviderConfig(productId, offer.id);
@@ -861,11 +896,19 @@ export default function EditOfferPage({ params }: PageProps) {
                                   <div className="mt-3">
                                     <div className="text-xs text-gray-600 mb-1">Meios de pagamento ativos</div>
                                     <div className="flex flex-wrap gap-2">
-                                      {(['CARD','PIX','OPEN_FINANCE','OPEN_FINANCE_AUTOMATIC'] as const).filter(m => routing[cc]?.[m]).map(m => (
-                                        <span key={m} className="px-2 py-1 rounded-full text-[11px] bg-gray-100 border border-gray-200 text-gray-700">
-                                          {m} · {routing[cc]?.[m]}
-                                        </span>
-                                      ))}
+                                      {(['CARD','PIX','OPEN_FINANCE','OPEN_FINANCE_AUTOMATIC'] as const)
+                                        .filter(m => routing[cc]?.[m])
+                                        .map(m => (
+                                          <span key={m} className="inline-flex items-center gap-2 px-2 py-1 rounded-full text-[11px] bg-gray-100 border border-gray-200 text-gray-700">
+                                            <span>{m} · {routing[cc]?.[m]}</span>
+                                            <button
+                                              type="button"
+                                              title={`Remover ${m}`}
+                                              className="h-4 w-4 inline-flex items-center justify-center rounded-full bg-white border border-gray-300 text-gray-600 hover:bg-red-50 hover:text-red-700"
+                                              onClick={() => offer && removeRouting(offer.id, cc, m)}
+                                            >×</button>
+                                          </span>
+                                        ))}
                                       {(!routing[cc] || !(['CARD','PIX','OPEN_FINANCE','OPEN_FINANCE_AUTOMATIC'] as const).some(m => routing[cc]?.[m])) && (
                                         <span className="text-xs text-gray-500">Nenhum método configurado</span>
                                       )}
@@ -939,6 +982,7 @@ export default function EditOfferPage({ params }: PageProps) {
                           <SelectContent>
                             <SelectItem value="STRIPE">STRIPE</SelectItem>
                             {addingCountryCode === 'BR' && (<SelectItem value="KRXPAY">KRXPAY</SelectItem>)}
+                            {addingCountryCode === 'BR' && (<SelectItem value="APPMAX">APPMAX</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
@@ -951,7 +995,7 @@ export default function EditOfferPage({ params }: PageProps) {
                           const cc = (addingCountryCode || 'US').toUpperCase();
                           if (!/^[A-Z]{2}$/.test(cc)) return;
                           const method = addingCountryMethod || 'CARD';
-                          const provider = (addingCountryProvider || (cc==='BR' ? 'KRXPAY' : 'STRIPE')) as any;
+                          const provider = (addingCountryProvider || (cc==='BR' ? 'APPMAX' : 'STRIPE')) as any;
                           await saveRouting(offer.id, cc, method as any, provider as any);
                           // reload from DB to reflect new country
                           await loadProviderConfig(productId, offer.id);
@@ -1143,6 +1187,7 @@ export default function EditOfferPage({ params }: PageProps) {
                         <SelectContent>
                           <SelectItem value="STRIPE">STRIPE</SelectItem>
                           {addRouteOpenFor === 'BR' && (<SelectItem value="KRXPAY">KRXPAY</SelectItem>)}
+                          {addRouteOpenFor === 'BR' && (<SelectItem value="APPMAX">APPMAX</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>

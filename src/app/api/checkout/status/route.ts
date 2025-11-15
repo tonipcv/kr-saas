@@ -81,6 +81,41 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Stripe PaymentIntent not found' }, { status: 404 });
     }
 
+    // Appmax branch: check our DB first (we persist provider_order_id as the Appmax order id)
+    try {
+      const txAppmax = await prisma.paymentTransaction.findFirst({
+        where: { provider: 'appmax' as any, OR: [ { providerOrderId: String(id) }, { providerChargeId: String(id) } ] },
+        select: {
+          provider: true,
+          status: true,
+          amountCents: true,
+          currency: true,
+          installments: true,
+          providerOrderId: true,
+          providerChargeId: true,
+          rawPayload: true,
+          clientName: true,
+          clientEmail: true,
+        },
+      } as any)
+      if (txAppmax) {
+        const normalized = {
+          provider: 'APPMAX',
+          status: txAppmax.status,
+          amount_minor: Number(txAppmax.amountCents || 0),
+          currency: (typeof txAppmax.currency === 'string' && txAppmax.currency.trim() ? txAppmax.currency.toUpperCase() : 'BRL'),
+          installments: Number(txAppmax.installments || 1),
+          order_id: txAppmax.providerOrderId || id,
+          charge_id: txAppmax.providerChargeId || null,
+          buyer: {
+            name: (txAppmax as any).clientName || (txAppmax.rawPayload as any)?.data?.customer?.firstname || null,
+            email: (txAppmax as any).clientEmail || (txAppmax.rawPayload as any)?.data?.customer?.email || null,
+          },
+        } as any;
+        return NextResponse.json({ success: true, provider: 'APPMAX', normalized });
+      }
+    } catch {}
+
     const order = await pagarmeGetOrder(id);
     console.log('[checkout][status] order details', {
       id: order?.id,

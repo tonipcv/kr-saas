@@ -19,7 +19,7 @@ export async function PUT(req: Request) {
     const isActive = typeof body?.isActive === 'boolean' ? !!body.isActive : true
 
     const METHODS: Record<string, true> = { CARD: true, PIX: true, OPEN_FINANCE: true, OPEN_FINANCE_AUTOMATIC: true }
-    const PROVIDERS: Record<string, true> = { STRIPE: true, KRXPAY: true }
+    const PROVIDERS: Record<string, true> = { STRIPE: true, KRXPAY: true, APPMAX: true }
     if (!offerId) return bad('offerId is required')
     if (!country || country.length !== 2) return bad('country is required (CC)')
     if (!METHODS[method]) return bad('invalid method')
@@ -106,14 +106,14 @@ export async function GET(req: Request) {
     const cfg = (offer?.providerConfig || {}) as any
     const legacyCheckout = (cfg?.CHECKOUT && typeof cfg.CHECKOUT === 'object') ? cfg.CHECKOUT[country] : null
 
-    const pick = (method: string): 'STRIPE'|'KRXPAY'|null => {
+    const pick = (method: string): 'STRIPE'|'KRXPAY'|'APPMAX'|null => {
       const first = scoped.find(r => r.method === method)
       if (first) return first.provider as any
       const g = global.find(r => r.method === method)
       if (g) return g.provider as any
       if (method === 'CARD') {
         const v = legacyCheckout
-        if (v === 'STRIPE' || v === 'KRXPAY') return v
+        if (v === 'STRIPE' || v === 'KRXPAY' || v === 'APPMAX') return v as any
       }
       return null
     }

@@ -1663,6 +1663,7 @@ enum PaymentProvider {
   KRXPAY
   STRIPE
   ADYEN
+  APPMAX
   PAYPAL
   MERCADOPAGO
   PAGARME

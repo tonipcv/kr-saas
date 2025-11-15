@@ -42,6 +42,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     // connection hints (best-effort)
     const stripeConnected = !!process.env.STRIPE_SECRET_KEY
     const krxConnected = !!(process.env.PAGARME_API_KEY || process.env.KRXPAY_API_KEY)
+    // Best-effort: expose Appmax status (env-only hint; actual merchant integration is clinic-scoped)
+    const appmaxConnected = !!process.env.APPMAX_ACCESS_TOKEN
 
     return ok({
       ok: true,
@@ -50,6 +52,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       status: {
         stripe: { connected: stripeConnected },
         krxpay: { connected: krxConnected },
+        appmax: { connected: appmaxConnected },
       },
     })
   } catch (e: any) {

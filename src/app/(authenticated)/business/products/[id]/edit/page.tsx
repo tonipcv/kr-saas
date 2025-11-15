@@ -139,17 +139,29 @@ export default function EditProductPage({ params }: PageProps) {
   const [integrationsLoading, setIntegrationsLoading] = useState<boolean>(false);
   const [stripeExtProductId, setStripeExtProductId] = useState<string>('');
   const [krxExtProductId, setKrxExtProductId] = useState<string>('');
-  const [enabledGateways, setEnabledGateways] = useState<{ STRIPE: boolean; KRXPAY: boolean }>({ STRIPE: false, KRXPAY: false });
+  const [appmaxExtProductId, setAppmaxExtProductId] = useState<string>('');
+  const [enabledGateways, setEnabledGateways] = useState<{ STRIPE: boolean; KRXPAY: boolean; APPMAX: boolean }>({ STRIPE: false, KRXPAY: false, APPMAX: false });
   const [savingStripe, setSavingStripe] = useState(false);
   const [savingKrx, setSavingKrx] = useState(false);
+  const [savingAppmax, setSavingAppmax] = useState(false);
   const [ensuringStripe, setEnsuringStripe] = useState(false);
   const [ensuringKrx, setEnsuringKrx] = useState(false);
   const [stripeList, setStripeList] = useState<Array<{ id: string; name: string }>>([]);
   const [krxList, setKrxList] = useState<Array<{ id: string; name: string }>>([]);
   const [stripeSearching, setStripeSearching] = useState(false);
   const [krxSearching, setKrxSearching] = useState(false);
+  const [appmaxSearching, setAppmaxSearching] = useState(false);
   const [stripeEditMode, setStripeEditMode] = useState<boolean>(false);
   const [krxEditMode, setKrxEditMode] = useState<boolean>(false);
+  const [appmaxEditMode, setAppmaxEditMode] = useState<boolean>(false);
+  const [appmaxList, setAppmaxList] = useState<Array<{ id: string; name: string }>>([]);
+  const [ensuringAppmax, setEnsuringAppmax] = useState<boolean>(false);
+
+  useEffect(() => {
+    // quick debug to ensure APPMAX mapping persists
+    // eslint-disable-next-line no-console
+    console.log('integrations', enabledGateways, { appmaxExtProductId });
+  }, [enabledGateways, appmaxExtProductId]);
 
   useEffect(() => {
     const loadMerchantAndStatuses = async () => {
@@ -187,7 +199,7 @@ export default function EditProductPage({ params }: PageProps) {
     } catch {}
   };
 
-  const addGateway = async (provider: 'STRIPE'|'KRXPAY') => {
+  const addGateway = async (provider: 'STRIPE'|'KRXPAY'|'APPMAX') => {
     setEnabledGateways(prev => ({ ...prev, [provider]: true }));
     // Prefetch lists
     if (provider === 'STRIPE') { await searchStripeProducts(''); }
@@ -209,17 +221,18 @@ export default function EditProductPage({ params }: PageProps) {
       const mapping = js?.integrations || {};
       setStripeExtProductId(mapping?.STRIPE?.externalProductId || '');
       setKrxExtProductId(mapping?.KRXPAY?.externalProductId || '');
-      setEnabledGateways({ STRIPE: !!mapping?.STRIPE, KRXPAY: !!mapping?.KRXPAY });
+      setAppmaxExtProductId(mapping?.APPMAX?.externalProductId || '');
+      setEnabledGateways({ STRIPE: !!mapping?.STRIPE, KRXPAY: !!mapping?.KRXPAY, APPMAX: !!mapping?.APPMAX });
     } catch {}
     finally { setIntegrationsLoading(false); }
   };
   useEffect(() => { loadIntegrations(); }, [productId]);
 
-  const saveIntegration = async (provider: 'STRIPE'|'KRXPAY', externalIdOverride?: string) => {
+  const saveIntegration = async (provider: 'STRIPE'|'KRXPAY'|'APPMAX', externalIdOverride?: string) => {
     try {
       if (!productId) return;
-      if (provider === 'STRIPE') setSavingStripe(true); else setSavingKrx(true);
-      const externalProductId = (externalIdOverride ?? (provider === 'STRIPE' ? stripeExtProductId : krxExtProductId)).trim();
+      if (provider === 'STRIPE') setSavingStripe(true); else if (provider === 'KRXPAY') setSavingKrx(true); else setSavingAppmax(true);
+      const externalProductId = (externalIdOverride ?? (provider === 'STRIPE' ? stripeExtProductId : provider === 'KRXPAY' ? krxExtProductId : appmaxExtProductId)).trim();
       const res = await fetch(`/api/products/${productId}/integrations`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider, externalProductId })
@@ -229,44 +242,62 @@ export default function EditProductPage({ params }: PageProps) {
         alert(err?.error || 'Falha ao salvar integração');
       } else {
         await loadIntegrations();
+        if (provider === 'APPMAX') setAppmaxEditMode(false);
       }
     } catch (e) {
       alert('Falha ao salvar integração');
     } finally {
-      if (provider === 'STRIPE') setSavingStripe(false); else setSavingKrx(false);
+      if (provider === 'STRIPE') setSavingStripe(false); else if (provider === 'KRXPAY') setSavingKrx(false); else setSavingAppmax(false);
     }
   };
 
-  const ensureProviderProduct = async (provider: 'STRIPE'|'KRXPAY') => {
+  const ensureProviderProduct = async (provider: 'STRIPE'|'KRXPAY'|'APPMAX') => {
     try {
       if (!productId) return;
-      if (provider === 'STRIPE') setEnsuringStripe(true); else setEnsuringKrx(true);
-      const url = provider === 'STRIPE'
-        ? '/api/integrations/stripe/products/ensure'
-        : '/api/integrations/krxpay/products/ensure';
-      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId }) });
-      const js = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        alert(js?.error || 'Falha ao criar/garantir produto no gateway');
-        return;
+      if (provider === 'STRIPE') {
+        setEnsuringStripe(true);
+        const res = await fetch('/api/integrations/stripe/products/ensure', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId }) });
+        const js = await res.json().catch(() => ({}));
+        if (!res.ok) { alert(js?.error || 'Falha ao criar/garantir produto no gateway'); return; }
+        const extId = js?.externalProductId || '';
+        setStripeExtProductId(extId);
+        await saveIntegration('STRIPE', extId);
+      } else if (provider === 'KRXPAY') {
+        setEnsuringKrx(true);
+        const res = await fetch('/api/integrations/krxpay/products/ensure', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId }) });
+        const js = await res.json().catch(() => ({}));
+        if (!res.ok) { alert(js?.error || 'Falha ao criar/garantir produto no gateway'); return; }
+        const extId = js?.externalProductId || '';
+        setKrxExtProductId(extId);
+        await saveIntegration('KRXPAY', extId);
+      } else if (provider === 'APPMAX') {
+        // Appmax: gerar um ID sintético localmente (até termos endpoint)
+        setEnsuringAppmax(true);
+        const extId = `appmax_prod_${Math.random().toString(36).slice(2, 10)}`;
+        setAppmaxExtProductId(extId);
+        await saveIntegration('APPMAX', extId);
       }
-      const extId = js?.externalProductId || '';
-      if (provider === 'STRIPE') setStripeExtProductId(extId); else setKrxExtProductId(extId);
-      await saveIntegration(provider, extId);
     } catch (e) {
       alert('Falha ao criar/garantir produto no gateway');
     } finally {
-      if (provider === 'STRIPE') setEnsuringStripe(false); else setEnsuringKrx(false);
+      if (provider === 'STRIPE') setEnsuringStripe(false);
+      if (provider === 'KRXPAY') setEnsuringKrx(false);
+      if (provider === 'APPMAX') setEnsuringAppmax(false);
     }
   };
 
-  const removeGateway = async (provider: 'STRIPE'|'KRXPAY') => {
+  const removeGateway = async (provider: 'STRIPE'|'KRXPAY'|'APPMAX') => {
     try {
       if (!productId) return;
       await fetch(`/api/products/${productId}/integrations?provider=${provider}`, { method: 'DELETE' }).catch(() => {});
-      if (provider === 'STRIPE') setStripeExtProductId(''); else setKrxExtProductId('');
-      setEnabledGateways(prev => ({ ...prev, [provider]: false } as any));
+      if (provider === 'STRIPE') setStripeExtProductId(''); else if (provider === 'KRXPAY') setKrxExtProductId(''); else setAppmaxExtProductId('');
+      setEnabledGateways(prev => ({ ...prev, [provider]: false }));
     } catch {}
+  };
+
+  // Back-compat wrapper used by some UI snippets
+  const removeIntegration = async (provider: 'STRIPE'|'KRXPAY'|'APPMAX') => {
+    await removeGateway(provider);
   };
 
   const searchStripeProducts = async (q: string) => {
@@ -284,6 +315,15 @@ export default function EditProductPage({ params }: PageProps) {
       const js = await fetch(url.toString(), { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
       setKrxList(Array.isArray(js?.items) ? js.items : []);
     } finally { setKrxSearching(false); }
+  };
+  const searchAppmaxProducts = async (q: string) => {
+    try {
+      setAppmaxSearching(true);
+      // Ainda não há endpoint; manter lista vazia para seleção manual futura
+      setAppmaxList([]);
+    } finally {
+      setAppmaxSearching(false);
+    }
   };
 
   // Keep newOffer.isSubscription bound to product originalType
@@ -902,6 +942,18 @@ export default function EditProductPage({ params }: PageProps) {
                           <Button type="button" variant="outline" className="border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-xl h-10" onClick={() => { setCreatingCategory(false); setNewCategoryName(''); }}>Cancel</Button>
                         </div>
                       )}
+                      
+
+                      
+
+                      
+
+                      
+
+                      
+
+                      {/* Dialog removed — Add buttons behave like Stripe/KRXPAY */}
+
                       <p className="text-xs text-gray-500 mt-2">Se deixar vazio, será usada a categoria 'Geral'.</p>
                     </div>
 
@@ -962,6 +1014,9 @@ export default function EditProductPage({ params }: PageProps) {
                         )}
                         {!enabledGateways.KRXPAY && (
                           <Button type="button" variant="outline" onClick={() => addGateway('KRXPAY')}>Adicionar KRXPay</Button>
+                        )}
+                        {!enabledGateways.APPMAX && (
+                          <Button type="button" variant="outline" onClick={() => addGateway('APPMAX')}>Adicionar Appmax</Button>
                         )}
                       </div>
 
@@ -1088,6 +1143,68 @@ export default function EditProductPage({ params }: PageProps) {
                           </div>
                         </div>
                       )}
+
+                      {/* Appmax block */}
+                      {(enabledGateways.APPMAX || !!appmaxExtProductId) && (
+                        <div className="border border-gray-200 rounded-xl p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-medium text-gray-900">Appmax</div>
+                            {(!appmaxExtProductId || appmaxEditMode) && (
+                              <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => removeGateway('APPMAX')}>Remover</button>
+                            )}
+                          </div>
+                          <div className="mt-3 grid grid-cols-1 gap-2">
+                            {(appmaxExtProductId && !appmaxEditMode) ? (
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 text-sm text-gray-700">
+                                  <span>Atual:</span>
+                                  <span className="font-sans text-gray-900 tracking-tight">{appmaxExtProductId}</span>
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs text-green-700">
+                                    <CheckIcon className="h-3.5 w-3.5" />
+                                    Verificado
+                                  </span>
+                                </div>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button type="button" variant="secondary" size="icon" className="h-8 w-8">
+                                      <EllipsisHorizontalIcon className="h-5 w-5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-36">
+                                    <DropdownMenuItem onClick={() => setAppmaxEditMode(true)}>Editar</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => removeGateway('APPMAX')}>Remover</DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex gap-2 items-center">
+                                  <Input placeholder="Buscar produtos…" className="h-9" onChange={(e) => searchAppmaxProducts(e.target.value)} />
+                                  <Button type="button" variant="outline" size="sm" onClick={() => searchAppmaxProducts('')}>{appmaxSearching ? 'Buscando…' : 'Atualizar'}</Button>
+                                  <Button type="button" size="sm" disabled={ensuringAppmax} onClick={() => ensureProviderProduct('APPMAX')}>{ensuringAppmax ? 'Gerando…' : 'Gerar Product ID'}</Button>
+                                  {appmaxExtProductId && (
+                                    <Button type="button" variant="ghost" size="sm" onClick={() => setAppmaxEditMode(false)}>Minimal</Button>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 items-center">
+                                  <div>
+                                    <Label className="text-gray-900 font-medium">Selecionar Produto</Label>
+                                    <Select value={appmaxExtProductId || ''} onValueChange={(val: any) => { setAppmaxExtProductId(val); saveIntegration('APPMAX', val); }}>
+                                      <SelectTrigger className="mt-2 h-10"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                                      <SelectContent>
+                                        {(appmaxList || []).map((it) => (
+                                          <SelectItem key={it.id} value={it.id}>{it.name || it.id}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="text-xs text-gray-600 mt-6">Atual: <span className="font-mono">{appmaxExtProductId || '—'}</span></div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </div>
@@ -1127,6 +1244,8 @@ export default function EditProductPage({ params }: PageProps) {
                       const type = of.isSubscription ? `${of.intervalCount || 1} ${of.intervalUnit || 'MONTH'}` : 'One-time';
                       const pixOn = (of.paymentMethods || []).some(x => x.method === 'PIX' && x.active);
                       const cardOn = (of.paymentMethods || []).some(x => x.method === 'CARD' && x.active);
+                      const pixExists = (of.paymentMethods || []).some(x => x.method === 'PIX');
+                      const cardExists = (of.paymentMethods || []).some(x => x.method === 'CARD');
                       return (
                         <div
                           key={of.id}
@@ -1161,19 +1280,51 @@ export default function EditProductPage({ params }: PageProps) {
                             <div className="text-[11px] text-gray-500">{of.currency}</div>
                           </div>
                           <div className="col-span-2">
-                            <div className="flex gap-1" onDoubleClick={(e) => e.stopPropagation()}>
-                              {(['PIX','CARD'] as const).map((m) => {
-                                const on = m === 'PIX' ? pixOn : cardOn;
-                                return (
-                                  <button key={m} type="button" onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleUpdateOfferMethods(of.id, [
-                                      { method: 'PIX', active: m === 'PIX' ? !pixOn : pixOn },
-                                      { method: 'CARD', active: m === 'CARD' ? !cardOn : cardOn },
-                                    ]);
-                                  }} onDoubleClick={(e) => e.stopPropagation()} className={`px-2 py-1 rounded-md text-[11px] border ${on ? 'bg-gray-100 border-gray-300 text-gray-800' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}>{m}</button>
-                                );
-                              })}
+                            <div className="flex flex-col gap-1" onDoubleClick={(e) => e.stopPropagation()}>
+                              <div className="flex gap-1">
+                                {(['PIX','CARD'] as const).map((m) => {
+                                  const on = m === 'PIX' ? pixOn : cardOn;
+                                  return (
+                                    <button key={m} type="button" onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleUpdateOfferMethods(of.id, [
+                                        { method: 'PIX', active: m === 'PIX' ? !pixOn : pixOn },
+                                        { method: 'CARD', active: m === 'CARD' ? !cardOn : cardOn },
+                                      ]);
+                                    }} onDoubleClick={(e) => e.stopPropagation()} className={`px-2 py-1 rounded-md text-[11px] border ${on ? 'bg-gray-100 border-gray-300 text-gray-800' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}>{m}</button>
+                                  );
+                                })}
+                              </div>
+                              <div className="flex gap-1">
+                                {pixExists && (
+                                  <button
+                                    type="button"
+                                    className="px-2 py-1 rounded-md text-[11px] border bg-white border-gray-200 text-gray-700 hover:bg-red-50 hover:text-red-700"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const next = (of.paymentMethods || [])
+                                        .filter(x => (x.method === 'PIX' || x.method === 'CARD') && x.method !== 'PIX')
+                                        .map(x => ({ method: x.method as 'PIX'|'CARD', active: !!x.active }));
+                                      handleUpdateOfferMethods(of.id, next);
+                                    }}
+                                    onDoubleClick={(e) => e.stopPropagation()}
+                                  >Excluir PIX</button>
+                                )}
+                                {cardExists && (
+                                  <button
+                                    type="button"
+                                    className="px-2 py-1 rounded-md text-[11px] border bg-white border-gray-200 text-gray-700 hover:bg-red-50 hover:text-red-700"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const next = (of.paymentMethods || [])
+                                        .filter(x => (x.method === 'PIX' || x.method === 'CARD') && x.method !== 'CARD')
+                                        .map(x => ({ method: x.method as 'PIX'|'CARD', active: !!x.active }));
+                                      handleUpdateOfferMethods(of.id, next);
+                                    }}
+                                    onDoubleClick={(e) => e.stopPropagation()}
+                                  >Excluir CARD</button>
+                                )}
+                              </div>
                             </div>
                           </div>
                           <div className="col-span-2 text-right flex items-center justify-end gap-2">

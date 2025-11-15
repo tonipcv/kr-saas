@@ -20,6 +20,31 @@ import { PhoneInput } from 'react-international-phone';
 import 'react-international-phone/style.css';
 import { getCurrencyForCountry, hasCurrencyMapping } from '@/lib/payments/countryCurrency';
 
+function digitsOnly(v: string): string { return (v || '').replace(/\D+/g, ''); }
+
+async function ensureStripeLoaded(publishableKey: string): Promise<any> {
+  // Returns Stripe instance
+  const w: any = typeof window !== 'undefined' ? window : {};
+  if (!publishableKey) throw new Error('Missing NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY');
+  if (w.__stripeInstance) return w.__stripeInstance;
+  if (w.Stripe) {
+    w.__stripeInstance = w.Stripe(publishableKey);
+    return w.__stripeInstance;
+  }
+  await new Promise<void>((resolve, reject) => {
+    const id = 'stripe-js';
+    if (document.getElementById(id)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.id = id; s.src = 'https://js.stripe.com/v3/'; s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Failed to load Stripe.js'));
+    document.head.appendChild(s);
+  });
+  if (!w.Stripe) throw new Error('Stripe.js not available');
+  w.__stripeInstance = w.Stripe(publishableKey);
+  return w.__stripeInstance;
+}
+
 type ClinicBranding = {
   theme?: 'LIGHT' | 'DARK';
   buttonColor?: string | null;
@@ -74,6 +99,10 @@ export default function BrandedCheckoutPage() {
   const [cardExpMonth, setCardExpMonth] = useState('');
   const [cardExpYear, setCardExpYear] = useState('');
   const [cardCvv, setCardCvv] = useState('');
+  const cardBrand = useMemo(() => {
+    try { return detectBrand ? detectBrand(cardNumber) : null } catch { return null }
+  }, [cardNumber]);
+  const cvvMax = useMemo(() => (cardBrand === 'AMEX' ? 4 : 3), [cardBrand]);
   // Address fields
   const [addrStreet, setAddrStreet] = useState('');
   const [addrNumber, setAddrNumber] = useState('');
@@ -90,6 +119,7 @@ export default function BrandedCheckoutPage() {
   const [stripeCardElement, setStripeCardElement] = useState<any>(null);
   const [stripeReady, setStripeReady] = useState(false);
   const [stripeFlowActive, setStripeFlowActive] = useState(false);
+  const stripeDivRef = useRef<HTMLDivElement|null>(null);
   const [preview, setPreview] = useState<any>(null);
   const [pricing, setPricing] = useState<any>(null);
   const [cardStatus, setCardStatus] = useState<null | { approved: boolean; status?: string; message?: string; last4?: string; brand?: string }>(null);
@@ -180,6 +210,7 @@ export default function BrandedCheckoutPage() {
   const [cardPolling, setCardPolling] = useState<{ active: boolean; startedAt: number } | null>(null);
   // Allowed methods derived from offer
   const PIX_OB_ENABLED = String(process.env.NEXT_PUBLIC_CHECKOUT_PIX_OB_ENABLED || '').toLowerCase() === 'true';
+  const LANG_DETECT_ENABLED = String(process.env.NEXT_PUBLIC_CHECKOUT_LANG_DETECT || '').toLowerCase() === 'true';
   // Open Finance participants (bank selection for pix_ob)
   const [participants, setParticipants] = useState<any[]>([]);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
@@ -381,6 +412,13 @@ export default function BrandedCheckoutPage() {
     { code: 'MX', name: 'México' },
   ];
 
+  const countryOptionsEN = [
+    { code: 'BR', name: 'Brazil' },
+    { code: 'US', name: 'United States' },
+    { code: 'PT', name: 'Portugal' },
+    { code: 'MX', name: 'Mexico' },
+  ];
+
   
 
   // Initialize country: prefer URL param; otherwise keep default 'BR' (no auto-detect to avoid false US)
@@ -412,6 +450,7 @@ export default function BrandedCheckoutPage() {
   // Safe auto-detect: only when no URL override and country is still at default 'BR'
   useEffect(() => {
     try {
+      if (!LANG_DETECT_ENABLED) return;
       if (countryParam) return; // explicit override wins
       if (addrCountry && addrCountry !== 'BR') return; // already set by user/UI
       const langs: string[] = (typeof navigator !== 'undefined' && Array.isArray((navigator as any).languages)) ? (navigator as any).languages : [];
@@ -429,7 +468,7 @@ export default function BrandedCheckoutPage() {
       }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countryParam, providerConfig?.CHECKOUT_DEFAULT_COUNTRY]);
+  }, [LANG_DETECT_ENABLED, countryParam, providerConfig?.CHECKOUT_DEFAULT_COUNTRY]);
 
   // Resolve routed provider and stripe price for country/currency
   const routedProvider: 'KRXPAY'|'STRIPE'|null = useMemo(() => {
@@ -481,33 +520,35 @@ export default function BrandedCheckoutPage() {
   }, [providerConfig?.STRIPE, currentCountry, currentCurrency, offerPriceRows]);
 
   // Derive an effective provider if CHECKOUT is not set, using available OfferPrice rows
-  const effectiveProvider: 'KRXPAY'|'STRIPE'|null = useMemo(() => {
+  const effectiveProvider: 'KRXPAY'|'STRIPE'|'APPMAX'|null = useMemo(() => {
     if (routedProvider) return routedProvider;
     const rows = offerPriceRows || [];
     const hasStripe = rows.some(r => String(r.provider).toUpperCase() === 'STRIPE');
     const hasKrx = rows.some(r => String(r.provider).toUpperCase() === 'KRXPAY');
+    const hasAppmax = rows.some(r => String(r.provider).toUpperCase() === 'APPMAX');
     if (hasStripe) return 'STRIPE';
     if (hasKrx) return 'KRXPAY';
+    if (hasAppmax) return 'APPMAX';
     return null;
   }, [routedProvider, offerPriceRows]);
 
   // Per-method providers from routing map (fallback to effectiveProvider if missing)
-  const cardProvider = useMemo(() => routingMap?.methods?.CARD?.provider ?? effectiveProvider, [routingMap, effectiveProvider]);
+  const cardProvider = useMemo(() => (routingMap?.methods?.CARD?.provider ?? effectiveProvider) as ('KRXPAY'|'STRIPE'|'APPMAX'|null), [routingMap, effectiveProvider]);
   const pixProvider = useMemo(() => {
     const routed = routingMap?.methods?.PIX?.provider ?? null;
     if (routed) return routed;
     if (currentCountry !== 'BR') return null;
     return effectiveProvider === 'KRXPAY' ? 'KRXPAY' : null;
-  }, [routingMap, effectiveProvider, currentCountry]);
+  }, [routingMap, effectiveProvider, currentCountry]) as ('KRXPAY'|'STRIPE'|'APPMAX'|null);
   const ofProvider = useMemo(() => {
     // Only respect explicit routing; otherwise do not infer provider
     const routed = routingMap?.methods?.OPEN_FINANCE?.provider ?? null;
-    return routed || null;
+    return (routed || null) as ('KRXPAY'|'STRIPE'|'APPMAX'|null);
   }, [routingMap]);
   const ofAutoProvider = useMemo(() => {
     // Only respect explicit routing; otherwise do not infer provider
     const routed = routingMap?.methods?.OPEN_FINANCE_AUTOMATIC?.provider ?? null;
-    return routed || null;
+    return (routed || null) as ('KRXPAY'|'STRIPE'|'APPMAX'|null);
   }, [routingMap]);
   useEffect(() => {
     let active = true;
@@ -656,6 +697,10 @@ export default function BrandedCheckoutPage() {
       // Accept only DB price or override
       return !!(offerPriceCents != null || priceOverrideCents != null);
     }
+    if (cardProvider === 'APPMAX') {
+      // Appmax: exigir OfferPrice (DB) ou override
+      return !!(offerPriceCents != null || priceOverrideCents != null);
+    }
     return false;
   }, [cardProvider, stripePriceId, offerPriceCents, priceOverrideCents]);
 
@@ -665,6 +710,7 @@ export default function BrandedCheckoutPage() {
     if (currentCountry !== 'BR') return false; // BR-only
     if (pixProvider === 'KRXPAY') return true;
     if (pixProvider === 'STRIPE') return false;
+    if (pixProvider === 'APPMAX') return true;
     return offerPix;
   }, [offer?.paymentMethods, pixProvider, currentCountry]);
 
@@ -680,13 +726,69 @@ export default function BrandedCheckoutPage() {
     return ofAutoProvider === 'KRXPAY';
   }, [ofAutoProvider, currentCountry]);
 
+  // Mount/unmount Stripe Card Element safely across country/provider switches
+  useEffect(() => {
+    let cancelled = false;
+    let localStripe: any = null;
+    let localElements: any = null;
+    let localCard: any = null;
+
+    async function setup() {
+      try {
+        // Activate inline Stripe flow only when routed to STRIPE and routing/prices are loaded
+        const enable = (paymentMethod === 'card') && (cardProvider === 'STRIPE') && (routingMap !== null) && (offerPriceRows !== null);
+        setStripeFlowActive(enable);
+        if (!enable) return;
+
+        // Ensure container exists
+        const mountNode = stripeDivRef.current;
+        if (!mountNode) {
+          requestAnimationFrame(setup);
+          return;
+        }
+
+        // Load Stripe.js and create elements
+        const pk = String(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
+        localStripe = await ensureStripeLoaded(pk);
+        if (cancelled) return;
+        localElements = localStripe.elements();
+        const style = { base: { fontSize: '16px' } } as any;
+        localCard = localElements.create('card', { style });
+        localCard.mount(mountNode);
+
+        setStripe(localStripe);
+        setStripeElements(localElements);
+        setStripeCardElement(localCard);
+        setStripeReady(true);
+      } catch (e) {
+        console.error('[stripe][mount][error]', e);
+        setStripeReady(false);
+      }
+    }
+
+    setup();
+
+    return () => {
+      cancelled = true;
+      try { if (localCard) localCard.unmount(); } catch {}
+      try { if (stripeCardElement && stripeCardElement !== localCard) stripeCardElement.unmount(); } catch {}
+      setStripeCardElement(null);
+      setStripeElements((prev: any) => (prev === localElements ? null : prev));
+      setStripeReady(false);
+    };
+  }, [paymentMethod, cardProvider, currentCountry, stripePriceId, routingMap, offerPriceRows]);
+
   // Auto-adjust selected payment method when routing changes (per-method providers)
   useEffect(() => {
     const isSub = !!offer?.isSubscription;
     // Prefer a method that is actually enabled for its provider
     if (isSub && openFinanceAutoAllowedRouted && ofAutoProvider === 'KRXPAY') { setPaymentMethod('pix_ob'); return; }
-    if (pixAllowedRouted && pixProvider === 'KRXPAY') { setPaymentMethod('pix'); return; }
+    // Card first
     if (cardAllowedRouted && cardProvider === 'STRIPE') { setPaymentMethod('card'); return; }
+    if (cardAllowedRouted && cardProvider === 'APPMAX') { setPaymentMethod('card'); return; }
+    // Then Pix
+    if (pixAllowedRouted && pixProvider === 'KRXPAY') { setPaymentMethod('pix'); return; }
+    if (pixAllowedRouted && pixProvider === 'APPMAX') { setPaymentMethod('pix'); return; }
     // No routing: keep previous heuristics
   }, [cardProvider, pixProvider, ofAutoProvider, cardAllowedRouted, pixAllowedRouted, openFinanceAutoAllowedRouted, offer?.isSubscription]);
 
@@ -695,6 +797,22 @@ export default function BrandedCheckoutPage() {
   const cardAllowed = cardAllowedRouted;
   const openFinanceAllowed = openFinanceAllowedRouted;
   const openFinanceAutoAllowed = openFinanceAutoAllowedRouted;
+
+  // UI readiness to avoid flicker: wait until routing + prices are loaded
+  const paymentReady = useMemo(() => {
+    return !!offer && routingMap !== null && offerPriceRows !== null;
+  }, [offer?.id, routingMap, offerPriceRows]);
+
+  // One-time UI ready flag (do not toggle back to false)
+  const [uiReady, setUiReady] = useState(false);
+  useEffect(() => {
+    if (!uiReady && paymentReady) setUiReady(true);
+  }, [paymentReady, uiReady]);
+
+  // On context changes (country or offer), re-enter loading state until ready again
+  useEffect(() => {
+    setUiReady(false);
+  }, [currentCountry, offer?.id]);
 
   function resetCardForm() {
     setCardNumber('');
@@ -755,6 +873,14 @@ export default function BrandedCheckoutPage() {
     })();
     return () => { stopped = true; };
   }, [cardProvider, cardAllowed, paymentMethod]);
+
+  // Force-disable Stripe UI when provider is not STRIPE (APPMAX/KRXPAY use native inputs)
+  useEffect(() => {
+    if (cardProvider !== 'STRIPE') {
+      setStripeFlowActive(false);
+      setStripeClientSecret(null);
+    }
+  }, [cardProvider]);
 
   // Dev helper: prefill test data and submit
   async function payNowTest() {
@@ -1277,14 +1403,18 @@ export default function BrandedCheckoutPage() {
       const subUnit = (offer?.intervalUnit || 'MONTH').toString().toUpperCase();
       const subCount = Number(offer?.intervalCount || 1);
       const subMonths = isSubscription ? (subUnit === 'YEAR' ? subCount * 12 : (subUnit === 'MONTH' ? subCount : (subUnit === 'WEEK' ? Math.ceil(subCount / 4) : 1))) : 0;
-      // Decide endpoint:
+      // Decide endpoint (with APPMAX override):
+      // - APPMAX (card/pix): always use /api/checkout/appmax/create
       // - subscription + PIX: use one-time create with subscriptionPeriodMonths (supports monthly too)
       // - subscription + CARD + subMonths>1: one-time create with installments=subMonths (prepaid)
       // - subscription + CARD + subMonths<=1: standard subscribe
       // - one-time: create
-      const endpoint = isSubscription
-        ? (paymentMethod === 'pix' ? '/api/checkout/create' : (subMonths > 1 ? '/api/checkout/create' : '/api/checkout/subscribe'))
-        : '/api/checkout/create';
+      const isAppmaxFlow = (paymentMethod === 'card' && cardProvider === 'APPMAX') || (paymentMethod === 'pix' && pixProvider === 'APPMAX');
+      let endpoint = isAppmaxFlow
+        ? '/api/checkout/appmax/create'
+        : (isSubscription
+            ? (paymentMethod === 'pix' ? '/api/checkout/create' : (subMonths > 1 ? '/api/checkout/create' : '/api/checkout/subscribe'))
+            : '/api/checkout/create');
       // If KRXPAY card, tokenize first to avoid sending PAN/CVV to checkout endpoint
       let savedCardId: string | null = null;
       if (paymentMethod === 'card' && cardProvider === 'KRXPAY') {
@@ -1309,59 +1439,41 @@ export default function BrandedCheckoutPage() {
         }
       }
 
-      const body = (endpoint === '/api/checkout/create' && isSubscription) ? {
-        productId: product.id,
-        productName: product.name,
-        amountCents: priceCents, // base amount; backend embeds interest
-        offerId: offer?.id || null,
-        buyer: {
-          name: buyerName,
-          email: buyerEmail,
-          phone: buyerPhone,
-          document: buyerDocument,
-          address: {
-            street: addrStreet,
-            number: addrNumber,
-            zip_code: addrZip,
-            city: addrCity,
-            state: addrState,
-            country: addrCountry || 'BR',
-          }
-        },
-        slug,
-        subscriptionPeriodMonths: subMonths,
-        payment: paymentMethod === 'pix'
-          ? { method: 'pix' }
-          : (savedCardId && cardProvider === 'KRXPAY'
-              ? {
-                  method: 'card',
-                  installments: Math.max(1, Math.min(
-                    Number(installments || 1),
-                    Number(subMonths || 1),
-                    Number(offer?.maxInstallments || 12),
-                    12
-                  )),
-                  saved_card_id: savedCardId,
-                }
-              : {
-                  method: 'card',
-                  // IMPORTANT: respect user's selection; clamp to subscription months, offer cap and platform cap
-                  installments: Math.max(1, Math.min(
-                    Number(installments || 1),
-                    Number(subMonths || 1),
-                    Number(offer?.maxInstallments || 12),
-                    12
-                  )),
-                  card: {
-                    number: cardNumber,
-                    holder_name: cardHolder,
-                    exp_month: cardExpMonth,
-                    exp_year: cardExpYear,
-                    cvv: cardCvv,
-                  }
-                }
-            )
-      } : (isSubscription && endpoint === '/api/checkout/subscribe' ? {
+      let body: any;
+      if (isAppmaxFlow) {
+        // Build body expected by /api/checkout/appmax/create
+        const cardForAppmax = paymentMethod === 'card' ? {
+          number: cardNumber,
+          cvv: cardCvv,
+          month: Number(cardExpMonth || 0),
+          year: Number(cardExpYear || 0),
+          name: cardHolder,
+        } : undefined;
+        const items = [
+          { sku: String(product?.id || ''), name: String(product?.name || ''), qty: 1, price: Number(priceCents || 0) / 100 }
+        ];
+        body = {
+          productId: product.id,
+          slug,
+          buyer: {
+            name: buyerName,
+            email: buyerEmail,
+            telephone: buyerPhone,
+            phone: buyerPhone,
+            document_number: buyerDocument,
+            postcode: addrZip,
+            address_street: addrStreet,
+            address_street_number: addrNumber,
+            address_city: addrCity,
+            address_state: addrState,
+          },
+          items,
+          method: paymentMethod === 'pix' ? 'pix' : 'card',
+          ...(paymentMethod === 'card' ? { installments: Math.max(1, Math.min(Number(installments || 1), Number(offer?.maxInstallments || 12), 12)) } : {}),
+          ...(cardForAppmax ? { card: cardForAppmax } : {}),
+        };
+      } else if (isSubscription && endpoint === '/api/checkout/subscribe') {
+        body = {
         productId: product.id,
         slug,
         offerId: offer?.id || null,
@@ -1382,7 +1494,9 @@ export default function BrandedCheckoutPage() {
         payment: savedCardId && cardProvider === 'KRXPAY'
           ? { method: 'card', saved_card_id: savedCardId }
           : { method: 'card', card: { number: cardNumber, holder_name: cardHolder, exp_month: cardExpMonth, exp_year: cardExpYear, cvv: cardCvv } }
-      } : {
+        };
+      } else {
+        body = {
         productId: product.id,
         productName: product.name,
         amountCents: priceCents,
@@ -1408,7 +1522,8 @@ export default function BrandedCheckoutPage() {
               ? { method: 'card', installments, saved_card_id: savedCardId }
               : { method: 'card', installments, card: { number: cardNumber, holder_name: cardHolder, exp_month: cardExpMonth, exp_year: cardExpYear, cvv: cardCvv } }
             )
-      });
+        };
+      }
       // Debug the outgoing payload
       try { 
         console.log('[checkout][submit] sending checkout', { 
@@ -1449,6 +1564,39 @@ export default function BrandedCheckoutPage() {
           setError(e?.message || 'Falha ao inicializar Stripe');
           return;
         }
+      }
+
+      // Handle APPMAX pix (open PIX modal)
+      if (data?.provider === 'APPMAX' && paymentMethod === 'pix') {
+        setOrderId(String(data?.order_id || ''));
+        const pix = data?.pix || {};
+        setPixQrUrl(pix?.qr_code_url || null);
+        setPixQrCode(pix?.qr_code || null);
+        let seconds = 0;
+        if (typeof pix?.expires_in === 'number') seconds = pix.expires_in;
+        setPixRemaining(seconds);
+        setPixExpiresAt(pix?.expires_at || null);
+        setPixOpen(true);
+        setPaid(false);
+        return;
+      }
+
+      // Handle APPMAX card (set status and start polling)
+      if (data?.provider === 'APPMAX' && paymentMethod === 'card') {
+        const status = String(data?.status || '').toLowerCase();
+        const approved = status === 'paid' || status === 'captured' || status.includes('aprov');
+        if (data?.order_id) setOrderId(String(data.order_id));
+        setCardStatus({ approved, status: data?.status || status, message: null as any, last4: undefined, brand: undefined });
+        if (!approved && data?.order_id) {
+          setCardPolling({ active: true, startedAt: Date.now() });
+          openApproveLoading();
+        }
+        if (approved && data?.order_id) {
+          setSuccess(true);
+          const to = `/${slug}/checkout/success?order_id=${data.order_id}&method=card&product_id=${productId}`;
+          showApprovedAndRedirect(to);
+        }
+        return;
       }
 
       // Handle PIX modal (only for one-time flow)
@@ -1803,69 +1951,17 @@ export default function BrandedCheckoutPage() {
 
   if (loading) {
     return (
-      <div className={`min-h-screen ${theme === 'DARK' ? 'bg-[#0b0b0b] text-gray-200' : 'bg-gradient-to-b from-gray-50 to-white text-gray-900'} p-4 md:p-6`}>
-        <div className="mx-auto max-w-7xl">
-          {/* Header skeleton with logo */}
-          <div className="text-center mt-6 md:mt-10 mb-8 md:mb-12">
-            <div className={`bg-white border-gray-200 h-12 w-40 md:w-56 mx-auto rounded-md border animate-pulse`} />
-          </div>
+      <div className={`min-h-screen ${theme === 'DARK' ? 'bg-[#0b0b0b] text-gray-200' : 'bg-gradient-to-b from-gray-50 to-white text-gray-900'} p-6 flex items-center justify-center`}>
+        <div className="h-9 w-9 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
+      </div>
+    );
+  }
 
-          {/* Content grid: left (form) + right (summary) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left card */}
-            <div className="lg:col-span-8">
-              <div className={`bg-white border-gray-200 rounded-xl border p-5 shadow-sm`}>
-                {/* Buyer info (skeleton) */}
-
-                {/* Payment method */}
-                <div className="mt-6">
-                  <div className={`bg-gray-100 h-4 rounded-md w-40 mb-3 animate-pulse`} />
-                  <div className="flex gap-2">
-                    <div className={`bg-white h-10 w-20 rounded-lg border border-gray-300 animate-pulse`} />
-                    <div className={`bg-white h-10 w-24 rounded-lg border border-gray-300 animate-pulse`} />
-                  </div>
-                </div>
-
-                {/* Card inputs skeleton */}
-                <div className="mt-6 space-y-3">
-                  <div className={`bg-gray-100 h-3 rounded-md w-28 animate-pulse`} />
-                  <div className={`bg-gray-100 rounded-md h-12 border border-transparent flex items-center animate-pulse`} />
-                  <div className={`bg-gray-100 h-3 rounded-md w-36 animate-pulse`} />
-                  <div className={`bg-gray-100 h-12 rounded-md animate-pulse`} />
-                </div>
-
-                {/* Pay button skeleton */}
-                <div className="mt-6 flex justify-end">
-                  <div className={`bg-gray-200 h-10 w-32 rounded-md animate-pulse`} />
-                </div>
-              </div>
-            </div>
-
-            {/* Right summary card */}
-            <div className="lg:col-span-4">
-              <div className={`bg-white border-gray-200 rounded-xl border p-5 shadow-sm`}>
-                <div className="flex items-start gap-3">
-                  <div className={`bg-gray-100 h-16 w-16 rounded-md border border-gray-200 animate-pulse`} />
-                  <div className="flex-1">
-                    <div className={`bg-gray-100 h-4 w-40 rounded animate-pulse`} />
-                    <div className={`bg-gray-100 h-3 w-24 rounded mt-2 animate-pulse`} />
-                  </div>
-                </div>
-                <div className="mt-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className={`bg-gray-100 h-3 w-24 rounded animate-pulse`} />
-                    <div className={`bg-gray-100 h-3 w-16 rounded animate-pulse`} />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className={`bg-gray-100 h-3 w-28 rounded animate-pulse`} />
-                    <div className={`bg-gray-100 h-3 w-20 rounded animate-pulse`} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        {/* no sticky debug in loading */}
+  // Prevent rendering the main UI until all payment dependencies are ready
+  if (!uiReady) {
+    return (
+      <div className={`min-h-screen ${theme === 'DARK' ? 'bg-[#0b0b0b] text-gray-200' : 'bg-gradient-to-b from-gray-50 to-white text-gray-900'} p-6 flex items-center justify-center`}>
+        <div className="h-9 w-9 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
       </div>
     );
   }
@@ -1916,7 +2012,7 @@ export default function BrandedCheckoutPage() {
                 className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm ${theme==='DARK'?'bg-[#0f0f0f] border-gray-800 text-gray-100':'bg-white border-gray-300 text-gray-900'}`}
               >
                 <span className="text-base">{flagEmoji(currentCountry)}</span>
-                <span>Alterar país</span>
+                <span>{isEN ? 'Change country' : 'Alterar país'}</span>
                 <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"/></svg>
               </button>
               {countryMenuOpen && (
@@ -1930,7 +2026,7 @@ export default function BrandedCheckoutPage() {
                           className={`w-full px-3 py-2 flex items-center gap-2 text-left ${theme==='DARK'?'hover:bg-gray-900 text-gray-100':'hover:bg-gray-50 text-gray-900'}`}
                         >
                           <span className="text-base">{flagEmoji(cc)}</span>
-                          <span>{cc}</span>
+                          <span>{(isEN ? countryOptionsEN : countryOptions).find(o => o.code === cc)?.name || cc}</span>
                         </button>
                       </li>
                     ))}
@@ -2012,177 +2108,172 @@ export default function BrandedCheckoutPage() {
                 </div>
 
                 {/* Payment method */}
-                <div className="mt-5">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'}`}>{t.payment_method}</div>
-                    {/* Dev helper button to autofill test card and submit */}
-                    {((process.env.NODE_ENV !== 'production') || (sp.get('testcard') === '1')) && (
-                      <button
-                        type="button"
-                        onClick={payNowTest}
-                        className={`text-[12px] underline ${theme==='DARK'?'text-blue-400 hover:text-blue-300':'text-blue-700 hover:text-blue-600'}`}
-                        title="Preenche dados de teste de cartão e paga agora"
-                      >
-                        Preencher dados de teste (Cartão)
-                      </button>
-                    )}
-                  </div>
-                  <div className={`grid ${pixAllowed && cardAllowed ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'} gap-3 mb-3`}>
-                    {/* Cartão */}
-                    {cardAllowed && (
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('card')}
-                        className={`relative group rounded-xl border p-3 text-left transition ${paymentMethod==='card' ? (theme==='DARK' ? 'border-blue-500 bg-[#0f0f0f]' : 'border-blue-500 bg-white shadow-sm') : (theme==='DARK' ? 'border-gray-800 bg-transparent hover:border-gray-700' : 'border-gray-300 bg-white hover:border-gray-400')}`}
-                      >
-                        {paymentMethod==='card' && (
-                          <span className="absolute -top-2 -right-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] shadow">✓</span>
+                {paymentReady && (
+                  <>
+                    <div className="mt-5">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'}`}>{t.payment_method}</div>
+                        {((process.env.NODE_ENV !== 'production') || (sp.get('testcard') === '1')) && (
+                          <button type="button" onClick={payNowTest} className={`text-[12px] underline ${theme==='DARK'?'text-blue-400 hover:text-blue-300':'text-blue-700 hover:text-blue-600'}`} title="Preenche dados de teste de cartão e paga agora">Preencher dados de teste (Cartão)</button>
                         )}
-                        <div className="flex items-center gap-2">
-                          {/* Card icon (inline SVG) */}
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={`${theme==='DARK'?'text-gray-200':'text-gray-700'}`}>
-                            <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/>
-                            <rect x="2" y="8" width="20" height="2" fill="currentColor"/>
-                            <rect x="5" y="13" width="5" height="2" rx="1" fill="currentColor"/>
-                          </svg>
-                          <span className={`${paymentMethod==='card' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>Cartão</span>
-                        </div>
-                        {(routedProvider === 'STRIPE' && !stripePriceId) && (
-                          <div className={`mt-2 text-[12px] ${theme==='DARK'?'text-amber-300':'text-amber-700'}`}>
-                            {t.stripe_missing_price}
-                          </div>
+                      </div>
+                      <div className={`grid ${pixAllowed && cardAllowed ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'} gap-3 mb-3`}>
+                        {cardAllowed && (
+                          <button type="button" onClick={() => setPaymentMethod('card')} className={`relative group rounded-xl border p-3 text-left transition ${paymentMethod==='card' ? (theme==='DARK' ? 'border-blue-500 bg-[#0f0f0f]' : 'border-blue-500 bg-white shadow-sm') : (theme==='DARK' ? 'border-gray-800 bg-transparent hover:border-gray-700' : 'border-gray-300 bg-white hover:border-gray-400')}`}>
+                            {paymentMethod==='card' && (<span className="absolute -top-2 -right-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] shadow">✓</span>)}
+                            <div className="flex items-center gap-2">
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={`${theme==='DARK'?'text-gray-200':'text-gray-700'}`}>
+                                <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+                                <rect x="2" y="8" width="20" height="2" fill="currentColor"/>
+                                <rect x="5" y="13" width="5" height="2" rx="1" fill="currentColor"/>
+                              </svg>
+                              <span className={`${paymentMethod==='card' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>{isEN ? 'Card' : 'Cartão'}</span>
+                            </div>
+                            {(routedProvider === 'STRIPE' && !stripePriceId) && (<div className={`mt-2 text-[12px] ${theme==='DARK'?'text-amber-300':'text-amber-700'}`}>{t.stripe_missing_price}</div>)}
+                          </button>
                         )}
-                      </button>
-                    )}
-
-                    {/* Pix */}
-                    {pixAllowed && (
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('pix')}
-                        className={`relative group rounded-xl border p-3 text-left transition ${paymentMethod==='pix' ? (theme==='DARK' ? 'border-blue-500 bg-[#0f0f0f]' : 'border-blue-500 bg-white shadow-sm') : (theme==='DARK' ? 'border-gray-800 bg-transparent hover:border-gray-700' : 'border-gray-300 bg-white hover:border-gray-400')}`}
-                      >
-                        {paymentMethod==='pix' && (
-                          <span className="absolute -top-2 -right-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] shadow">✓</span>
+                        {pixAllowed && (
+                          <button type="button" onClick={() => setPaymentMethod('pix')} className={`relative group rounded-xl border p-3 text-left transition ${paymentMethod==='pix' ? (theme==='DARK' ? 'border-blue-500 bg-[#0f0f0f]' : 'border-blue-500 bg-white shadow-sm') : (theme==='DARK' ? 'border-gray-800 bg-transparent hover:border-gray-700' : 'border-gray-300 bg-white hover:border-gray-400')}`}>
+                            {paymentMethod==='pix' && (<span className="absolute -top-2 -right-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] shadow">✓</span>)}
+                            <div className="flex items-center gap-2">
+                              <img src="/pix.png" alt="Pix" className="h-4 w-4 object-contain" />
+                              <span className={`${paymentMethod==='pix' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>Pix</span>
+                            </div>
+                          </button>
                         )}
-                        <div className="flex items-center gap-2">
-                          {/* Pix icon from public */}
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src="/pix.png" alt="Pix" className="h-4 w-4 object-contain" />
-                          <span className={`${paymentMethod==='pix' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>Pix</span>
-                        </div>
-                      </button>
-                    )}
-                    {(() => {
-                      const isSub = !!offer?.isSubscription;
-                      const show = isSub ? openFinanceAutoAllowed : openFinanceAllowed;
-                      return show;
-                    })() && (
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('pix_ob')}
-                        className={`relative group rounded-xl border p-3 text-left transition ${paymentMethod==='pix_ob' ? (theme==='DARK' ? 'border-blue-500 bg-[#0f0f0f]' : 'border-blue-500 bg-white shadow-sm') : (theme==='DARK' ? 'border-gray-800 bg-transparent hover:border-gray-700' : 'border-gray-300 bg-white hover:border-gray-400')}`}
-                      >
-                        {paymentMethod==='pix_ob' && (
-                          <span className="absolute -top-2 -right-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] shadow">✓</span>
+                        {(() => { const isSub = !!offer?.isSubscription; const show = isSub ? openFinanceAutoAllowed : openFinanceAllowed; return show; })() && (
+                          <button type="button" onClick={() => setPaymentMethod('pix_ob')} className={`relative group rounded-xl border p-3 text-left transition ${paymentMethod==='pix_ob' ? (theme==='DARK' ? 'border-blue-500 bg-[#0f0f0f]' : 'border-blue-500 bg-white shadow-sm') : (theme==='DARK' ? 'border-gray-800 bg-transparent hover:border-gray-700' : 'border-gray-300 bg-white hover:border-gray-400')}`}>
+                            {paymentMethod==='pix_ob' && (<span className="absolute -top-2 -right-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] shadow">✓</span>)}
+                            <div className="flex items-center gap-2">
+                              <img src="/pix.png" alt="Pix" className="h-4 w-4 object-contain" />
+                              <span className={`${paymentMethod==='pix_ob' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>{offer?.isSubscription ? 'Pix Automático' : 'Open Finance'}</span>
+                            </div>
+                          </button>
                         )}
-                        <div className="flex items-center gap-2">
-                          <img src="/pix.png" alt="Pix" className="h-4 w-4 object-contain" />
-                          <span className={`${paymentMethod==='pix_ob' ? 'text-blue-600' : (theme==='DARK'?'text-gray-300':'text-gray-700')} text-sm font-medium`}>
-                            {offer?.isSubscription ? 'Pix Automático' : 'Open Finance'}
-                          </span>
-                        </div>
-                      </button>
-                    )}
-                  </div>
-                  {paymentMethod === 'card' && cardAllowed && (
-                    <div>{/* Parcelas e País serão exibidos após os campos do cartão */}</div>
-                  )}
-                  {addrCountry === 'BR' && paymentMethod === 'pix' && (
-                    <div className="mt-2 text-sm">
-                      <div className={`${theme==='DARK'?'text-gray-300':'text-gray-700'}`}>
-                        <div><strong>Informações sobre o pagamento via pix:</strong></div>
-                        <ul className="list-disc ml-5 mt-1 space-y-1">
-                          <li>Valor à vista: {formatCents(priceCents)}.</li>
-                          <li>É simples, só usar o aplicativo de seu banco para pagar PIX.</li>
-                          <li>Super seguro. O pagamento PIX foi desenvolvido pelo Banco Central para facilitar pagamentos.</li>
-                        </ul>
                       </div>
                     </div>
-                  )}
-                  {paymentMethod === 'pix_ob' && (
-                    <div className="mt-2 text-sm">
-                      <div className={`${theme==='DARK'?'text-gray-300':'text-gray-700'}`}>
-                        <ul className="list-disc ml-5 mt-1 space-y-1">
-                          <li>Pix Automático (Open Finance) com vínculo ao banco.</li>
-                          <li>Você será redirecionado para autorizar o acesso.</li>
-                        </ul>
+                    {paymentMethod === 'card' && cardAllowed && (<div>{/* Parcelas e País serão exibidos após os campos do cartão */}</div>)}
+                    {addrCountry === 'BR' && paymentMethod === 'pix' && (
+                      <div className="mt-2 text-sm">
+                        <div className={`${theme==='DARK'?'text-gray-300':'text-gray-700'}`}>
+                          <div><strong>Informações sobre o pagamento via pix:</strong></div>
+                          <ul className="list-disc ml-5 mt-1 space-y-1">
+                            <li>Valor à vista: {formatCents(priceCents)}.</li>
+                            <li>É simples, só usar o aplicativo de seu banco para pagar PIX.</li>
+                            <li>Super seguro. O pagamento PIX foi desenvolvido pelo Banco Central para facilitar pagamentos.</li>
+                          </ul>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-
-                                {paymentMethod === 'card' && cardAllowed && (
+                    )}
+                    {paymentMethod === 'pix_ob' && (
+                      <div className="mt-2 text-sm">
+                        <div className={`${theme==='DARK'?'text-gray-300':'text-gray-700'}`}>
+                          <ul className="list-disc ml-5 mt-1 space-y-1">
+                            <li>Pix Automático (Open Finance) com vínculo ao banco.</li>
+                            <li>Você será redirecionado para autorizar o acesso.</li>
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+                {paymentMethod === 'card' && cardAllowed && (
                   <div className="mt-4 space-y-3">
                     <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'}`}>{t.card_information}</div>
-                    <div id="stripe-card-element" className="bg-white border border-gray-300 rounded-md p-3" style={{ display: stripeFlowActive ? 'block' : 'none' }} />
+                    <div id="stripe-card-element" ref={stripeDivRef} className="bg-white border border-gray-300 rounded-md p-3" style={{ display: stripeFlowActive ? 'block' : 'none' }} />
                     {!stripeFlowActive && (
                       <>
-                        {/* Segmented row: number | MM/YY | CVC */}
-                        <div className={`${theme==='DARK'?'bg-[#0f0f0f] border border-gray-800':'bg-gray-100 border border-transparent'} rounded-md h-12 flex items-stretch overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500`}>
-                          {/* Number */}
+                        {/* Desktop segmented (md+) */}
+                        <div className={`${theme==='DARK'?'bg-[#0f0f0f] border border-gray-800':'bg-gray-100 border border-transparent'} rounded-md items-stretch overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 h-12 hidden md:flex`}>
                           <div className="relative flex-1 flex items-center">
                             <input
                               value={cardNumber}
-                              onChange={(e) => setCardNumber(e.target.value)}
+                              onChange={(e) => setCardNumber(digitsOnly(e.target.value).slice(0, 19))}
                               placeholder="1234 1234 1234 1234"
                               className={`w-full h-full px-3 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 placeholder:text-gray-500':'text-gray-900 placeholder:text-gray-400'}`}
                               autoComplete="off"
                               inputMode="numeric"
+                              pattern="\\d*"
+                              maxLength={19}
                               autoCorrect="off"
                               autoCapitalize="off"
                               spellCheck={false}
                             />
-                            {/* Brand badge (dynamic) */}
                             <div className="absolute right-2 inset-y-0 flex items-center">
-                              {(() => {
-                                const b = detectBrand(cardNumber);
-                                if (b === 'VISA') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#1a1f71]">VISA</span>;
-                                if (b === 'MASTERCARD') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#eb001b]">MC</span>;
-                                if (b === 'AMEX') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#0a2540]">AMEX</span>;
-                                if (b === 'DISCOVER') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#ff6000]">DISC</span>;
-                                return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-gray-500">CARD</span>;
-                              })()}
+                              {(() => { const b = detectBrand(cardNumber); if (b === 'VISA') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#1a1f71]">VISA</span>; if (b === 'MASTERCARD') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#eb001b]">MC</span>; if (b === 'AMEX') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#0a2540]">AMEX</span>; if (b === 'DISCOVER') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#ff6000]">DISC</span>; return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-gray-500">CARD</span>; })()}
                             </div>
                           </div>
-                          {/* Divider */}
                           <div className={`${theme==='DARK'?'bg-gray-800':'bg-gray-300'} w-px`} />
-                          {/* Mês/Ano */}
                           <div className="w-40 flex items-center gap-2 px-2">
                             <select value={cardExpMonth} onChange={(e) => setCardExpMonth(e.target.value)} className={`w-1/2 h-8 rounded-md px-2 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 border border-gray-800':'text-gray-900'}`}>
-                              <option value="" disabled>Mês</option>
+                              <option value="" disabled>{isEN ? 'Month' : 'Mês'}</option>
                               {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
                                 <option key={m} value={String(m).padStart(2,'0')}>{String(m).padStart(2,'0')}</option>
                               ))}
                             </select>
                             <select value={cardExpYear} onChange={(e) => setCardExpYear(e.target.value)} className={`w-1/2 h-8 rounded-md px-2 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 border border-gray-800':'text-gray-900'}`}>
-                              <option value="" disabled>Ano</option>
-                              {Array.from({ length: 12 }, (_, i) => i).map(delta => {
-                                const year = new Date().getFullYear() % 100 + delta;
-                                return <option key={year} value={String(year).padStart(2,'0')}>{String(year).padStart(2,'0')}</option>;
-                              })}
+                              <option value="" disabled>{isEN ? 'Year' : 'Ano'}</option>
+                              {Array.from({ length: 12 }, (_, i) => i).map(delta => { const year = new Date().getFullYear() % 100 + delta; return <option key={year} value={String(year).padStart(2,'0')}>{String(year).padStart(2,'0')}</option>; })}
                             </select>
                           </div>
-                          {/* Divider */}
                           <div className={`${theme==='DARK'?'bg-gray-800':'bg-gray-300'} w-px`} />
-                          {/* CVC */}
                           <div className="w-24 flex items-center">
                             <input
                               value={cardCvv}
-                              onChange={(e) => setCardCvv(e.target.value)}
-                              placeholder="Cód. segurança"
+                              onChange={(e) => setCardCvv(digitsOnly(e.target.value).slice(0, cvvMax))}
+                              placeholder={isEN ? 'CSV' : 'Cód. segurança'}
                               className={`w-full h-full px-3 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 placeholder:text-gray-500':'text-gray-900 placeholder:text-gray-400'}`}
                               autoComplete="off"
+                              inputMode="numeric"
+                              pattern="\\d*"
+                              maxLength={cvvMax}
+                              autoCorrect="off"
+                              autoCapitalize="off"
+                              spellCheck={false}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Mobile stacked (below md): number, (month/year inline), cvc */}
+                        <div className={`${theme==='DARK'?'bg-[#0f0f0f] border border-gray-800':'bg-gray-100 border border-transparent'} rounded-md p-2 space-y-2 md:hidden`}>
+                          <div className="relative">
+                            <input
+                              value={cardNumber}
+                              onChange={(e) => setCardNumber(digitsOnly(e.target.value).slice(0, 19))}
+                              placeholder="1234 1234 1234 1234"
+                              className={`w-full h-10 px-3 text-sm rounded-md outline-none bg-transparent ${theme==='DARK'?'text-gray-100 placeholder:text-gray-500':'text-gray-900 placeholder:text-gray-400'}`}
+                              autoComplete="off"
+                              inputMode="numeric"
+                              pattern="\\d*"
+                              maxLength={19}
+                              autoCorrect="off"
+                              autoCapitalize="off"
+                              spellCheck={false}
+                            />
+                            <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                              {(() => { const b = detectBrand(cardNumber); if (b === 'VISA') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#1a1f71]">VISA</span>; if (b === 'MASTERCARD') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#eb001b]">MC</span>; if (b === 'AMEX') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#0a2540]">AMEX</span>; if (b === 'DISCOVER') return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-[#ff6000]">DISC</span>; return <span className="inline-flex items-center justify-center h-4 px-1.5 rounded-[3px] text-[10px] font-semibold text-white bg-gray-500">CARD</span>; })()}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <select value={cardExpMonth} onChange={(e) => setCardExpMonth(e.target.value)} className={`flex-1 h-10 rounded-md px-2 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 border border-gray-800':'text-gray-900'}`}>
+                              <option value="" disabled>{isEN ? 'Month' : 'Mês'}</option>
+                              {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (<option key={m} value={String(m).padStart(2,'0')}>{String(m).padStart(2,'0')}</option>))}
+                            </select>
+                            <select value={cardExpYear} onChange={(e) => setCardExpYear(e.target.value)} className={`flex-1 h-10 rounded-md px-2 text-sm outline-none bg-transparent ${theme==='DARK'?'text-gray-100 border border-gray-800':'text-gray-900'}`}>
+                              <option value="" disabled>{isEN ? 'Year' : 'Ano'}</option>
+                              {Array.from({ length: 12 }, (_, i) => i).map(delta => { const year = new Date().getFullYear() % 100 + delta; return <option key={year} value={String(year).padStart(2,'0')}>{String(year).padStart(2,'0')}</option>; })}
+                            </select>
+                          </div>
+                          <div>
+                            <input
+                              value={cardCvv}
+                              onChange={(e) => setCardCvv(digitsOnly(e.target.value).slice(0, cvvMax))}
+                              placeholder={isEN ? 'CSV' : 'Cód. segurança'}
+                              className={`w-full h-10 px-3 text-sm rounded-md outline-none bg-transparent ${theme==='DARK'?'text-gray-100 placeholder:text-gray-500':'text-gray-900 placeholder:text-gray-400'}`}
+                              autoComplete="off"
+                              inputMode="numeric"
+                              pattern="\\d*"
+                              maxLength={cvvMax}
                               autoCorrect="off"
                               autoCapitalize="off"
                               spellCheck={false}
@@ -2213,8 +2304,20 @@ export default function BrandedCheckoutPage() {
                         {/* País no final */}
                         <div>
                           <div className={`text-sm ${theme==='DARK'?'text-gray-400':'text-gray-600'} mb-1.5`}>{t.country_region}</div>
-                          <select value={addrCountry} onChange={(e) => setAddrCountry(e.target.value)} className={`${selectClass} h-11 w-full rounded-md border px-3 text-sm`}>
-                            <option value="BR">Brazil</option>
+                          <select
+                            value={addrCountry}
+                            onChange={(e) => setAddrCountry(e.target.value)}
+                            className={`w-full rounded-md border ${theme==='DARK'?'bg-[#0f0f0f] border-gray-800 text-gray-100':'bg-white border-gray-300 text-gray-900'} h-9 px-2 text-sm`}
+                          >
+                            {(
+                              (Array.isArray(availableCountries) && availableCountries.length ? availableCountries : ['BR'])
+                            ).map((cc) => {
+                              const m = countryOptions.find(o => o.code === cc);
+                              const label = m?.name || cc;
+                              return (
+                                <option key={cc} value={cc}>{label}</option>
+                              );
+                            })}
                           </select>
                         </div>
                       </>

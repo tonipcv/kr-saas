@@ -136,6 +136,14 @@ export default function IntegrationsPage() {
   const [stripeWebhookUrl, setStripeWebhookUrl] = useState<string>('');
   const [stripeReady, setStripeReady] = useState(false);
   const [stripeVerifying, setStripeVerifying] = useState(false);
+  // Appmax connected indicator
+  const [appmaxConnected, setAppmaxConnected] = useState(false);
+  // Appmax (payments) — minimal state
+  const [appmaxOpen, setAppmaxOpen] = useState(false);
+  const [appmaxApiKey, setAppmaxApiKey] = useState('');
+  const [appmaxTestMode, setAppmaxTestMode] = useState(true);
+  const [appmaxSaving, setAppmaxSaving] = useState(false);
+  const [appmaxMerchantId, setAppmaxMerchantId] = useState<string>('');
 
   // Page loading while integrations status are being fetched
   const pageLoading = isLoading || waStatusLoading || pgLoading || emailStatusLoading;
@@ -319,6 +327,20 @@ export default function IntegrationsPage() {
 
   useEffect(() => {
     loadStripeStatus();
+  }, [currentClinic?.id]);
+
+  // Appmax status loader (minimal)
+  useEffect(() => {
+    (async () => {
+      if (!currentClinic?.id) return;
+      try {
+        const res = await fetch(`/api/admin/integrations/appmax/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+        const data = await res.json();
+        setAppmaxConnected(!!data?.connected);
+      } catch {
+        setAppmaxConnected(false);
+      }
+    })();
   }, [currentClinic?.id]);
 
   // Prefill Stripe dialog when opening
@@ -659,6 +681,31 @@ export default function IntegrationsPage() {
                     </div>
                   </div>
                 )}
+                {/* Row: Appmax */}
+                {appmaxConnected && (
+                  <div
+                    className="px-6 py-3 grid grid-cols-3 items-center gap-4 cursor-pointer"
+                    onDoubleClick={async () => {
+                      if (!appmaxMerchantId) {
+                        const mid = await resolveMerchantId();
+                        if (mid) setAppmaxMerchantId(mid);
+                      }
+                      setAppmaxOpen(true);
+                    }}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Image src="/appmax.png" alt="Appmax" width={20} height={20} />
+                      <div className="truncate">
+                        <div className="text-sm font-semibold text-gray-900 truncate">Appmax</div>
+                        <div className="text-[11px] text-gray-500 truncate">Payment processing</div>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-700">Payments</div>
+                    <div className="flex items-center justify-end">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200 text-xs">Connected</span>
+                    </div>
+                  </div>
+                )}
                 {/* Row: Stripe */}
                 {stripeConnected && (
                   <div className="px-6 py-3 grid grid-cols-3 items-center gap-4 cursor-pointer" onDoubleClick={() => openDetails('STRIPE')}>
@@ -800,6 +847,28 @@ export default function IntegrationsPage() {
                         </div>
                       </div>
                     </button>
+                    {/* Appmax */}
+                    <button
+                      className="text-left rounded-xl border border-gray-200 bg-white hover:bg-gray-50 p-4"
+                      onClick={async () => {
+                        setAddOpen(false);
+                        const mid = await resolveMerchantId();
+                        if (!mid) {
+                          toast.error('Merchant not found for current clinic');
+                          return;
+                        }
+                        setAppmaxMerchantId(mid);
+                        setAppmaxOpen(true);
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Image src="/appmax.png" alt="Appmax" width={40} height={40} />
+                        <div>
+                          <div className="font-semibold text-gray-900">Appmax</div>
+                          <div className="text-xs text-gray-600">Payments (card, pix)</div>
+                        </div>
+                      </div>
+                    </button>
                     {/* PayPal (placeholder) */}
                     <button
                       className="text-left rounded-xl border border-gray-200 bg-white hover:bg-gray-50 p-4"
@@ -833,6 +902,70 @@ export default function IntegrationsPage() {
                       </div>
                     </button>
                   </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Appmax Connect Dialog (minimal) */}
+          <Dialog open={appmaxOpen} onOpenChange={async (v) => { setAppmaxOpen(v); if (v && !appmaxMerchantId) { const mid = await resolveMerchantId(); if (mid) setAppmaxMerchantId(mid); } }}>
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader>
+                <DialogTitle>Connect Appmax</DialogTitle>
+                <DialogDescription>Save your Appmax API Key (sandbox/production).</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <div className="text-sm text-gray-700 mb-1">API Key</div>
+                  <Input value={appmaxApiKey} onChange={(e) => setAppmaxApiKey(e.target.value)} placeholder="XXXXXXXX-XXXXXXXX-..." />
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={appmaxTestMode} onChange={(e) => setAppmaxTestMode(e.target.checked)} />
+                  Test mode (sandbox)
+                </label>
+                <div className="pt-2 flex items-center justify-end gap-2">
+                  <Button variant="secondary" onClick={() => setAppmaxOpen(false)}>Cancel</Button>
+                  <Button
+                    disabled={appmaxSaving || !appmaxApiKey.trim() || !appmaxMerchantId}
+                    onClick={async () => {
+                      if (!appmaxMerchantId) return;
+                      try {
+                        setAppmaxSaving(true);
+                        const res = await fetch('/api/admin/integrations/appmax/upsert', {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ merchantId: appmaxMerchantId, credentials: { apiKey: appmaxApiKey.trim(), testMode: !!appmaxTestMode } })
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+                        toast.success('Appmax connected');
+                        // Auto-verify credentials to mark as verified
+                        try {
+                          const v = await fetch('/api/admin/integrations/appmax/verify', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ clinicId: currentClinic?.id })
+                          });
+                          const vd = await v.json();
+                          if (v.ok && vd?.verified) {
+                            toast.success('Appmax token verified');
+                          } else {
+                            toast(vd?.error || 'Unable to verify Appmax now');
+                          }
+                        } catch {}
+                        setAppmaxOpen(false);
+                        setAppmaxApiKey('');
+                        // Refresh status table
+                        try {
+                          const res2 = await fetch(`/api/admin/integrations/appmax/status?clinicId=${encodeURIComponent(currentClinic?.id || '')}`, { cache: 'no-store' });
+                          const d2 = await res2.json();
+                          setAppmaxConnected(!!d2?.connected);
+                        } catch {}
+                      } catch (e: any) {
+                        toast.error(e?.message || 'Failed to save Appmax credentials');
+                      } finally {
+                        setAppmaxSaving(false);
+                      }
+                    }}
+                  >{appmaxSaving ? 'Saving…' : 'Save'}</Button>
                 </div>
               </div>
             </DialogContent>
