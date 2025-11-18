@@ -126,9 +126,17 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
   const pay = Array.isArray(order?.payments) ? order.payments[0] : null;
   const tx = ch?.last_transaction || pay?.last_transaction || null;
   const normalizedStatus = (typeof normalized?.status === 'string' && normalized.status.trim()) ? String(normalized.status).toLowerCase() : '';
-  const status = (normalizedStatus || (tx?.status || ch?.status || order?.status || '')).toString();
+  // Prefer live provider statuses (tx/ch/order) over potentially-stale normalized DB status
+  const status = ((tx?.status || ch?.status || order?.status || '') || normalizedStatus).toString();
   const statusLower = status.toLowerCase();
-  const isPaid = (statusLower === 'paid' || statusLower === 'succeeded' || statusLower === 'authorized');
+  const isSubscriptionId = typeof orderId === 'string' && orderId.startsWith('sub_');
+  const isPaid = (
+    statusLower === 'paid' ||
+    statusLower === 'succeeded' ||
+    statusLower === 'authorized' ||
+    statusLower === 'captured' ||
+    (isSubscriptionId && (statusLower === 'active' || statusLower === 'trial' || statusLower === 'trialing'))
+  );
   // CRITICAL: derive actual payment method from order data, NOT from URL param
   const actualMethodRaw = (tx?.payment_method || ch?.payment_method || pay?.payment_method || '').toString().toLowerCase();
   const normalizedActualMethod = actualMethodRaw === 'credit_card' ? 'card' : actualMethodRaw;
@@ -367,7 +375,7 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
                   ? t.thanks
                   : (method === 'pix' ? t.finishPix : t.processing)}
               </div>
-              {!!orderId && (<StatusClient orderId={orderId} />)}
+              {!!orderId && !isPaid && (<StatusClient orderId={orderId} />)}
             </div>
 
             {/* Body */}

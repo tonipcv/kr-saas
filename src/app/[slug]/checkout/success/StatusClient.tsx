@@ -30,7 +30,7 @@ export default function StatusClient({ orderId }: Props) {
           if (cur) setCurrency(cur);
         }
         // Terminal states: stop polling
-        const terminal = st === "succeeded" || st === "paid" || st === "authorized";
+        const terminal = st === "succeeded" || st === "paid" || st === "authorized" || st === "captured";
         if (terminal) {
           return; // do not schedule next poll
         }
@@ -57,7 +57,7 @@ export default function StatusClient({ orderId }: Props) {
 
   // Show only a subtle spinner while processing; no extra text to avoid duplication with header
   if (!status) return null;
-  const terminal = status === 'succeeded' || status === 'paid' || status === 'authorized';
+  const terminal = status === 'succeeded' || status === 'paid' || status === 'authorized' || status === 'captured';
   if (terminal) return null;
   return (
     <div className="flex items-center justify-center mt-3">

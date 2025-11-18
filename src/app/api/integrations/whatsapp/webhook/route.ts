@@ -3,7 +3,6 @@ import { verifyWebhook } from '@/lib/whatsapp';
 import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/lib/events';
 import { EventActor, EventType } from '@prisma/client';
-import { classifyIntent, generateReply, shouldAutoReply } from '@/lib/ai/auto-reply';
 import { sendWhatsAppText } from '@/lib/whatsapp';
 
 export async function GET(req: NextRequest) {

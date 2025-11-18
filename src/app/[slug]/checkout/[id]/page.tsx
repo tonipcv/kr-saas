@@ -1564,8 +1564,9 @@ export default function BrandedCheckoutPage() {
               : { method: 'card', installments: (currentCountry === 'BR' ? installments : 1), card: { number: cardNumber, holder_name: cardHolder, exp_month: cardExpMonth, exp_year: cardExpYear, cvv: cardCvv } }
             )
         ,
-        // For subscription offers using PIX via the one-time create endpoint, send prepaid hint
-        ...(isSubscription && paymentMethod === 'pix' ? { subscriptionPeriodMonths: 1 } : {})
+        // For subscription offers using one-time create endpoint, send prepaid hint
+        ...(isSubscription && paymentMethod === 'pix' ? { subscriptionPeriodMonths: 1 } : {}),
+        ...(isSubscription && paymentMethod === 'card' && endpoint === '/api/checkout/create' ? { subscriptionPeriodMonths: Math.max(1, subMonths || 1) } : {})
         };
       }
       // Debug the outgoing payload

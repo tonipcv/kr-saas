@@ -624,8 +624,8 @@ export async function POST(req: Request) {
     let actualSplitApplied = false;
     try {
       const ENABLE_SPLIT = String(process.env.PAGARME_ENABLE_SPLIT || '').toLowerCase() === 'true';
-      const clinicRecipientId = merchant?.recipientId || null;
-      const platformRecipientId = (String(process.env.PLATFORM_RECIPIENT_ID || process.env.PAGARME_PLATFORM_RECIPIENT_ID || '').trim()) || null;
+      const clinicRecipientId = (String(process.env.PAGARME_RECIPIENT_ID_OVERRIDE || merchant?.recipientId || '').trim()) || null;
+      const platformRecipientId = (String(process.env.PAGARME_PLATFORM_RECIPIENT_ID_OVERRIDE || process.env.PLATFORM_RECIPIENT_ID || process.env.PAGARME_PLATFORM_RECIPIENT_ID || '').trim()) || null;
       const rawSplitPercent = typeof merchant?.splitPercent === 'number' ? merchant.splitPercent : 70; // default 70% clínica
       // Split style per method with sensible defaults:
       // - all methods: payments_percentage (per Pagar.me support example)
@@ -641,6 +641,15 @@ export async function POST(req: Request) {
       let charges: any[] | null = null;
       // Enable split whenever using Pagar.me gateway (this checkout path), independent of selectedProvider label
       const splitEnabled = ENABLE_SPLIT && !!clinicRecipientId && !!platformRecipientId;
+      try {
+        console.log('[checkout][create] split env/resolution', {
+          ENABLE_SPLIT,
+          clinicRecipientId,
+          platformRecipientId,
+          usingClinicOverride: Boolean(process.env.PAGARME_RECIPIENT_ID_OVERRIDE),
+          usingPlatformOverride: Boolean(process.env.PAGARME_PLATFORM_RECIPIENT_ID_OVERRIDE),
+        });
+      } catch {}
       if (splitEnabled) {
         const clinicPercent = Math.max(0, Math.min(100, Number(rawSplitPercent)));
         if (SPLIT_STYLE === 'payments_percentage') {

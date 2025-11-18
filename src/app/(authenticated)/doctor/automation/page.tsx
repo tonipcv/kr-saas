@@ -101,7 +101,6 @@ export default function AutomationPage() {
               <p className="text-xs text-gray-500">Create trigger-based automations to execute actions automatically</p>
             </div>
             <div className="flex gap-2">
-              <Link href="/doctor/automation/playbooks"><Button variant="outline" size="sm">Playbooks</Button></Link>
               <Link href="/doctor/automation/new"><Button size="sm" className="h-8 bg-gray-900 hover:bg-black text-white">New automation</Button></Link>
             </div>
           </div>

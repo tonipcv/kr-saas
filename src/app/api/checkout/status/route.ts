@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { pagarmeGetOrder } from '@/lib/payments/pagarme/sdk';
+import { pagarmeGetOrder, pagarmeGetSubscription } from '@/lib/payments/pagarme/sdk';
 import { prisma } from '@/lib/prisma';
 import Stripe from 'stripe';
 
@@ -167,6 +167,30 @@ export async function GET(req: Request) {
           } as any;
           return NextResponse.json({ success: true, provider: 'KRXPAY', normalized });
         }
+      } catch {}
+      // Final fallback: fetch subscription directly from Pagar.me to populate success page
+      try {
+        const sub = await pagarmeGetSubscription(String(id));
+        const amountMinor = (() => {
+          const item = Array.isArray(sub?.items) ? sub.items[0] : null;
+          const ps = item?.pricing_scheme || item?.pricingScheme || null;
+          const price = (ps && (ps.price ?? ps.unit_price ?? ps.unitPrice)) ?? sub?.plan?.amount ?? sub?.amount;
+          const n = Number(price);
+          return Number.isFinite(n) ? n : null;
+        })();
+        const currency = String(sub?.currency || 'BRL').toUpperCase();
+        const normalized = {
+          provider: 'KRXPAY',
+          status: String(sub?.status || ''),
+          amount_minor: amountMinor,
+          currency,
+          installments: 1,
+          order_id: String(id),
+          charge_id: (Array.isArray(sub?.charges) && sub.charges[0]?.id) ? String(sub.charges[0].id) : null,
+          billing_period_start: sub?.current_period?.start_at || sub?.current_period_start || null,
+          billing_period_end: sub?.current_period?.end_at || sub?.current_period_end || null,
+        } as any;
+        return NextResponse.json({ success: true, provider: 'KRXPAY', normalized });
       } catch {}
       // Not found
       return NextResponse.json({ error: 'Subscription not found' }, { status: 404 });

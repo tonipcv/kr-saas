@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { Prisma, PaymentMethod } from '@prisma/client';
 import { isV5, pagarmeCreateCustomer, pagarmeCreateCustomerCard, pagarmeCreateSubscription, pagarmeCreatePlan, pagarmeGetSubscription, pagarmeUpdateCharge } from '@/lib/payments/pagarme/sdk';
+import { createPagarmeSubscription } from '@/lib/providers/pagarme/legacy';
 import crypto from 'crypto';
 
 function onlyDigits(s: string) { return (s || '').replace(/\D/g, ''); }
@@ -13,8 +14,67 @@ export async function POST(req: Request) {
 
     if (!isV5()) return NextResponse.json({ error: 'Pagar.me v5 não configurado' }, { status: 400 });
     const isDev = process.env.NODE_ENV !== 'production';
+    const USE_PLANLESS = String(process.env.USE_PLANLESS_SUBSCRIPTION || '').toLowerCase() === 'true';
 
     const body = await req.json();
+    const DELEGATE = String(process.env.SUBSCRIBE_V1_DELEGATE || '').toLowerCase() === 'true';
+    // If delegation flag is on, try to normalize and delegate to legacy (DRY). We resolve clinicId if missing.
+    if (DELEGATE) {
+      try {
+        const inputCustomer = body.customer || body.buyer || {};
+        let inputPayment = body.paymentMethod || body.payment || {};
+        // Infer credit card type if missing but card details are present
+        const hasSavedCard = !!(inputPayment?.saved_card_id || inputPayment?.card_id || body?.saved_card_id);
+        const hasRawCard = !!(inputPayment?.card && (inputPayment?.card?.number || inputPayment?.card?.token));
+        if (!inputPayment?.type && (hasSavedCard || hasRawCard)) {
+          inputPayment = { ...inputPayment, type: 'credit_card' };
+        }
+        let clinicId: string | null = body.clinicId ? String(body.clinicId) : null;
+        // resolve clinicId from product or slug if not provided
+        if (!clinicId) {
+          if (body.productId) {
+            const prod = await prisma.products.findUnique({ where: { id: String(body.productId) } });
+            clinicId = (prod as any)?.clinicId ? String((prod as any).clinicId) : null;
+          }
+          if (!clinicId && body.slug) {
+            const clinic = await prisma.clinic.findFirst({ where: { slug: String(body.slug) } });
+            clinicId = clinic ? String(clinic.id) : null;
+          }
+        }
+        try {
+          console.log('[subscribe][v1] delegation check', {
+            DELEGATE,
+            hasClinicIdInBody: !!body.clinicId,
+            resolvedClinicId: clinicId,
+            hasOfferIdInBody: !!body.offerId,
+            hasOfferObj: !!body.offer?.id,
+            paymentMethodType: inputPayment?.type || inputPayment?.payment_method,
+            inferredCreditCard: (!body?.paymentMethod?.type && (hasSavedCard || hasRawCard)) || false,
+          });
+        } catch {}
+        if (clinicId && (body.offerId || body.offer?.id)) {
+          const offerId = String(body.offerId || body.offer?.id);
+          const result = await createPagarmeSubscription({
+            clinicId,
+            customerId: String(body.customerId || ''),
+            offerId,
+            amount: Number(body.amount || 0),
+            currency: String(body.currency || 'BRL'),
+            interval: String(body.interval || 'month'),
+            customer: inputCustomer,
+            paymentMethod: inputPayment,
+            metadata: body.metadata || undefined,
+          });
+          try { console.log('[subscribe][v1->legacy] delegated', { clinicId, offerId, hasSplit: !!result?.providerData, amount: body.amount }); } catch {}
+          return NextResponse.json({ success: true, subscription: result, subscription_id: String(result?.subscriptionId || result?.id || '') });
+        } else {
+          try { console.log('[subscribe][v1] not delegating (missing clinicId or offerId)'); } catch {}
+        }
+      } catch (e: any) {
+        try { console.error('[subscribe][v1->legacy] delegation failed', { error: e?.message }); } catch {}
+        // fall through to legacy v1 flow below
+      }
+    }
     const { productId, slug, buyer, payment } = body || {};
     if (!productId) return NextResponse.json({ error: 'productId é obrigatório' }, { status: 400 });
     if (!buyer?.name || !buyer?.email || !buyer?.phone) return NextResponse.json({ error: 'Dados do comprador incompletos' }, { status: 400 });
@@ -58,98 +118,63 @@ export async function POST(req: Request) {
       }
     }
 
-    // Ensure provider plan exists and matches OfferPrice; auto-create or recreate if price mismatch
+    // Ensure provider plan only when planless mode is disabled
     let providerPlanId: string | null = (product as any)?.providerPlanId || null;
-    // Derive desired amount from OfferPrice/Product
+    if (!USE_PLANLESS) {
+      // Derive desired amount from OfferPrice/Product for plan creation
       const planName = String((product as any)?.name || 'Subscription Plan');
-      // Resolve amount priority: OfferPrice(offerId,country,KRXPAY)->OfferPrice(offerId,country,any)->Offer.priceCents->product.price
       let amountCents = 0;
       let desiredCountry = 'BR';
-      try {
-        desiredCountry = String(((buyer as any)?.address?.country) || clinic?.country || 'BR').toUpperCase();
-      } catch {}
+      try { desiredCountry = String(((buyer as any)?.address?.country) || clinic?.country || 'BR').toUpperCase(); } catch {}
       let resolvedRow: any = null;
       if (selectedOffer) {
         try {
-          resolvedRow = await prisma.offerPrice.findFirst({
-            where: { offerId: String(selectedOffer.id), country: desiredCountry, provider: 'KRXPAY' as any, active: true },
-            orderBy: { updatedAt: 'desc' },
-          });
-          if (!resolvedRow) {
-            resolvedRow = await prisma.offerPrice.findFirst({
-              where: { offerId: String(selectedOffer.id), country: desiredCountry, active: true },
-              orderBy: { updatedAt: 'desc' },
-            });
-          }
-        } catch (e: any) {
-          try { console.warn('[subscribe] OfferPrice lookup failed, falling back', e?.message || String(e)); } catch {}
-        }
+          resolvedRow = await prisma.offerPrice.findFirst({ where: { offerId: String(selectedOffer.id), country: desiredCountry, provider: 'KRXPAY' as any, active: true }, orderBy: { updatedAt: 'desc' } });
+          if (!resolvedRow) resolvedRow = await prisma.offerPrice.findFirst({ where: { offerId: String(selectedOffer.id), country: desiredCountry, active: true }, orderBy: { updatedAt: 'desc' } });
+        } catch (e: any) { try { console.warn('[subscribe] OfferPrice lookup failed, falling back', e?.message || String(e)); } catch {} }
       }
-      if (resolvedRow?.amountCents != null && Number(resolvedRow.amountCents) > 0) {
-        amountCents = Number(resolvedRow.amountCents);
-      } else if (selectedOffer && Number(selectedOffer.priceCents || 0) > 0) {
-        amountCents = Number(selectedOffer.priceCents || 0);
-      } else {
-        amountCents = Math.round(Number((product as any)?.price || 0) * 100);
-      }
+      if (resolvedRow?.amountCents != null && Number(resolvedRow.amountCents) > 0) amountCents = Number(resolvedRow.amountCents);
+      else if (selectedOffer && Number(selectedOffer.priceCents || 0) > 0) amountCents = Number(selectedOffer.priceCents || 0);
+      else amountCents = Math.round(Number((product as any)?.price || 0) * 100);
       try { console.warn('[subscribe] plan amount resolution', { desiredCountry, from: resolvedRow ? 'offer_price' : (selectedOffer ? 'offer_base' : 'product_base'), amountCents, offerId: selectedOffer?.id, productId }); } catch {}
       if (!amountCents || amountCents <= 0) {
         try { console.error('[subscribe] invalid plan amount', { desiredCountry, offerId: selectedOffer?.id || null, offerPriceCents: selectedOffer?.priceCents || null, productPrice: (product as any)?.price || null }); } catch {}
         return NextResponse.json({ error: 'Preço inválido para criar plano de assinatura', country: desiredCountry, offerId: selectedOffer?.id || null }, { status: 400 });
       }
-    // If an existing plan is present, check local cached providerPlanData price; recreate if mismatch
-    const currentPlanPrice = (() => {
-      try {
-        const d: any = (product as any)?.providerPlanData || null;
-        const price0 = d?.items?.[0]?.pricing_scheme?.price;
-        return Number(price0 || 0) || 0;
-      } catch { return 0; }
-    })();
-    const planDataMissing = !((product as any)?.providerPlanData);
-    try { console.warn('[subscribe][plan-check]', { providerPlanId, planDataMissing, currentPlanPrice, desired: amountCents }); } catch {}
-    if (providerPlanId && (planDataMissing || currentPlanPrice !== amountCents)) {
-      try { console.warn('[subscribe] provider plan cache missing or price mismatch; will recreate', { providerPlanId, currentPlanPrice, desired: amountCents }); } catch {}
-      providerPlanId = null; // force recreation below
-    }
-    if (!providerPlanId) {
-      const planPayload: any = {
-        name: planName,
-        interval: (selectedOffer?.intervalUnit ? String(selectedOffer.intervalUnit).toLowerCase() : 'month'),
-        interval_count: (selectedOffer?.intervalCount && selectedOffer.intervalCount > 0) ? Number(selectedOffer.intervalCount) : 1,
-        billing_type: 'prepaid',
-        currency: (resolvedRow?.currency || (selectedOffer as any)?.currency || 'BRL'),
-        payment_methods: ['credit_card'],
-        items: [
-          {
-            name: planName,
-            quantity: 1,
-            pricing_scheme: {
-              scheme_type: 'unit',
-              price: amountCents,
-            },
-          },
-        ],
-        metadata: { productId: String(productId), clinicId: String((product as any)?.clinicId || ''), offerId: selectedOffer?.id || null },
-      };
-      // Include trial period from Offer when > 0
-      if (selectedOffer?.trialDays && Number(selectedOffer.trialDays) > 0) {
-        planPayload.trial_period_days = Number(selectedOffer.trialDays);
+      const currentPlanPrice = (() => { try { const d: any = (product as any)?.providerPlanData || null; const price0 = d?.items?.[0]?.pricing_scheme?.price; return Number(price0 || 0) || 0; } catch { return 0; } })();
+      const planDataMissing = !((product as any)?.providerPlanData);
+      try { console.warn('[subscribe][plan-check]', { providerPlanId, planDataMissing, currentPlanPrice, desired: amountCents }); } catch {}
+      if (providerPlanId && (planDataMissing || currentPlanPrice !== amountCents)) {
+        try { console.warn('[subscribe] provider plan cache missing or price mismatch; will recreate', { providerPlanId, currentPlanPrice, desired: amountCents }); } catch {}
+        providerPlanId = null;
       }
-      try {
-        if (isDev) console.warn('[subscribe] Creating provider plan', { planPayload });
-        const createdPlan = await pagarmeCreatePlan(planPayload);
-        providerPlanId = createdPlan?.id || createdPlan?.plan?.id || null;
-        if (providerPlanId) {
-          try {
-            await prisma.products.update({ where: { id: String(productId) }, data: { providerPlanId, providerPlanData: createdPlan || null } });
-          } catch {}
+      if (!providerPlanId) {
+        const planPayload: any = {
+          name: planName,
+          interval: (selectedOffer?.intervalUnit ? String(selectedOffer.intervalUnit).toLowerCase() : 'month'),
+          interval_count: (selectedOffer?.intervalCount && selectedOffer.intervalCount > 0) ? Number(selectedOffer.intervalCount) : 1,
+          billing_type: 'prepaid',
+          currency: (resolvedRow?.currency || (selectedOffer as any)?.currency || 'BRL'),
+          payment_methods: ['credit_card'],
+          items: [{ name: planName, quantity: 1, pricing_scheme: { scheme_type: 'unit', price: amountCents } }],
+          metadata: { productId: String(productId), clinicId: String((product as any)?.clinicId || ''), offerId: selectedOffer?.id || null },
+        };
+        if (selectedOffer?.trialDays && Number(selectedOffer.trialDays) > 0) planPayload.trial_period_days = Number(selectedOffer.trialDays);
+        try {
+          if (isDev) console.warn('[subscribe] Creating provider plan', { planPayload });
+          const createdPlan = await pagarmeCreatePlan(planPayload);
+          providerPlanId = createdPlan?.id || createdPlan?.plan?.id || null;
+          if (providerPlanId) { try { await prisma.products.update({ where: { id: String(productId) }, data: { providerPlanId, providerPlanData: createdPlan || null } }); } catch {} }
+        } catch (e: any) {
+          try { console.error('[subscribe] create plan failed', { status: e?.status, message: e?.message, response: e?.responseJson || e?.responseText }); } catch {}
+          return NextResponse.json({ error: e?.message || 'Falha ao criar plano de assinatura no provedor' }, { status: 500 });
         }
-      } catch (e: any) {
-        try { console.error('[subscribe] create plan failed', { status: e?.status, message: e?.message, response: e?.responseJson || e?.responseText }); } catch {}
-        return NextResponse.json({ error: e?.message || 'Falha ao criar plano de assinatura no provedor' }, { status: 500 });
+      } else {
+        try { console.warn('[subscribe] Using existing providerPlanId', { providerPlanId, currentPlanPrice, desired: amountCents }); } catch {}
       }
     } else {
-      try { console.warn('[subscribe] Using existing providerPlanId', { providerPlanId, currentPlanPrice, desired: amountCents }); } catch {}
+      try { console.warn('[subscribe] planless mode enabled; skipping plan ensure'); } catch {}
+      providerPlanId = null;
     }
 
     // Build customer payload
@@ -252,21 +277,74 @@ export async function POST(req: Request) {
       offerId: selectedOffer?.id || null,
     };
 
-    if (isDev) console.warn('[subscribe] Using plan_id', { providerPlanId });
-    const payload: any = {
-      plan_id: providerPlanId,
-      customer: providerCustomerId ? { id: providerCustomerId, ...customerCore } : customerCore,
-      payment_method: 'credit_card',
-      metadata,
-    };
-    if (useSavedCard && cardId) {
-      payload.card_id = cardId;
+    // Build subscription payload: planless vs plan-based
+    let payload: any = {};
+    if (USE_PLANLESS) {
+      // Resolve amount again (authoritative for creation payload)
+      let desiredCountry2 = 'BR';
+      try { desiredCountry2 = String(((buyer as any)?.address?.country) || clinic?.country || 'BR').toUpperCase(); } catch {}
+      let row2: any = null;
+      if (selectedOffer) {
+        try {
+          row2 = await prisma.offerPrice.findFirst({ where: { offerId: String(selectedOffer.id), country: desiredCountry2, provider: 'KRXPAY' as any, active: true }, orderBy: { updatedAt: 'desc' } });
+          if (!row2) row2 = await prisma.offerPrice.findFirst({ where: { offerId: String(selectedOffer.id), country: desiredCountry2, active: true }, orderBy: { updatedAt: 'desc' } });
+        } catch {}
+      }
+      const amountPlanless = (() => {
+        if (row2?.amountCents != null && Number(row2.amountCents) > 0) return Number(row2.amountCents);
+        if (selectedOffer?.priceCents != null && Number(selectedOffer.priceCents) > 0) return Number(selectedOffer.priceCents);
+        return Math.round(Number((product as any)?.price || 0) * 100) || 0;
+      })();
+      if (!amountPlanless || amountPlanless <= 0) {
+        return NextResponse.json({ error: 'Preço inválido para assinatura (planless)' }, { status: 400 });
+      }
+      const intervalUnit = (selectedOffer?.intervalUnit ? String(selectedOffer.intervalUnit).toLowerCase() : 'month');
+      const intervalCount = (selectedOffer?.intervalCount && selectedOffer.intervalCount > 0) ? Number(selectedOffer.intervalCount) : 1;
+      const currency2 = (row2?.currency || (selectedOffer as any)?.currency || 'BRL') as any;
+      const ENABLE_SPLIT = String(process.env.PAGARME_ENABLE_SPLIT || '').toLowerCase() === 'true';
+      const platformRecipientId = String(process.env.PLATFORM_RECIPIENT_ID || process.env.PAGARME_PLATFORM_RECIPIENT_ID || '').trim() || null;
+      const clinicPercent = Math.max(0, Math.min(100, Number(merchant?.splitPercent || 70)));
+      const platformPercent = Math.max(0, Math.min(100, 100 - clinicPercent));
+      const splitBody = (ENABLE_SPLIT && platformRecipientId && merchant?.recipientId) ? {
+        enabled: true,
+        rules: [
+          { recipient_id: String(platformRecipientId), type: 'percentage', amount: platformPercent, options: { liable: true, charge_processing_fee: true } },
+          { recipient_id: String(merchant.recipientId), type: 'percentage', amount: clinicPercent, options: { liable: false, charge_processing_fee: false } },
+        ],
+      } : undefined;
+      if (isDev) console.warn('[subscribe][planless] Creating subscription payload', { amountPlanless, currency: String(currency2), intervalUnit, intervalCount, hasSplit: !!splitBody, itemPricing: 'pricing_scheme.unit' });
+      payload = {
+        customer: providerCustomerId ? { id: providerCustomerId, ...customerCore } : customerCore,
+        payment_method: 'credit_card',
+        interval: intervalUnit,
+        interval_count: intervalCount,
+        billing_type: 'prepaid',
+        currency: String(currency2),
+        items: [ {
+          name: String((product as any)?.name || 'Assinatura'),
+          description: 'Assinatura avulsa',
+          quantity: 1,
+          pricing_scheme: { scheme_type: 'unit', price: amountPlanless }
+        } ],
+        metadata,
+        ...(splitBody ? { split: splitBody } : {}),
+      };
+      if (useSavedCard && cardId) payload.card_id = cardId;
+    } else {
+      if (isDev) console.warn('[subscribe] Using plan_id', { providerPlanId });
+      payload = {
+        plan_id: providerPlanId,
+        customer: providerCustomerId ? { id: providerCustomerId, ...customerCore } : customerCore,
+        payment_method: 'credit_card',
+        metadata,
+      };
+      if (useSavedCard && cardId) payload.card_id = cardId;
     }
 
     // Create subscription
     let subscription: any = null;
     try {
-      if (isDev) console.warn('[subscribe] Creating subscription', { plan_id: payload?.plan_id, has_customer: !!payload?.customer, has_card_id: !!payload?.card_id });
+      if (isDev) console.warn('[subscribe] Creating subscription', { planless: USE_PLANLESS, plan_id: payload?.plan_id, amount: payload?.amount, has_customer: !!payload?.customer, has_card_id: !!payload?.card_id, has_split: !!payload?.split });
       subscription = await pagarmeCreateSubscription(payload);
     } catch (e: any) {
       const status = Number(e?.status) || 502;
