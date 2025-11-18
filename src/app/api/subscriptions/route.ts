@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { pagarmeListSubscriptions } from '@/lib/pagarme';
+// Note: external providers listing removed. We now list from internal customer_subscriptions (by merchant).
 
 // GET /api/subscriptions?clinicId=...&page=1&page_size=20&from=...&to=...
 export async function GET(req: Request) {
@@ -45,68 +45,86 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Fetch subscriptions from Pagar.me (v5)
-    // Common params: page, size, created_since/created_until
-    const params: Record<string, any> = {};
-    if (page > 0) params.page = page;
-    if (pageSize > 0) params.size = pageSize;
-    if (from) params.created_since = from;
-    if (to) params.created_until = to;
+    // Resolve merchant from clinic
+    const merchant = await prisma.merchant.findFirst({ where: { clinicId }, select: { id: true } });
+    if (!merchant) {
+      return NextResponse.json({ data: [], pagination: { page, page_size: pageSize, total: 0 } }, { status: 200 });
+    }
 
-    const apiResp: any = await pagarmeListSubscriptions(params);
-    // Pagar.me may return an array or a paginated object; normalize to array
-    const itemsRaw: any[] = Array.isArray(apiResp) ? apiResp : (apiResp?.data || apiResp?.items || []);
+    // List internal customer subscriptions by merchant using raw SQL (snake_case)
+    const offset = Math.max(0, (page - 1) * pageSize);
+    const rows: any[] = await prisma.$queryRawUnsafe(
+      `SELECT 
+         id,
+         provider_subscription_id as "providerSubscriptionId",
+         status,
+         customer_id as "customerId",
+         product_id as "productId",
+         offer_id as "offerId",
+         start_at as "startAt",
+         current_period_start as "currentPeriodStart",
+         current_period_end as "currentPeriodEnd",
+         updated_at as "updatedAt",
+         metadata,
+         (SELECT COUNT(1) FROM payment_transactions pt WHERE pt.customer_subscription_id = customer_subscriptions.id) AS "chargesCount"
+       FROM customer_subscriptions
+       WHERE merchant_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2 OFFSET $3`,
+      merchant.id,
+      pageSize,
+      offset,
+    ) as any[];
+    const totalRow: any[] = await prisma.$queryRawUnsafe(
+      `SELECT COUNT(1)::int as count FROM customer_subscriptions WHERE merchant_id = $1`,
+      merchant.id,
+    ) as any[];
+    const total = (totalRow?.[0]?.count as number) || 0;
 
-    // Filter by our metadata.clinicId (set on create/subscribe)
-    const filtered = itemsRaw.filter((s: any) => {
-      const meta = s?.metadata || {};
-      return String(meta?.clinicId || '') === String(clinicId);
-    });
-
-    // Collect productIds to enrich with our product name
-    const productIds = Array.from(new Set(filtered.map((s: any) => String(s?.metadata?.productId || '')).filter(Boolean)));
-    const products = productIds.length > 0 ? await prisma.products.findMany({
-      where: { id: { in: productIds } },
-      select: { id: true, name: true },
-    }) : [];
+    // Enrich product names
+    const productIds = Array.from(new Set(rows.map((r: any) => String(r.productId || '')).filter(Boolean)));
+    const products = productIds.length > 0 ? await prisma.products.findMany({ select: { id: true, name: true }, where: { id: { in: productIds } } }) : [];
     const productMap = new Map(products.map(p => [p.id, p.name]));
 
-    // Map to UI-friendly shape
-    const mapped = filtered.map((s: any) => {
-      const meta = s?.metadata || {};
-      const customer = s?.customer || s?.customer_data || {};
-      const plan = s?.plan || s?.plan_data || {};
-      const items = s?.items || [];
-      // Try to infer cycle
-      const interval = (s?.billing_interval || plan?.interval || (s?.interval as any)) || null;
-      const intervalCount = (s?.billing_interval_count || plan?.interval_count || (s?.interval_count as any)) || null;
-      // Charges info (depends on API)
-      const chargesCount = Array.isArray(s?.charges) ? s.charges.length : (typeof s?.charges_count === 'number' ? s.charges_count : 0);
+    // Enrich customers
+    const customerIds = Array.from(new Set(rows.map(r => String(r.customerId || '')).filter(Boolean)));
+    const customers = customerIds.length > 0 ? await prisma.customer.findMany({ select: { id: true, name: true, email: true }, where: { id: { in: customerIds } } }) : [];
+    const customerMap = new Map(customers.map(c => [c.id, c]));
 
-      const productId = String(meta?.productId || '');
-      const productName = productId ? (productMap.get(productId) || productId) : (items?.[0]?.name || plan?.name || 'Subscription');
-
+    // Derive customer name, preferring metadata then Customer
+    const mapped = rows.map((r: any) => {
+      const meta = (r?.metadata || {}) as any;
+      const productName = r.productId ? (productMap.get(String(r.productId)) || r.productId) : (meta?.productName || 'Subscription');
+      const fallbackCustomer = customerMap.get(String(r.customerId || '')) as any;
+      const customerName = meta?.buyerName || fallbackCustomer?.name || '-';
+      const customerEmail = meta?.buyerEmail || fallbackCustomer?.email || null;
+      let interval = meta?.interval || null as any;
+      let intervalCount = meta?.intervalCount || null as any;
+      if (!interval && r.currentPeriodStart && r.currentPeriodEnd) {
+        const start = new Date(r.currentPeriodStart as any).getTime();
+        const end = new Date(r.currentPeriodEnd as any).getTime();
+        const days = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)));
+        if (days >= 360) { interval = 'year'; intervalCount = 1; }
+        else if (days >= 28 && days <= 31) { interval = 'month'; intervalCount = 1; }
+        else if (days >= 6 && days <= 8) { interval = 'week'; intervalCount = 1; }
+        else if (days <= 1) { interval = 'day'; intervalCount = 1; }
+      }
       return {
-        id: s?.id || s?.code || '',
-        status: s?.status || s?.payment_status || 'unknown',
-        customerName: customer?.name || customer?.email || meta?.buyerEmail || '-',
+        id: r.providerSubscriptionId || r.id,
+        internalId: r.id,
+        status: r.status,
+        customerName,
+        customerEmail,
         product: productName,
-        startedAt: s?.created_at || s?.start_at || s?.start_date || null,
-        updatedAt: s?.updated_at || s?.updated_at || null,
-        chargesCount,
+        startedAt: r.startAt || null,
+        updatedAt: r.updatedAt || r.currentPeriodStart || null,
+        chargesCount: Number((r as any).chargesCount || 0),
         interval,
         intervalCount,
       };
     });
 
-    const payload = {
-      data: mapped,
-      pagination: {
-        page,
-        page_size: pageSize,
-        total: mapped.length, // we don't know remote total; return current page size
-      },
-    };
+    const payload = { data: mapped, pagination: { page, page_size: pageSize, total } };
 
     return NextResponse.json(payload, { status: 200 });
   } catch (e: any) {

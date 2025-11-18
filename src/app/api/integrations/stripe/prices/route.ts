@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getStripeClientForCurrentDoctor } from '@/lib/payments/stripe-client'
+import { getStripeFromClinicIntegration } from '@/lib/payments/stripe-from-integration'
 
 export async function GET(req: Request) {
   try {
@@ -7,16 +8,31 @@ export async function GET(req: Request) {
     const currency = (searchParams.get('currency') || '').toUpperCase()
     const query = (searchParams.get('query') || '').toLowerCase()
     const limit = Math.min(50, Math.max(1, Number(searchParams.get('limit') || 20)))
+    const productIdFilter = (searchParams.get('productId') || '').trim()
+    const accountIdOverride = (searchParams.get('stripeAccountId') || searchParams.get('accountId') || '').trim()
+    const clinicId = (searchParams.get('clinicId') || '').trim()
 
-    const { stripe, accountId } = await getStripeClientForCurrentDoctor()
+    // Prefer clinic integration secret when clinicId is provided
+    let stripe: any
+    let targetAccountId: string | null = null
+    if (clinicId) {
+      const fromClinic = await getStripeFromClinicIntegration(clinicId)
+      stripe = fromClinic.stripe
+      targetAccountId = null // using raw secret; stripeAccount header not needed
+    } else {
+      const fromDoctor = await getStripeClientForCurrentDoctor()
+      stripe = fromDoctor.stripe
+      targetAccountId = accountIdOverride || fromDoctor.accountId || null
+    }
 
     // List active prices; filter by currency if provided
     const prices = await stripe.prices.list({
       active: true,
       currency: currency || undefined,
+      product: productIdFilter || undefined,
       limit,
       expand: ['data.product'],
-    }, accountId ? { stripeAccount: accountId } : undefined)
+    }, targetAccountId ? { stripeAccount: targetAccountId } : undefined)
 
     const items = (prices.data || []).map((p: any) => {
       const product = p.product || {}

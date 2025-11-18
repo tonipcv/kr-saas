@@ -63,13 +63,40 @@ export async function POST(req: Request) {
     if (!providerPlanId) {
       // Derive minimal plan payload from product
       const planName = String((product as any)?.name || 'Subscription Plan');
-      // Amount and interval from Offer when available, otherwise legacy product price
-      const offerAmountCents = selectedOffer ? Number(selectedOffer.priceCents || 0) : null;
-      const amountCents = (offerAmountCents != null && offerAmountCents > 0)
-        ? offerAmountCents
-        : Math.round(Number((product as any)?.price || 0) * 100);
+      // Resolve amount priority: OfferPrice(offerId,country,KRXPAY)->OfferPrice(offerId,country,any)->Offer.priceCents->product.price
+      let amountCents = 0;
+      let desiredCountry = 'BR';
+      try {
+        desiredCountry = String(((buyer as any)?.address?.country) || clinic?.country || 'BR').toUpperCase();
+      } catch {}
+      let resolvedRow: any = null;
+      if (selectedOffer) {
+        try {
+          resolvedRow = await prisma.offerPrice.findFirst({
+            where: { offerId: String(selectedOffer.id), country: desiredCountry, provider: 'KRXPAY' as any, active: true },
+            orderBy: { updatedAt: 'desc' },
+          });
+          if (!resolvedRow) {
+            resolvedRow = await prisma.offerPrice.findFirst({
+              where: { offerId: String(selectedOffer.id), country: desiredCountry, active: true },
+              orderBy: { updatedAt: 'desc' },
+            });
+          }
+        } catch (e: any) {
+          try { console.warn('[subscribe] OfferPrice lookup failed, falling back', e?.message || String(e)); } catch {}
+        }
+      }
+      if (resolvedRow?.amountCents != null && Number(resolvedRow.amountCents) > 0) {
+        amountCents = Number(resolvedRow.amountCents);
+      } else if (selectedOffer && Number(selectedOffer.priceCents || 0) > 0) {
+        amountCents = Number(selectedOffer.priceCents || 0);
+      } else {
+        amountCents = Math.round(Number((product as any)?.price || 0) * 100);
+      }
+      try { console.warn('[subscribe] plan amount resolution', { desiredCountry, from: resolvedRow ? 'offer_price' : (selectedOffer ? 'offer_base' : 'product_base'), amountCents, offerId: selectedOffer?.id, productId }); } catch {}
       if (!amountCents || amountCents <= 0) {
-        return NextResponse.json({ error: 'Preço inválido para criar plano de assinatura' }, { status: 400 });
+        try { console.error('[subscribe] invalid plan amount', { desiredCountry, offerId: selectedOffer?.id || null, offerPriceCents: selectedOffer?.priceCents || null, productPrice: (product as any)?.price || null }); } catch {}
+        return NextResponse.json({ error: 'Preço inválido para criar plano de assinatura', country: desiredCountry, offerId: selectedOffer?.id || null }, { status: 400 });
       }
       const planPayload: any = {
         name: planName,
@@ -240,6 +267,102 @@ export async function POST(req: Request) {
     }
     const subscriptionId = subscription?.id || subscription?.subscription?.id || null;
 
+    // Upsert immediate into customer_subscriptions so Business > Subscriptions lists it right away
+    try {
+      if (subscriptionId && clinic?.id) {
+        // Best-effort extraction of period dates
+        const subStatus = String(subscription?.status || subscription?.subscription?.status || 'ACTIVE');
+        const startAt: string | null = (subscription?.start_at || subscription?.startAt || null) as any;
+        const curStart: string | null = (subscription?.current_period_start || subscription?.current_period?.start_at || null) as any;
+        const curEnd: string | null = (subscription?.current_period_end || subscription?.current_period?.end_at || null) as any;
+        const meta = {
+          buyerName: buyer?.name || customerCore?.name || null,
+          buyerEmail: buyer?.email || customerCore?.email || null,
+          clinicId: clinic?.id || null,
+          productId: String(productId),
+          offerId: selectedOffer?.id || null,
+          providerPlanId,
+        } as any;
+        // Ensure merchant id
+        const merchantRow = await prisma.merchant.findFirst({ where: { clinicId: String(clinic.id) }, select: { id: true } });
+        const merchantId = merchantRow?.id || null;
+        if (merchantId) {
+          const csId = crypto.randomUUID();
+          try {
+            await prisma.$executeRawUnsafe(
+              `INSERT INTO customer_subscriptions (
+                 id, provider_subscription_id, status, customer_id, product_id, offer_id, merchant_id, start_at, current_period_start, current_period_end, metadata
+               ) VALUES (
+                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb
+               )
+               ON CONFLICT (provider_subscription_id) DO UPDATE SET
+                 status = EXCLUDED.status,
+                 current_period_start = EXCLUDED.current_period_start,
+                 current_period_end = EXCLUDED.current_period_end,
+                 updated_at = NOW(),
+                 metadata = COALESCE(customer_subscriptions.metadata, '{}'::jsonb) || EXCLUDED.metadata`,
+              csId,
+              String(subscriptionId),
+              subStatus,
+              null,
+              String(productId),
+              selectedOffer?.id ? String(selectedOffer.id) : null,
+              String(merchantId),
+              startAt,
+              curStart,
+              curEnd,
+              JSON.stringify(meta),
+            );
+          } catch (e) {
+            // If ON CONFLICT target is missing (no unique), fallback to existence check then insert
+            try {
+              const exists: any[] = await prisma.$queryRawUnsafe(
+                `SELECT 1 FROM customer_subscriptions WHERE provider_subscription_id = $1 LIMIT 1`,
+                String(subscriptionId)
+              );
+              if (!exists || !exists[0]) {
+                await prisma.$executeRawUnsafe(
+                  `INSERT INTO customer_subscriptions (
+                     id, provider_subscription_id, status, customer_id, product_id, offer_id, merchant_id, start_at, current_period_start, current_period_end, metadata
+                   ) VALUES (
+                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb
+                   )`,
+                  csId,
+                  String(subscriptionId),
+                  subStatus,
+                  null,
+                  String(productId),
+                  selectedOffer?.id ? String(selectedOffer.id) : null,
+                  String(merchantId),
+                  startAt,
+                  curStart,
+                  curEnd,
+                  JSON.stringify(meta),
+                );
+              } else {
+                await prisma.$executeRawUnsafe(
+                  `UPDATE customer_subscriptions
+                      SET status = $2,
+                          current_period_start = $3,
+                          current_period_end = $4,
+                          updated_at = NOW(),
+                          metadata = COALESCE(metadata, '{}'::jsonb) || $5::jsonb
+                    WHERE provider_subscription_id = $1`,
+                  String(subscriptionId),
+                  subStatus,
+                  curStart,
+                  curEnd,
+                  JSON.stringify(meta),
+                );
+              }
+            } catch {}
+          }
+        }
+      }
+    } catch (e) {
+      if (process.env.NODE_ENV !== 'production') console.warn('[subscribe] upsert customer_subscriptions failed:', e instanceof Error ? e.message : e);
+    }
+
     // Persist payment records (customers, methods, and transactions)
     try {
       // attempt to resolve doctorId and patient profile
@@ -307,7 +430,8 @@ export async function POST(req: Request) {
                   const last4 = (payment?.card?.number ? String(payment.card.number).replace(/\s+/g, '') : '').slice(-4) || null;
                   await prisma.$executeRawUnsafe(
                     `INSERT INTO payment_methods (id, payment_customer_id, provider_card_id, brand, last4, exp_month, exp_year, is_default, status, raw_payload)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, 'active', $8::jsonb)`,
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, 'active', $8::jsonb)
+                     ON CONFLICT (payment_customer_id, provider_card_id) DO NOTHING`,
                     pmId,
                     String(finalPcId),
                     String(cardId),

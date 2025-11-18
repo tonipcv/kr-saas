@@ -123,11 +123,6 @@ export default function CreateProductPage() {
     priority: '0',
     // Selling type
     type: 'PRODUCT', // PRODUCT | SUBSCRIPTION
-    interval: 'MONTH', // DAY | WEEK | MONTH | YEAR
-    intervalCount: '1',
-    hasTrial: false,
-    trialDays: '0',
-    autoRenew: true,
   });
 
   useEffect(() => {
@@ -189,37 +184,14 @@ export default function CreateProductPage() {
         const productId = created?.id || created?.product?.id;
         if (productId) {
           try {
-            // Create initial Offer
-            const priceNumber = Math.max(0, Number((offerForm.price || '0').replace(',', '.')));
-            const priceCents = Math.round(priceNumber * 100);
-            // Clamp installments according to rules
-            const monthsFromInterval = (unit: string, count: number) => {
-              const u = String(unit || 'MONTH').toUpperCase();
-              if (u === 'YEAR') return Math.max(1, count * 12);
-              if (u === 'MONTH') return Math.max(1, count);
-              if (u === 'WEEK') return Math.max(1, Math.ceil(count / 4));
-              if (u === 'DAY') return Math.max(1, Math.ceil(count / 30));
-              return 1;
-            };
-            const offeredMax = Math.max(1, Number(offerForm.maxInstallments || '1'));
-            const priceNumberForRule = Math.max(0, Number((offerForm.price || '0').replace(',', '.')));
-            const priceCentsRule = Math.round(priceNumberForRule * 100);
-            const platformCap = 12;
-            const isSub = !!offerForm.isSubscription;
-            const periodMonths = isSub ? monthsFromInterval(offerForm.intervalUnit, Number(offerForm.intervalCount || '1')) : 0;
-            const businessMax = isSub ? periodMonths : (priceCentsRule >= 9700 ? platformCap : 1);
-            const finalMaxInstallments = Math.max(1, Math.min(offeredMax, businessMax, platformCap));
-
+            // Create initial Offer (global, without price/methods/installments)
             const offerPayload: any = {
               name: offerForm.name || 'Nova oferta',
-              priceCents,
-              currency: offerForm.currency,
               // Offer type is bound to product type
               isSubscription: payload.type === 'SUBSCRIPTION',
               intervalUnit: (payload.type === 'SUBSCRIPTION') ? offerForm.intervalUnit : null,
               intervalCount: (payload.type === 'SUBSCRIPTION') ? Number(offerForm.intervalCount || 1) : null,
               trialDays: (payload.type === 'SUBSCRIPTION') ? Number(offerForm.trialDays || 0) : null,
-              maxInstallments: finalMaxInstallments,
               active: true,
               // checkoutUrl will be auto-generated below
             };
@@ -238,12 +210,7 @@ export default function CreateProductPage() {
                 });
               } catch {}
             }
-            if (offerId && (offerForm.allowPIX || offerForm.allowCARD)) {
-              await fetch(`/api/products/${productId}/offers/${offerId}/methods`, {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ methods: [ { method: 'PIX', active: !!offerForm.allowPIX }, { method: 'CARD', active: !!offerForm.allowCARD } ] })
-              });
-            }
+            // Payment methods will be defined per country/provider in OfferPrices later
             // Go to edit page
             router.push(`/business/products/${productId}/edit`);
           } catch (e) {
@@ -450,30 +417,16 @@ export default function CreateProductPage() {
               <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base font-semibold text-gray-900">Initial Offer</CardTitle>
+                  <p className="text-xs text-gray-500 mt-1">Preço e métodos por país são definidos nas OfferPrices (por país/moeda/provedor).</p>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-                    <div className="md:col-span-2">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="md:col-span-1">
                       <Label className="text-gray-900 font-medium">Name</Label>
                       <Input value={offerForm.name} onChange={(e) => setOfferForm(o => ({ ...o, name: e.target.value }))} className="mt-2 h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900" placeholder="New offer" />
                     </div>
-                    <div>
-                      <Label className="text-gray-900 font-medium">Price</Label>
-                      <Input type="number" step="0.01" min={0} value={offerForm.price} onChange={(e) => setOfferForm(o => ({ ...o, price: e.target.value }))} className="mt-2 h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900" placeholder="99.90" />
-                    </div>
-                    <div>
-                      <Label className="text-gray-900 font-medium">Currency</Label>
-                      <Select value={offerForm.currency} onValueChange={(val: any) => setOfferForm(o => ({ ...o, currency: val }))}>
-                        <SelectTrigger className="mt-2 h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900"><SelectValue placeholder="Moeda" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="BRL">BRL</SelectItem>
-                          <SelectItem value="USD">USD</SelectItem>
-                          <SelectItem value="EUR">EUR</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
                   </div>
-                  {offerForm.isSubscription ? (
+                  {offerForm.isSubscription && (
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                       <div>
                         <Label className="text-gray-900 font-medium">Interval</Label>
@@ -496,46 +449,7 @@ export default function CreateProductPage() {
                         <Input type="number" min={0} value={offerForm.trialDays} onChange={(e) => setOfferForm(o => ({ ...o, trialDays: e.target.value }))} className="mt-2 h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900" />
                       </div>
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div>
-                        <Label className="text-gray-900 font-medium">Max installments</Label>
-                        <Input type="number" min={1} value={offerForm.maxInstallments} onChange={(e) => setOfferForm(o => ({ ...o, maxInstallments: e.target.value }))} className="mt-2 h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900" />
-                        <p className="text-xs text-gray-500 mt-1">Até 12x. Se o preço for menor que R$97, será 1x.</p>
-                      </div>
-                    </div>
                   )}
-                  {/* Subscription also allows defining installments up to the period months */}
-                  {offerForm.isSubscription && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div>
-                        <Label className="text-gray-900 font-medium">Max installments</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={offerForm.maxInstallments}
-                          onChange={(e) => setOfferForm(o => ({ ...o, maxInstallments: e.target.value }))}
-                          className="mt-2 h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">Limite: até o número de meses do período (1/3/6/12).</p>
-                      </div>
-                    </div>
-                  )}
-                  <div>
-                    <div className="text-xs text-gray-700 mb-2">Payment methods</div>
-                    <div className="flex flex-wrap gap-2">
-                      {(['PIX','CARD'] as const).map((m) => {
-                        const on = m === 'PIX' ? offerForm.allowPIX : offerForm.allowCARD;
-                        return (
-                          <button key={m} type="button" onClick={() => {
-                            setOfferForm(o => ({ ...o, allowPIX: m==='PIX' ? !o.allowPIX : o.allowPIX, allowCARD: m==='CARD' ? !o.allowCARD : o.allowCARD }));
-                          }} className={`px-3 py-1.5 rounded-lg text-xs border ${on ? 'bg-gray-100 border-gray-300 text-gray-800' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
-                            {m}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
                 </CardContent>
               </Card>
 
@@ -545,86 +459,12 @@ export default function CreateProductPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center justify-between">
-                    <div>
-                      <Label htmlFor="isActive" className="text-gray-900 font-medium">Active Product</Label>
-                      <p className="text-gray-500 font-medium mt-1">Active products can be recommended in protocols</p>
-                    </div>
+                    <Label htmlFor="isActive" className="text-gray-900 font-medium">Active</Label>
                     <Switch id="isActive" checked={formData.isActive} onCheckedChange={(checked) => handleInputChange('isActive', checked)} />
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Gateway por localização */}
-              <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-semibold text-gray-900">Gateway por localização</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-gray-900 font-medium">Usar padrão da plataforma</Label>
-                      <p className="text-xs text-gray-500">Padrão: BR → KRXPay, outros → Stripe</p>
-                    </div>
-                    <Switch checked={routingUsePlatformDefault} onCheckedChange={setRoutingUsePlatformDefault} />
-                  </div>
-                  {!routingUsePlatformDefault && (
-                    <>
-                      <div>
-                        <Label className="text-gray-900 font-medium">Default gateway</Label>
-                        <div className="mt-2 w-60">
-                          <Select value={routingDefaultProvider} onValueChange={(v: any) => setRoutingDefaultProvider(v)}>
-                            <SelectTrigger className="h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900">
-                              <SelectValue placeholder="Selecione" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="KRXPAY" disabled={!pgConnected}>KRX Pay{!pgConnected ? ' (inativo)' : ''}</SelectItem>
-                              <SelectItem value="STRIPE" disabled={!stripeConnected}>Stripe{!stripeConnected ? ' (inativo)' : ''}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-gray-900 font-medium">Overrides por país</Label>
-                          <Button type="button" variant="outline" className="h-8" onClick={() => setRoutingOverrides(prev => ([...prev, { country: '', provider: 'KRXPAY' }]))}>Adicionar país</Button>
-                        </div>
-                        <div className="space-y-2">
-                          {routingOverrides.map((ov, idx) => (
-                            <div key={idx} className="flex gap-2 items-center">
-                              <div className="w-64">
-                                <Select value={(ov.country || '').toUpperCase()} onValueChange={(v: any) => {
-                                  setRoutingOverrides(list => list.map((x, i) => i === idx ? { ...x, country: v } : x));
-                                }}>
-                                  <SelectTrigger className="h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900">
-                                    <SelectValue placeholder="Select country" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {COUNTRIES.map(c => (
-                                      <SelectItem key={c.code} value={c.code}>
-                                        {flagEmoji(c.code)} {c.name} ({c.code})
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="w-52">
-                                <Select value={ov.provider} onValueChange={(v: any) => setRoutingOverrides(list => list.map((x, i) => i === idx ? { ...x, provider: v } : x))}>
-                                  <SelectTrigger className="h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900"><SelectValue placeholder="Gateway" /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="KRXPAY" disabled={!pgConnected}>KRX Pay{!pgConnected ? ' (inativo)' : ''}</SelectItem>
-                                    <SelectItem value="STRIPE" disabled={!stripeConnected}>Stripe{!stripeConnected ? ' (inativo)' : ''}</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <Button type="button" variant="ghost" className="h-8" onClick={() => setRoutingOverrides(list => list.filter((_, i) => i !== idx))}>Remover</Button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
 
               <div className="flex gap-3">
                 <Button type="submit" disabled={isLoading} className="flex-1 bg-gray-900 hover:bg-black text-white rounded-xl h-10 shadow-sm font-medium">

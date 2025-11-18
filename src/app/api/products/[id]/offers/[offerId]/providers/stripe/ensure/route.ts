@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getStripeClientForCurrentDoctor } from '@/lib/payments/stripe-client'
+import { getStripeFromClinicIntegration } from '@/lib/payments/stripe-from-integration'
 
 function mapInterval(unit?: string): 'day'|'week'|'month'|'year'|null {
   const u = String(unit || '').toUpperCase()
@@ -17,6 +18,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const body = await req.json().catch(() => ({}))
     const currency = String(body?.currency || '').toUpperCase()
     const amountCentsOverride = typeof body?.amountCents === 'number' ? Math.max(0, Math.floor(body.amountCents)) : null
+    const nickname: string | undefined = body?.nickname ? String(body.nickname) : undefined
+    const clinicId: string | undefined = body?.clinicId ? String(body.clinicId) : undefined
 
     if (!currency) return NextResponse.json({ error: 'currency is required' }, { status: 400 })
 
@@ -35,13 +38,35 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
     if (!offer) return NextResponse.json({ error: 'Offer not found' }, { status: 404 })
 
-    const { stripe, accountId } = await getStripeClientForCurrentDoctor()
+    // Prefer clinic integration secret when provided
+    let stripe: any
+    let accountId: string | null = null
+    if (clinicId) {
+      const fromClinic = await getStripeFromClinicIntegration(clinicId)
+      stripe = fromClinic.stripe
+      accountId = null // direct secret; do not use stripeAccount header
+    } else {
+      const fromDoctor = await getStripeClientForCurrentDoctor()
+      stripe = fromDoctor.stripe
+      accountId = fromDoctor.accountId
+    }
 
-    // Resolve desired amount/currency and recurring
+    // Resolve desired amount/currency and recurring (allow override from body)
     const isSub = !!offer.isSubscription
-    const stripeInterval = isSub ? mapInterval(offer.intervalUnit as any) : null
-    const interval_count = isSub ? Math.max(1, Number(offer.intervalCount || 1)) : undefined
+    const overrideUnit = body?.intervalUnit ? String(body.intervalUnit).toUpperCase() : undefined
+    const overrideCount = typeof body?.intervalCount === 'number' ? Number(body.intervalCount) : undefined
+    const chosenUnit = (overrideUnit || (offer.intervalUnit as any)) as string | undefined
+    const chosenCount = overrideCount ?? Number(offer.intervalCount || 1)
+    const stripeInterval = isSub ? mapInterval(chosenUnit as any) : null
+    const interval_count = isSub ? Math.max(1, chosenCount || 1) : undefined
     const amountCents = amountCentsOverride ?? Number(offer.priceCents || 0)
+
+    // Validate subscription interval
+    if (isSub) {
+      if (!stripeInterval || !(interval_count && interval_count > 0)) {
+        return NextResponse.json({ error: 'Subscription Offer requires valid intervalUnit/intervalCount to create a Stripe price' }, { status: 400 })
+      }
+    }
 
     // 1) Ensure Product
     // Try to find by name first (best-effort), otherwise create
@@ -90,6 +115,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
       if (isSub && stripeInterval) {
         createParams.recurring = { interval: stripeInterval, interval_count }
+      }
+      if (nickname) {
+        createParams.nickname = nickname
       }
       const created = await stripe.prices.create(createParams, accountId ? { stripeAccount: accountId } : undefined)
       priceIdStripe = created.id

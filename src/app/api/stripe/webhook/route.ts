@@ -1,31 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
+export const runtime = 'nodejs';
 import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/lib/events';
 import { EventActor, EventType } from '@prisma/client';
 import Stripe from 'stripe';
+import crypto from 'crypto';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2023-10-16',
+// Webhook-only usage: we do not call Stripe APIs here. We only verify signatures and process payloads.
+// Use a dummy key and match the project's Stripe TypeScript apiVersion to satisfy types.
+const stripe = new Stripe('sk_webhook_dummy', {
+  apiVersion: '2025-07-30.basil',
 });
 
 export async function POST(req: NextRequest) {
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!webhookSecret) {
-    console.error('Missing STRIPE_WEBHOOK_SECRET');
-    return NextResponse.json({ received: true });
-  }
-
   const signature = req.headers.get('stripe-signature');
   if (!signature) {
     return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
   }
 
-  let event: Stripe.Event;
+  let event: Stripe.Event | undefined;
+  let matchedMerchantId: string | null = null;
+  const payload = await req.text();
+  // Verify using per-merchant secrets stored in integrations only
   try {
-    const payload = await req.text();
-    event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
-  } catch (err: any) {
-    console.error('Webhook signature verification failed.', err?.message);
+    const integrations = await prisma.merchantIntegration.findMany({
+      where: { provider: 'STRIPE' as any, isActive: true },
+      select: { merchantId: true, credentials: true },
+    });
+    for (const integ of integrations) {
+      const creds = (integ.credentials || {}) as any;
+      const secret = String(creds?.webhookSecret || '');
+      if (!secret) continue;
+      try {
+        event = stripe.webhooks.constructEvent(payload, signature, secret);
+        matchedMerchantId = integ.merchantId;
+        break;
+      } catch {}
+    }
+  } catch (e) {
+    console.error('[stripe][webhook] failed loading integrations for signature verification', e);
+  }
+  if (!event) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
@@ -37,19 +52,22 @@ export async function POST(req: NextRequest) {
         const amount = Number(pi.amount || 0);
         const currency = String(pi.currency || '').toUpperCase();
         try {
-          await prisma.$executeRawUnsafe(
-            `UPDATE payment_transactions
-               SET status = 'paid',
-                   amount_cents = CASE WHEN amount_cents = 0 OR amount_cents IS NULL THEN $2 ELSE amount_cents END,
-                   currency = CASE WHEN currency IS NULL OR currency = '' THEN $3 ELSE currency END,
-                   paid_at = COALESCE(paid_at, NOW()),
-                   raw_payload = COALESCE(raw_payload, '{}'::jsonb) || jsonb_build_object('pi', $4::text)
-             WHERE provider = 'stripe' AND provider_order_id = $1`,
-            intentId,
-            amount,
-            currency,
-            intentId
-          );
+          if (matchedMerchantId) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE payment_transactions
+                 SET status = 'paid',
+                     amount_cents = CASE WHEN amount_cents = 0 OR amount_cents IS NULL THEN $3 ELSE amount_cents END,
+                     currency = CASE WHEN currency IS NULL OR currency = '' THEN $4 ELSE currency END,
+                     paid_at = COALESCE(paid_at, NOW()),
+                     raw_payload = COALESCE(raw_payload, '{}'::jsonb) || jsonb_build_object('pi', $5::text)
+               WHERE provider = 'stripe' AND provider_order_id = $1 AND merchant_id = $2`,
+              intentId,
+              matchedMerchantId,
+              amount,
+              currency,
+              intentId
+            );
+          }
         } catch (e) {
           console.error('[stripe][webhook] update payment_intent.succeeded failed', e);
         }
@@ -61,14 +79,17 @@ export async function POST(req: NextRequest) {
         const intentId = String(pi.id);
         const lastError = (pi.last_payment_error?.message || pi.last_payment_error?.code || '').toString();
         try {
-          await prisma.$executeRawUnsafe(
-            `UPDATE payment_transactions
-               SET status = 'failed',
-                   raw_payload = COALESCE(raw_payload, '{}'::jsonb) || jsonb_build_object('pi_failed', jsonb_build_object('id', $1::text, 'error', $2::text))
-             WHERE provider = 'stripe' AND provider_order_id = $1`,
-            intentId,
-            lastError
-          );
+          if (matchedMerchantId) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE payment_transactions
+                 SET status = 'failed',
+                     raw_payload = COALESCE(raw_payload, '{}'::jsonb) || jsonb_build_object('pi_failed', jsonb_build_object('id', $1::text, 'error', $3::text))
+               WHERE provider = 'stripe' AND provider_order_id = $1 AND merchant_id = $2`,
+              intentId,
+              matchedMerchantId,
+              lastError
+            );
+          }
         } catch (e) {
           console.error('[stripe][webhook] update payment_intent.payment_failed failed', e);
         }
@@ -83,7 +104,7 @@ export async function POST(req: NextRequest) {
         const currency = String(ch.currency || '').toUpperCase();
         const status = ch.paid ? (ch.captured ? 'captured' : 'paid') : 'processing';
         try {
-          if (intentId) {
+          if (intentId && matchedMerchantId) {
             await prisma.$executeRawUnsafe(
               `UPDATE payment_transactions
                  SET provider_charge_id = $1,
@@ -92,13 +113,14 @@ export async function POST(req: NextRequest) {
                      currency = CASE WHEN currency IS NULL OR currency = '' THEN $3 ELSE currency END,
                      refunded_cents = COALESCE(refunded_cents, 0),
                      raw_payload = COALESCE(raw_payload, '{}'::jsonb) || jsonb_build_object('ch', $5::text)
-               WHERE provider = 'stripe' AND provider_order_id = $6`,
+              WHERE provider = 'stripe' AND provider_order_id = $6 AND merchant_id = $7`,
               chargeId,
               amount,
               currency,
               status,
               chargeId,
-              intentId
+              intentId,
+              matchedMerchantId
             );
           }
         } catch (e) {
@@ -112,13 +134,14 @@ export async function POST(req: NextRequest) {
         const chargeId = String(ch.id);
         const intentId = (ch.payment_intent ? String(ch.payment_intent) : '') || '';
         try {
-          if (intentId) {
+          if (intentId && matchedMerchantId) {
             await prisma.$executeRawUnsafe(
               `UPDATE payment_transactions
                  SET status = 'captured', provider_charge_id = COALESCE(provider_charge_id, $1), captured_at = NOW()
-               WHERE provider = 'stripe' AND provider_order_id = $2`,
+              WHERE provider = 'stripe' AND provider_order_id = $2 AND merchant_id = $3`,
               chargeId,
-              intentId
+              intentId,
+              matchedMerchantId
             );
           }
         } catch (e) {
@@ -134,17 +157,18 @@ export async function POST(req: NextRequest) {
         const total = Number(ch.amount || 0);
         const status = refunded >= total && total > 0 ? 'refunded' : 'paid';
         try {
-          if (intentId) {
+          if (intentId && matchedMerchantId) {
             await prisma.$executeRawUnsafe(
               `UPDATE payment_transactions
                  SET refunded_cents = $1,
                      status = $2,
                      refund_status = 'refunded',
                      refunded_at = NOW()
-               WHERE provider = 'stripe' AND provider_order_id = $3`,
+              WHERE provider = 'stripe' AND provider_order_id = $3 AND merchant_id = $4`,
               refunded,
               status,
-              intentId
+              intentId,
+              matchedMerchantId
             );
           }
         } catch (e) {
@@ -153,146 +177,156 @@ export async function POST(req: NextRequest) {
         break;
       }
       case 'checkout.session.completed': {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const clinicId = (session.client_reference_id as string) || session.metadata?.clinicId;
-        const planId = session.metadata?.planId as string | undefined;
-        const stripeCustomerId = session.customer as string | null;
-        const stripeSubscriptionId = session.subscription as string | null;
-
-        if (!clinicId || !planId || !stripeSubscriptionId) break;
-
-        // Retrieve subscription to get period dates
-        const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-        const currentPeriodEnd = new Date((sub.current_period_end || 0) * 1000);
-        const currentPeriodStart = new Date();
-        const trialEndsAt = sub.trial_end ? new Date(sub.trial_end * 1000) : currentPeriodStart;
-
-        // Upsert clinic subscription
-        const existing = await prisma.clinicSubscription.findFirst({
-          where: { clinicId },
-          orderBy: { createdAt: 'desc' },
-        });
-
-        if (existing) {
-          await prisma.clinicSubscription.update({
-            where: { id: existing.id },
-            data: {
-              // Ensure plan relation is connected
-              plan: { connect: { id: planId } },
-              status: 'ACTIVE',
-              stripeCustomerId: stripeCustomerId || existing.stripeCustomerId,
-              stripeSubscriptionId,
-              currentPeriodStart,
-              currentPeriodEnd,
-              trialEndsAt,
-            },
-          });
-        } else {
-          await prisma.clinicSubscription.create({
-            data: {
-              // Connect both clinic and plan relations explicitly
-              clinic: { connect: { id: clinicId } },
-              plan: { connect: { id: planId } },
-              status: 'ACTIVE',
-              startDate: currentPeriodStart,
-              trialEndsAt,
-              currentPeriodStart,
-              currentPeriodEnd,
-              stripeCustomerId: stripeCustomerId || undefined,
-              stripeSubscriptionId,
-            },
-          });
-        }
-
-        // Emit events (non-blocking)
-        try {
-          if (clinicId) {
-            // Membership started on first activation
-            await emitEvent({
-              eventId: event.id,
-              eventType: EventType.membership_started,
-              actor: EventActor.system,
-              clinicId,
-              metadata: {
-                plan_id: planId || null,
-                tier: 'basic',
-                price: (session.amount_total ?? 0) / 100,
-                duration: null,
-              },
-            });
-            // Also record a billing event
-            await emitEvent({
-              eventType: EventType.subscription_billed,
-              actor: EventActor.system,
-              clinicId,
-              metadata: { plan_id: planId || null, amount: (session.amount_total ?? 0) / 100, status: 'paid' },
-            });
-          }
-        } catch (e) {
-          console.error('[events] stripe checkout.session.completed emit failed', e);
-        }
+        // No-op for webhook-only mode (no API calls). Business plan onboarding can be handled elsewhere.
         break;
       }
 
       case 'customer.subscription.updated': {
-        const sub = event.data.object as Stripe.Subscription;
-        const stripeSubscriptionId = sub.id;
-        const currentPeriodEnd = new Date((sub.current_period_end || 0) * 1000);
-        let status: 'ACTIVE' | 'PAST_DUE' = 'ACTIVE';
-        if (sub.status === 'past_due' || sub.status === 'unpaid') status = 'PAST_DUE';
+        const sub: any = event.data.object as any;
+        const stripeSubscriptionId = String(sub?.id || '');
+        const currentPeriodEnd = sub?.current_period_end ? new Date(sub.current_period_end * 1000) : null;
+        const currentPeriodStart = sub?.current_period_start ? new Date(sub.current_period_start * 1000) : null;
+        const trialEndsAt = sub?.trial_end ? new Date(sub.trial_end * 1000) : null;
+        const cancelAt = sub?.cancel_at ? new Date(sub.cancel_at * 1000) : null;
+        const canceledAt = sub?.canceled_at ? new Date(sub.canceled_at * 1000) : null;
+        const mapStatus = (s?: string) => {
+          const v = String(s || '').toLowerCase();
+          if (v === 'active') return 'ACTIVE';
+          if (v === 'trialing') return 'TRIAL';
+          if (v === 'past_due' || v === 'unpaid' || v === 'incomplete' || v === 'incomplete_expired') return 'PAST_DUE';
+          if (v === 'canceled') return 'CANCELED';
+          return 'ACTIVE';
+        };
+        const statusVal = mapStatus(sub?.status);
 
-        await prisma.clinicSubscription.updateMany({
-          where: { stripeSubscriptionId },
-          data: {
-            status,
-            currentPeriodEnd,
-          },
-        });
-
-        // Emit a billing-related event to reflect status change
+        // Update our internal customer_subscriptions by provider_subscription_id (snake_case)
         try {
-          // Find clinicId by subscription
-          const subRow = await prisma.clinicSubscription.findFirst({ where: { stripeSubscriptionId }, select: { clinicId: true, planId: true } });
-          if (subRow?.clinicId) {
-            await emitEvent({
-              eventId: event.id,
-              eventType: EventType.subscription_billed,
-              actor: EventActor.system,
-              clinicId: subRow.clinicId,
-              metadata: { plan_id: subRow.planId, amount: null, status: sub.status },
-            });
+          if (matchedMerchantId) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE "customer_subscriptions" 
+                 SET status = $1::"SubscriptionStatus",
+                     current_period_start = $2,
+                     current_period_end = $3,
+                     trial_ends_at = $4,
+                     cancel_at = $5,
+                     canceled_at = $6,
+                     updated_at = NOW()
+               WHERE provider_subscription_id = $7 AND merchant_id = $8`,
+              statusVal,
+              currentPeriodStart,
+              currentPeriodEnd,
+              trialEndsAt,
+              cancelAt,
+              canceledAt,
+              stripeSubscriptionId,
+              matchedMerchantId
+            );
           }
         } catch (e) {
-          console.error('[events] stripe customer.subscription.updated emit failed', e);
+          console.error('[stripe][webhook] update customer_subscriptions failed', e);
         }
         break;
       }
 
       case 'customer.subscription.deleted': {
-        const sub = event.data.object as Stripe.Subscription;
-        const stripeSubscriptionId = sub.id;
-        await prisma.clinicSubscription.updateMany({
-          where: { stripeSubscriptionId },
-          data: {
-            status: 'CANCELED',
-            canceledAt: new Date(),
-          },
-        });
-
-        // Emit cancellation
+        const sub: any = event.data.object as any;
+        const stripeSubscriptionId = String(sub?.id || '');
         try {
-          const subRow = await prisma.clinicSubscription.findFirst({ where: { stripeSubscriptionId }, select: { clinicId: true, planId: true } });
-          if (subRow?.clinicId) {
-            await emitEvent({
-              eventId: event.id,
-              eventType: EventType.subscription_canceled,
-              actor: EventActor.system,
-              clinicId: subRow.clinicId,
-              metadata: { reason: 'no_value', plan_id: subRow.planId },
-            });
+          if (matchedMerchantId) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE "customer_subscriptions" 
+                 SET status = 'CANCELED'::"SubscriptionStatus",
+                     canceled_at = NOW(),
+                     updated_at = NOW()
+               WHERE provider_subscription_id = $1 AND merchant_id = $2`,
+              stripeSubscriptionId,
+              matchedMerchantId
+            );
           }
         } catch (e) {
-          console.error('[events] stripe customer.subscription.deleted emit failed', e);
+          console.error('[stripe][webhook] cancel customer_subscriptions failed', e);
+        }
+        break;
+      }
+
+      // Record invoice payments as transactions and link to our customer_subscriptions
+      case 'invoice.payment_succeeded':
+      case 'invoice.payment_failed':
+      case 'invoice.payment_action_required': {
+        const inv: any = event.data.object as any;
+        const subscriptionId = inv?.subscription ? String(inv.subscription) : '';
+        const amount = Number(inv?.amount_paid ?? inv?.amount_due ?? 0);
+        const currency = String(inv?.currency || '').toUpperCase();
+        const piId = typeof inv?.payment_intent === 'string' ? inv.payment_intent : inv?.payment_intent?.id;
+        const chId = typeof inv?.charge === 'string' ? inv.charge : undefined;
+        const periodStart = inv?.lines?.data?.[0]?.period?.start ? new Date(inv.lines.data[0].period.start * 1000) : undefined;
+        const periodEnd = inv?.lines?.data?.[0]?.period?.end ? new Date(inv.lines.data[0].period.end * 1000) : undefined;
+
+        // Find our subscription row for linkage
+        const subRows = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT id, merchant_id, customer_id, product_id FROM "customer_subscriptions" WHERE provider_subscription_id = $1 LIMIT 1`,
+          subscriptionId
+        ).catch(() => []);
+        const subRow = Array.isArray(subRows) && subRows[0] ? subRows[0] : null;
+
+        // Derive status
+        const paid = event.type === 'invoice.payment_succeeded';
+        const status = paid ? 'paid' : (event.type === 'invoice.payment_failed' ? 'failed' : 'processing');
+
+        if (subRow && piId) {
+          if (matchedMerchantId && String(subRow.merchant_id) !== String(matchedMerchantId)) {
+            // Cross-tenant mismatch; ignore
+            break;
+          }
+          // Upsert payment_transaction by provider+provider_order_id (PI)
+          try {
+            const existing = await prisma.paymentTransaction.findFirst({ where: { provider: 'stripe', providerOrderId: String(piId) }, select: { id: true } }).catch(() => null);
+            if (existing?.id) {
+              await prisma.paymentTransaction.update({
+                where: { id: existing.id },
+                data: {
+                  status,
+                  status_v2: paid ? 'PAID' as any : undefined,
+                  amountCents: amount || undefined,
+                  currency: currency || undefined,
+                  providerChargeId: chId || undefined,
+                  customerSubscriptionId: subRow.id,
+                  customerId: subRow.customer_id,
+                  merchantId: subRow.merchant_id,
+                  productId: subRow.product_id,
+                  billingPeriodStart: periodStart,
+                  billingPeriodEnd: periodEnd,
+                },
+              });
+            } else {
+              await prisma.paymentTransaction.create({
+                data: {
+                  id: crypto.randomUUID(),
+                  provider: 'stripe',
+                  providerOrderId: String(piId),
+                  providerChargeId: chId || null,
+                  doctorId: null,
+                  patientProfileId: null,
+                  clinicId: null,
+                  merchantId: subRow.merchant_id || null,
+                  productId: subRow.product_id || null,
+                  customerId: subRow.customer_id || null,
+                  amountCents: Number(amount || 0),
+                  currency: currency || 'USD',
+                  installments: null,
+                  paymentMethodType: 'card',
+                  status,
+                  status_v2: paid ? 'PAID' as any : undefined,
+                  rawPayload: { invoice_id: inv.id },
+                  billingPeriodStart: periodStart,
+                  billingPeriodEnd: periodEnd,
+                  customerSubscriptionId: subRow.id,
+                },
+              });
+            }
+          } catch (e) {
+            console.error('[stripe][webhook] upsert payment_transactions (invoice) failed', e);
+          }
         }
         break;
       }

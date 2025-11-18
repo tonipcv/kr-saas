@@ -175,6 +175,26 @@ export async function PUT(
       }
     }
 
+    // If activating a SUBSCRIPTION product, enforce it has at least one active subscription Offer with an active OfferPrice
+    const targetType = (typeof type === 'string')
+      ? (type === 'SUBSCRIPTION' ? 'SUBSCRIPTION' : 'PRODUCT')
+      : (existingProduct as any)?.type;
+    const targetIsActive = (typeof isActive === 'boolean') ? isActive : (existingProduct as any)?.isActive;
+    if (targetIsActive && String(targetType) === 'SUBSCRIPTION') {
+      const hasValidOffer = await prisma.offer.findFirst({
+        where: {
+          productId: productId,
+          active: true,
+          isSubscription: true,
+          prices: { some: { active: true } },
+        },
+        select: { id: true },
+      });
+      if (!hasValidOffer) {
+        return NextResponse.json({ error: 'Cannot activate subscription product without an active subscription Offer that has at least one active OfferPrice.' }, { status: 409 });
+      }
+    }
+
     const updatedProduct = await prisma.products.update({
       where: { id: productId },
       data: updateData,

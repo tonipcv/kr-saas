@@ -16,17 +16,58 @@ export class AppmaxClient {
   private async post<T = any>(path: string, body: Record<string, any>): Promise<T> {
     const url = `${this.baseURL}${path}`
     const payload = { ...(body || {}), ['access-token']: this.apiKey }
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-    const text = await res.text()
-    let json: any = null
-    try { json = text ? JSON.parse(text) : null } catch { json = { raw: text } }
-    if (!res.ok) {
-      const err: any = new Error(json?.message || 'appmax_error')
-      err.status = res.status
-      err.response = json
-      throw err
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const sanitize = (obj: any) => {
+      try {
+        const c = JSON.parse(JSON.stringify(obj || {}))
+        if (c && typeof c === 'object') {
+          if ('access-token' in c) c['access-token'] = '***'
+          if (c.payment && c.payment.CreditCard && c.payment.CreditCard.number) c.payment.CreditCard.number = '****'
+          if (c.payment && c.payment.pix && c.payment.pix.document_number) c.payment.pix.document_number = '****'
+        }
+        return c
+      } catch {
+        return obj
+      }
     }
-    return json as T
+
+    let lastErr: any = null
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const controller = new AbortController()
+      const timeoutMs = 20000
+      const timer = setTimeout(() => controller.abort(), timeoutMs)
+      const start = Date.now()
+      try {
+        console.log('[appmax][request]', { url, path, attempt, payload: sanitize(payload) })
+        const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload), signal: controller.signal })
+        const text = await res.text()
+        let json: any = null
+        try { json = text ? JSON.parse(text) : null } catch { json = { raw: text } }
+        const durationMs = Date.now() - start
+        console.log('[appmax][response]', { url, path, attempt, status: res.status, durationMs, body: sanitize(json) })
+        if (!res.ok) {
+          const err: any = new Error(json?.message || 'appmax_error')
+          err.status = res.status
+          err.response = json
+          throw err
+        }
+        clearTimeout(timer)
+        return json as T
+      } catch (e: any) {
+        clearTimeout(timer)
+        lastErr = e
+        const durationMs = Date.now() - start
+        console.error('[appmax][error]', { url, path, attempt, durationMs, message: e?.message, status: e?.status, response: sanitize(e?.response) })
+        const retriable = e?.name === 'AbortError' || (Number(e?.status) >= 500)
+        if (attempt < 2 && retriable) {
+          await new Promise(r => setTimeout(r, 500))
+          continue
+        }
+        break
+      }
+    }
+    if (lastErr) throw lastErr
+    throw new Error('appmax_error')
   }
 
   customersCreate(body: Record<string, any>) {

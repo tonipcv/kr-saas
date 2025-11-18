@@ -377,6 +377,11 @@ export default function BrandedCheckoutPage() {
   const currentCurrency = getCurrencyForCountry(currentCountry);
   const locale = isEN ? 'en-US' : 'pt-BR';
 
+  // Clamp installments outside BR (defensive): no installments for non-BR countries
+  useEffect(() => {
+    if (currentCountry !== 'BR' && installments !== 1) setInstallments(1);
+  }, [currentCountry, installments]);
+
   // Debounced session upsert on form changes (prevents spamming the API)
   useEffect(() => {
     if (!SESS_EN) return;
@@ -555,7 +560,6 @@ export default function BrandedCheckoutPage() {
     async function fetchStripePrice() {
       try {
         if (cardProvider !== 'STRIPE' || !stripePriceId) { if (active) { setStripePriceCents(null); setStripePriceCurrency(null); } return; }
-        // Try known endpoints; fallback gracefully
         const endpoints = [
           `/api/stripe/price?id=${encodeURIComponent(stripePriceId)}`,
           `/api/stripe/prices?id=${encodeURIComponent(stripePriceId)}`
@@ -583,6 +587,8 @@ export default function BrandedCheckoutPage() {
     fetchStripePrice();
     return () => { active = false; };
   }, [cardProvider, stripePriceId]);
+
+  
 
   // Fetch Stripe product active status when we know the product id
   useEffect(() => {
@@ -1148,6 +1154,10 @@ export default function BrandedCheckoutPage() {
   // Build installment options using Price (APR mensal)
   const installmentOptions = useMemo(() => {
     if (!priceCents) return [] as { n: number; perCents: number }[];
+    // Outside Brazil, disable installments entirely
+    if (currentCountry !== 'BR') {
+      return [{ n: 1, perCents: Math.round(priceCents) }];
+    }
     const apr = typeof pricing?.INSTALLMENT_CUSTOMER_APR_MONTHLY === 'number' ? pricing.INSTALLMENT_CUSTOMER_APR_MONTHLY : 0.029;
     const maxPricingN = typeof pricing?.INSTALLMENT_MAX_INSTALLMENTS === 'number' ? pricing.INSTALLMENT_MAX_INSTALLMENTS : 12;
     const maxOfferN = offer?.maxInstallments != null ? offer.maxInstallments : undefined;
@@ -1187,7 +1197,7 @@ export default function BrandedCheckoutPage() {
       out.push({ n, perCents: per });
     }
     return out;
-  }, [priceCents, pricing, offer?.maxInstallments, offer?.isSubscription, offer?.intervalUnit, offer?.intervalCount]);
+  }, [priceCents, pricing, offer?.maxInstallments, offer?.isSubscription, offer?.intervalUnit, offer?.intervalCount, currentCountry]);
 
   // Derived from installmentOptions (must be after its declaration)
   const maxInstallmentsCap = useMemo(() => (installmentOptions.length ? installmentOptions[installmentOptions.length - 1]?.n : 1), [installmentOptions]);
@@ -1413,10 +1423,15 @@ export default function BrandedCheckoutPage() {
       let endpoint = isAppmaxFlow
         ? '/api/checkout/appmax/create'
         : (isSubscription
-            ? (paymentMethod === 'pix' ? '/api/checkout/create' : (subMonths > 1 ? '/api/checkout/create' : '/api/checkout/subscribe'))
+            ? (paymentMethod === 'pix'
+                ? '/api/checkout/create'
+                : (cardProvider === 'STRIPE'
+                    ? '/api/checkout/stripe/subscribe'
+                    : (subMonths > 1 ? '/api/checkout/create' : '/api/checkout/subscribe')))
             : '/api/checkout/create');
       // If KRXPAY card, tokenize first to avoid sending PAN/CVV to checkout endpoint
       let savedCardId: string | null = null;
+      let savedProviderCustomerId: string | null = null;
       if (paymentMethod === 'card' && cardProvider === 'KRXPAY') {
         try {
           const tokRes = await fetch('/api/payments/tokenize', {
@@ -1434,6 +1449,7 @@ export default function BrandedCheckoutPage() {
           const tok = await tokRes.json().catch(() => ({}));
           if (!tokRes.ok || !tok?.cardId) throw new Error(tok?.error || 'Falha ao tokenizar cartão');
           savedCardId = String(tok.cardId);
+          savedProviderCustomerId = tok?.customerId ? String(tok.customerId) : null;
         } catch (e: any) {
           throw new Error(e?.message || 'Tokenização indisponível');
         }
@@ -1469,7 +1485,7 @@ export default function BrandedCheckoutPage() {
           },
           items,
           method: paymentMethod === 'pix' ? 'pix' : 'card',
-          ...(paymentMethod === 'card' ? { installments: Math.max(1, Math.min(Number(installments || 1), Number(offer?.maxInstallments || 12), 12)) } : {}),
+          ...(paymentMethod === 'card' ? { installments: (currentCountry === 'BR' ? Math.max(1, Math.min(Number(installments || 1), Number(offer?.maxInstallments || 12), 12)) : 1) } : {}),
           ...(cardForAppmax ? { card: cardForAppmax } : {}),
         };
       } else if (isSubscription && endpoint === '/api/checkout/subscribe') {
@@ -1492,8 +1508,28 @@ export default function BrandedCheckoutPage() {
           }
         },
         payment: savedCardId && cardProvider === 'KRXPAY'
-          ? { method: 'card', saved_card_id: savedCardId }
+          ? { method: 'card', saved_card_id: savedCardId, provider_customer_id: savedProviderCustomerId }
           : { method: 'card', card: { number: cardNumber, holder_name: cardHolder, exp_month: cardExpMonth, exp_year: cardExpYear, cvv: cardCvv } }
+        };
+      } else if (isSubscription && endpoint === '/api/checkout/stripe/subscribe') {
+        body = {
+          clinicId: branding?.clinicId || null,
+          productId: product.id,
+          offerId: offer?.id || null,
+          stripePriceId: stripePriceId || null,
+          buyer: {
+            name: buyerName,
+            email: buyerEmail,
+            phone: buyerPhone,
+            address: {
+              street: addrStreet,
+              number: addrNumber,
+              zip_code: addrZip,
+              city: addrCity,
+              state: addrState,
+              country: addrCountry || 'US',
+            }
+          }
         };
       } else {
         body = {
@@ -1519,9 +1555,12 @@ export default function BrandedCheckoutPage() {
         payment: paymentMethod === 'pix'
           ? { method: 'pix' }
           : (savedCardId && cardProvider === 'KRXPAY'
-              ? { method: 'card', installments, saved_card_id: savedCardId }
-              : { method: 'card', installments, card: { number: cardNumber, holder_name: cardHolder, exp_month: cardExpMonth, exp_year: cardExpYear, cvv: cardCvv } }
+              ? { method: 'card', installments: (currentCountry === 'BR' ? installments : 1), saved_card_id: savedCardId }
+              : { method: 'card', installments: (currentCountry === 'BR' ? installments : 1), card: { number: cardNumber, holder_name: cardHolder, exp_month: cardExpMonth, exp_year: cardExpYear, cvv: cardCvv } }
             )
+        ,
+        // For subscription offers using PIX via the one-time create endpoint, send prepaid hint
+        ...(isSubscription && paymentMethod === 'pix' ? { subscriptionPeriodMonths: 1 } : {})
         };
       }
       // Debug the outgoing payload
@@ -1545,6 +1584,24 @@ export default function BrandedCheckoutPage() {
       if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
       // Reset card UI status before handling
       setCardStatus(null);
+      // Handle STRIPE subscription two-phase flow
+      if (isSubscription && endpoint === '/api/checkout/stripe/subscribe') {
+        if (data?.phase === 'setup' && data?.clientSecret) {
+          await confirmStripeSetup(String(data.clientSecret), String(data?.customerId || ''));
+          return;
+        }
+        if (data?.phase === 'subscribe' && data?.subscriptionId) {
+          // If invoice PI requires confirmation, confirm it
+          if (data?.clientSecret) {
+            await confirmStripePayment(String(data.clientSecret));
+            return;
+          }
+          setSuccess(true);
+          const to = `/${slug}/checkout/success?order_id=${encodeURIComponent(String(data.subscriptionId))}&method=card&product_id=${productId}`;
+          showApprovedAndRedirect(to);
+          return;
+        }
+      }
       // Handle STRIPE branch: backend returned client_secret for PaymentIntent
       if (paymentMethod === 'card' && data?.provider === 'STRIPE' && data?.client_secret) {
         try {
@@ -1681,6 +1738,65 @@ export default function BrandedCheckoutPage() {
       }
     } catch (e: any) {
       setError(e?.message || 'Erro ao criar checkout');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function confirmStripeSetup(setupSecret: string, customerId?: string) {
+    try {
+      if (!stripe || !stripeElements) {
+        try { await ensureStripeMountedStandalone(); } catch {}
+      }
+      if (!stripe || !stripeElements || !setupSecret) throw new Error('Stripe não inicializado para setup');
+      setSubmitting(true);
+      const billing_details: any = {
+        name: buyerName,
+        email: buyerEmail,
+        address: {
+          line1: addrStreet,
+          line2: '',
+          postal_code: addrZip,
+          city: addrCity,
+          state: addrState,
+          country: addrCountry,
+        }
+      };
+      let cardEl = stripeCardElement || (stripeElements && stripeElements.getElement && stripeElements.getElement('card'));
+      if (!cardEl) {
+        try { await ensureStripeMountedStandalone(); } catch {}
+        cardEl = stripeCardElement || (stripeElements && stripeElements.getElement && stripeElements.getElement('card'));
+      }
+      if (!cardEl) throw new Error('Stripe Card Element não está disponível');
+      const { error, setupIntent } = await stripe.confirmCardSetup(setupSecret, {
+        payment_method: { card: cardEl, billing_details },
+      });
+      if (error) { setError(error.message || 'Falha ao salvar método de pagamento'); return; }
+      const pmId = String(setupIntent?.payment_method || '');
+      if (!pmId) { setError('Método de pagamento não retornado'); return; }
+      const payload: any = {
+        clinicId: branding?.clinicId || null,
+        productId,
+        offerId: offer?.id || null,
+        stripePriceId: stripePriceId || null,
+        customerId: customerId || undefined,
+        paymentMethodId: pmId,
+      };
+      const res = await fetch('/api/checkout/stripe/subscribe', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      const js = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(js?.error || 'Falha ao criar assinatura Stripe'); return; }
+      if (js?.phase === 'subscribe' && js?.subscriptionId) {
+        if (js?.clientSecret) { await confirmStripePayment(String(js.clientSecret)); return; }
+        setSuccess(true);
+        const to = `/${slug}/checkout/success?order_id=${encodeURIComponent(String(js.subscriptionId))}&method=card&product_id=${productId}`;
+        showApprovedAndRedirect(to);
+        return;
+      }
+      setError('Fluxo de assinatura Stripe não concluído');
+    } catch (e: any) {
+      setError(e?.message || 'Falha no setup do cartão');
     } finally {
       setSubmitting(false);
     }
@@ -2054,7 +2170,7 @@ export default function BrandedCheckoutPage() {
                 <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between">
                   <div className={`${theme==='DARK'?'text-gray-400':'text-gray-600'} text-sm`}>{t.total}</div>
                   <div className="text-right">
-                    {installmentOptions.length > 1 ? (
+                    {currentCountry === 'BR' && paymentMethod === 'card' && installmentOptions.length > 1 ? (
                       <>
                         <div className="text-base font-semibold">{`${installmentOptions[installmentOptions.length-1].n}x ${formatCents(installmentOptions[installmentOptions.length-1].perCents)}`}</div>
                         <div className={`text-[12px] ${theme==='DARK'?'text-gray-400':'text-gray-500'}`}>{`ou ${formatCents(priceCents)}`}</div>
@@ -2288,7 +2404,7 @@ export default function BrandedCheckoutPage() {
                         </div>
 
                         {/* Parcelas abaixo dos inputs do cartão (somente BR e sem Stripe) */}
-                        {addrCountry === 'BR' && !stripeFlowActive && (
+                        {currentCountry === 'BR' && !stripeFlowActive && (
                           <div>
                             <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>{t.installments}</div>
                             <select value={installments} onChange={(e) => setInstallments(parseInt(e.target.value, 10))} className={`${selectClass} h-11 w-full rounded-md border px-3 text-sm`}>
@@ -2365,7 +2481,7 @@ export default function BrandedCheckoutPage() {
                 <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between">
                   <div className={`${theme==='DARK'?'text-gray-400':'text-gray-600'} text-sm`}>Total</div>
                   <div className="text-right">
-                    {installmentOptions.length > 1 ? (
+                    {currentCountry === 'BR' && paymentMethod === 'card' && installmentOptions.length > 1 ? (
                       <>
                         <div className="text-base font-semibold">{`${installmentOptions[installmentOptions.length-1].n}x ${formatCents(installmentOptions[installmentOptions.length-1].perCents)}`}</div>
                         <div className={`text-[12px] ${theme==='DARK'?'text-gray-400':'text-gray-500'}`}>{`ou ${formatCents(priceCents)}`}</div>

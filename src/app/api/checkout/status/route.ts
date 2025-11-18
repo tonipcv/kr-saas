@@ -94,8 +94,6 @@ export async function GET(req: Request) {
           providerOrderId: true,
           providerChargeId: true,
           rawPayload: true,
-          clientName: true,
-          clientEmail: true,
         },
       } as any)
       if (txAppmax) {
@@ -108,13 +106,71 @@ export async function GET(req: Request) {
           order_id: txAppmax.providerOrderId || id,
           charge_id: txAppmax.providerChargeId || null,
           buyer: {
-            name: (txAppmax as any).clientName || (txAppmax.rawPayload as any)?.data?.customer?.firstname || null,
-            email: (txAppmax as any).clientEmail || (txAppmax.rawPayload as any)?.data?.customer?.email || null,
+            name: (txAppmax.rawPayload as any)?.data?.customer?.firstname || null,
+            email: (txAppmax.rawPayload as any)?.data?.customer?.email || null,
           },
         } as any;
         return NextResponse.json({ success: true, provider: 'APPMAX', normalized });
       }
     } catch {}
+
+    // KRXLabs (Pagar.me) subscription branch: ids like sub_*
+    if (id.startsWith('sub_')) {
+      // Try DB payment_transactions first (webhooks or persistence may have created a row)
+      try {
+        const tx = await prisma.paymentTransaction.findFirst({
+          where: { provider: 'pagarme' as any, OR: [ { providerOrderId: String(id) }, { providerChargeId: String(id) } ] },
+          select: {
+            provider: true,
+            status: true,
+            amountCents: true,
+            currency: true,
+            installments: true,
+            providerOrderId: true,
+            providerChargeId: true,
+          },
+        });
+        if (tx) {
+          const normalized = {
+            provider: 'KRXPAY',
+            status: tx.status,
+            amount_minor: Number(tx.amountCents || 0),
+            currency: (typeof tx.currency === 'string' && tx.currency.trim() ? tx.currency.toUpperCase() : 'BRL'),
+            installments: Number(tx.installments || 1),
+            order_id: tx.providerOrderId || id,
+            charge_id: tx.providerChargeId || null,
+          } as any;
+          return NextResponse.json({ success: true, provider: 'KRXPAY', normalized });
+        }
+      } catch {}
+      // Fallback: check customer_subscriptions table
+      try {
+        const rows = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT status, current_period_start, current_period_end, customer_id, product_id
+             FROM customer_subscriptions
+            WHERE provider_subscription_id = $1
+            LIMIT 1`,
+          String(id)
+        ).catch(() => []);
+        const r = rows && rows[0] ? rows[0] : null;
+        if (r) {
+          const normalized = {
+            provider: 'KRXPAY',
+            status: String(r.status || 'ACTIVE'),
+            amount_minor: null,
+            currency: 'BRL',
+            installments: 1,
+            order_id: id,
+            charge_id: null,
+            billing_period_start: r.current_period_start || null,
+            billing_period_end: r.current_period_end || null,
+          } as any;
+          return NextResponse.json({ success: true, provider: 'KRXPAY', normalized });
+        }
+      } catch {}
+      // Not found
+      return NextResponse.json({ error: 'Subscription not found' }, { status: 404 });
+    }
 
     const order = await pagarmeGetOrder(id);
     console.log('[checkout][status] order details', {

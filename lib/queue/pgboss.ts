@@ -106,6 +106,89 @@ async function processEvent(row: EventRow) {
           )
         }
       }
+
+      // Subscription lifecycle: update CustomerSubscription periods/status
+      if (type === 'customer.subscription.created' || type === 'customer.subscription.updated' || type === 'customer.subscription.deleted') {
+        const subObj: any = obj
+        const provSubId: string | null = subObj?.id || null
+        if (provSubId) {
+          const statusRaw: string = String(subObj?.status || '').toUpperCase()
+          // Periods in seconds
+          const periodStart = subObj?.current_period_start ? new Date(Number(subObj.current_period_start) * 1000) : null
+          const periodEnd = subObj?.current_period_end ? new Date(Number(subObj.current_period_end) * 1000) : null
+          const trialEnd = subObj?.trial_end ? new Date(Number(subObj.trial_end) * 1000) : null
+          await prisma.customerSubscription.updateMany({
+            where: { provider: 'STRIPE', providerSubscriptionId: String(provSubId) },
+            data: {
+              status: (statusRaw as any),
+              currentPeriodStart: periodStart || undefined,
+              currentPeriodEnd: periodEnd || undefined,
+              trialEndsAt: trialEnd || undefined,
+              canceledAt: (type === 'customer.subscription.deleted') ? new Date() : undefined,
+              updatedAt: new Date(),
+            }
+          }).catch(() => {})
+        }
+      }
+
+      // Invoice events -> create PaymentTransaction and link to subscription/customer
+      if (type === 'invoice.payment_succeeded' || type === 'invoice.payment_failed' || type === 'invoice.finalized') {
+        const inv: any = obj
+        const invoiceId: string | null = inv?.id || null
+        const provSubId: string | null = typeof inv?.subscription === 'string' ? String(inv.subscription) : null
+        const customerStripeId: string | null = typeof inv?.customer === 'string' ? String(inv.customer) : null
+        const chargeStripeId: string | null = typeof inv?.charge === 'string' ? String(inv.charge) : null
+        const currency: string = String(inv?.currency || 'brl').toUpperCase()
+        const amountCents: number = Number(inv?.amount_paid ?? inv?.total ?? 0)
+        const periodStart = inv?.lines?.data?.[0]?.period?.start ? new Date(Number(inv.lines.data[0].period.start) * 1000) : null
+        const periodEnd = inv?.lines?.data?.[0]?.period?.end ? new Date(Number(inv.lines.data[0].period.end) * 1000) : null
+
+        // Resolve CustomerSubscription
+        const subRow = provSubId ? await prisma.customerSubscription.findFirst({ where: { provider: 'STRIPE', providerSubscriptionId: provSubId } }).catch(() => null) : null
+        // Resolve Customer via CustomerProvider (by providerCustomerId)
+        const custProv = customerStripeId ? await prisma.customerProvider.findFirst({ where: { provider: 'STRIPE', providerCustomerId: customerStripeId } }).catch(() => null) : null
+
+        // Insert or update payment_transaction row
+        if (invoiceId) {
+          const txId = `inv_${invoiceId}`
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO payment_transactions (
+                id, provider, provider_order_id, provider_charge_id,
+                amount_cents, currency, status, raw_payload,
+                customer_id, customer_provider_id, customer_subscription_id,
+                billing_period_start, billing_period_end, created_at, updated_at
+             ) VALUES (
+                $1, 'stripe', $2, $3,
+                $4, $5, $6, $7::jsonb,
+                $8, $9, $10,
+                $11, $12, NOW(), NOW()
+             ) ON CONFLICT (id) DO UPDATE SET
+                provider_charge_id = COALESCE(EXCLUDED.provider_charge_id, payment_transactions.provider_charge_id),
+                amount_cents = EXCLUDED.amount_cents,
+                currency = EXCLUDED.currency,
+                status = EXCLUDED.status,
+                raw_payload = EXCLUDED.raw_payload,
+                customer_id = COALESCE(EXCLUDED.customer_id, payment_transactions.customer_id),
+                customer_provider_id = COALESCE(EXCLUDED.customer_provider_id, payment_transactions.customer_provider_id),
+                customer_subscription_id = COALESCE(EXCLUDED.customer_subscription_id, payment_transactions.customer_subscription_id),
+                billing_period_start = COALESCE(EXCLUDED.billing_period_start, payment_transactions.billing_period_start),
+                billing_period_end = COALESCE(EXCLUDED.billing_period_end, payment_transactions.billing_period_end),
+                updated_at = NOW()`,
+            txId,
+            String(invoiceId),
+            chargeStripeId ? String(chargeStripeId) : null,
+            Number(amountCents || 0),
+            currency,
+            (type === 'invoice.payment_succeeded') ? 'paid' : (type === 'invoice.payment_failed' ? 'failed' : 'processing'),
+            JSON.stringify(ev),
+            custProv?.customerId || null,
+            custProv?.id || null,
+            subRow?.id || null,
+            periodStart,
+            periodEnd
+          )
+        }
+      }
       return true
     } catch {
       return false

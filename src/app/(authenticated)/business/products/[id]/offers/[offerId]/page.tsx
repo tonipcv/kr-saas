@@ -80,6 +80,7 @@ export default function EditOfferPage({ params }: PageProps) {
   const [addRouteProvider, setAddRouteProvider] = useState<'STRIPE'|'KRXPAY'|'APPMAX' | ''>('');
   const [createStripeOpenFor, setCreateStripeOpenFor] = useState<{ country: string, currency: string } | null>(null);
   const [createStripeAmount, setCreateStripeAmount] = useState<string>('');
+  const [createStripeNickname, setCreateStripeNickname] = useState<string>('');
   const [editingCountry, setEditingCountry] = useState<Record<string, boolean>>({});
 
   const currencyForCountry = (code: string): 'BRL'|'USD'|'EUR' => {
@@ -100,11 +101,14 @@ export default function EditOfferPage({ params }: PageProps) {
       // Save custom amount when enabled for non-STRIPE providers (KRXPAY or APPMAX)
       if (!!overrideEnabled[cc]) {
         const provider = (routing[cc]?.CARD || null) as ('STRIPE'|'KRXPAY'|'APPMAX'|null);
-        if (provider && provider !== 'STRIPE') {
+        if (provider) {
           const cents = parseAmountToCents(overridePrice[cc] || '0');
+          const body: any = { country: cc, currency: cur, provider, amountCents: cents };
+          // If STRIPE and using custom price, clear any previous externalPriceId to enforce amountCents precedence
+          if (provider === 'STRIPE') body.externalPriceId = '';
           await fetch(`/api/offers/${offer.id}/prices`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ country: cc, currency: cur, provider, amountCents: cents })
+            body: JSON.stringify(body)
           });
         }
       }
@@ -228,6 +232,8 @@ export default function EditOfferPage({ params }: PageProps) {
       url.searchParams.set('currency', currency);
       if (query) url.searchParams.set('query', query);
       url.searchParams.set('limit', '20');
+      // Use clinic integration (secret) instead of env/current doctor when available
+      if (currentClinic?.id) url.searchParams.set('clinicId', String(currentClinic.id));
       const res = await fetch(url.toString(), { cache: 'no-store' });
       const js = await res.json().catch(() => ({}));
       setSearchResults(Array.isArray(js?.items) ? js.items : []);
@@ -267,10 +273,17 @@ export default function EditOfferPage({ params }: PageProps) {
   const ensureStripePrice = async (currency: 'BRL'|'USD') => {
     if (!offer) return;
     try {
+      // Derive amount from the modal quick input if provided; fallback to override price for current country
+      const centsQuick = Math.round(Math.max(0, Number((createStripeAmount || '0').replace(',', '.')) * 100));
+      const nickname = `${offer.name || 'Offer'} ${currency}`;
+      const body: any = { currency, nickname };
+      if (currentClinic?.id) body.clinicId = String(currentClinic.id);
+      if (centsQuick > 0) body.amountCents = centsQuick;
+
       const res = await fetch(`/api/products/${productId}/offers/${offer.id}/providers/stripe/ensure`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currency })
+        body: JSON.stringify(body)
       });
       const js = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(js?.error || 'Failed to ensure Stripe price');
@@ -434,8 +447,9 @@ export default function EditOfferPage({ params }: PageProps) {
       const cur = currencyForCountry(country);
       // Align provider with routed CARD provider (fallback STRIPE)
       const routed = (routing[country]?.CARD || null) as ('STRIPE'|'KRXPAY'|'APPMAX'|null);
-      const provider = (routed || 'STRIPE') as 'STRIPE'|'KRXPAY'|'APPMAX';
+      const provider = (routing[country]?.CARD || 'STRIPE') as 'STRIPE'|'KRXPAY'|'APPMAX';
       const body = { country, currency: cur, provider, amountCents: cents } as any;
+      if (provider === 'STRIPE') body.externalPriceId = '';
       const res = await fetch(`/api/offers/${offer.id}/prices`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (res.ok) await loadProviderConfig(productId, offer.id);
     } catch {}
@@ -850,7 +864,7 @@ export default function EditOfferPage({ params }: PageProps) {
                                         onChange={(e) => setOverridePrice(prev => ({ ...prev, [cc]: e.target.value }))}
                                         className="mt-2 h-10"
                                         placeholder={cur === 'USD' ? '30.00' : '0.00'}
-                                        readOnly={routing[cc]?.CARD === 'STRIPE'}
+                                        readOnly={routing[cc]?.CARD === 'STRIPE' && !enabled}
                                       />
                                     </div>
                                     <div className="flex items-end">
@@ -860,14 +874,32 @@ export default function EditOfferPage({ params }: PageProps) {
                                           const priceId = stripeForCountry?.externalPriceId as string | undefined;
                                           return (
                                             <div className="flex gap-2">
-                                              <Button type="button" variant="outline" className="h-10" onClick={() => { setSearchCountry(cc); setSearchCurrency(cur as any); setSearchOpen(true); fetchStripePrices(cur as any, ''); }}>
-                                                {priceId ? 'Trocar price_id (Stripe)' : 'Selecionar price_id (Stripe)'}
-                                              </Button>
-                                              {!priceId && (
-                                                <Button type="button" className="h-10" onClick={() => { const amountStr = overridePrice[cc] || ''; setCreateStripeAmount(amountStr); setCreateStripeOpenFor({ country: cc, currency: cur }); }}>
-                                                  Criar price_id (Stripe)
-                                                </Button>
-                                              )}
+                                              {(() => {
+                                                const isSupported = (cur === 'USD' || cur === 'BRL');
+                                                return (
+                                                  <>
+                                                    <Button
+                                                      type="button"
+                                                      variant="outline"
+                                                      className="h-10"
+                                                      disabled={!isSupported}
+                                                      onClick={() => { if (!isSupported) return; setSearchCountry(cc); openStripeSearch(cur as 'BRL'|'USD'); }}
+                                                    >
+                                                      {priceId ? 'Trocar price_id (Stripe)' : 'Selecionar price_id (Stripe)'}
+                                                    </Button>
+                                                    {!priceId && (
+                                                      <Button
+                                                        type="button"
+                                                        className="h-10"
+                                                        disabled={!isSupported}
+                                                        onClick={() => { const amountStr = overridePrice[cc] || ''; setCreateStripeAmount(amountStr); setCreateStripeOpenFor({ country: cc, currency: cur }); }}
+                                                      >
+                                                        Criar price_id (Stripe)
+                                                      </Button>
+                                                    )}
+                                                  </>
+                                                );
+                                              })()}
                                             </div>
                                           );
                                         })()
@@ -1123,6 +1155,62 @@ export default function EditOfferPage({ params }: PageProps) {
                       <div className="flex gap-2">
                         <Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Nome do produto ou price_id" />
                         <Button type="button" onClick={() => fetchStripePrices(searchCurrency, searchQuery)} disabled={searchLoading}>{searchLoading ? 'Buscando...' : 'Buscar'}</Button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+                        <div>
+                          <Label className="text-gray-900 font-medium">Valor ({searchCurrency})</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            value={createStripeAmount}
+                            onChange={(e) => setCreateStripeAmount(e.target.value)}
+                            className="mt-2 h-10"
+                            placeholder={searchCurrency === 'USD' ? '30.00' : '0.00'}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-gray-900 font-medium">Apelido (opcional)</Label>
+                          <Input
+                            value={createStripeNickname}
+                            onChange={(e) => setCreateStripeNickname(e.target.value)}
+                            className="mt-2 h-10"
+                            placeholder={`ex.: ${offer?.name || 'Offer'} ${searchCurrency}`}
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <Button
+                            type="button"
+                            className="h-10"
+                            onClick={async () => {
+                              if (!offer) return;
+                              if (!currentClinic?.id) { alert('Clínica não definida'); return; }
+                              if (!searchCountry) { alert('Selecione um país para aplicar o price_id'); return; }
+                              const cents = Math.round(Math.max(0, Number((createStripeAmount || '0').replace(',', '.')) * 100));
+                              if (!(cents > 0)) { alert('Informe um valor válido'); return; }
+                              const nickname = createStripeNickname?.trim() || `${offer.name || 'Offer'} ${searchCurrency}`;
+                              try {
+                                const res = await fetch(`/api/products/${productId}/offers/${offer.id}/providers/stripe/ensure`, {
+                                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ clinicId: String(currentClinic.id), currency: searchCurrency, amountCents: cents, nickname })
+                                });
+                                const js = await res.json().catch(() => ({}));
+                                if (!res.ok) throw new Error(js?.error || 'Falha ao criar price');
+                                const pid = js?.priceId as string | undefined;
+                                if (pid) {
+                                  await selectStripePrice(pid);
+                                }
+                                setSearchOpen(false);
+                                setCreateStripeAmount('');
+                                setCreateStripeNickname('');
+                              } catch (e: any) {
+                                alert(e?.message || 'Falha ao criar price');
+                              }
+                            }}
+                          >
+                            Criar price_id (Stripe)
+                          </Button>
+                        </div>
                       </div>
                     </div>
                     <div className="max-h-80 overflow-auto rounded-lg border border-gray-200">

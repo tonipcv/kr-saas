@@ -19,16 +19,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const { id } = await params;
     const body = await req.json();
+    // Enforce product type constraints: if product is SUBSCRIPTION, offer must be subscription
+    const product = await prisma.products.findUnique({ where: { id: String(id) }, select: { type: true } });
+    if (!product) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    if (String(product.type) === 'SUBSCRIPTION' && body?.isSubscription === false) {
+      return NextResponse.json({ error: 'Offers for subscription products must be subscription (isSubscription=true)' }, { status: 400 });
+    }
     const data: any = {
       productId: String(id),
       name: String(body?.name || 'Nova oferta'),
       description: body?.description || undefined,
       currency: body?.currency || 'BRL',
-      priceCents: Number(body?.priceCents || 0),
-      maxInstallments: body?.maxInstallments != null ? Number(body.maxInstallments) : 1,
-      installmentMinCents: body?.installmentMinCents != null ? Number(body.installmentMinCents) : null,
+      // Keep schema compatibility: Offer no longer carries pricing here
+      priceCents: 0,
       active: body?.active != null ? Boolean(body.active) : true,
-      isSubscription: Boolean(body?.isSubscription || false),
+      isSubscription: String(product.type) === 'SUBSCRIPTION' ? true : Boolean(body?.isSubscription || false),
       intervalCount: body?.intervalCount != null ? Number(body.intervalCount) : null,
       intervalUnit: body?.intervalUnit || null,
       trialDays: body?.trialDays != null ? Number(body.trialDays) : null,

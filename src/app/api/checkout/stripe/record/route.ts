@@ -44,7 +44,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Clínica não encontrada', step: 'resolve_clinic', details: { clinicId: product?.clinicId } }, { status: 404 })
     }
 
-    const merchant = await prisma.merchant.findUnique({ where: { id: String(clinic.merchantId) } })
+    // Resolve merchant via clinicId (schema commonly relates by clinicId)
+    const merchant = await prisma.merchant.findFirst({ where: { clinicId: String(clinic.id) } })
     if (!merchant) {
       console.error('[stripe][record][error]', { step: 'resolve_merchant', clinicId: clinic.id });
       return NextResponse.json({ error: 'Merchant não encontrado', step: 'resolve_merchant', details: { clinicId: clinic.id } }, { status: 404 })
@@ -93,34 +94,64 @@ export async function POST(req: NextRequest) {
       email: (pi as any)?.receipt_email || (charge?.billing_details?.email ?? ''),
     }
 
-    // Persist minimal payment_transactions row (upsert via ON CONFLICT)
+    // Try to resolve doctor and patient profile for visibility in Business > Payments
+    let doctorId: string | null = (product as any)?.doctorId || clinic?.ownerId || null
+    let profileId: string | null = null
     try {
-      const txId = randomUUID()
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO payment_transactions (
-          id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, product_id,
-          amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency,
-          installments, payment_method_type, status, raw_payload, routed_provider
-        ) VALUES (
-          $1, 'stripe', $2, null, null, $3, $4,
-          $5, NULL, NULL, NULL, $6,
-          1, 'credit_card', $7, $8::jsonb, 'STRIPE'
-        )
-        ON CONFLICT (provider, provider_order_id) DO NOTHING`,
-        txId,
-        String(pi.id),
-        String(clinic.id),
-        String(product.id),
-        amount,
-        currency,
-        isSucceeded ? 'paid' : (isRequiresCapture ? 'authorized' : status || 'processing'),
-        JSON.stringify({ provider: 'stripe', payment_intent_id: pi.id, buyer })
+      if (buyer.email) {
+        const u = await prisma.user.findUnique({ where: { email: String(buyer.email) }, select: { id: true } })
+        const userId = u?.id || null
+        if (doctorId && userId) {
+          const existing = await prisma.patientProfile.findUnique({ where: { doctorId_userId: { doctorId: String(doctorId), userId: String(userId) } }, select: { id: true } })
+          profileId = existing?.id || null
+          if (!profileId) {
+            try {
+              const created = await prisma.patientProfile.create({ data: { doctorId: String(doctorId), userId: String(userId), name: String(buyer.name || ''), phone: null } })
+              profileId = created.id
+            } catch {}
+          }
+        }
+      }
+    } catch {}
+
+    // Persist minimal payment_transactions row (upsert via ON CONFLICT), only if table exists
+    try {
+      const existsRows: any[] = await prisma.$queryRawUnsafe(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'payment_transactions') AS exists"
       )
+      const tableExists = Array.isArray(existsRows) && !!(existsRows[0]?.exists || existsRows[0]?.exists === true)
+      if (tableExists) {
+        const txId = randomUUID()
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO payment_transactions (
+            id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, product_id,
+            amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency,
+            installments, payment_method_type, status, raw_payload, routed_provider
+          ) VALUES (
+            $1, 'stripe', $2, $3, $4, $5, $6,
+            $7, NULL, NULL, NULL, $8,
+            1, 'credit_card', $9, $10::jsonb, 'STRIPE'
+          )
+          ON CONFLICT (provider, provider_order_id) DO NOTHING`,
+          txId,
+          String(pi.id),
+          doctorId ? String(doctorId) : null,
+          profileId ? String(profileId) : null,
+          String(clinic.id),
+          String(product.id),
+          amount,
+          currency,
+          isSucceeded ? 'paid' : (isRequiresCapture ? 'authorized' : status || 'processing'),
+          JSON.stringify({ provider: 'stripe', payment_intent_id: pi.id, buyer })
+        )
+      } else {
+        if (process.env.NODE_ENV !== 'production') console.warn('[stripe][record] payment_transactions table not found — skipping persistence')
+      }
     } catch (e) {
       console.warn('[stripe][record] failed to persist payment_transactions:', e instanceof Error ? e.message : e)
     }
 
-    return NextResponse.json({ ok: true, status: pi.status, amount, currency })
+    return NextResponse.json({ ok: true, status: pi.status, amount: amount, currency })
   } catch (e: any) {
     console.error('[stripe][record][error][unhandled]', e);
     return NextResponse.json({ error: e?.message || 'internal_error', step: 'unhandled', details: { stack: e?.stack || null } }, { status: 500 })

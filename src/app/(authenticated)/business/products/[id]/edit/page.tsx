@@ -1361,79 +1361,36 @@ export default function EditProductPage({ params }: PageProps) {
                       <button onClick={() => { setCreateOfferOpen(false); setEditingOfferId(null); }} className="text-gray-400 hover:text-gray-600" aria-label="Close">✕</button>
                     </div>
                     <div className="space-y-3">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="md:col-span-3">
                           <Label className="text-gray-900 font-medium">Name</Label>
                           <Input value={newOffer.name} onChange={(e) => setNewOffer(o => ({ ...o, name: e.target.value }))} className="mt-2 h-10" placeholder="New offer" />
                         </div>
-                        <div>
-                          <Label className="text-gray-900 font-medium">Price</Label>
-                          <Input type="number" step="0.01" min={0} value={newOffer.price} onChange={(e) => setNewOffer(o => ({ ...o, price: e.target.value }))} className="mt-2 h-10" placeholder="99.90" />
-                        </div>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div>
-                          <Label className="text-gray-900 font-medium">Type</Label>
-                          <Select
-                            value={(originalType === 'SUBSCRIPTION' && newOffer.isSubscription) ? 'SUBSCRIPTION' : 'PRODUCT'}
-                            onValueChange={(val) => {
-                              // Only allow subscription if product is SUBSCRIPTION
-                              if (originalType !== 'SUBSCRIPTION' && val === 'SUBSCRIPTION') return;
-                              setNewOffer(o => ({ ...o, isSubscription: val === 'SUBSCRIPTION' }));
-                            }}
-                          >
-                            <SelectTrigger className="mt-2 h-10" disabled={originalType !== 'SUBSCRIPTION'}><SelectValue placeholder="Type" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="PRODUCT">One-time</SelectItem>
-                              {originalType === 'SUBSCRIPTION' && (
-                                <SelectItem value="SUBSCRIPTION">Subscription</SelectItem>
-                              )}
-                            </SelectContent>
-                          </Select>
+                      {(originalType === 'SUBSCRIPTION' && newOffer.isSubscription) && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div>
+                            <Label className="text-gray-900 font-medium">Interval</Label>
+                            <Select value={newOffer.intervalUnit} onValueChange={(val: any) => setNewOffer(o => ({ ...o, intervalUnit: val }))}>
+                              <SelectTrigger className="mt-2 h-10"><SelectValue placeholder="Interval" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="DAY">Day</SelectItem>
+                                <SelectItem value="WEEK">Week</SelectItem>
+                                <SelectItem value="MONTH">Month</SelectItem>
+                                <SelectItem value="YEAR">Year</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-gray-900 font-medium">Interval Count</Label>
+                            <Input type="number" min={1} value={newOffer.intervalCount} onChange={(e) => setNewOffer(o => ({ ...o, intervalCount: e.target.value }))} className="mt-2 h-10" placeholder="1" />
+                          </div>
+                          <div>
+                            <Label className="text-gray-900 font-medium">Trial (days)</Label>
+                            <Input type="number" min={0} value={newOffer.trialDays} onChange={(e) => setNewOffer(o => ({ ...o, trialDays: e.target.value }))} className="mt-2 h-10" placeholder="0" />
+                          </div>
                         </div>
-                        <div>
-                          <Label className="text-gray-900 font-medium">Currency</Label>
-                          <Select value={newOffer.currency} onValueChange={(val: any) => setNewOffer(o => ({ ...o, currency: val }))}>
-                            <SelectTrigger className="mt-2 h-10"><SelectValue placeholder="Currency" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="BRL">BRL</SelectItem>
-                              <SelectItem value="USD">USD</SelectItem>
-                              <SelectItem value="EUR">EUR</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        {(originalType === 'SUBSCRIPTION' && newOffer.isSubscription) ? (
-                          <>
-                            <div>
-                              <Label className="text-gray-900 font-medium">Interval</Label>
-                              <Select value={newOffer.intervalUnit} onValueChange={(val: any) => setNewOffer(o => ({ ...o, intervalUnit: val }))}>
-                                <SelectTrigger className="mt-2 h-10"><SelectValue placeholder="Interval" /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="DAY">Day</SelectItem>
-                                  <SelectItem value="WEEK">Week</SelectItem>
-                                  <SelectItem value="MONTH">Month</SelectItem>
-                                  <SelectItem value="YEAR">Year</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label className="text-gray-900 font-medium">Interval Count</Label>
-                              <Input type="number" min={1} value={newOffer.intervalCount} onChange={(e) => setNewOffer(o => ({ ...o, intervalCount: e.target.value }))} className="mt-2 h-10" placeholder="1" />
-                            </div>
-                            <div>
-                              <Label className="text-gray-900 font-medium">Trial (days)</Label>
-                              <Input type="number" min={0} value={newOffer.trialDays} onChange={(e) => setNewOffer(o => ({ ...o, trialDays: e.target.value }))} className="mt-2 h-10" placeholder="0" />
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div>
-                              <Label className="text-gray-900 font-medium">Max installments</Label>
-                              <Input type="number" min={1} value={newOffer.maxInstallments} onChange={(e) => setNewOffer(o => ({ ...o, maxInstallments: e.target.value }))} className="mt-2 h-10" placeholder="1" />
-                            </div>
-                          </>
-                        )}
-                      </div>
+                      )}
                     </div>
                     <div className="flex items-center justify-end gap-2 mt-4">
                       <Button type="button" variant="outline" className="h-9" onClick={() => { setCreateOfferOpen(false); setEditingOfferId(null); }}>Close</Button>

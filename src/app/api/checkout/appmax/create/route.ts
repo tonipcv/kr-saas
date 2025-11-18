@@ -165,13 +165,15 @@ export async function POST(req: Request) {
         ccToken = token
       } else if (card && (card.number && card.cvv && card.month && card.year)) {
         try {
-          const tokResp = await client.tokenizeCard({ card: {
-            name: card.name || buyer.name,
-            number: String(card.number),
-            cvv: String(card.cvv),
-            month: Number(card.month),
-            year: Number(card.year),
-          } })
+          const tokResp = await client.tokenizeCard({
+            card: {
+              name: String(card.name || buyer.name),
+              number: String(card.number),
+              cvv: String(card.cvv),
+              month: Number(card.month),
+              year: Number(card.year),
+            }
+          })
           ccToken = tokResp?.token || tokResp?.data?.token || null
         } catch (e: any) {
           // Fallback: proceed without token, sending raw card details in payment payload
@@ -229,7 +231,8 @@ export async function POST(req: Request) {
       const doc = (buyer.document_number || buyer.document || '').toString().replace(/\D+/g, '')
       if (!doc) return jsonError(400, 'document_number ausente para PIX', 'input_validation', { need: 'buyer.document_number' })
       const expAt = (() => {
-        const d = new Date(Date.now() + 30 * 60 * 1000); // +30 min default
+        // Format: YYYY-MM-DD HH:mm:ss (as in docs)
+        const d = new Date(Date.now() + 30 * 60 * 1000)
         const pad = (n: number) => String(n).padStart(2, '0')
         const y = d.getFullYear()
         const m = pad(d.getMonth() + 1)

@@ -912,6 +912,14 @@ model PaymentTransaction {
   refundedAt         DateTime? @map("refunded_at")
   routedProvider     String?   @map("routed_provider")
 
+  // Orchestration (optional foreign keys and billing periods for recurring invoices)
+  customerId               String?  @map("customer_id")
+  customerProviderId       String?  @map("customer_provider_id")
+  customerPaymentMethodId  String?  @map("customer_payment_method_id")
+  customerSubscriptionId   String?  @map("customer_subscription_id")
+  billingPeriodStart       DateTime? @map("billing_period_start")
+  billingPeriodEnd         DateTime? @map("billing_period_end")
+
   // Optional back-relation to CheckoutSession
   checkoutSession    CheckoutSession? @relation("SessionPayment")
 
@@ -932,6 +940,114 @@ model PaymentTransaction {
 }
 
  
+
+
+model Customer {
+  id         String   @id @default(cuid())
+  merchantId String
+  name       String?
+  email      String?
+  phone      String?
+  document   String?
+  address    Json?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  providers      CustomerProvider[]
+  paymentMethods CustomerPaymentMethod[]
+  subscriptions  CustomerSubscription[]
+
+  @@index([merchantId, email])
+  @@index([merchantId, phone])
+  @@map("customers")
+}
+
+
+
+model CustomerProvider {
+  id                 String   @id @default(cuid())
+  customerId         String
+  provider           PaymentProvider
+  accountId          String?
+  providerCustomerId String
+  metadata           Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  paymentMethods CustomerPaymentMethod[]
+  subscriptions  CustomerSubscription[]
+
+  @@unique([provider, accountId, providerCustomerId])
+  @@unique([customerId, provider, accountId])
+  @@index([customerId, provider, accountId])
+  @@map("customer_providers")
+}
+
+
+
+model CustomerPaymentMethod {
+  id                      String   @id @default(cuid())
+  customerId              String
+  customerProviderId      String?
+  provider                PaymentProvider
+  accountId               String?
+  providerPaymentMethodId String?
+  brand                   String?
+  last4                   String?
+  expMonth                Int?
+  expYear                 Int?
+  isDefault               Boolean  @default(false)
+  status                  String?
+  fingerprint             String?
+  metadata                Json?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  customer         Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerProvider CustomerProvider? @relation(fields: [customerProviderId], references: [id])
+
+  @@unique([provider, accountId, providerPaymentMethodId])
+  @@index([customerId, provider, accountId])
+  @@map("customer_payment_methods")
+}
+
+
+
+model CustomerSubscription {
+  id                     String   @id @default(cuid())
+  customerId             String
+  merchantId             String
+  productId              String
+  offerId                String?
+  provider               PaymentProvider
+  accountId              String?
+  isNative               Boolean  @default(true)
+  customerProviderId     String?
+  providerSubscriptionId String?
+  vaultPaymentMethodId   String?
+  status                 SubscriptionStatus @default(TRIAL)
+  startAt                DateTime @default(now())
+  trialEndsAt            DateTime?
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  cancelAt               DateTime?
+  canceledAt             DateTime?
+  priceCents             Int
+  currency               Currency
+  metadata               Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  customer         Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerProvider CustomerProvider? @relation(fields: [customerProviderId], references: [id])
+
+  @@index([merchantId, status])
+  @@index([provider, accountId, providerSubscriptionId])
+  @@map("customer_subscriptions")
+}
+
 
 // Removed enums: AppointmentStatus, ServiceAvailability, FeeType, FeeVisibility
 
