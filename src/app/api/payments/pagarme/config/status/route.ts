@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { pagarmeGetRecipient, isV5 } from '@/lib/pagarme';
+import { pagarmeGetRecipient, isV5 } from '@/lib/payments/pagarme/sdk';
 import { prisma } from '@/lib/prisma';
 
 /**

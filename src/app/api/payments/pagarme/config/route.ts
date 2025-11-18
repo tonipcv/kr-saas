@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { isV5 } from '@/lib/pagarme';
+import { isV5 } from '@/lib/payments/pagarme/sdk';
 
 export async function GET() {
   try {

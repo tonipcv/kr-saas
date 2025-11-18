@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { Prisma, PaymentMethod } from '@prisma/client';
-import { isV5, pagarmeCreateCustomer, pagarmeCreateCustomerCard, pagarmeCreateSubscription, pagarmeCreatePlan } from '@/lib/pagarme';
+import { isV5, pagarmeCreateCustomer, pagarmeCreateCustomerCard, pagarmeCreateSubscription, pagarmeCreatePlan, pagarmeGetSubscription, pagarmeUpdateCharge } from '@/lib/payments/pagarme/sdk';
 import crypto from 'crypto';
 
 function onlyDigits(s: string) { return (s || '').replace(/\D/g, ''); }
@@ -58,10 +58,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // Ensure provider plan exists; auto-create if missing
+    // Ensure provider plan exists and matches OfferPrice; auto-create or recreate if price mismatch
     let providerPlanId: string | null = (product as any)?.providerPlanId || null;
-    if (!providerPlanId) {
-      // Derive minimal plan payload from product
+    // Derive desired amount from OfferPrice/Product
       const planName = String((product as any)?.name || 'Subscription Plan');
       // Resolve amount priority: OfferPrice(offerId,country,KRXPAY)->OfferPrice(offerId,country,any)->Offer.priceCents->product.price
       let amountCents = 0;
@@ -98,12 +97,27 @@ export async function POST(req: Request) {
         try { console.error('[subscribe] invalid plan amount', { desiredCountry, offerId: selectedOffer?.id || null, offerPriceCents: selectedOffer?.priceCents || null, productPrice: (product as any)?.price || null }); } catch {}
         return NextResponse.json({ error: 'Preço inválido para criar plano de assinatura', country: desiredCountry, offerId: selectedOffer?.id || null }, { status: 400 });
       }
+    // If an existing plan is present, check local cached providerPlanData price; recreate if mismatch
+    const currentPlanPrice = (() => {
+      try {
+        const d: any = (product as any)?.providerPlanData || null;
+        const price0 = d?.items?.[0]?.pricing_scheme?.price;
+        return Number(price0 || 0) || 0;
+      } catch { return 0; }
+    })();
+    const planDataMissing = !((product as any)?.providerPlanData);
+    try { console.warn('[subscribe][plan-check]', { providerPlanId, planDataMissing, currentPlanPrice, desired: amountCents }); } catch {}
+    if (providerPlanId && (planDataMissing || currentPlanPrice !== amountCents)) {
+      try { console.warn('[subscribe] provider plan cache missing or price mismatch; will recreate', { providerPlanId, currentPlanPrice, desired: amountCents }); } catch {}
+      providerPlanId = null; // force recreation below
+    }
+    if (!providerPlanId) {
       const planPayload: any = {
         name: planName,
         interval: (selectedOffer?.intervalUnit ? String(selectedOffer.intervalUnit).toLowerCase() : 'month'),
         interval_count: (selectedOffer?.intervalCount && selectedOffer.intervalCount > 0) ? Number(selectedOffer.intervalCount) : 1,
         billing_type: 'prepaid',
-        currency: 'BRL',
+        currency: (resolvedRow?.currency || (selectedOffer as any)?.currency || 'BRL'),
         payment_methods: ['credit_card'],
         items: [
           {
@@ -127,13 +141,15 @@ export async function POST(req: Request) {
         providerPlanId = createdPlan?.id || createdPlan?.plan?.id || null;
         if (providerPlanId) {
           try {
-            await prisma.products.update({ where: { id: String(productId) }, data: { providerPlanId } });
+            await prisma.products.update({ where: { id: String(productId) }, data: { providerPlanId, providerPlanData: createdPlan || null } });
           } catch {}
         }
       } catch (e: any) {
         try { console.error('[subscribe] create plan failed', { status: e?.status, message: e?.message, response: e?.responseJson || e?.responseText }); } catch {}
         return NextResponse.json({ error: e?.message || 'Falha ao criar plano de assinatura no provedor' }, { status: 500 });
       }
+    } else {
+      try { console.warn('[subscribe] Using existing providerPlanId', { providerPlanId, currentPlanPrice, desired: amountCents }); } catch {}
     }
 
     // Build customer payload
@@ -267,11 +283,81 @@ export async function POST(req: Request) {
     }
     const subscriptionId = subscription?.id || subscription?.subscription?.id || null;
 
+    // Apply split immediately on the first charge (best-effort) to avoid timing issues
+    try {
+      const ENABLE_SPLIT = String(process.env.PAGARME_ENABLE_SPLIT || '').toLowerCase() === 'true';
+      const platformRecipientId = String(process.env.PLATFORM_RECIPIENT_ID || process.env.PAGARME_PLATFORM_RECIPIENT_ID || '').trim() || null;
+      if (ENABLE_SPLIT && subscriptionId && clinic?.id && platformRecipientId) {
+        const merchantRow = await prisma.merchant.findFirst({ where: { clinicId: String(clinic.id) }, select: { recipientId: true, splitPercent: true } });
+        if (merchantRow?.recipientId) {
+          // Resolve amount from OfferPrice logic already computed (amountCents from plan creation path)
+          const desiredCountry0 = String(((buyer as any)?.address?.country) || clinic?.country || 'BR').toUpperCase();
+          let priceRow0: any = null;
+          try {
+            if (selectedOffer) {
+              priceRow0 = await prisma.offerPrice.findFirst({ where: { offerId: String(selectedOffer.id), country: desiredCountry0, provider: 'KRXPAY' as any, active: true }, orderBy: { updatedAt: 'desc' } });
+              if (!priceRow0) priceRow0 = await prisma.offerPrice.findFirst({ where: { offerId: String(selectedOffer.id), country: desiredCountry0, active: true }, orderBy: { updatedAt: 'desc' } });
+            }
+          } catch {}
+          const grossCents0 = (() => {
+            if (priceRow0?.amountCents != null && Number(priceRow0.amountCents) > 0) return Number(priceRow0.amountCents);
+            if (selectedOffer?.priceCents != null && Number(selectedOffer.priceCents) > 0) return Number(selectedOffer.priceCents);
+            return Math.round(Number((product as any)?.price || 0) * 100) || 0;
+          })();
+          if (grossCents0 > 0) {
+            const clinicPercent0 = Math.max(0, Math.min(100, Number(merchantRow.splitPercent || 70)));
+            const clinicAmount0 = Math.round(grossCents0 * clinicPercent0 / 100);
+            const platformAmount0 = grossCents0 - clinicAmount0;
+            // Fetch subscription to locate the first charge and apply split (retry due to eventual consistency)
+            try {
+              let attempt = 0;
+              let chargeId0: string | null = null;
+              while (attempt < 15 && !chargeId0) {
+                const subObj = await pagarmeGetSubscription(String(subscriptionId)).catch((e) => {
+                  try { console.warn('[subscribe][split] get subscription failed', e?.message || e); } catch {}
+                  return null as any;
+                });
+                const ch = Array.isArray(subObj?.charges) ? subObj.charges[0] : (subObj?.latest_charge || null);
+                chargeId0 = ch?.id || null;
+                if (!chargeId0) {
+                  attempt++;
+                  try { console.warn('[subscribe][split] charge not ready, retrying', { subscriptionId, attempt }); } catch {}
+                  await new Promise((r) => setTimeout(r, 1000));
+                }
+              }
+              if (chargeId0) {
+                const splitRules0 = [
+                  { recipient_id: String(platformRecipientId), amount: platformAmount0, type: 'flat', liable: true, charge_processing_fee: true },
+                  { recipient_id: String(merchantRow.recipientId), amount: clinicAmount0, type: 'flat', liable: false, charge_processing_fee: false },
+                ];
+                try {
+                  await pagarmeUpdateCharge(String(chargeId0), { split: splitRules0 });
+                  try { console.warn('[subscribe][split] applied immediately', { subscriptionId, chargeId0, platformAmount0, clinicAmount0 }); } catch {}
+                } catch (e: any) {
+                  try { console.warn('[subscribe][split] update charge failed', e?.message || e); } catch {}
+                }
+              } else {
+                try { console.warn('[subscribe][split] no charge found after retries', { subscriptionId }); } catch {}
+              }
+            } catch {}
+          }
+        }
+      }
+    } catch {}
+
     // Upsert immediate into customer_subscriptions so Business > Subscriptions lists it right away
     try {
       if (subscriptionId && clinic?.id) {
         // Best-effort extraction of period dates
-        const subStatus = String(subscription?.status || subscription?.subscription?.status || 'ACTIVE');
+        const mapStatus = (s?: string) => {
+          const v = String(s || '').toLowerCase();
+          if (v === 'active') return 'ACTIVE';
+          if (v === 'trial' || v === 'trialing') return 'TRIAL';
+          if (v === 'past_due' || v === 'incomplete' || v === 'incomplete_expired') return 'PAST_DUE';
+          if (v === 'canceled' || v === 'cancelled') return 'CANCELED';
+          return 'ACTIVE';
+        };
+        const subStatus = mapStatus(subscription?.status || (subscription as any)?.subscription?.status || 'ACTIVE');
         const startAt: string | null = (subscription?.start_at || subscription?.startAt || null) as any;
         const curStart: string | null = (subscription?.current_period_start || subscription?.current_period?.start_at || null) as any;
         const curEnd: string | null = (subscription?.current_period_end || subscription?.current_period?.end_at || null) as any;
@@ -288,63 +374,117 @@ export async function POST(req: Request) {
         const merchantId = merchantRow?.id || null;
         if (merchantId) {
           const csId = crypto.randomUUID();
+          // Resolve or create internal Customer (like Stripe flow)
+          let internalCustomerId: string | null = null;
           try {
-            await prisma.$executeRawUnsafe(
-              `INSERT INTO customer_subscriptions (
-                 id, provider_subscription_id, status, customer_id, product_id, offer_id, merchant_id, start_at, current_period_start, current_period_end, metadata
-               ) VALUES (
-                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb
-               )
-               ON CONFLICT (provider_subscription_id) DO UPDATE SET
-                 status = EXCLUDED.status,
-                 current_period_start = EXCLUDED.current_period_start,
-                 current_period_end = EXCLUDED.current_period_end,
-                 updated_at = NOW(),
-                 metadata = COALESCE(customer_subscriptions.metadata, '{}'::jsonb) || EXCLUDED.metadata`,
-              csId,
-              String(subscriptionId),
-              subStatus,
-              null,
-              String(productId),
-              selectedOffer?.id ? String(selectedOffer.id) : null,
-              String(merchantId),
-              startAt,
-              curStart,
-              curEnd,
-              JSON.stringify(meta),
-            );
-          } catch (e) {
-            // If ON CONFLICT target is missing (no unique), fallback to existence check then insert
+            let cust: any = null;
             try {
-              const exists: any[] = await prisma.$queryRawUnsafe(
-                `SELECT 1 FROM customer_subscriptions WHERE provider_subscription_id = $1 LIMIT 1`,
-                String(subscriptionId)
-              );
-              if (!exists || !exists[0]) {
-                await prisma.$executeRawUnsafe(
-                  `INSERT INTO customer_subscriptions (
-                     id, provider_subscription_id, status, customer_id, product_id, offer_id, merchant_id, start_at, current_period_start, current_period_end, metadata
-                   ) VALUES (
-                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb
-                   )`,
-                  csId,
-                  String(subscriptionId),
-                  subStatus,
-                  null,
-                  String(productId),
-                  selectedOffer?.id ? String(selectedOffer.id) : null,
-                  String(merchantId),
-                  startAt,
-                  curStart,
-                  curEnd,
-                  JSON.stringify(meta),
+              cust = await prisma.customer.findFirst({ where: { email: meta.buyerEmail || undefined }, select: { id: true } });
+            } catch {}
+            if (!cust) {
+              try {
+                const colRows: any[] = await prisma.$queryRawUnsafe(
+                  "SELECT column_name FROM information_schema.columns WHERE table_name = 'customers' AND column_name IN ('merchantId','merchant_id')"
                 );
-              } else {
+                const colNames = Array.isArray(colRows) ? colRows.map((r: any) => r.column_name) : [];
+                const hasCamel = colNames.includes('merchantId');
+                const hasSnake = colNames.includes('merchant_id');
+                if (hasCamel) {
+                  cust = await prisma.customer.create({ data: { merchantId: merchantId || '', name: meta.buyerName, email: meta.buyerEmail, phone: buyer?.phone || null, metadata: { clinicId: meta.clinicId, productId: meta.productId, offerId: meta.offerId } as any } });
+                } else if (hasSnake) {
+                  const id = crypto.randomUUID();
+                  await prisma.$executeRawUnsafe(
+                    `INSERT INTO "customers" ("id", "merchant_id", "name", "email", "phone") VALUES ($1, $2, $3, $4, $5)`,
+                    id,
+                    merchantId || '',
+                    meta.buyerName,
+                    meta.buyerEmail,
+                    buyer?.phone || null,
+                  );
+                  cust = { id };
+                } else {
+                  const id = crypto.randomUUID();
+                  await prisma.$executeRawUnsafe(
+                    `INSERT INTO "customers" ("id", "name", "email", "phone") VALUES ($1, $2, $3, $4)`,
+                    id,
+                    meta.buyerName,
+                    meta.buyerEmail,
+                    buyer?.phone || null,
+                  );
+                  cust = { id };
+                }
+              } catch {}
+            }
+            internalCustomerId = cust?.id || null;
+          } catch {}
+
+          // Decide currency and price_cents using OfferPrice (prefer KRXPAY for country)
+          let desiredCountry = 'BR';
+          try { desiredCountry = String(((buyer as any)?.address?.country) || clinic?.country || 'BR').toUpperCase(); } catch {}
+          let priceRowForInsert: any = null;
+          try {
+            if (selectedOffer) {
+              priceRowForInsert = await prisma.offerPrice.findFirst({
+                where: { offerId: String(selectedOffer.id), country: desiredCountry, provider: 'KRXPAY' as any, active: true },
+                orderBy: { updatedAt: 'desc' },
+              });
+              if (!priceRowForInsert) {
+                priceRowForInsert = await prisma.offerPrice.findFirst({
+                  where: { offerId: String(selectedOffer.id), country: desiredCountry, active: true },
+                  orderBy: { updatedAt: 'desc' },
+                });
+              }
+            }
+          } catch {}
+          const currencyVal = (priceRowForInsert?.currency || (selectedOffer as any)?.currency || 'BRL') as any;
+          const unitAmount = (() => {
+            if (priceRowForInsert?.amountCents != null && Number(priceRowForInsert.amountCents) > 0) return Number(priceRowForInsert.amountCents);
+            if (selectedOffer?.priceCents != null && Number(selectedOffer.priceCents) > 0) return Number(selectedOffer.priceCents);
+            return Math.round(Number((product as any)?.price || 0) * 100) || 0;
+          })();
+          if (!unitAmount || unitAmount <= 0) {
+            return NextResponse.json({ error: 'Preço inválido (zero) para assinatura', details: { country: desiredCountry, offerId: selectedOffer?.id || null, productId } }, { status: 400 });
+          }
+
+          // Try to INSERT full row like Stripe to ensure visibility; if fails, fallback to UPDATE
+          const exists: any[] = await prisma.$queryRawUnsafe(
+            'SELECT id FROM "customer_subscriptions" WHERE provider_subscription_id = $1 LIMIT 1',
+            String(subscriptionId)
+          );
+          if (!exists || exists.length === 0) {
+            try {
+              const newId = crypto.randomUUID();
+              await prisma.$executeRawUnsafe(
+                'INSERT INTO "customer_subscriptions" ("id","merchant_id","customer_id","product_id","offer_id","provider","account_id","customer_provider_id","provider_subscription_id","vault_payment_method_id","status","start_at","trial_ends_at","current_period_start","current_period_end","cancel_at","canceled_at","price_cents","currency","metadata") VALUES ($1, $2, $3, $4, $5, $6::"PaymentProvider", $7, $8, $9, $10, $11::"SubscriptionStatus", $12::timestamp, $13::timestamp, $14::timestamp, $15::timestamp, $16::timestamp, $17::timestamp, $18, $19::"Currency", $20::jsonb)'
+                , newId
+                , String(merchantId)
+                , internalCustomerId || null
+                , String(productId)
+                , (selectedOffer?.id ? String(selectedOffer.id) : null)
+                , 'KRXPAY'
+                , null
+                , null
+                , String(subscriptionId)
+                , null
+                , subStatus
+                , startAt
+                , null
+                , curStart
+                , curEnd
+                , null
+                , null
+                , unitAmount
+                , String(currencyVal)
+                , JSON.stringify(meta)
+              );
+            } catch (insErr) {
+              // Fallback to UPDATE if INSERT fails due to schema differences
+              try {
                 await prisma.$executeRawUnsafe(
                   `UPDATE customer_subscriptions
-                      SET status = $2,
-                          current_period_start = $3,
-                          current_period_end = $4,
+                      SET status = $2::"SubscriptionStatus",
+                          current_period_start = $3::timestamp,
+                          current_period_end = $4::timestamp,
                           updated_at = NOW(),
                           metadata = COALESCE(metadata, '{}'::jsonb) || $5::jsonb
                     WHERE provider_subscription_id = $1`,
@@ -354,8 +494,23 @@ export async function POST(req: Request) {
                   curEnd,
                   JSON.stringify(meta),
                 );
-              }
-            } catch {}
+              } catch {}
+            }
+          } else {
+            await prisma.$executeRawUnsafe(
+              `UPDATE customer_subscriptions
+                  SET status = $2::"SubscriptionStatus",
+                      current_period_start = $3::timestamp,
+                      current_period_end = $4::timestamp,
+                      updated_at = NOW(),
+                      metadata = COALESCE(metadata, '{}'::jsonb) || $5::jsonb
+                WHERE provider_subscription_id = $1`,
+              String(subscriptionId),
+              subStatus,
+              curStart,
+              curEnd,
+              JSON.stringify(meta),
+            );
           }
         }
       }
@@ -458,7 +613,24 @@ export async function POST(req: Request) {
         const tableExists = Array.isArray(existsRows) && !!(existsRows[0]?.exists || existsRows[0]?.exists === true);
         if (doctorId && tableExists) {
           const txId = crypto.randomUUID();
-          const amountCents = (selectedOffer ? Number(selectedOffer.priceCents || 0) : Math.round(Number(product?.price as any) * 100)) || 0;
+          // Resolve amount for initial transaction using OfferPrice as well
+          let trxCountry = 'BR';
+          try { trxCountry = String(((buyer as any)?.address?.country) || clinic?.country || 'BR').toUpperCase(); } catch {}
+          let trxRow: any = null;
+          try {
+            if (selectedOffer) {
+              trxRow = await prisma.offerPrice.findFirst({ where: { offerId: String(selectedOffer.id), country: trxCountry, provider: 'KRXPAY' as any, active: true }, orderBy: { updatedAt: 'desc' } });
+              if (!trxRow) trxRow = await prisma.offerPrice.findFirst({ where: { offerId: String(selectedOffer.id), country: trxCountry, active: true }, orderBy: { updatedAt: 'desc' } });
+            }
+          } catch {}
+          const amountCents = (() => {
+            if (trxRow?.amountCents != null && Number(trxRow.amountCents) > 0) return Number(trxRow.amountCents);
+            if (selectedOffer) return Number(selectedOffer.priceCents || 0) || 0;
+            return Math.round(Number(product?.price as any) * 100) || 0;
+          })();
+          if (!amountCents || amountCents <= 0) {
+            return NextResponse.json({ error: 'Preço zero não permitido para transação', details: { country: trxCountry, offerId: selectedOffer?.id || null, productId } }, { status: 400 });
+          }
           // Estimate split for initial row; webhook will adjust if needed (hybrid fees)
           let clinicSplitPercent = 70;
           let platformFeeBps = 0;

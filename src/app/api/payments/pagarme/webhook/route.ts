@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { verifyPagarmeWebhookSignature, pagarmeUpdateCharge } from '@/lib/pagarme';
-import { pagarmeGetOrder } from '@/lib/pagarme';
+import { verifyPagarmeWebhookSignature, pagarmeUpdateCharge, pagarmeGetOrder } from '@/lib/payments/pagarme/sdk';
 import { sendEmail } from '@/lib/email';
 import { baseTemplate } from '@/email-templates/layouts/base';
 import crypto from 'crypto';
@@ -98,17 +97,39 @@ export async function POST(req: Request) {
         const ENABLE_SPLIT = String(process.env.PAGARME_ENABLE_SPLIT || '').toLowerCase() === 'true';
         const platformRecipientId = String(process.env.PLATFORM_RECIPIENT_ID || process.env.PAGARME_PLATFORM_RECIPIENT_ID || '').trim() || null;
         
-        if (ENABLE_SPLIT && subscriptionIdInCharge && chargeIdForSplit && clinicIdInMeta && platformRecipientId) {
+        // Fallback: resolve clinicId and split percent via internal DB when metadata lacks it
+        let resolvedClinicId: string | null = clinicIdInMeta;
+        let resolvedSplitPercent: number | null = null;
+        if (!resolvedClinicId && subscriptionIdInCharge) {
+          try {
+            const subRows = await prisma.$queryRawUnsafe<any[]>(
+              `SELECT cs.merchant_id, cs.product_id, cs.offer_id, m.recipient_id, m.split_percent, p.clinic_id
+                 FROM customer_subscriptions cs
+                 LEFT JOIN merchants m ON m.id = cs.merchant_id
+                 LEFT JOIN products p ON p.id = cs.product_id
+                WHERE cs.provider_subscription_id = $1
+                LIMIT 1`,
+              String(subscriptionIdInCharge)
+            );
+            const r = subRows?.[0] || null;
+            if (r) {
+              resolvedClinicId = r.clinic_id || null;
+              resolvedSplitPercent = (r.split_percent != null) ? Number(r.split_percent) : null;
+            }
+          } catch {}
+        }
+
+        if (ENABLE_SPLIT && subscriptionIdInCharge && chargeIdForSplit && (clinicIdInMeta || resolvedClinicId) && platformRecipientId) {
           // Lookup clinic merchant to get recipientId and splitPercent
           const merchant = await prisma.merchant.findFirst({
-            where: { clinicId: String(clinicIdInMeta) },
+            where: { clinicId: String(clinicIdInMeta || resolvedClinicId) },
             select: { recipientId: true, splitPercent: true },
           });
           
           if (merchant?.recipientId) {
             const totalCents = Number(chargeData?.amount || 0);
             if (totalCents > 0) {
-              const clinicPercent = Math.max(0, Math.min(100, Number(merchant.splitPercent || 70)));
+              const clinicPercent = Math.max(0, Math.min(100, Number((resolvedSplitPercent != null ? resolvedSplitPercent : merchant.splitPercent) || 70)));
               const clinicAmount = Math.round(totalCents * clinicPercent / 100);
               const platformAmount = totalCents - clinicAmount;
               
@@ -132,7 +153,7 @@ export async function POST(req: Request) {
               console.log('[pagarme][webhook][charge.created] applying split to subscription charge', {
                 chargeId: chargeIdForSplit,
                 subscriptionId: subscriptionIdInCharge,
-                clinicId: clinicIdInMeta,
+                clinicId: clinicIdInMeta || resolvedClinicId,
                 platformAmount,
                 clinicAmount,
               });

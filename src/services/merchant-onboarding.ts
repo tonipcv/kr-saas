@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { pagarmeCreateRecipient, pagarmeUpdateRecipient, isV5 } from '@/lib/pagarme';
+import { pagarmeCreateRecipient, pagarmeUpdateRecipient, isV5 } from '@/lib/payments/pagarme/sdk';
 
 export type MerchantApplicationPayload = {
   clinicId: string;

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getStripeClientForCurrentDoctor } from '@/lib/payments/stripe-client'
-import { getStripeFromClinicIntegration } from '@/lib/payments/stripe-from-integration'
+import { getStripeFromClinicIntegration } from '@/lib/payments/stripe/integration'
 
 export async function GET(req: Request) {
   try {

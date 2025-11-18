@@ -1225,12 +1225,10 @@ export default function EditProductPage({ params }: PageProps) {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {/* Header row */}
+                  {/* Header row (Price and Methods removed) */}
                   <div className="hidden md:grid grid-cols-12 text-xs text-gray-500 px-3">
-                    <div className="col-span-4">Name</div>
-                    <div className="col-span-2">Type</div>
-                    <div className="col-span-2">Price</div>
-                    <div className="col-span-2">Methods</div>
+                    <div className="col-span-6">Name</div>
+                    <div className="col-span-4">Type</div>
                     <div className="col-span-2 text-right">Actions</div>
                   </div>
                   {/* Offers list */}
@@ -1240,12 +1238,7 @@ export default function EditProductPage({ params }: PageProps) {
                       <div className="text-sm text-gray-500 px-3">No offers yet. Click "+ New offer" to create.</div>
                     )}
                     {offers.map((of) => {
-                      const price = (Number(of.priceCents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: of.currency || 'BRL' });
                       const type = of.isSubscription ? `${of.intervalCount || 1} ${of.intervalUnit || 'MONTH'}` : 'One-time';
-                      const pixOn = (of.paymentMethods || []).some(x => x.method === 'PIX' && x.active);
-                      const cardOn = (of.paymentMethods || []).some(x => x.method === 'CARD' && x.active);
-                      const pixExists = (of.paymentMethods || []).some(x => x.method === 'PIX');
-                      const cardExists = (of.paymentMethods || []).some(x => x.method === 'CARD');
                       return (
                         <div
                           key={of.id}
@@ -1258,7 +1251,7 @@ export default function EditProductPage({ params }: PageProps) {
                             if (e.key === 'Enter') handleOpenEditOffer(of);
                           }}
                         >
-                          <div className="col-span-4">
+                          <div className="col-span-6">
                             <div className="text-sm font-medium text-gray-900">{of.name}</div>
                             <div className="mt-0.5 flex items-center gap-2">
                               <span className="text-xs text-gray-500 font-mono break-all" title={of.id}>ID: {of.id}</span>
@@ -1274,59 +1267,7 @@ export default function EditProductPage({ params }: PageProps) {
                               </button>
                             </div>
                           </div>
-                          <div className="col-span-2 text-sm text-gray-700">{type}</div>
-                          <div className="col-span-2">
-                            <div className="text-sm text-gray-900">{price}</div>
-                            <div className="text-[11px] text-gray-500">{of.currency}</div>
-                          </div>
-                          <div className="col-span-2">
-                            <div className="flex flex-col gap-1" onDoubleClick={(e) => e.stopPropagation()}>
-                              <div className="flex gap-1">
-                                {(['PIX','CARD'] as const).map((m) => {
-                                  const on = m === 'PIX' ? pixOn : cardOn;
-                                  return (
-                                    <button key={m} type="button" onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleUpdateOfferMethods(of.id, [
-                                        { method: 'PIX', active: m === 'PIX' ? !pixOn : pixOn },
-                                        { method: 'CARD', active: m === 'CARD' ? !cardOn : cardOn },
-                                      ]);
-                                    }} onDoubleClick={(e) => e.stopPropagation()} className={`px-2 py-1 rounded-md text-[11px] border ${on ? 'bg-gray-100 border-gray-300 text-gray-800' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}>{m}</button>
-                                  );
-                                })}
-                              </div>
-                              <div className="flex gap-1">
-                                {pixExists && (
-                                  <button
-                                    type="button"
-                                    className="px-2 py-1 rounded-md text-[11px] border bg-white border-gray-200 text-gray-700 hover:bg-red-50 hover:text-red-700"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const next = (of.paymentMethods || [])
-                                        .filter(x => (x.method === 'PIX' || x.method === 'CARD') && x.method !== 'PIX')
-                                        .map(x => ({ method: x.method as 'PIX'|'CARD', active: !!x.active }));
-                                      handleUpdateOfferMethods(of.id, next);
-                                    }}
-                                    onDoubleClick={(e) => e.stopPropagation()}
-                                  >Excluir PIX</button>
-                                )}
-                                {cardExists && (
-                                  <button
-                                    type="button"
-                                    className="px-2 py-1 rounded-md text-[11px] border bg-white border-gray-200 text-gray-700 hover:bg-red-50 hover:text-red-700"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const next = (of.paymentMethods || [])
-                                        .filter(x => (x.method === 'PIX' || x.method === 'CARD') && x.method !== 'CARD')
-                                        .map(x => ({ method: x.method as 'PIX'|'CARD', active: !!x.active }));
-                                      handleUpdateOfferMethods(of.id, next);
-                                    }}
-                                    onDoubleClick={(e) => e.stopPropagation()}
-                                  >Excluir CARD</button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
+                          <div className="col-span-4 text-sm text-gray-700">{type}</div>
                           <div className="col-span-2 text-right flex items-center justify-end gap-2">
                             <Switch checked={of.active} onCheckedChange={(checked) => handleToggleOfferActive(of.id, checked)} onClick={(e) => e.stopPropagation()} />
                             <DropdownMenu>

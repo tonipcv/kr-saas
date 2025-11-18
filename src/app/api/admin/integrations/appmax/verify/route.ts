@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { AppmaxClient } from '@/lib/appmax'
+import { AppmaxClient } from '@/lib/payments/appmax/sdk'
 
 async function resolveMerchantIdFromClinic(clinicId: string) {
   const merchant = await prisma.merchant.findUnique({ where: { clinicId } })

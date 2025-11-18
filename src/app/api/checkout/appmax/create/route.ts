@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { AppmaxClient, buildAppmaxClientForMerchant } from '@/lib/appmax'
+import { AppmaxClient, buildAppmaxClientForMerchant } from '@/lib/payments/appmax/sdk'
 
 function jsonError(status: number, error: string, step: string, details?: any) {
   try { console.error('[appmax][create][error]', { step, error, details }); } catch {}

@@ -660,7 +660,12 @@ export default function BrandedCheckoutPage() {
   useEffect(() => {
     try {
       const rows = offerPriceRows || [];
-      const row = rows.find(r => String(r.provider).toUpperCase() === cardProvider);
+      // Prefer price from the routed provider; if not available, fallback to any available row for current country/currency
+      let row = rows.find(r => String(r.provider).toUpperCase() === cardProvider);
+      if (!row && rows.length > 0) {
+        // Prefer KRXPAY as a sensible default for card display when available, otherwise first row
+        row = rows.find(r => String(r.provider).toUpperCase() === 'KRXPAY') || rows[0];
+      }
       const cents = Number.isFinite(Number(row?.amountCents)) ? Number(row.amountCents) : null;
       setOfferPriceCents(cents);
     } catch {

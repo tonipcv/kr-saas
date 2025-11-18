@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { pagarmeCreatePlan, isV5 } from '@/lib/pagarme';
+import { pagarmeCreatePlan, isV5 } from '@/lib/payments/pagarme/sdk';
 
 export async function POST(req: Request) {
   try {

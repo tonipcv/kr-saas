@@ -11,11 +11,11 @@ import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/lib/events';
 import { EventActor, EventType, PaymentMethod, PaymentProvider } from '@prisma/client';
 import crypto from 'crypto';
-import { pagarmeCreateOrder, pagarmeGetOrder, isV5, pagarmeCreateCustomer, pagarmeCreateCustomerCard } from '@/lib/pagarme';
+import { pagarmeCreateOrder, pagarmeGetOrder, isV5, pagarmeCreateCustomer, pagarmeCreateCustomerCard } from '@/lib/payments/pagarme/sdk';
 import { sendEmail } from '@/lib/email';
 import { baseTemplate } from '@/email-templates/layouts/base';
 import { PRICING } from '@/lib/pricing';
-import { selectProvider } from '@/lib/payments/routing/selectProvider';
+import { selectProvider } from '@/lib/payments/core/routing';
 import Stripe from 'stripe';
 import { getCurrencyForCountry } from '@/lib/payments/countryCurrency';
 

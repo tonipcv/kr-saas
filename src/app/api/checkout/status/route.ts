@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { pagarmeGetOrder } from '@/lib/pagarme';
+import { pagarmeGetOrder } from '@/lib/payments/pagarme/sdk';
 import { prisma } from '@/lib/prisma';
 import Stripe from 'stripe';
 

@@ -399,10 +399,9 @@ export default function ProductsPage() {
                   <thead className="bg-gray-50/80">
                     <tr className="text-left text-xs text-gray-600">
                       <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Name</th>
-                      <th className="px-3 py-3.5 font-medium">Type</th>
-                      <th className="px-3 py-3.5 font-medium">Default gateway</th>
-                      <th className="px-3 py-3.5 font-medium">ID</th>
                       <th className="px-3 py-3.5 font-medium">Status</th>
+                      <th className="px-3 py-3.5 font-medium">Type</th>
+                      <th className="px-3 py-3.5 font-medium">ID</th>
                       <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
                     </tr>
                   </thead>
@@ -421,7 +420,7 @@ export default function ProductsPage() {
                           }
                         }}
                       >
-                        <td className="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                        <td className="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm text-gray-900 sm:pl-6">
                           <Link
                             href={`/business/products/${product.id}`}
                             title={product.name}
@@ -431,36 +430,22 @@ export default function ProductsPage() {
                             {product.name}
                           </Link>
                         </td>
-                        <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
-                          {product.type === 'SUBSCRIPTION' ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-900 text-white">Subscription</span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-800 text-white/90">Product</span>
-                          )}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
-                          {defaultProviders[product.id]
-                            ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200">
-                                {defaultProviders[product.id]}
-                              </span>
-                            )
-                            : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">
-                                Platform default
-                              </span>
-                            )}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
-                          <span title={product.id}>{product.id}</span>
-                        </td>
-                        
                         <td className="whitespace-nowrap px-3 py-3.5 text-sm">
                           {product.isActive ? (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Active</span>
                           ) : (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Inactive</span>
                           )}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
+                          {product.type === 'SUBSCRIPTION' ? (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-medium text-gray-800 ring-1 ring-inset ring-gray-200 bg-white">Subscription</span>
+                          ) : (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-medium text-gray-700 ring-1 ring-inset ring-gray-200 bg-white">Product</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
+                          <span title={product.id}>{product.id}</span>
                         </td>
                         <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                           <div className="relative inline-block text-left">

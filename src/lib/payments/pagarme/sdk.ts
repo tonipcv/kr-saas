@@ -37,6 +37,29 @@ export async function pagarmeListSubscriptions(params: Record<string, any> = {})
   return data;
 }
 
+export async function pagarmeGetSubscription(subscriptionId: string) {
+  const res = await fetch(`${PAGARME_BASE_URL}/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    method: 'GET',
+    headers: authHeaders(),
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  let data: any = {};
+  try { data = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    const msgFromArray = Array.isArray(data?.errors)
+      ? data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(' | ')
+      : undefined;
+    const msg = msgFromArray || data?.message || data?.error || text || `Pagarme error ${res.status}`;
+    const err: any = new Error(`[Pagarme ${res.status}] ${msg}`);
+    err.status = res.status;
+    err.responseText = text;
+    err.responseJson = data;
+    throw err;
+  }
+  return data;
+}
+
 // ===== Subscriptions (v5) =====
 export async function pagarmeCreatePlan(payload: Record<string, any>) {
   // Typical payload:

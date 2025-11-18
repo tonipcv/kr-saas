@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { pagarmeCreateBankAccount, pagarmeCreateRecipient, pagarmeGetRecipient, pagarmeUpdateRecipient, isV5 } from '@/lib/pagarme';
+import { pagarmeCreateBankAccount, pagarmeCreateRecipient, pagarmeGetRecipient, pagarmeUpdateRecipient, isV5 } from '@/lib/payments/pagarme/sdk';
 
 // Create or update recipient for a clinic
 // Body: { clinicId, legalInfo, bankAccount, splitPercent?, platformFeeBps? }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { pagarmeCancelCharge, pagarmeRefundCharge, pagarmeGetCharge } from '@/lib/pagarme';
+import { pagarmeCancelCharge, pagarmeRefundCharge, pagarmeGetCharge } from '@/lib/payments/pagarme/sdk';
 
 export async function POST(req: Request) {
   try {

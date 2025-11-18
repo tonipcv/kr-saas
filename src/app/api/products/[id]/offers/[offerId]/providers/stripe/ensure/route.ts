@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getStripeClientForCurrentDoctor } from '@/lib/payments/stripe-client'
-import { getStripeFromClinicIntegration } from '@/lib/payments/stripe-from-integration'
+import { getStripeFromClinicIntegration } from '@/lib/payments/stripe/integration'
 
 function mapInterval(unit?: string): 'day'|'week'|'month'|'year'|null {
   const u = String(unit || '').toUpperCase()

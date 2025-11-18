@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { pagarmeCreateCustomer, pagarmeCreateCustomerCard, isV5 } from '@/lib/pagarme'
+import { pagarmeCreateCustomer, pagarmeCreateCustomerCard, isV5 } from '@/lib/payments/pagarme/sdk'
 
 // Tokenize card for KRXPAY (Pagar.me) and return a provider card_id to be used as a token.
 // This avoids sending raw PAN/CVV to the general checkout endpoint.

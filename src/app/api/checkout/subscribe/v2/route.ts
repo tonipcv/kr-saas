@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { PaymentMethod, PaymentProvider, SubscriptionStatus } from '@prisma/client';
-import { getProviderClient } from '@/lib/providers/factory';
 
 // Minimal helpers
 function onlyDigits(s: string) { return (s || '').replace(/\D/g, ''); }
@@ -21,9 +20,8 @@ function onlyDigits(s: string) { return (s || '').replace(/\D/g, ''); }
 
 export async function POST(req: Request) {
   try {
-    // Feature flag to avoid impacting existing Pagar.me route
-    const ENABLED = String(process.env.SUBSCRIBE_V2_ENABLED || 'true').toLowerCase() === 'true';
-    if (!ENABLED) return NextResponse.json({ error: 'subscribe v2 disabled' }, { status: 404 });
+    // Temporarily disabled until provider factory is implemented
+    return NextResponse.json({ error: 'subscribe v2 disabled' }, { status: 404 });
 
     const body = await req.json();
     const { productId, offerId, slug, country, currency, buyer, payment, saveMethod } = body || {};

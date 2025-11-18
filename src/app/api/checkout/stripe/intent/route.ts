@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getStripeFromClinicIntegration } from '@/lib/payments/stripe-from-integration'
+import { getStripeFromClinicIntegration } from '@/lib/payments/stripe/integration'
 
 export async function POST(req: Request) {
   try {
