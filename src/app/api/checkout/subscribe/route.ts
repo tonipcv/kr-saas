@@ -531,30 +531,36 @@ export async function POST(req: Request) {
           );
           if (!exists || exists.length === 0) {
             try {
-              const newId = crypto.randomUUID();
-              await prisma.$executeRawUnsafe(
-                'INSERT INTO "customer_subscriptions" ("id","merchant_id","customer_id","product_id","offer_id","provider","account_id","customer_provider_id","provider_subscription_id","vault_payment_method_id","status","start_at","trial_ends_at","current_period_start","current_period_end","cancel_at","canceled_at","price_cents","currency","metadata") VALUES ($1, $2, $3, $4, $5, $6::"PaymentProvider", $7, $8, $9, $10, $11::"SubscriptionStatus", $12::timestamp, $13::timestamp, $14::timestamp, $15::timestamp, $16::timestamp, $17::timestamp, $18, $19::"Currency", $20::jsonb)'
-                , newId
-                , String(merchantId)
-                , internalCustomerId || null
-                , String(productId)
-                , (selectedOffer?.id ? String(selectedOffer.id) : null)
-                , 'KRXPAY'
-                , null
-                , null
-                , String(subscriptionId)
-                , null
-                , subStatus
-                , startAt
-                , null
-                , curStart
-                , curEnd
-                , null
-                , null
-                , unitAmount
-                , String(currencyVal)
-                , JSON.stringify(meta)
-              );
+              // Only attempt INSERT when we have required identifiers to satisfy NOT NULL constraints
+              if (internalCustomerId && subscriptionId) {
+                const newId = crypto.randomUUID();
+                await prisma.$executeRawUnsafe(
+                  'INSERT INTO "customer_subscriptions" ("id","merchant_id","customer_id","product_id","offer_id","provider","account_id","customer_provider_id","provider_subscription_id","vault_payment_method_id","status","start_at","trial_ends_at","current_period_start","current_period_end","cancel_at","canceled_at","price_cents","currency","metadata") VALUES ($1, $2, $3, $4, $5, $6::"PaymentProvider", $7, $8, $9, $10, $11::"SubscriptionStatus", $12::timestamp, $13::timestamp, $14::timestamp, $15::timestamp, $16::timestamp, $17::timestamp, $18, $19::"Currency", $20::jsonb)'
+                  , newId
+                  , String(merchantId)
+                  , String(internalCustomerId)
+                  , String(productId)
+                  , (selectedOffer?.id ? String(selectedOffer.id) : null)
+                  , 'KRXPAY'
+                  , null
+                  , null
+                  , String(subscriptionId)
+                  , null
+                  , subStatus
+                  , startAt
+                  , null
+                  , curStart
+                  , curEnd
+                  , null
+                  , null
+                  , unitAmount
+                  , String(currencyVal)
+                  , JSON.stringify(meta)
+                );
+              } else {
+                // Missing required fields; skip INSERT and let UPDATE path handle it later when data is available
+                throw new Error('__SKIP_INSERT__');
+              }
             } catch (insErr) {
               // Fallback to UPDATE if INSERT fails due to schema differences
               try {
@@ -689,7 +695,7 @@ export async function POST(req: Request) {
           "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'payment_transactions') AS exists"
         );
         const tableExists = Array.isArray(existsRows) && !!(existsRows[0]?.exists || existsRows[0]?.exists === true);
-        if (doctorId && tableExists) {
+        if (doctorId && tableExists && subscriptionId) {
           const txId = crypto.randomUUID();
           // Resolve amount for initial transaction using OfferPrice as well
           let trxCountry = 'BR';
@@ -730,9 +736,10 @@ export async function POST(req: Request) {
           const platformAmountCents = Math.max(0, grossCents - clinicAmountCents);
           await prisma.$executeRawUnsafe(
             `INSERT INTO payment_transactions (id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, product_id, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, installments, payment_method_type, status, raw_payload)
-             VALUES ($1, 'pagarme', $2, $3, $4, $5, $6, $7, $8, $9, $10, 'BRL', $11, $12, 'processing', $13::jsonb)`,
+             VALUES ($1, 'pagarme', $2, $3, $4, $5, $6, $7, $8, $9, $10, 'BRL', $11, $12, 'processing', $13::jsonb)
+             ON CONFLICT (provider, provider_order_id) DO NOTHING`,
             txId,
-            subscriptionId ? String(subscriptionId) : null,
+            String(subscriptionId),
             String(doctorId),
             String(profileId),
             clinic?.id ? String(clinic.id) : null,

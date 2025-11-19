@@ -208,28 +208,73 @@ export async function createPagarmeSubscription(params: LegacyCreatePagarmeSubsc
       const meta = { buyerName: params.customer?.name || null, buyerEmail: params.customer?.email || null, clinicId: clinic?.id || null, productId: String(product?.id || ''), offerId: String(offer?.id || '') } as any;
       const merchantRow = await prisma.merchant.findFirst({ where: { clinicId: String(clinic.id) }, select: { id: true } });
       const merchantId = merchantRow?.id || null;
+      
+      // Resolve or create internal Customer
+      let internalCustomerId: string | null = null;
+      try {
+        let cust: any = null;
+        try {
+          cust = await prisma.customer.findFirst({ where: { email: String(params.customer?.email || '') }, select: { id: true } });
+        } catch {}
+        if (!cust && merchantId) {
+          try {
+            const colRows: any[] = await prisma.$queryRawUnsafe(
+              "SELECT column_name FROM information_schema.columns WHERE table_name = 'customers' AND column_name IN ('merchantId','merchant_id')"
+            );
+            const colNames = Array.isArray(colRows) ? colRows.map((r: any) => r.column_name) : [];
+            const hasCamel = colNames.includes('merchantId');
+            const hasSnake = colNames.includes('merchant_id');
+            if (hasCamel) {
+              cust = await prisma.customer.create({ data: { merchantId: merchantId, name: params.customer?.name, email: params.customer?.email, phone: params.customer?.phone || null, metadata: { clinicId: clinic?.id, productId: product?.id, offerId: offer?.id } as any } });
+            } else if (hasSnake) {
+              const id = crypto.randomUUID();
+              await prisma.$executeRawUnsafe(
+                `INSERT INTO "customers" ("id", "merchant_id", "name", "email", "phone") VALUES ($1, $2, $3, $4, $5)`,
+                id, merchantId, params.customer?.name, params.customer?.email, params.customer?.phone || null
+              );
+              cust = { id };
+            } else {
+              const id = crypto.randomUUID();
+              await prisma.$executeRawUnsafe(
+                `INSERT INTO "customers" ("id", "name", "email", "phone") VALUES ($1, $2, $3, $4)`,
+                id, params.customer?.name, params.customer?.email, params.customer?.phone || null
+              );
+              cust = { id };
+            }
+          } catch {}
+        }
+        internalCustomerId = cust?.id || null;
+      } catch {}
+      
       if (merchantId) {
         // Upsert into customer_subscriptions
         const exists: any[] = await prisma.$queryRawUnsafe('SELECT id FROM "customer_subscriptions" WHERE provider_subscription_id = $1 LIMIT 1', String(subscriptionId));
         if (!exists || exists.length === 0) {
           const newId = crypto.randomUUID();
           try {
-            await prisma.$executeRawUnsafe(
-              'INSERT INTO "customer_subscriptions" ("id","merchant_id","product_id","offer_id","provider","provider_subscription_id","status","start_at","current_period_start","current_period_end","price_cents","currency","metadata") VALUES ($1,$2,$3,$4,$5::"PaymentProvider",$6,$7::"SubscriptionStatus",$8::timestamp,$9::timestamp,$10::timestamp,$11,$12::"Currency",$13::jsonb)',
-              newId,
-              String(merchantId),
-              String(product?.id || ''),
-              String(offer?.id || ''),
-              'KRXPAY',
-              String(subscriptionId),
-              mapStatus(subStatus),
-              startAt,
-              curStart,
-              curEnd,
-              unitAmount,
-              String(currency),
-              JSON.stringify(meta),
-            );
+            // Only INSERT when we have all required fields (merchant_id, customer_id, provider_subscription_id)
+            if (merchantId && internalCustomerId && subscriptionId) {
+              await prisma.$executeRawUnsafe(
+                'INSERT INTO "customer_subscriptions" ("id","merchant_id","customer_id","product_id","offer_id","provider","provider_subscription_id","status","start_at","current_period_start","current_period_end","price_cents","currency","metadata") VALUES ($1,$2,$3,$4,$5,$6::"PaymentProvider",$7,$8::"SubscriptionStatus",$9::timestamp,$10::timestamp,$11::timestamp,$12,$13::"Currency",$14::jsonb)',
+                newId,
+                String(merchantId),
+                String(internalCustomerId),
+                String(product?.id || ''),
+                String(offer?.id || ''),
+                'KRXPAY',
+                String(subscriptionId),
+                mapStatus(subStatus),
+                startAt,
+                curStart,
+                curEnd,
+                unitAmount,
+                String(currency),
+                JSON.stringify(meta),
+              );
+            } else {
+              // Missing required fields; log and skip INSERT
+              try { console.warn('[subscribe][persist] skip customer_subscriptions insert - missing required fields', { hasMerchant: !!merchantId, hasCustomer: !!internalCustomerId, hasSubscription: !!subscriptionId }); } catch {}
+            }
           } catch (persistErr: any) {
             try { console.warn('[subscribe][persist] skip customer_subscriptions insert', { message: persistErr?.message }); } catch {}
           }
@@ -250,11 +295,38 @@ export async function createPagarmeSubscription(params: LegacyCreatePagarmeSubsc
         const tableExists = Array.isArray(existsRows) && !!(existsRows[0]?.exists || existsRows[0]?.exists === true);
         if (tableExists) {
           const txId = crypto.randomUUID();
+          // Resolve doctorId for better visibility
+          let doctorId: string | null = clinic?.ownerId ? String(clinic.ownerId) : null;
+          let patientProfileId: string | null = null;
+          // Try to get patient profile
+          if (doctorId && params.customer?.email) {
+            try {
+              const u = await prisma.user.findUnique({ where: { email: String(params.customer.email) }, select: { id: true } });
+              if (u?.id) {
+                const prof = await prisma.patientProfile.findUnique({ 
+                  where: { doctorId_userId: { doctorId: String(doctorId), userId: String(u.id) } }, 
+                  select: { id: true } 
+                } as any);
+                patientProfileId = prof?.id || null;
+              }
+            } catch {}
+          }
+          // Compute split amounts for initial row
+          const clinicSplitPercent = Math.max(0, Math.min(100, Number(merchant?.splitPercent || 70)));
+          const platformFeeBps = Number(merchant?.platformFeeBps || 0);
+          const transactionFeeCents = Number(merchant?.transactionFeeCents || 0);
+          const clinicShare = Math.round(unitAmount * (clinicSplitPercent / 100));
+          const feePercent = Math.round(unitAmount * (platformFeeBps / 10000));
+          const feeFlat = transactionFeeCents;
+          const platformFeeTotal = Math.max(0, feePercent + feeFlat);
+          const clinicAmountCents = Math.max(0, clinicShare - platformFeeTotal);
+          const platformAmountCents = Math.max(0, unitAmount - clinicAmountCents);
           try {
             await prisma.$executeRawUnsafe(
-              'INSERT INTO payment_transactions (id, provider, provider_order_id, provider_charge_id, amount_cents, currency, status, metadata) VALUES ($1,$2,$3,$4,$5,$6::"Currency",$7,$8::jsonb)',
-              txId, 'pagarme', String(subscriptionId), null, unitAmount, String(currency), 'pending', JSON.stringify({ clinicId: clinic?.id, offerId: String(offer?.id || ''), productId: String(product?.id || '') })
+              'INSERT INTO payment_transactions (id, provider, provider_order_id, provider_charge_id, doctor_id, patient_profile_id, clinic_id, product_id, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, installments, payment_method_type, status, raw_payload, routed_provider, client_name, client_email) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::"Currency",$14,$15,$16,$17::jsonb,$18,$19,$20) ON CONFLICT (provider, provider_order_id) DO NOTHING',
+              txId, 'pagarme', String(subscriptionId), null, doctorId, patientProfileId, clinic?.id ? String(clinic.id) : null, String(product?.id || ''), unitAmount, clinicAmountCents, platformAmountCents, platformFeeTotal, String(currency), 1, 'credit_card', 'processing', JSON.stringify({ clinicId: clinic?.id, offerId: String(offer?.id || ''), productId: String(product?.id || ''), subscriptionId }), 'KRXPAY', params.customer?.name || null, params.customer?.email || null
             );
+            try { console.log('[subscribe][persist] created payment_transactions row', { subscriptionId, status: 'processing', clinicId: clinic?.id }); } catch {}
           } catch (persistErr: any) {
             try { console.warn('[subscribe][persist] skip payment_transactions insert', { message: persistErr?.message }); } catch {}
           }

@@ -19,7 +19,7 @@ function serverError(message = 'Erro interno do servidor') {
   return NextResponse.json({ success: false, message }, { status: 500 });
 }
 
-// GET /api/business/revenue?clinicId=...&from=YYYY-MM-DD&to=YYYY-MM-DD
+// GET /api/business/revenue/series?clinicId=...&from=YYYY-MM-DD&to=YYYY-MM-DD
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -46,36 +46,42 @@ export async function GET(req: NextRequest) {
     });
     if (!hasAccess) return forbidden('Access denied to this clinic');
 
-    // KPIs from payment_transactions: only PAID
-    const clauses: string[] = ["pt.clinic_id = $1", "UPPER(pt.status) = 'PAID'"];
+    // Build WHERE pieces for payment_transactions
+    const clauses: string[] = [
+      "pt.clinic_id = $1",
+      "UPPER(pt.status) = 'PAID'"
+    ];
     const params: any[] = [clinicId];
     let idx = 2;
-    // Use paid date for KPIs to match chart
+    // Filter by settlement/paid date to reflect when revenue actually occurred
     if (from) { clauses.push(`COALESCE(pt.paid_at, pt.updated_at, pt.created_at) >= $${idx++}`); params.push(new Date(`${from}T00:00:00`)); }
     if (to)   { clauses.push(`COALESCE(pt.paid_at, pt.updated_at, pt.created_at) <= $${idx++}`); params.push(new Date(`${to}T23:59:59`)); }
     const whereSql = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
+    // Aggregate daily sum of clinic net cents (fallback to amount_cents - platform_amount_cents)
     const rows = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT COALESCE(SUM(COALESCE(pt.clinic_amount_cents, (pt.amount_cents - COALESCE(pt.platform_amount_cents,0)))),0)::bigint AS cents,
-              COUNT(*)::bigint AS count
+      `SELECT to_char(date_trunc('day', COALESCE(pt.paid_at, pt.updated_at, pt.created_at)), 'YYYY-MM-DD') AS day,
+              SUM(COALESCE(pt.clinic_amount_cents, (pt.amount_cents - COALESCE(pt.platform_amount_cents,0))))::bigint AS cents
          FROM payment_transactions pt
-        ${whereSql}`,
+        ${whereSql}
+     GROUP BY 1
+     ORDER BY 1 ASC`,
       ...params
-    );
-    const r = Array.isArray(rows) && rows[0] ? rows[0] : { cents: 0n, count: 0n } as any;
-    const cents = typeof r.cents === 'bigint' ? Number(r.cents) : Number(r.cents || 0);
-    const total = (Number.isFinite(cents) ? cents : 0) / 100;
-    const countPaidRaw = typeof r.count === 'bigint' ? Number(r.count) : Number(r.count || 0);
-    const purchasesCount = Number.isFinite(countPaidRaw) ? countPaidRaw : 0;
-    const aov = purchasesCount > 0 ? total / purchasesCount : 0;
+    ).catch(() => []);
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[revenue][GET][transactions] whereSql=', whereSql, 'params=', params, 'total=', total, 'count=', purchasesCount);
-    }
+    // Series in BRL units (cents / 100)
+    const series: Array<[number, number]> = Array.isArray(rows)
+      ? rows.map((r) => {
+          const t = new Date(`${r.day}T00:00:00`).getTime();
+          const cents = typeof r.cents === 'bigint' ? Number(r.cents) : Number(r.cents || 0);
+          const v = (Number.isFinite(cents) ? cents : 0) / 100;
+          return [t, v];
+        })
+      : [];
 
-    return ok({ total, purchasesCount, aov });
+    return ok({ series });
   } catch (err) {
-    console.error('GET /api/business/revenue error', err);
+    console.error('GET /api/business/revenue/series error', err);
     return serverError();
   }
 }

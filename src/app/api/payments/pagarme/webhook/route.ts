@@ -254,13 +254,20 @@ export async function POST(req: Request) {
         chargedback: 'chargedback',
       };
       const mappedRaw = statusMap[rawStatus] || (rawStatus ? rawStatus : undefined);
-      const isPaidEvent = typeLower.includes('order.paid') || typeLower.includes('charge.paid');
-      // Only allow 'paid' transition on explicit paid events; keep other terminals (canceled/failed/refunded)
-      let mapped = (mappedRaw === 'paid' && !isPaidEvent) ? undefined : mappedRaw;
+      const isPaidEvent = typeLower.includes('order.paid') || typeLower.includes('charge.paid') || typeLower.includes('invoice.paid');
+      // For invoice.paid or charge.paid events, always map to 'paid' regardless of status field
+      let mapped: string | undefined;
+      if (isPaidEvent) {
+        mapped = 'paid';
+      } else if (mappedRaw === 'paid' && !isPaidEvent) {
+        mapped = undefined; // Don't allow 'paid' on non-paid events
+      } else {
+        mapped = mappedRaw;
+      }
       // Do not persist 'active' into payment_transactions; it's an item lifecycle, not payment state
       if (mapped === 'active') mapped = undefined;
       try {
-        console.log('[pagarme][webhook] normalized', { orderId, chargeId, rawStatus, mapped, type });
+        console.log('[pagarme][webhook] normalized', { orderId, chargeId, rawStatus, mapped, type, isPaidEvent });
       } catch {}
 
       // Anti-downgrade is now handled atomically in SQL CASE
@@ -355,6 +362,7 @@ export async function POST(req: Request) {
                  clinic_amount_cents = COALESCE(clinic_amount_cents, $6::bigint),
                  platform_amount_cents = COALESCE(platform_amount_cents, $7::bigint),
                  platform_fee_cents = COALESCE(platform_fee_cents, $8::bigint),
+                 paid_at = CASE WHEN ($2::text) = 'paid' THEN COALESCE(paid_at, NOW()) ELSE paid_at END,
                  updated_at = NOW()
              WHERE provider = 'pagarme' AND provider_order_id = $1`,
             String(orderId),
@@ -384,7 +392,7 @@ export async function POST(req: Request) {
               console.log('[pagarme][webhook] created early row by orderId', { orderId, status: placeholderStatus });
             } catch {}
           } else {
-            console.log('[pagarme][webhook] updated by orderId', { orderId, status: mapped || 'unchanged' });
+            console.log('[pagarme][webhook] updated by orderId', { orderId, status: mapped || 'unchanged', affectedRows: result });
           }
         } catch (e) {
           console.warn('[pagarme][webhook] update by orderId failed', { orderId, err: e instanceof Error ? e.message : e });
@@ -412,6 +420,7 @@ export async function POST(req: Request) {
                  clinic_amount_cents = COALESCE(clinic_amount_cents, $7::bigint),
                  platform_amount_cents = COALESCE(platform_amount_cents, $8::bigint),
                  platform_fee_cents = COALESCE(platform_fee_cents, $9::bigint),
+                 paid_at = CASE WHEN ($2::text) = 'paid' THEN COALESCE(paid_at, NOW()) ELSE paid_at END,
                  updated_at = NOW()
              WHERE provider = 'pagarme' AND (provider_charge_id = $1 OR provider_order_id = $4)`,
             String(chargeId),
@@ -442,7 +451,7 @@ export async function POST(req: Request) {
               console.log('[pagarme][webhook] created early row by chargeId', { chargeId, status: placeholderStatus });
             } catch {}
           } else {
-            console.log('[pagarme][webhook] updated by chargeId', { chargeId, orderId, status: mapped || 'unchanged' });
+            console.log('[pagarme][webhook] updated by chargeId', { chargeId, orderId, status: mapped || 'unchanged', affectedRows: result2 });
           }
         } catch (e) {
           console.warn('[pagarme][webhook] update by chargeId failed', { chargeId, orderId, err: e instanceof Error ? e.message : e });

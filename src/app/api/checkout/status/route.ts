@@ -110,7 +110,22 @@ export async function GET(req: Request) {
             email: (txAppmax.rawPayload as any)?.data?.customer?.email || null,
           },
         } as any;
-        return NextResponse.json({ success: true, provider: 'APPMAX', normalized });
+        // Include payment_status/order_status for polling and PIX data for modal refresh
+        const payment_status = String(normalized.status || '').toLowerCase();
+        const order_status = payment_status;
+        // Extract PIX from rawPayload (AppMax stores at payResp.data.pix_qrcode, pix_emv, etc)
+        // Map to frontend expectations: qr_code_url (image) and qr_code (EMV)
+        const rp: any = (txAppmax as any)?.rawPayload || {};
+        const payData: any = rp?.payResp?.data || rp?.data || {};
+        const expiresAt = payData?.pix_expiration_date || payData?.pix_creation_date || null;
+        const expiresIn = expiresAt ? Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)) : 0;
+        const pix = (payData?.pix_qrcode || payData?.pix_emv) ? {
+          qr_code_url: payData?.pix_qrcode ? `data:image/png;base64,${payData.pix_qrcode}` : null,
+          qr_code: payData?.pix_emv || null,
+          expires_at: expiresAt,
+          expires_in: expiresIn,
+        } : null;
+        return NextResponse.json({ success: true, provider: 'APPMAX', payment_status, order_status, normalized, ...(pix ? { pix } : {}) });
       }
     } catch {}
 
@@ -118,35 +133,85 @@ export async function GET(req: Request) {
     if (id.startsWith('sub_')) {
       // Try DB payment_transactions first (webhooks or persistence may have created a row)
       try {
-        const tx = await prisma.paymentTransaction.findFirst({
-          where: { provider: 'pagarme' as any, OR: [ { providerOrderId: String(id) }, { providerChargeId: String(id) } ] },
-          select: {
-            provider: true,
-            status: true,
-            amountCents: true,
-            currency: true,
-            installments: true,
-            providerOrderId: true,
-            providerChargeId: true,
-          },
-        });
+        const rows = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT provider, status, amount_cents, currency, installments, provider_order_id, provider_charge_id
+             FROM payment_transactions
+            WHERE provider = 'pagarme' AND (provider_order_id = $1 OR provider_charge_id = $1)
+            ORDER BY updated_at DESC, created_at DESC
+            LIMIT 1`,
+          String(id)
+        );
+        const tx = rows && rows[0] ? rows[0] : null;
+        // If we have a tx but it's not terminal, see if the subscription table already confirms ACTIVE/TRIAL
         if (tx) {
+          const txStatus = String(tx.status || '').toLowerCase();
+          const isTerminal = txStatus === 'paid' || txStatus === 'succeeded' || txStatus === 'authorized' || txStatus === 'captured';
+          if (!isTerminal) {
+            try {
+              const srows = await prisma.$queryRawUnsafe<any[]>(
+                `SELECT status, price_cents, currency, current_period_start, current_period_end
+                   FROM customer_subscriptions
+                  WHERE provider_subscription_id = $1
+                  LIMIT 1`,
+                String(id)
+              );
+              const sub = srows && srows[0] ? srows[0] : null;
+              const subStatus = String(sub?.status || '').toUpperCase();
+              const isOk = subStatus === 'ACTIVE' || subStatus === 'TRIAL';
+              if (isOk) {
+                const normalized = {
+                  provider: 'KRXPAY',
+                  status: 'active',
+                  amount_minor: Number(sub?.price_cents || tx.amount_cents || 0) || null,
+                  currency: String((sub?.currency || tx.currency || 'BRL')).toUpperCase(),
+                  installments: Number(tx.installments || 1),
+                  order_id: tx.provider_order_id || id,
+                  charge_id: tx.provider_charge_id || null,
+                  billing_period_start: sub?.current_period_start || null,
+                  billing_period_end: sub?.current_period_end || null,
+                } as any;
+                try {
+                  console.log('[checkout][status] subscription prefers customer_subscriptions', { id, tx_status: txStatus, sub_status: subStatus, amount: normalized.amount_minor, currency: normalized.currency });
+                } catch {}
+                return NextResponse.json({ success: true, provider: 'KRXPAY', normalized });
+              }
+            } catch {}
+          }
+          // Default: return tx as-is
           const normalized = {
             provider: 'KRXPAY',
-            status: tx.status,
-            amount_minor: Number(tx.amountCents || 0),
+            status: String(tx.status || ''),
+            amount_minor: Number(tx.amount_cents || 0),
             currency: (typeof tx.currency === 'string' && tx.currency.trim() ? tx.currency.toUpperCase() : 'BRL'),
             installments: Number(tx.installments || 1),
-            order_id: tx.providerOrderId || id,
-            charge_id: tx.providerChargeId || null,
+            order_id: tx.provider_order_id || id,
+            charge_id: tx.provider_charge_id || null,
           } as any;
+          try {
+            console.log('[checkout][status] subscription from payment_transactions', { 
+              id, 
+              status: normalized.status, 
+              amount: normalized.amount_minor, 
+              currency: normalized.currency,
+              provider_order_id: tx.provider_order_id,
+              provider_charge_id: tx.provider_charge_id
+            });
+          } catch {}
           return NextResponse.json({ success: true, provider: 'KRXPAY', normalized });
         }
-      } catch {}
+      } catch (e) {
+        try { console.warn('[checkout][status] payment_transactions query failed', { id, error: (e as any)?.message }); } catch {}
+      }
       // Fallback: check customer_subscriptions table
       try {
         const rows = await prisma.$queryRawUnsafe<any[]>(
-          `SELECT status, current_period_start, current_period_end, customer_id, product_id
+          `SELECT status,
+                  current_period_start,
+                  current_period_end,
+                  customer_id,
+                  product_id,
+                  price_cents,
+                  currency
              FROM customer_subscriptions
             WHERE provider_subscription_id = $1
             LIMIT 1`,
@@ -157,8 +222,8 @@ export async function GET(req: Request) {
           const normalized = {
             provider: 'KRXPAY',
             status: String(r.status || 'ACTIVE'),
-            amount_minor: null,
-            currency: 'BRL',
+            amount_minor: Number(r.price_cents || 0) || null,
+            currency: String(r.currency || 'BRL').toUpperCase(),
             installments: 1,
             order_id: id,
             charge_id: null,

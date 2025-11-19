@@ -28,10 +28,22 @@ export default function StatusClient({ orderId }: Props) {
           setStatus(st || null);
           if (amt != null) setAmountMinor(amt);
           if (cur) setCurrency(cur);
+          try {
+            console.log('[StatusClient] poll result', { orderId, attempt, status: st, amount: amt, currency: cur });
+          } catch {}
         }
         // Terminal states: stop polling
-        const terminal = st === "succeeded" || st === "paid" || st === "authorized" || st === "captured";
+        const isSubscription = orderId.startsWith('sub_');
+        const terminal = st === "succeeded" || st === "paid" || st === "authorized" || st === "captured" || (isSubscription && (st === "active" || st === "trial" || st === "trialing"));
         if (terminal) {
+          try {
+            console.log('[StatusClient] terminal state reached', { orderId, status: st, isSubscription });
+          } catch {}
+          if (!reloadedRef.current) {
+            reloadedRef.current = true;
+            try { sessionStorage.setItem(`success_refreshed_${orderId}`, "1"); } catch {}
+            setTimeout(() => { if (!stop) window.location.replace(window.location.href); }, 150);
+          }
           return; // do not schedule next poll
         }
         // If we have solid in-progress data (e.g., processing/requires_capture), trigger a single reload
@@ -57,7 +69,8 @@ export default function StatusClient({ orderId }: Props) {
 
   // Show only a subtle spinner while processing; no extra text to avoid duplication with header
   if (!status) return null;
-  const terminal = status === 'succeeded' || status === 'paid' || status === 'authorized' || status === 'captured';
+  const isSubscription = orderId.startsWith('sub_');
+  const terminal = status === 'succeeded' || status === 'paid' || status === 'authorized' || status === 'captured' || (isSubscription && (status === 'active' || status === 'trial' || status === 'trialing'));
   if (terminal) return null;
   return (
     <div className="flex items-center justify-center mt-3">

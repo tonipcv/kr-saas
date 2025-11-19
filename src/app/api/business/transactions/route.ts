@@ -65,6 +65,7 @@ export async function GET(req: NextRequest) {
 
     const sql = `
       SELECT pt.id,
+             pt.provider,
              pt.provider_order_id,
              pt.provider_charge_id,
              pt.doctor_id,
@@ -76,13 +77,18 @@ export async function GET(req: NextRequest) {
              c.name AS clinic_name,
              pt.product_id,
              p.name AS product_name,
-             pt.amount_cents,
+             (pt.amount_cents)::int AS amount_cents,
+             COALESCE(pt.clinic_amount_cents, (pt.amount_cents - COALESCE(pt.platform_amount_cents,0)))::int AS clinic_amount_cents,
+             (COALESCE(pt.platform_amount_cents, 0))::int AS platform_amount_cents,
+             (COALESCE(pt.refunded_cents, 0))::int AS refunded_cents,
              pt.currency,
-             pt.installments,
+             (COALESCE(pt.installments, 1))::int AS installments,
              pt.payment_method_type,
              pt.status,
              pt.created_at,
-             pt.raw_payload
+             pt.raw_payload,
+             pt.client_name,
+             pt.client_email
         FROM payment_transactions pt
    LEFT JOIN "User" d ON d.id = pt.doctor_id
    LEFT JOIN patient_profiles pp ON pp.id = pt.patient_profile_id
@@ -90,14 +96,33 @@ export async function GET(req: NextRequest) {
    LEFT JOIN clinics c ON c.id = pt.clinic_id
    LEFT JOIN products p ON p.id = pt.product_id
        ${whereSql}
-    ORDER BY pt.created_at DESC
+    ORDER BY pt.updated_at DESC NULLS LAST, pt.created_at DESC
        LIMIT ${limit}
     `;
 
     // Using $queryRawUnsafe with parameter array for dynamic WHERE
     const rows = await prisma.$queryRawUnsafe<any[]>(sql, ...params);
 
-    return ok({ items: rows });
+    // Sanitize values for JSON serialization (BigInt, Date, arrays, objects)
+    const sanitize = (v: any): any => {
+      if (v === null || v === undefined) return v;
+      if (v instanceof Date) return v.toISOString();
+      const t = typeof v;
+      if (t === 'bigint') {
+        const n = Number(v);
+        return Number.isSafeInteger(n) ? n : v.toString();
+      }
+      if (t === 'object') {
+        if (Array.isArray(v)) return v.map(sanitize);
+        const out: any = {};
+        for (const k of Object.keys(v)) out[k] = sanitize(v[k]);
+        return out;
+      }
+      return v;
+    };
+    const safe = Array.isArray(rows) ? rows.map(sanitize) : [];
+
+    return ok({ items: safe });
   } catch (err) {
     console.error('GET /api/business/transactions error', err);
     return serverError();

@@ -25,21 +25,36 @@ export async function POST(req: Request) {
     }
     if (!product && slug) {
       clinic = await prisma.clinic.findFirst({ where: { slug: String(slug) } })
-      if (clinic) {
-        product = await prisma.products.findFirst({ where: { clinicId: clinic.id } })
-      }
     }
     if (!product) return jsonError(404, 'Produto não encontrado', 'resolve_product', { productId, slug })
+    
+    // CRITICAL: Resolve clinicId from product or from doctor's clinic
+    let resolvedClinicId = product.clinicId ? String(product.clinicId) : null
+    if (!resolvedClinicId && product.doctorId) {
+      try {
+        const doctorClinic = await prisma.clinic.findFirst({ 
+          where: { ownerId: String(product.doctorId), isActive: true }, 
+          select: { id: true },
+          orderBy: { createdAt: 'desc' }
+        })
+        resolvedClinicId = doctorClinic?.id || null
+      } catch {}
+    }
+    if (!resolvedClinicId) {
+      console.error('[appmax][create] CRITICAL: product has no clinicId', { productId, doctorId: product.doctorId })
+      return jsonError(400, 'Produto sem clínica vinculada', 'product_missing_clinic')
+    }
+    
     // Try resolve clinic by product relation; if not present, fallback to slug
     if (!clinic) {
-      if (product?.clinicId) {
-        clinic = await prisma.clinic.findUnique({ where: { id: String(product.clinicId) } })
+      if (resolvedClinicId) {
+        clinic = await prisma.clinic.findUnique({ where: { id: resolvedClinicId } })
       }
       if (!clinic && slug) {
         clinic = await prisma.clinic.findFirst({ where: { slug: String(slug) } })
       }
     }
-    if (!clinic) return jsonError(404, 'Clínica não encontrada', 'resolve_clinic', { clinicId: product?.clinicId || null, slug })
+    if (!clinic) return jsonError(404, 'Clínica não encontrada', 'resolve_clinic', { clinicId: resolvedClinicId, slug })
 
     let merchant = clinic.merchantId
       ? await prisma.merchant.findUnique({ where: { id: String(clinic.merchantId) } })
@@ -101,25 +116,49 @@ export async function POST(req: Request) {
     if (!customer_id || !Number.isFinite(customer_id)) return jsonError(400, 'Resposta inválida ao criar cliente', 'appmax_customers_create_parse', { customerResp })
 
     // 2) Create Order
-    // Build products list
+    // CRITICAL: Determine base price in CENTS for the order
+    // Priority: items[].price (reais) > product.price (reais)
+    const basePriceCents = (() => {
+      // If items come with price, sum them and convert to cents
+      if (Array.isArray(items) && items.length > 0) {
+        const hasAllPrices = items.every((it: any) => typeof it.price === 'number' && it.price > 0)
+        if (hasAllPrices) {
+          const totalReais = items.reduce((acc: number, it: any) => {
+            return acc + (Number(it.price) * Number(it.qty || 1))
+          }, 0)
+          return Math.round(totalReais * 100)
+        }
+      }
+      // Fallback: use product.price (Decimal in reais)
+      return Math.round(Number(product?.price || 0) * 100)
+    })()
+
+    // CRITICAL: AppMax API expects values in REAIS (Decimal 10,2), not cents!
+    // We store in cents internally, but send reais to AppMax
+    const totalReais = basePriceCents / 100
+    
+    // Build products list for AppMax (items in their payload format, prices in REAIS)
     const prods = Array.isArray(items) && items.length > 0 ? items.map((it: any) => ({
       sku: String(it.sku || product?.sku || product?.id),
       name: String(it.name || product?.name || 'Produto'),
       qty: Number(it.qty || 1),
-      ...(it.price ? { price: Number(it.price) } : {}),
+      ...(it.price ? { price: Number(it.price) } : {}), // Keep in REAIS
       ...(it.digital_product != null ? { digital_product: it.digital_product ? 1 : 0 } : {}),
     })) : [
-      { sku: String(product?.sku || product?.id), name: String(product?.name || 'Produto'), qty: 1 }
+      { sku: String(product?.sku || product?.id), name: String(product?.name || 'Produto'), qty: 1, price: totalReais }
     ]
 
-    const totalFromItems = (() => {
-      const withUnit = prods.every((p: any) => typeof p.price === 'number')
-      if (withUnit) return prods.reduce((acc: number, p: any) => acc + Number(p.price || 0) * Number(p.qty || 1), 0)
-      return null
-    })()
+    console.log('[appmax][create] price calculation', { 
+      productPrice: product?.price, 
+      basePriceCents, 
+      totalReais, 
+      totalCents: basePriceCents,
+      hasItems: Array.isArray(items) && items.length > 0,
+      resolvedClinicId 
+    })
 
     const orderPayload: any = {
-      total: totalFromItems == null ? Number(product?.price || 0) : undefined,
+      total: totalReais, // AppMax expects REAIS (Decimal 10,2)
       products: prods,
       shipping: typeof shipping === 'number' ? Number(shipping) : 0,
       discount: typeof discount === 'number' ? Number(discount) : 0,
@@ -136,26 +175,92 @@ export async function POST(req: Request) {
     const order_id = Number(orderResp?.order_id || orderResp?.id || orderResp?.data?.id)
     if (!order_id || !Number.isFinite(order_id)) return jsonError(400, 'Resposta inválida ao criar pedido', 'appmax_orders_create_parse', { orderResp })
 
-    // 3) Persist early row for visibility
+    // 3) Persist early row for visibility (with doctor_id and patient_profile_id)
+    // Resolve doctor from product
+    const doctorId = product?.doctorId || null
+    // Resolve or create patient profile by buyer email + doctor
+    let patientProfileId: string | null = null
+    if (doctorId && buyer?.email) {
+      try {
+        // Find or create User by email
+        let user = await prisma.user.findUnique({ where: { email: String(buyer.email) }, select: { id: true } })
+        if (!user) {
+          user = await prisma.user.create({
+            data: {
+              email: String(buyer.email),
+              name: String(buyer.name || 'Cliente'),
+              role: 'PATIENT' as any,
+            },
+            select: { id: true },
+          })
+        }
+        // Find or create PatientProfile
+        const prof = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT id FROM patient_profiles WHERE doctor_id = $1 AND user_id = $2 LIMIT 1`,
+          String(doctorId),
+          String(user.id)
+        )
+        if (prof && prof[0]?.id) {
+          patientProfileId = String(prof[0].id)
+        } else {
+          const newProf = await prisma.$queryRawUnsafe<any[]>(
+            `INSERT INTO patient_profiles (id, doctor_id, user_id, name, created_at, updated_at)
+             VALUES (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+             RETURNING id`,
+            String(doctorId),
+            String(user.id),
+            String(buyer.name || 'Cliente')
+          )
+          patientProfileId = newProf?.[0]?.id || null
+        }
+      } catch (e) {
+        console.warn('[appmax][create] failed to resolve patient_profile', e instanceof Error ? e.message : e)
+      }
+    }
+
     try {
-      await prisma.$executeRawUnsafe(
+      const txRows = await prisma.$queryRawUnsafe<any[]>(
         `INSERT INTO payment_transactions (
-           id, provider, provider_order_id, clinic_id, product_id,
+           id, provider, provider_order_id, clinic_id, product_id, doctor_id, patient_profile_id,
            amount_cents, currency, payment_method_type, status, raw_payload, routed_provider, client_name, client_email
          ) VALUES (
-           gen_random_uuid(), 'appmax', $1, $2, $3,
-           $4, 'BRL', $5, 'processing', $6::jsonb, 'APPMAX', $7, $8
-         ) ON CONFLICT DO NOTHING`,
+           gen_random_uuid(), 'appmax', $1, $2, $3, $4, $5,
+           $6, 'BRL', $7, 'processing', $8::jsonb, 'APPMAX', $9, $10
+         )
+         RETURNING id`,
         String(order_id),
-        String(product.clinicId),
+        resolvedClinicId, // Use resolved clinicId (never null)
         String(product.id),
-        Math.round(Number(product?.price || 0) * 100) || 0,
+        doctorId ? String(doctorId) : null,
+        patientProfileId,
+        basePriceCents, // Store in cents for consistency
         method === 'card' ? 'credit_card' : (method === 'pix' ? 'pix' : null),
         JSON.stringify({ step: 'create_order', customerResp, orderResp, buyer: { name: buyer.name, email: buyer.email } }),
         String(buyer.name || ''),
         String(buyer.email || '')
       )
-    } catch {}
+      console.log('[appmax][create] ✅ transaction created', { 
+        txId: txRows?.[0]?.id,
+        orderId: order_id, 
+        clinicId: resolvedClinicId, 
+        amountCents: basePriceCents,
+        amountReais: totalReais,
+        doctorId,
+        patientProfileId 
+      })
+    } catch (e) {
+      console.error('[appmax][create] ❌ CRITICAL: failed to persist transaction', { 
+        error: e instanceof Error ? e.message : e, 
+        stack: e instanceof Error ? e.stack : undefined,
+        orderId: order_id, 
+        clinicId: resolvedClinicId,
+        productId: product.id,
+        doctorId,
+        patientProfileId,
+        amountCents: basePriceCents
+      })
+      // Don't fail the whole request, just log the error
+    }
 
     // 4) Payment (card or pix)
     if (method === 'card') {
@@ -209,9 +314,13 @@ export async function POST(req: Request) {
       // Best-effort update status to authorized/paid if retornado
       const mapped = (() => {
         const s = String(payResp?.status || payResp?.data?.status || '').toLowerCase()
+        const txt = String(payResp?.text || payResp?.data?.text || '').toLowerCase()
+        // Prefer explicit status
         if (s.includes('aprov')) return 'paid'
         if (s.includes('autor')) return 'authorized'
         if (s.includes('pend')) return 'pending'
+        // Fallback: infer from success text when status field is absent
+        if (txt.includes('captur') || (txt.includes('autoriz') && txt.includes('sucesso'))) return 'paid'
         return 'processing'
       })()
 
@@ -270,13 +379,24 @@ export async function POST(req: Request) {
         )
       } catch {}
 
-      // Extract PIX fields when available
+      // Extract PIX fields when available (AppMax returns at data.pix_qrcode, data.pix_emv, data.pix_expiration_date)
+      // Map to names expected by frontend modal: qr_code_url (for image) and qr_code (for copy-paste EMV)
+      const d = payResp?.data || {}
+      const expiresAt = d?.pix_expiration_date || d?.pix_creation_date || null
+      const expiresIn = expiresAt ? Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)) : 0
       const pix = {
-        qr_code: payResp?.pix?.qr_code || payResp?.data?.pix?.qr_code || null,
-        qr_code_base64: payResp?.pix?.qr_code_base64 || payResp?.data?.pix?.qr_code_base64 || null,
-        copy_paste: payResp?.pix?.copy_paste || payResp?.data?.pix?.copy_paste || null,
-        expires_at: payResp?.pix?.expires_at || payResp?.data?.pix?.expires_at || null,
+        qr_code_url: d?.pix_qrcode ? `data:image/png;base64,${d.pix_qrcode}` : null, // Convert base64 to data URL
+        qr_code: d?.pix_emv || null, // EMV code for copy-paste
+        expires_at: expiresAt,
+        expires_in: expiresIn,
       }
+      console.log('[appmax][create][pix] fields mapped', { 
+        has_qrcode: !!d?.pix_qrcode, 
+        has_emv: !!d?.pix_emv, 
+        qr_code_url_length: pix.qr_code_url?.length || 0,
+        qr_code_length: pix.qr_code?.length || 0,
+        expires_in: expiresIn 
+      })
       return NextResponse.json({ ok: true, provider: 'APPMAX', order_id, status: mapped, pix })
     }
 

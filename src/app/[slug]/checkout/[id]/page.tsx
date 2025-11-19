@@ -22,6 +22,23 @@ import { getCurrencyForCountry, hasCurrencyMapping } from '@/lib/payments/countr
 
 function digitsOnly(v: string): string { return (v || '').replace(/\D+/g, ''); }
 
+function isApprovedResponse(d: any): boolean {
+  try {
+    const ok = d?.ok === true || d?.success === true;
+    const hasId = !!d?.order_id;
+    const st = String(d?.status || '').toLowerCase();
+    const txt = String(d?.text || '').toLowerCase();
+    const provider = String(d?.provider || '').toUpperCase();
+    const approvedByStatus = (st === 'paid' || st === 'authorized');
+    const approvedByText = provider === 'APPMAX' && (
+      txt.includes('sucesso') || txt.includes('captur') || (txt.includes('autoriz') && txt.includes('sucesso'))
+    );
+    return !!ok && !!hasId && (approvedByStatus || approvedByText);
+  } catch {
+    return false;
+  }
+}
+
 async function ensureStripeLoaded(publishableKey: string): Promise<any> {
   // Returns Stripe instance
   const w: any = typeof window !== 'undefined' ? window : {};
@@ -1589,6 +1606,33 @@ export default function BrandedCheckoutPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
       // Reset card UI status before handling
+      if (isAppmaxFlow && isApprovedResponse(data)) {
+        setSuccess(true);
+        const meth = paymentMethod === 'pix' ? 'pix' : 'card';
+        const q = new URLSearchParams();
+        q.set('order_id', String(data.order_id));
+        q.set('method', meth);
+        q.set('product_id', productId);
+        if (currentCurrency) q.set('currency', String(currentCurrency).toUpperCase());
+        if (resolvedPriceCents != null) q.set('amount_minor', String(resolvedPriceCents));
+        const to = `/${slug}/checkout/success?${q.toString()}`;
+        showApprovedAndRedirect(to);
+        return;
+      }
+      // Fallback: also redirect if backend marks provider as APPMAX and response is approved
+      if (String(data?.provider || '').toUpperCase() === 'APPMAX' && isApprovedResponse(data)) {
+        setSuccess(true);
+        const meth = paymentMethod === 'pix' ? 'pix' : 'card';
+        const q = new URLSearchParams();
+        q.set('order_id', String(data.order_id));
+        q.set('method', meth);
+        q.set('product_id', productId);
+        if (currentCurrency) q.set('currency', String(currentCurrency).toUpperCase());
+        if (resolvedPriceCents != null) q.set('amount_minor', String(resolvedPriceCents));
+        const to = `/${slug}/checkout/success?${q.toString()}`;
+        showApprovedAndRedirect(to);
+        return;
+      }
       setCardStatus(null);
       // Handle STRIPE subscription two-phase flow
       if (isSubscription && endpoint === '/api/checkout/stripe/subscribe') {

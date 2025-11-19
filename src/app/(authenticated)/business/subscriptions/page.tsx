@@ -222,7 +222,7 @@ export default function BusinessSubscriptionsPage() {
                         }
                       }}
                     >
-                      <td className="px-2 py-2 whitespace-nowrap"><span className="font-mono text-xs text-gray-700">{row.id}</span></td>
+                      <td className="px-2 py-2 whitespace-nowrap"><span className="text-xs text-gray-700">{row.id}</span></td>
                       <td className="px-2 py-2 whitespace-nowrap text-gray-900">
                         <div className="flex flex-col">
                           <span>{row.customerName || '-'}</span>
@@ -266,7 +266,7 @@ export default function BusinessSubscriptionsPage() {
                   <div>
                     <div className="text-sm text-gray-500">Transactions for</div>
                     <div className="text-[15px] font-semibold text-gray-900">{txSub?.customerName || '-'} <span className="text-gray-500 font-normal">•</span> <span className="text-gray-600">{txSub?.product}</span></div>
-                    <div className="text-xs text-gray-500 mt-0.5">Subscription: <span className="font-mono">{txSub?.id}</span></div>
+                    <div className="text-xs text-gray-500 mt-0.5">Subscription: <span>{txSub?.id}</span></div>
                   </div>
                   <div>
                     <Button variant="outline" size="sm" onClick={() => setTxOpen(false)}>Close</Button>

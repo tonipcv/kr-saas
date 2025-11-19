@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import crypto from 'crypto'
 
 function mapStatus(pt: string): string | undefined {
   const s = String(pt || '').toLowerCase()
@@ -102,6 +103,85 @@ export async function POST(req: Request) {
         buyerEmail
       )
     } catch {}
+
+    // CRITICAL: Create PaymentCustomer, PaymentMethod and Purchase when paid (like Pagar.me)
+    if (mapped === 'paid') {
+      try {
+        // Lookup transaction row to get doctor_id, patient_profile_id, product_id, clinic_id, amount
+        const txRows = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT id, doctor_id, patient_profile_id, product_id, clinic_id, amount_cents
+             FROM payment_transactions
+            WHERE provider = 'appmax' AND provider_order_id = $1
+            LIMIT 1`,
+          String(orderId)
+        )
+        const tx = txRows?.[0] || null
+        if (tx && tx.doctor_id && tx.patient_profile_id) {
+          const doctorId = String(tx.doctor_id)
+          const patientProfileId = String(tx.patient_profile_id)
+          const productId = tx.product_id ? String(tx.product_id) : null
+          const clinicId = tx.clinic_id ? String(tx.clinic_id) : null
+          const amountCents = Number(tx.amount_cents || 0)
+
+          // 1) Upsert PaymentCustomer (provider_customer_id = appmax customer.id)
+          const appmaxCustomerId = cust?.id ? String(cust.id) : null
+          if (appmaxCustomerId) {
+            const pcId = crypto.randomUUID()
+            await prisma.$executeRawUnsafe(
+              `INSERT INTO payment_customers (id, provider, provider_customer_id, doctor_id, patient_profile_id, clinic_id)
+               VALUES ($1, 'appmax', $2, $3, $4, $5)
+               ON CONFLICT (doctor_id, patient_profile_id, provider)
+               DO UPDATE SET provider_customer_id = EXCLUDED.provider_customer_id`,
+              pcId,
+              String(appmaxCustomerId),
+              doctorId,
+              patientProfileId,
+              clinicId
+            )
+            console.log('[appmax][webhook] upserted payment_customer', { pcId, appmaxCustomerId, doctorId, patientProfileId })
+          }
+
+          // 2) Upsert PaymentMethod if card data present
+          // Appmax webhook typically does not return card details; skip if unavailable
+          // If you need card storage, capture it in /api/checkout/appmax/create instead
+
+          // 3) Create Purchase for the paid transaction
+          if (productId) {
+            const existingPurchase = await prisma.purchase.findFirst({
+              where: { externalIdempotencyKey: String(orderId) }
+            })
+            if (!existingPurchase) {
+              // Resolve userId from patientProfile
+              const profRows = await prisma.$queryRawUnsafe<any[]>(
+                `SELECT user_id FROM patient_profiles WHERE id = $1 LIMIT 1`,
+                patientProfileId
+              )
+              const userId = profRows?.[0]?.user_id ? String(profRows[0].user_id) : null
+              if (userId) {
+                const price = amountCents / 100
+                await prisma.purchase.create({
+                  data: {
+                    userId: String(userId),
+                    doctorId: String(doctorId),
+                    productId: String(productId),
+                    quantity: 1,
+                    unitPrice: price as any,
+                    totalPrice: price as any,
+                    pointsAwarded: 0 as any,
+                    status: 'COMPLETED',
+                    externalIdempotencyKey: String(orderId),
+                    notes: 'Created via AppMax webhook (paid)',
+                  } as any,
+                })
+                console.log('[appmax][webhook] created purchase', { orderId, userId, productId, price })
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[appmax][webhook] paid backfill failed:', e instanceof Error ? e.message : e)
+      }
+    }
 
     return NextResponse.json({ received: true })
   } catch (e: any) {

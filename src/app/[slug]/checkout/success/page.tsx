@@ -126,10 +126,13 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
   const pay = Array.isArray(order?.payments) ? order.payments[0] : null;
   const tx = ch?.last_transaction || pay?.last_transaction || null;
   const normalizedStatus = (typeof normalized?.status === 'string' && normalized.status.trim()) ? String(normalized.status).toLowerCase() : '';
-  // Prefer live provider statuses (tx/ch/order) over potentially-stale normalized DB status
-  const status = ((tx?.status || ch?.status || order?.status || '') || normalizedStatus).toString();
-  const statusLower = status.toLowerCase();
   const isSubscriptionId = typeof orderId === 'string' && orderId.startsWith('sub_');
+  // For subscriptions, prefer normalized DB status over potentially-missing provider status
+  // For orders, prefer live provider statuses over potentially-stale normalized DB status
+  const status = isSubscriptionId 
+    ? (normalizedStatus || tx?.status || ch?.status || order?.status || '').toString()
+    : ((tx?.status || ch?.status || order?.status || '') || normalizedStatus).toString();
+  const statusLower = status.toLowerCase();
   const isPaid = (
     statusLower === 'paid' ||
     statusLower === 'succeeded' ||
@@ -137,6 +140,20 @@ export default async function SuccessPage({ params, searchParams }: { params: Pr
     statusLower === 'captured' ||
     (isSubscriptionId && (statusLower === 'active' || statusLower === 'trial' || statusLower === 'trialing'))
   );
+  try {
+    console.log('[checkout][success] status resolution', { 
+      orderId,
+      isSubscription: isSubscriptionId, 
+      normalizedStatus, 
+      txStatus: tx?.status, 
+      chStatus: ch?.status, 
+      orderStatus: order?.status, 
+      finalStatus: statusLower, 
+      isPaid,
+      hasNormalized: !!normalized,
+      normalizedProvider: normalized?.provider
+    });
+  } catch {}
   // CRITICAL: derive actual payment method from order data, NOT from URL param
   const actualMethodRaw = (tx?.payment_method || ch?.payment_method || pay?.payment_method || '').toString().toLowerCase();
   const normalizedActualMethod = actualMethodRaw === 'credit_card' ? 'card' : actualMethodRaw;

@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { REGIONAL_COUNTRIES, flagEmoji } from '@/lib/countries';
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeftIcon, CheckIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { ArrowLeftIcon, CheckIcon, TrashIcon, DocumentDuplicateIcon } from "@heroicons/react/24/outline";
 import { useClinic } from "@/contexts/clinic-context";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { getCurrencyForCountry as mapCurrency } from "@/lib/payments/countryCurrency";
@@ -514,6 +514,18 @@ export default function EditOfferPage({ params }: PageProps) {
     return toFullCheckout(value);
   };
 
+  // Computed checkout link for display/copy (read-only)
+  const computedCheckoutUrl = useMemo(() => {
+    try {
+      const saved = (form.checkoutUrl || '').trim();
+      if (saved) return saved;
+    } catch {}
+    const base = getBaseUrl();
+    const slug = getSlug();
+    if (!productId || !offerId) return '';
+    return `${base}/${slug}/checkout/${productId}?offer=${offerId}`;
+  }, [form.checkoutUrl, productId, offerId]);
+
   useEffect(() => {
     (async () => {
       const { id, offerId } = await params;
@@ -700,7 +712,18 @@ export default function EditOfferPage({ params }: PageProps) {
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={handleSave} disabled={saving} className="h-9 px-3 rounded-xl bg-gray-900 hover:bg-black text-white text-sm flex items-center gap-2">{saving ? (<><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>Saving…</>) : (<><CheckIcon className="h-4 w-4" />Save</>)}</button>
-                <Button type="button" variant="outline" onClick={handleDelete} disabled={deleting} className="h-9 border-red-200 text-red-600 hover:bg-red-50">{deleting ? 'Deleting…' : (<><TrashIcon className="h-4 w-4 mr-1" />Delete</> )}</Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="h-9 w-9 text-gray-400 hover:text-red-600 hover:bg-transparent"
+                  aria-label="Delete"
+                  title={deleting ? 'Deleting…' : 'Delete'}
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           </div>
@@ -710,14 +733,21 @@ export default function EditOfferPage({ params }: PageProps) {
             {/* Single column (image card removed) */}
             <div className="space-y-6">
               <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-semibold text-gray-900">Checkout Links</CardTitle>
+                <CardHeader className="py-3 pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-900">Checkout link</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div>
-                    <Label className="text-gray-900 font-medium">Checkout URL (full)</Label>
-                    <Input value={form.checkoutUrl} onChange={(e) => setForm(v => ({ ...v, checkoutUrl: e.target.value }))} className="mt-2 h-10" placeholder={`${getBaseUrl()}/${getSlug()}/checkout/${productId}`} />
-                    <p className="text-xs text-gray-500 mt-1">Saved as an absolute URL with slug “{getSlug()}” and base {getBaseUrl()}.</p>
+                <CardContent className="pt-0">
+                  <div className="flex items-center gap-2">
+                    <div className="text-[12px] sm:text-[12px] text-gray-800 truncate select-all" title={computedCheckoutUrl}>
+                      {computedCheckoutUrl}
+                    </div>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7"
+                      aria-label="Copy"
+                      title="Copy"
+                      onClick={() => { try { navigator.clipboard.writeText(computedCheckoutUrl || ''); } catch {} }}
+                    >
+                      <DocumentDuplicateIcon className="h-4 w-4 text-gray-600" />
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

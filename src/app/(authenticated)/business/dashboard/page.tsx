@@ -114,6 +114,7 @@ export default function BusinessDashboard() {
     return `${y}-${m}-${day}`;
   });
   const [summary, setSummary] = useState<RevenueSummary>({ total: 0, purchasesCount: 0, aov: 0 });
+  const [seriesApi, setSeriesApi] = useState<Array<[number, number]>>([]);
   const [transactions, setTransactions] = useState<TxRow[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -123,8 +124,9 @@ export default function BusinessDashboard() {
       setLoading(true);
       try {
         const qs = new URLSearchParams({ clinicId: currentClinic.id, from: dateFrom, to: dateTo });
-        const [revRes, txRes] = await Promise.all([
+        const [revRes, revSeriesRes, txRes] = await Promise.all([
           fetch(`/api/business/revenue?${qs.toString()}`, { cache: 'no-store' }),
+          fetch(`/api/business/revenue/series?${qs.toString()}`, { cache: 'no-store' }),
           fetch(`/api/business/transactions?${qs.toString()}&limit=100`, { cache: 'no-store' }),
         ]);
         if (revRes.ok) {
@@ -134,6 +136,11 @@ export default function BusinessDashboard() {
             purchasesCount: Number(rj?.data?.purchasesCount || 0) || 0,
             aov: Number(rj?.data?.aov || 0) || 0,
           });
+        }
+        if (revSeriesRes.ok) {
+          const sj = await revSeriesRes.json();
+          const arr = Array.isArray(sj?.data?.series) ? sj.data.series : [];
+          setSeriesApi(arr);
         }
         if (txRes.ok) {
           const tj = await txRes.json();
@@ -175,6 +182,19 @@ export default function BusinessDashboard() {
       const dayMs = 24 * 60 * 60 * 1000;
       const start = new Date(fromD.getFullYear(), fromD.getMonth(), fromD.getDate()).getTime();
       const end = new Date(toD.getFullYear(), toD.getMonth(), toD.getDate()).getTime();
+      // Prefer API series from purchases if available
+      if (Array.isArray(seriesApi) && seriesApi.length) {
+        const buckets = new Map<number, number>();
+        for (let t = start; t <= end; t += dayMs) buckets.set(t, 0);
+        for (const [t, v] of seriesApi) {
+          if (t < start || t > end) continue;
+          const key = new Date(new Date(t).getFullYear(), new Date(t).getMonth(), new Date(t).getDate()).getTime();
+          if (!buckets.has(key)) continue;
+          const val = Number(v) || 0;
+          if (Number.isFinite(val)) buckets.set(key, (buckets.get(key) || 0) + val);
+        }
+        return Array.from(buckets.entries()).sort((a, b) => a[0] - b[0]);
+      }
       const buckets = new Map<number, number>();
       for (let t = start; t <= end; t += dayMs) buckets.set(t, 0);
       for (const t of transactions) {
@@ -182,14 +202,22 @@ export default function BusinessDashboard() {
         const d = new Date(t.created_at as any);
         const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
         if (!buckets.has(key)) continue;
-        const val = Number(t.amount_cents || 0) / 100;
+        // Prefer clinic_amount_cents; fallback to amount_cents - platform_amount_cents; else amount_cents
+        const hasClinic = typeof (t as any).clinic_amount_cents === 'number';
+        const hasPlatform = typeof (t as any).platform_amount_cents === 'number';
+        const hasAmount = typeof (t as any).amount_cents === 'number';
+        const fallback = hasAmount && hasPlatform ? ((t as any).amount_cents as number) - ((t as any).platform_amount_cents as number) : undefined;
+        const cents = hasClinic 
+          ? ((t as any).clinic_amount_cents as number)
+          : (typeof fallback === 'number' ? fallback : ((t as any).amount_cents as number) || 0);
+        const val = Number(cents) / 100;
         if (Number.isFinite(val)) buckets.set(key, (buckets.get(key) || 0) + val);
       }
       return Array.from(buckets.entries()).sort((a, b) => a[0] - b[0]);
     } catch {
       return [] as Array<[number, number]>;
     }
-  }, [transactions, dateFrom, dateTo]);
+  }, [seriesApi, transactions, dateFrom, dateTo]);
 
   // Breakdowns (normalized)
   const normalizeMethod = (raw?: string | null) => {
