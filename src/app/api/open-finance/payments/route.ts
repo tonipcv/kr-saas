@@ -197,6 +197,80 @@ export async function POST(req: Request) {
       console.warn('[open-finance][payments] persist warning:', (e as any)?.message, { correlationId });
     }
 
+    // BEGIN Non-blocking orchestration dual-write (Customer, CustomerProvider, PaymentTransaction)
+    try {
+      const product = await prisma.products.findUnique({ where: { id: productId }, select: { id: true, clinicId: true, doctorId: true } });
+      if (product?.clinicId) {
+        const merchant = await prisma.merchant.findFirst({ where: { clinicId: product.clinicId }, select: { id: true } });
+        if (merchant) {
+          // Upsert Customer
+          let customer: any = null;
+          const payerEmail = payer?.email ? String(payer.email) : null;
+          const payerCpf = payer?.cpf ? String(payer.cpf).replace(/\D/g, '') : null;
+          if (payerEmail || payerCpf) {
+            const whereClause: any = { merchantId: merchant.id, OR: [] };
+            if (payerEmail) whereClause.OR.push({ email: payerEmail });
+            if (payerCpf) whereClause.OR.push({ document: payerCpf });
+            customer = await prisma.customer.findFirst({ where: whereClause, select: { id: true } });
+            if (!customer) {
+              customer = await prisma.customer.create({
+                data: {
+                  merchantId: merchant.id,
+                  name: payer?.name || null,
+                  email: payerEmail,
+                  phone: null,
+                  document: payerCpf,
+                  metadata: { source: 'open_finance_payment' },
+                },
+                select: { id: true },
+              });
+            }
+          }
+          // Upsert CustomerProvider (OPENFINANCE)
+          let customerProvider: any = null;
+          if (customer) {
+            const cpWhere = { customerId: customer.id, provider: 'OPENFINANCE' as any, accountId: merchant.id };
+            customerProvider = await prisma.customerProvider.findFirst({ where: cpWhere, select: { id: true } });
+            if (!customerProvider) {
+              customerProvider = await prisma.customerProvider.create({
+                data: { ...cpWhere, providerCustomerId: null, metadata: { source: 'open_finance_payment' } },
+                select: { id: true },
+              });
+            }
+          }
+          // Create PaymentTransaction with OPENFINANCE/PROCESSING
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO payment_transactions (
+              id, provider, provider_order_id, doctor_id, clinic_id, merchant_id, product_id,
+              customer_id, customer_provider_id,
+              amount_cents, currency, installments, payment_method_type,
+              status, provider_v2, status_v2, routed_provider, raw_payload
+            ) VALUES (
+              $1, 'open_banking', $2, $3, $4, $5, $6,
+              $7, $8,
+              $9, $10, 1, 'pix',
+              'processing', 'OPENFINANCE'::"PaymentProvider", 'PROCESSING'::"PaymentStatus", 'OPENFINANCE', $11::jsonb
+            )
+            ON CONFLICT (provider, provider_order_id) DO NOTHING`,
+            crypto.randomUUID(),
+            String(paymentLinkId),
+            product.doctorId || null,
+            product.clinicId,
+            merchant.id,
+            product.id,
+            customer?.id || null,
+            customerProvider?.id || null,
+            Number(amount) || 0,
+            String(currency),
+            JSON.stringify({ provider: 'open_finance', paymentLinkId, orderRef, payer })
+          );
+        }
+      }
+    } catch (e) {
+      console.warn('[open-finance][payments][orchestration] dual-write failed (non-blocking)', (e as any)?.message);
+    }
+    // END Non-blocking orchestration dual-write
+
     console.log('[of.payments][success]', { correlationId, paymentLinkId, orderRef, latencyMs: dt });
     return NextResponse.json({ paymentLinkId, redirect_uri, expiresAt, correlationId });
   } catch (e: any) {

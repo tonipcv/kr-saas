@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { AppmaxClient, buildAppmaxClientForMerchant } from '@/lib/payments/appmax/sdk'
+import crypto from 'crypto'
 
 function jsonError(status: number, error: string, step: string, details?: any) {
   try { console.error('[appmax][create][error]', { step, error, details }); } catch {}
@@ -115,6 +116,62 @@ export async function POST(req: Request) {
     const customer_id = Number(customerResp?.customer_id || customerResp?.id || customerResp?.data?.id || customerResp?.data?.customer_id)
     if (!customer_id || !Number.isFinite(customer_id)) return jsonError(400, 'Resposta inválida ao criar cliente', 'appmax_customers_create_parse', { customerResp })
 
+    // BEGIN Non-blocking orchestration dual-write (Customer + CustomerProvider)
+    let unifiedCustomerId: string | null = null
+    let unifiedCustomerProviderId: string | null = null
+    try {
+      console.log('[appmax][create][orchestration] 🔄 Starting dual-write...', { merchantId: merchant.id, buyerEmail: buyer.email })
+      // Upsert Customer
+      const docDigits = (buyer.document_number || buyer.document || '').toString().replace(/\D/g, '') || null
+      const whereClause: any = { merchantId: merchant.id, OR: [] }
+      if (buyer.email) whereClause.OR.push({ email: String(buyer.email) })
+      if (docDigits) whereClause.OR.push({ document: docDigits })
+      let customer = null
+      if (whereClause.OR.length > 0) {
+        customer = await prisma.customer.findFirst({ where: whereClause, select: { id: true } })
+      }
+      if (customer) {
+        unifiedCustomerId = customer.id
+        console.log('[appmax][create][orchestration] ✅ Customer found', { customerId: unifiedCustomerId })
+      } else {
+        const created = await prisma.customer.create({
+          data: {
+            merchantId: merchant.id,
+            name: String(buyer.name || ''),
+            email: buyer.email ? String(buyer.email) : null,
+            phone: (buyer.telephone || buyer.phone || '').toString().replace(/\D/g, '').slice(0, 11) || null,
+            document: docDigits,
+            metadata: { source: 'appmax_checkout', appmaxCustomerId: customer_id },
+          },
+          select: { id: true },
+        })
+        unifiedCustomerId = created.id
+        console.log('[appmax][create][orchestration] ✅ Customer created', { customerId: unifiedCustomerId })
+      }
+      // Upsert CustomerProvider (APPMAX)
+      if (unifiedCustomerId) {
+        const cpWhere = { customerId: unifiedCustomerId, provider: 'APPMAX' as any, accountId: merchant.id }
+        let customerProvider = await prisma.customerProvider.findFirst({ where: cpWhere, select: { id: true } })
+        if (!customerProvider) {
+          customerProvider = await prisma.customerProvider.create({
+            data: { ...cpWhere, providerCustomerId: String(customer_id), metadata: { source: 'appmax_checkout' } },
+            select: { id: true },
+          })
+          console.log('[appmax][create][orchestration] ✅ CustomerProvider created', { customerProviderId: customerProvider.id })
+        } else {
+          await prisma.customerProvider.update({
+            where: { id: customerProvider.id },
+            data: { providerCustomerId: String(customer_id), metadata: { source: 'appmax_checkout' } },
+          })
+          console.log('[appmax][create][orchestration] ✅ CustomerProvider updated', { customerProviderId: customerProvider.id })
+        }
+        unifiedCustomerProviderId = customerProvider.id
+      }
+    } catch (e) {
+      console.warn('[appmax][create][orchestration] ⚠️  Dual-write failed (non-blocking)', e instanceof Error ? e.message : String(e))
+    }
+    // END Non-blocking orchestration dual-write
+
     // 2) Create Order
     // CRITICAL: Determine base price in CENTS for the order
     // Priority: items[].price (reais) > product.price (reais)
@@ -185,8 +242,10 @@ export async function POST(req: Request) {
         // Find or create User by email
         let user = await prisma.user.findUnique({ where: { email: String(buyer.email) }, select: { id: true } })
         if (!user) {
+          const userId = crypto.randomUUID()
           user = await prisma.user.create({
             data: {
+              id: userId,
               email: String(buyer.email),
               name: String(buyer.name || 'Cliente'),
               role: 'PATIENT' as any,
@@ -221,11 +280,13 @@ export async function POST(req: Request) {
     try {
       const txRows = await prisma.$queryRawUnsafe<any[]>(
         `INSERT INTO payment_transactions (
-           id, provider, provider_order_id, clinic_id, product_id, doctor_id, patient_profile_id,
-           amount_cents, currency, payment_method_type, status, raw_payload, routed_provider, client_name, client_email
+           id, provider, provider_order_id, clinic_id, merchant_id, product_id, doctor_id, patient_profile_id,
+           customer_id, customer_provider_id,
+           amount_cents, currency, payment_method_type, status, provider_v2, status_v2, routed_provider, raw_payload, client_name, client_email
          ) VALUES (
-           gen_random_uuid(), 'appmax', $1, $2, $3, $4, $5,
-           $6, 'BRL', $7, 'processing', $8::jsonb, 'APPMAX', $9, $10
+           gen_random_uuid(), 'appmax', $1, $2, $11, $3, $4, $5,
+           $12, $13,
+           $6, 'BRL', $7, 'processing', 'APPMAX'::"PaymentProvider", 'PROCESSING'::"PaymentStatus", 'APPMAX', $8::jsonb, $9, $10
          )
          RETURNING id`,
         String(order_id),
@@ -235,9 +296,12 @@ export async function POST(req: Request) {
         patientProfileId,
         basePriceCents, // Store in cents for consistency
         method === 'card' ? 'credit_card' : (method === 'pix' ? 'pix' : null),
-        JSON.stringify({ step: 'create_order', customerResp, orderResp, buyer: { name: buyer.name, email: buyer.email } }),
+        JSON.stringify({ step: 'create_order', customerResp, orderResp, buyer: { name: buyer.name, email: buyer.email }, orchestration: { unifiedCustomerId, unifiedCustomerProviderId } }),
         String(buyer.name || ''),
-        String(buyer.email || '')
+        String(buyer.email || ''),
+        String(merchant.id),
+        unifiedCustomerId,
+        unifiedCustomerProviderId
       )
       console.log('[appmax][create] ✅ transaction created', { 
         txId: txRows?.[0]?.id,
@@ -326,10 +390,11 @@ export async function POST(req: Request) {
 
       try {
         await prisma.$executeRawUnsafe(
-          `UPDATE payment_transactions SET status=$2, raw_payload=$3::jsonb, client_name=COALESCE(client_name,$4), client_email=COALESCE(client_email,$5), updated_at=NOW()
+          `UPDATE payment_transactions SET status=$2, status_v2=CASE WHEN $2='paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $2='authorized' THEN 'PROCESSING'::"PaymentStatus" WHEN $2='failed' THEN 'FAILED'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END, provider_v2=COALESCE(provider_v2,'APPMAX'::"PaymentProvider"), raw_payload=$3::jsonb, client_name=COALESCE(client_name,$4), client_email=COALESCE(client_email,$5), updated_at=NOW()
             WHERE provider='appmax' AND provider_order_id=$1`,
           String(order_id), mapped, JSON.stringify({ step: 'payment_card', payResp }), String(buyer.name||''), String(buyer.email||'')
         )
+        console.log('[appmax][create][payment] ✅ Card payment completed', { orderId: order_id, status: mapped, statusV2: mapped === 'paid' ? 'SUCCEEDED' : 'PROCESSING' })
       } catch {}
 
       return NextResponse.json({ ok: true, provider: 'APPMAX', order_id, status: mapped })
@@ -373,10 +438,11 @@ export async function POST(req: Request) {
 
       try {
         await prisma.$executeRawUnsafe(
-          `UPDATE payment_transactions SET status=$2, raw_payload=$3::jsonb, client_name=COALESCE(client_name,$4), client_email=COALESCE(client_email,$5), updated_at=NOW()
+          `UPDATE payment_transactions SET status=$2, status_v2=CASE WHEN $2='paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $2='pending' THEN 'PROCESSING'::"PaymentStatus" WHEN $2='failed' THEN 'FAILED'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END, provider_v2=COALESCE(provider_v2,'APPMAX'::"PaymentProvider"), raw_payload=$3::jsonb, client_name=COALESCE(client_name,$4), client_email=COALESCE(client_email,$5), updated_at=NOW()
             WHERE provider='appmax' AND provider_order_id=$1`,
           String(order_id), mapped, JSON.stringify({ step: 'payment_pix', payResp }), String(buyer.name||''), String(buyer.email||'')
         )
+        console.log('[appmax][create][payment] ✅ PIX payment completed', { orderId: order_id, status: mapped, statusV2: mapped === 'paid' ? 'SUCCEEDED' : 'PROCESSING' })
       } catch {}
 
       // Extract PIX fields when available (AppMax returns at data.pix_qrcode, data.pix_emv, data.pix_expiration_date)

@@ -64,6 +64,16 @@ export async function POST(req: Request) {
                               WHEN status = 'canceled' AND ($2::text) = 'failed' THEN ($2::text)
                               ELSE status
                             END,
+                   status_v2 = CASE
+                                 WHEN ($2::text) = 'paid' THEN 'SUCCEEDED'::"PaymentStatus"
+                                 WHEN ($2::text) = 'processing' THEN 'PROCESSING'::"PaymentStatus"
+                                 WHEN ($2::text) = 'pending' THEN 'PROCESSING'::"PaymentStatus"
+                                 WHEN ($2::text) = 'failed' THEN 'FAILED'::"PaymentStatus"
+                                 WHEN ($2::text) = 'canceled' THEN 'CANCELED'::"PaymentStatus"
+                                 WHEN ($2::text) = 'refunded' THEN 'REFUNDED'::"PaymentStatus"
+                                 ELSE status_v2
+                               END,
+                   provider_v2 = COALESCE(provider_v2, 'OPENFINANCE'::"PaymentProvider"),
                    raw_payload = $3::jsonb
              WHERE provider = 'LINA_OB' AND provider_order_id = $1`,
             String(recurringPaymentId),

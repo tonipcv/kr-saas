@@ -56,6 +56,8 @@ export async function POST(req: NextRequest) {
             await prisma.$executeRawUnsafe(
               `UPDATE payment_transactions
                  SET status = 'paid',
+                     status_v2 = 'SUCCEEDED'::"PaymentStatus",
+                     provider_v2 = COALESCE(provider_v2, 'STRIPE'::"PaymentProvider"),
                      amount_cents = CASE WHEN amount_cents = 0 OR amount_cents IS NULL THEN $3 ELSE amount_cents END,
                      currency = CASE WHEN currency IS NULL OR currency = '' THEN $4 ELSE currency END,
                      paid_at = COALESCE(paid_at, NOW()),
@@ -83,6 +85,8 @@ export async function POST(req: NextRequest) {
             await prisma.$executeRawUnsafe(
               `UPDATE payment_transactions
                  SET status = 'failed',
+                     status_v2 = 'FAILED'::"PaymentStatus",
+                     provider_v2 = COALESCE(provider_v2, 'STRIPE'::"PaymentProvider"),
                      raw_payload = COALESCE(raw_payload, '{}'::jsonb) || jsonb_build_object('pi_failed', jsonb_build_object('id', $1::text, 'error', $3::text))
                WHERE provider = 'stripe' AND provider_order_id = $1 AND merchant_id = $2`,
               intentId,
@@ -109,6 +113,8 @@ export async function POST(req: NextRequest) {
               `UPDATE payment_transactions
                  SET provider_charge_id = $1,
                      status = $4,
+                     status_v2 = CASE WHEN $4 = 'captured' OR $4 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END,
+                     provider_v2 = COALESCE(provider_v2, 'STRIPE'::"PaymentProvider"),
                      amount_cents = CASE WHEN amount_cents = 0 OR amount_cents IS NULL THEN $2 ELSE amount_cents END,
                      currency = CASE WHEN currency IS NULL OR currency = '' THEN $3 ELSE currency END,
                      refunded_cents = COALESCE(refunded_cents, 0),
@@ -137,7 +143,11 @@ export async function POST(req: NextRequest) {
           if (intentId && matchedMerchantId) {
             await prisma.$executeRawUnsafe(
               `UPDATE payment_transactions
-                 SET status = 'captured', provider_charge_id = COALESCE(provider_charge_id, $1), captured_at = NOW()
+                 SET status = 'captured',
+                     status_v2 = 'SUCCEEDED'::"PaymentStatus",
+                     provider_v2 = COALESCE(provider_v2, 'STRIPE'::"PaymentProvider"),
+                     provider_charge_id = COALESCE(provider_charge_id, $1),
+                     captured_at = NOW()
               WHERE provider = 'stripe' AND provider_order_id = $2 AND merchant_id = $3`,
               chargeId,
               intentId,
@@ -162,6 +172,8 @@ export async function POST(req: NextRequest) {
               `UPDATE payment_transactions
                  SET refunded_cents = $1,
                      status = $2,
+                     status_v2 = CASE WHEN $2 = 'refunded' THEN 'REFUNDED'::"PaymentStatus" ELSE 'SUCCEEDED'::"PaymentStatus" END,
+                     provider_v2 = COALESCE(provider_v2, 'STRIPE'::"PaymentProvider"),
                      refund_status = 'refunded',
                      refunded_at = NOW()
               WHERE provider = 'stripe' AND provider_order_id = $3 AND merchant_id = $4`,

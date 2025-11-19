@@ -124,13 +124,13 @@ export async function POST(req: NextRequest) {
         const txId = randomUUID()
         await prisma.$executeRawUnsafe(
           `INSERT INTO payment_transactions (
-            id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, product_id,
+            id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, merchant_id, product_id,
             amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency,
-            installments, payment_method_type, status, raw_payload, routed_provider
+            installments, payment_method_type, status, raw_payload, routed_provider, provider_v2, status_v2
           ) VALUES (
-            $1, 'stripe', $2, $3, $4, $5, $6,
-            $7, NULL, NULL, NULL, $8,
-            1, 'credit_card', $9, $10::jsonb, 'STRIPE'
+            $1, 'stripe', $2, $3, $4, $5, $10, $11,
+            $6, NULL, NULL, NULL, $7,
+            1, 'credit_card', $8, $9::jsonb, 'STRIPE', 'STRIPE'::"PaymentProvider", $12::"PaymentStatus"
           )
           ON CONFLICT (provider, provider_order_id) DO NOTHING`,
           txId,
@@ -138,11 +138,13 @@ export async function POST(req: NextRequest) {
           doctorId ? String(doctorId) : null,
           profileId ? String(profileId) : null,
           String(clinic.id),
-          String(product.id),
           amount,
           currency,
           isSucceeded ? 'paid' : (isRequiresCapture ? 'authorized' : status || 'processing'),
-          JSON.stringify({ provider: 'stripe', payment_intent_id: pi.id, buyer })
+          JSON.stringify({ provider: 'stripe', payment_intent_id: pi.id, buyer }),
+          String(merchant.id),
+          String(product.id),
+          isSucceeded ? 'SUCCEEDED' : (isRequiresCapture ? 'PROCESSING' : 'PROCESSING')
         )
       } else {
         if (process.env.NODE_ENV !== 'production') console.warn('[stripe][record] payment_transactions table not found — skipping persistence')

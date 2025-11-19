@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { Prisma, PaymentMethod } from '@prisma/client';
+import { Prisma, PaymentMethod, PaymentProvider, PaymentStatus } from '@prisma/client';
 import { isV5, pagarmeCreateCustomer, pagarmeCreateCustomerCard, pagarmeCreateSubscription, pagarmeCreatePlan, pagarmeGetSubscription, pagarmeUpdateCharge } from '@/lib/payments/pagarme/sdk';
 import { createPagarmeSubscription } from '@/lib/providers/pagarme/legacy';
 import crypto from 'crypto';
@@ -65,6 +65,30 @@ export async function POST(req: Request) {
             paymentMethod: inputPayment,
             metadata: body.metadata || undefined,
           });
+          // Update Provider IDs into unified CustomerProvider and pre-created Transaction (best-effort)
+          try {
+            // Try to persist providerCustomerId on CustomerProvider
+            if (unifiedCustomerProvider && result?.providerData?.customer_id) {
+              await prisma.customerProvider.update({
+                where: { customerId_provider_accountId: { customerId: unifiedCustomerProvider.customerId, provider: PaymentProvider.PAGARME, accountId: String((merchant as any).id) } },
+                data: { providerCustomerId: String(result.providerData.customer_id) },
+              });
+            }
+            // Update transaction with provider IDs and final amount/status
+            if (preTransactionId) {
+              await prisma.paymentTransaction.update({
+                where: { id: preTransactionId },
+                data: {
+                  providerOrderId: String(result?.subscriptionId || result?.id || ''),
+                  providerChargeId: String((result as any)?.chargeId || (result as any)?.current_charge?.id || ''),
+                  amountCents: Number(result?.amount || 0) || undefined,
+                  status: (String((result as any)?.status || 'processing')).toLowerCase(),
+                  status_v2: PaymentStatus.PROCESSING,
+                  rawPayload: (result as any) || undefined,
+                },
+              });
+            }
+          } catch (e) { try { console.warn('[subscribe][orchestration] post-update failed (non-blocking)', e instanceof Error ? e.message : String(e)); } catch {} }
           try { console.log('[subscribe][v1->legacy] delegated', { clinicId, offerId, hasSplit: !!result?.providerData, amount: body.amount }); } catch {}
           return NextResponse.json({ success: true, subscription: result, subscription_id: String(result?.subscriptionId || result?.id || '') });
         } else {
@@ -176,6 +200,87 @@ export async function POST(req: Request) {
       try { console.warn('[subscribe] planless mode enabled; skipping plan ensure'); } catch {}
       providerPlanId = null;
     }
+
+    // BEGIN Non-blocking orchestration dual-write (Customer, Provider, Pre-Transaction)
+    let unifiedCustomer: any = null;
+    let unifiedCustomerProvider: any = null;
+    let preTransactionId: string | null = null;
+    try {
+      // Upsert unified Customer (by merchant + email/document)
+      const docDigits = onlyDigits(String(buyer.document || '')) || null;
+      const whereClause: any = {
+        merchantId: String((merchant as any)?.id || ''),
+        OR: [] as any[],
+      };
+      if (buyer.email) whereClause.OR.push({ email: String(buyer.email) });
+      if (docDigits) whereClause.OR.push({ document: String(docDigits) });
+      let existing = null;
+      if (whereClause.OR.length > 0) {
+        existing = await prisma.customer.findFirst({ where: whereClause as any });
+      }
+      unifiedCustomer = existing || await prisma.customer.create({
+        data: {
+          merchantId: String((merchant as any)?.id || ''),
+          name: String(buyer.name || ''),
+          email: buyer.email ? String(buyer.email) : null,
+          phone: String(buyer.phone || ''),
+          document: docDigits,
+          address: (buyer as any)?.address ? (buyer as any).address : undefined,
+          metadata: { source: 'subscribe_v1' },
+        } as any,
+      });
+
+      // Upsert CustomerProvider (unique: customerId+provider+accountId)
+      if (unifiedCustomer && (merchant as any)?.id) {
+        const providerKey = {
+          customerId: unifiedCustomer.id,
+          provider: PaymentProvider.PAGARME,
+          accountId: String((merchant as any).id),
+        } as any;
+        unifiedCustomerProvider = await prisma.customerProvider.upsert({
+          where: { customerId_provider_accountId: providerKey },
+          create: { ...providerKey, providerCustomerId: undefined, metadata: { source: 'subscribe_v1' } },
+          update: {},
+        });
+      }
+
+      // Pre-create PaymentTransaction (status PROCESSING)
+      // amountCents was resolved above
+      const amountCentsPre = (() => {
+        try {
+          // Try reuse resolution from above branch (resolvedRow/selectedOffer/product)
+          const price0 = (typeof (product as any)?.price === 'number') ? Math.round(((product as any).price || 0) * 100) : Math.round(Number((product as any)?.price || 0) * 100);
+          return Number.isFinite(price0) ? price0 : 0;
+        } catch { return 0; }
+      })();
+      preTransactionId = crypto.randomUUID();
+      await prisma.paymentTransaction.create({
+        data: {
+          id: preTransactionId,
+          provider: 'pagarme',
+          provider_v2: PaymentProvider.PAGARME,
+          doctorId: (product as any)?.doctorId || null,
+          clinicId: (product as any)?.clinicId || (clinic?.id || null),
+          merchantId: (merchant as any)?.id || null,
+          productId: String(product.id),
+          amountCents: amountCentsPre || 0,
+          currency: String(((selectedOffer as any)?.currency) || 'BRL'),
+          installments: 1,
+          paymentMethodType: 'credit_card',
+          status: 'processing',
+          status_v2: PaymentStatus.PROCESSING,
+          customerId: unifiedCustomer?.id || null,
+          customerProviderId: unifiedCustomerProvider?.id || null,
+          routedProvider: 'pagarme',
+        },
+      });
+    } catch (e) {
+      try { console.warn('[subscribe][orchestration] dual-write failed (non-blocking)', e instanceof Error ? e.message : String(e)); } catch {}
+      unifiedCustomer = null;
+      unifiedCustomerProvider = null;
+      preTransactionId = null;
+    }
+    // END Non-blocking orchestration dual-write
 
     // Build customer payload
     const phoneDigits = onlyDigits(String(buyer.phone));

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { PaymentProvider } from '@prisma/client';
 import crypto from 'crypto';
 
 function isEnabled() { return true; }
@@ -47,6 +48,45 @@ export async function POST(req: Request) {
 
     const exists = await prisma.checkoutSession.findUnique({ where: { resumeToken }, select: { id: true, resumeToken: true } });
 
+    // BEGIN Non-blocking orchestration dual-write (Customer)
+    let unifiedCustomerId: string | null = null;
+    try {
+      if (email && clinicId) {
+        // Resolve merchant from clinic
+        const merchant = await prisma.merchant.findFirst({ where: { clinicId }, select: { id: true } });
+        if (merchant) {
+          // Upsert Customer
+          const docDigits = document ? document.replace(/\D/g, '') : null;
+          const whereClause: any = { merchantId: merchant.id, OR: [] };
+          if (email) whereClause.OR.push({ email });
+          if (docDigits) whereClause.OR.push({ document: docDigits });
+          let existing = null;
+          if (whereClause.OR.length > 0) {
+            existing = await prisma.customer.findFirst({ where: whereClause, select: { id: true } });
+          }
+          if (existing) {
+            unifiedCustomerId = existing.id;
+          } else {
+            const created = await prisma.customer.create({
+              data: {
+                merchantId: merchant.id,
+                name: (metadata as any)?.buyerName || null,
+                email,
+                phone,
+                document: docDigits,
+                metadata: { source: 'checkout_session_upsert' },
+              },
+              select: { id: true },
+            });
+            unifiedCustomerId = created.id;
+          }
+        }
+      }
+    } catch (e) {
+      try { console.warn('[checkout][session][upsert][orchestration] customer upsert failed (non-blocking)', e instanceof Error ? e.message : String(e)); } catch {}
+    }
+    // END Non-blocking orchestration dual-write
+
     let sess;
     try {
       if (!exists) {
@@ -59,7 +99,7 @@ export async function POST(req: Request) {
             selectedInstallments: selectedInstallments ?? undefined,
             selectedBank,
             paymentMethodsAllowed: paymentMethodsAllowed as any,
-            metadata: metadata as any,
+            metadata: { ...(metadata as any || {}), unifiedCustomerId } as any,
             lastStep,
             origin,
             createdBy,
@@ -84,7 +124,7 @@ export async function POST(req: Request) {
             selectedInstallments: selectedInstallments ?? undefined,
             selectedBank: selectedBank ?? undefined,
             paymentMethodsAllowed: (paymentMethodsAllowed as any) ?? undefined,
-            metadata: (metadata as any) ?? undefined,
+            metadata: (metadata || unifiedCustomerId) ? { ...(metadata as any || {}), unifiedCustomerId } as any : undefined,
             lastStep: lastStep ?? undefined,
             origin: origin ?? undefined,
             createdBy: createdBy ?? undefined,

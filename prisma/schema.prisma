@@ -936,6 +936,12 @@ model PaymentTransaction {
   @@index([status])
   @@index([paidAt])
   @@index([routedProvider])
+  @@index([customerId])
+  @@index([customerProviderId])
+  @@index([customerPaymentMethodId])
+  @@index([customerSubscriptionId])
+  @@index([provider_v2])
+  @@index([status_v2])
   @@map("payment_transactions")
 }
 
@@ -944,7 +950,7 @@ model PaymentTransaction {
 
 model Customer {
   id         String   @id @default(cuid())
-  merchantId String
+  merchantId String   @map("merchant_id")
   name       String?
   email      String?
   phone      String?
@@ -970,7 +976,7 @@ model CustomerProvider {
   customerId         String
   provider           PaymentProvider
   accountId          String?
-  providerCustomerId String
+  providerCustomerId String?
   metadata           Json?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -1195,6 +1201,7 @@ model CheckoutSession {
   @@index([status, pixExpiresAt])
   @@index([orderId])
   @@index([pixOrderId])
+  @@index([paymentTransactionId])
   @@map("checkout_sessions")
 }
 

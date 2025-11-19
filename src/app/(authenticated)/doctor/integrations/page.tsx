@@ -120,6 +120,8 @@ export default function IntegrationsPage() {
   const [stripeVerified, setStripeVerified] = useState(false);
   const [stripeStatusAccountId, setStripeStatusAccountId] = useState<string>('');
   const [stripeStatusLastUsedAt, setStripeStatusLastUsedAt] = useState<string | null>(null);
+  const [stripeStatusApiKey, setStripeStatusApiKey] = useState<string | null>(null);
+  const [stripeStatusWebhookSecret, setStripeStatusWebhookSecret] = useState<string | null>(null);
   const hasAnyConnected = waConnected || pgConnected || emailVerified || stripeConnected;
 
   // Stripe (new, isolated)
@@ -144,6 +146,8 @@ export default function IntegrationsPage() {
   const [appmaxTestMode, setAppmaxTestMode] = useState(true);
   const [appmaxSaving, setAppmaxSaving] = useState(false);
   const [appmaxMerchantId, setAppmaxMerchantId] = useState<string>('');
+  const [appmaxStatusApiKey, setAppmaxStatusApiKey] = useState<string | null>(null);
+  const [appmaxStatusTestMode, setAppmaxStatusTestMode] = useState<boolean>(true);
 
   // Page loading while integrations status are being fetched
   const pageLoading = isLoading || waStatusLoading || pgLoading || emailStatusLoading;
@@ -317,11 +321,15 @@ export default function IntegrationsPage() {
       setStripeVerified(!!data?.verified);
       setStripeStatusAccountId(String(data?.accountId || ''));
       setStripeStatusLastUsedAt(data?.lastUsedAt || null);
+      setStripeStatusApiKey(data?.apiKey || null);
+      setStripeStatusWebhookSecret(data?.webhookSecret || null);
     } catch {
       setStripeConnected(false);
       setStripeVerified(false);
       setStripeStatusAccountId('');
       setStripeStatusLastUsedAt(null);
+      setStripeStatusApiKey(null);
+      setStripeStatusWebhookSecret(null);
     }
   };
 
@@ -337,8 +345,12 @@ export default function IntegrationsPage() {
         const res = await fetch(`/api/admin/integrations/appmax/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
         const data = await res.json();
         setAppmaxConnected(!!data?.connected);
+        setAppmaxStatusApiKey(data?.apiKey || null);
+        setAppmaxStatusTestMode(!!data?.testMode);
       } catch {
         setAppmaxConnected(false);
+        setAppmaxStatusApiKey(null);
+        setAppmaxStatusTestMode(true);
       }
     })();
   }, [currentClinic?.id]);
@@ -349,6 +361,13 @@ export default function IntegrationsPage() {
     // hydrate accountId from status
     if (stripeStatusAccountId && !stripeAccountId) {
       setStripeAccountId(stripeStatusAccountId);
+    }
+    // hydrate masked apiKey and webhookSecret from status
+    if (stripeStatusApiKey && !stripeApiKey) {
+      setStripeApiKey(stripeStatusApiKey);
+    }
+    if (stripeStatusWebhookSecret && !stripeWebhookSecret) {
+      setStripeWebhookSecret(stripeStatusWebhookSecret);
     }
     // resolve merchant id for actions
     (async () => {
@@ -690,6 +709,11 @@ export default function IntegrationsPage() {
                         const mid = await resolveMerchantId();
                         if (mid) setAppmaxMerchantId(mid);
                       }
+                      // Prefill masked apiKey and testMode from status
+                      if (appmaxStatusApiKey && !appmaxApiKey) {
+                        setAppmaxApiKey(appmaxStatusApiKey);
+                      }
+                      setAppmaxTestMode(appmaxStatusTestMode);
                       setAppmaxOpen(true);
                     }}
                   >

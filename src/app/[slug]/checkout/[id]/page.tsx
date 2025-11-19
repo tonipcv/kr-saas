@@ -804,7 +804,7 @@ export default function BrandedCheckoutPage() {
       setStripeElements((prev: any) => (prev === localElements ? null : prev));
       setStripeReady(false);
     };
-  }, [paymentMethod, cardProvider, currentCountry, stripePriceId, routingMap, offerPriceRows]);
+  }, [paymentMethod, cardProvider, stripePriceId]);
 
   // Auto-adjust selected payment method when routing changes (per-method providers)
   useEffect(() => {
@@ -866,10 +866,10 @@ export default function BrandedCheckoutPage() {
     const card = existing || elements.create('card');
     // wait for mount target
     let mountTarget: HTMLElement | null = null;
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 40; i++) {
       mountTarget = document.getElementById('stripe-card-element');
       if (mountTarget) break;
-      await new Promise((r) => setTimeout(r, 25));
+      await new Promise((r) => setTimeout(r, 50));
     }
     if (!mountTarget) throw new Error('stripe-card-element não encontrado');
     // Micro-tick to ensure DOM paint before mount
@@ -1875,10 +1875,10 @@ export default function BrandedCheckoutPage() {
     const card = existing || elements.create('card');
     // Retry a few times to let React render the mount target
     let mountTarget: HTMLElement | null = null;
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 40; i++) {
       mountTarget = document.getElementById('stripe-card-element');
       if (mountTarget) break;
-      await new Promise((r) => setTimeout(r, 25));
+      await new Promise((r) => setTimeout(r, 50));
     }
     if (!mountTarget) throw new Error('stripe-card-element não encontrado');
     if ((card as any)._mounted !== true) {
@@ -2255,7 +2255,8 @@ export default function BrandedCheckoutPage() {
                     <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>{t.phone_label}</div>
                     <div className={`rounded-md ${theme==='DARK'?'bg-[#0f0f0f] border border-gray-800':'bg-gray-100 border border-transparent'} h-11 flex items-center px-2`}>
                       <PhoneInput
-                        defaultCountry="br"
+                        key={`phone-${currentCountry}`}
+                        defaultCountry={currentCountry.toLowerCase() as any}
                         value={buyerPhone}
                         onChange={(val) => setBuyerPhone(val)}
                         placeholder={t.phone_placeholder}

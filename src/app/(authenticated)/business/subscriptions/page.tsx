@@ -15,7 +15,7 @@ interface SubscriptionRow {
   product: string;
   startedAt: string | null;
   updatedAt: string | null;
-  chargesCount: number;
+  provider?: string | null;
   interval?: string | null;
   intervalCount?: number | null;
   internalId?: string;
@@ -134,17 +134,17 @@ export default function BusinessSubscriptionsPage() {
       <div className="min-h-screen bg-gray-50">
         <div className="lg:ml-64">
           <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
-            <div className="overflow-auto rounded-2xl border border-gray-200 bg-white">
+            <div className="overflow-auto rounded-2xl border border-gray-200 bg-white p-3">
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50/80 text-xs text-gray-600">
                   <tr>
                     <th className="px-2 py-2 text-left">Code</th>
                     <th className="px-2 py-2 text-left">Contact</th>
                     <th className="px-2 py-2 text-left">Product</th>
+                    <th className="px-2 py-2 text-left">Provider</th>
                     <th className="px-2 py-2 text-left">Status</th>
                     <th className="px-2 py-2 text-left">Started</th>
                     <th className="px-2 py-2 text-left">Updated</th>
-                    <th className="px-2 py-2 text-left"># of Charges</th>
                     <th className="px-2 py-2 text-left">Charged Every</th>
                   </tr>
                 </thead>
@@ -182,17 +182,17 @@ export default function BusinessSubscriptionsPage() {
             />
           </div>
 
-          <div className="overflow-auto rounded-2xl border border-gray-200 bg-white">
+          <div className="overflow-auto rounded-2xl border border-gray-200 bg-white p-3">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50/80 text-xs text-gray-600">
                 <tr>
                   <th className="px-2 py-2 text-left">Code</th>
                   <th className="px-2 py-2 text-left">Contact</th>
                   <th className="px-2 py-2 text-left">Product</th>
+                  <th className="px-2 py-2 text-left">Provider</th>
                   <th className="px-2 py-2 text-left">Status</th>
                   <th className="px-2 py-2 text-left">Started</th>
                   <th className="px-2 py-2 text-left">Updated</th>
-                  <th className="px-2 py-2 text-left"># of Charges</th>
                   <th className="px-2 py-2 text-left">Charged Every</th>
                 </tr>
               </thead>
@@ -232,10 +232,10 @@ export default function BusinessSubscriptionsPage() {
                         </div>
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap text-gray-900">{row.product || '-'}</td>
+                      <td className="px-2 py-2 whitespace-nowrap text-gray-700">{row.provider || '-'}</td>
                       <td className="px-2 py-2 whitespace-nowrap">{renderStatusBadge(row.status)}</td>
                       <td className="px-2 py-2 whitespace-nowrap text-gray-500">{formatDate(row.startedAt)}</td>
                       <td className="px-2 py-2 whitespace-nowrap text-gray-500">{formatDate(row.updatedAt)}</td>
-                      <td className="px-2 py-2 whitespace-nowrap">{row.chargesCount ?? 0}</td>
                       <td className="px-2 py-2 whitespace-nowrap text-gray-600">{row.interval ? `${String(row.interval).toLowerCase()}${row.intervalCount && row.intervalCount > 1 ? ` x${row.intervalCount}` : ''}` : '-'}</td>
                     </tr>
                   ))

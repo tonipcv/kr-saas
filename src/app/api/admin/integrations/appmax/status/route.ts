@@ -21,7 +21,22 @@ export async function GET(req: NextRequest) {
     const verified = !!integration.lastUsedAt // we may later set this when a call succeeds
     const connected = prelimConnected && (verified || true) // consider connected when prelim ok for now
 
-    return NextResponse.json({ exists: true, connected, verified, testMode: !!creds?.testMode, lastUsedAt: integration.lastUsedAt })
+    // Mask sensitive credentials for prefill (show last 4 chars)
+    const maskSecret = (s: string | null | undefined) => {
+      if (!s || typeof s !== 'string') return null
+      if (s.length <= 4) return '***'
+      return '***' + s.slice(-4)
+    }
+    const apiKeyMasked = maskSecret(creds?.apiKey)
+
+    return NextResponse.json({ 
+      exists: true, 
+      connected, 
+      verified, 
+      testMode: !!creds?.testMode, 
+      apiKey: apiKeyMasked,
+      lastUsedAt: integration.lastUsedAt 
+    })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'internal_error' }, { status: 500 })
   }

@@ -356,6 +356,15 @@ export async function POST(req: Request) {
                             WHEN status = 'canceled' AND ($2::text) = 'failed' THEN ($2::text)
                             ELSE status
                           END,
+                 status_v2 = CASE
+                               WHEN ($2::text) = 'paid' THEN 'SUCCEEDED'::"PaymentStatus"
+                               WHEN ($2::text) IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus"
+                               WHEN ($2::text) = 'failed' THEN 'FAILED'::"PaymentStatus"
+                               WHEN ($2::text) = 'canceled' THEN 'CANCELED'::"PaymentStatus"
+                               WHEN ($2::text) = 'refunded' THEN 'REFUNDED'::"PaymentStatus"
+                               ELSE status_v2
+                             END,
+                 provider_v2 = COALESCE(provider_v2, 'PAGARME'::"PaymentProvider"),
                  raw_payload = $3::jsonb,
                  payment_method_type = COALESCE($4::text, payment_method_type),
                  installments = COALESCE($5::int, installments),
@@ -379,8 +388,8 @@ export async function POST(req: Request) {
             const webhookTxId = `wh_${orderId}_${Date.now()}`;
             try {
               await prisma.$executeRawUnsafe(
-                `INSERT INTO payment_transactions (id, provider, provider_order_id, status, payment_method_type, installments, amount_cents, currency, raw_payload, created_at, routed_provider)
-                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, 0, 'BRL', $6::jsonb, NOW(), 'KRXPAY')
+                `INSERT INTO payment_transactions (id, provider, provider_order_id, status, payment_method_type, installments, amount_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2)
+                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, 0, 'BRL', $6::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END)
                  ON CONFLICT DO NOTHING`,
                 webhookTxId,
                 String(orderId),
@@ -414,6 +423,15 @@ export async function POST(req: Request) {
                             WHEN status = 'canceled' AND ($2::text) = 'failed' THEN ($2::text)
                             ELSE status
                           END,
+                 status_v2 = CASE
+                               WHEN ($2::text) = 'paid' THEN 'SUCCEEDED'::"PaymentStatus"
+                               WHEN ($2::text) IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus"
+                               WHEN ($2::text) = 'failed' THEN 'FAILED'::"PaymentStatus"
+                               WHEN ($2::text) = 'canceled' THEN 'CANCELED'::"PaymentStatus"
+                               WHEN ($2::text) = 'refunded' THEN 'REFUNDED'::"PaymentStatus"
+                               ELSE status_v2
+                             END,
+                 provider_v2 = COALESCE(provider_v2, 'PAGARME'::"PaymentProvider"),
                  raw_payload = $3::jsonb,
                  payment_method_type = COALESCE($5::text, payment_method_type),
                  installments = COALESCE($6::int, installments),
@@ -438,8 +456,8 @@ export async function POST(req: Request) {
             const webhookTxId2 = `wh_${chargeId}_${Date.now()}`;
             try {
               await prisma.$executeRawUnsafe(
-                `INSERT INTO payment_transactions (id, provider, provider_charge_id, status, payment_method_type, installments, amount_cents, currency, raw_payload, created_at, routed_provider)
-                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, 0, 'BRL', $6::jsonb, NOW(), 'KRXPAY')
+                `INSERT INTO payment_transactions (id, provider, provider_charge_id, status, payment_method_type, installments, amount_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2)
+                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, 0, 'BRL', $6::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END)
                  ON CONFLICT DO NOTHING`,
                 webhookTxId2,
                 String(chargeId),

@@ -57,6 +57,7 @@ export async function GET(req: Request) {
       `SELECT 
          id,
          provider_subscription_id as "providerSubscriptionId",
+         provider,
          status,
          customer_id as "customerId",
          product_id as "productId",
@@ -112,13 +113,13 @@ export async function GET(req: Request) {
       return {
         id: r.providerSubscriptionId || r.id,
         internalId: r.id,
+        provider: r.provider || null,
         status: r.status,
         customerName,
         customerEmail,
         product: productName,
         startedAt: r.startAt || null,
         updatedAt: r.updatedAt || r.currentPeriodStart || null,
-        chargesCount: Number((r as any).chargesCount || 0),
         interval,
         intervalCount,
       };

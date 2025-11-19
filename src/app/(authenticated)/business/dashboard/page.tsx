@@ -117,6 +117,9 @@ export default function BusinessDashboard() {
   const [seriesApi, setSeriesApi] = useState<Array<[number, number]>>([]);
   const [transactions, setTransactions] = useState<TxRow[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const pageLoading = useMemo(() => {
+    return isLoading || loading || paymentsReady === null || !currentClinic;
+  }, [isLoading, loading, paymentsReady, currentClinic]);
 
   useEffect(() => {
     const load = async () => {
@@ -259,9 +262,7 @@ export default function BusinessDashboard() {
       router.replace('/business/clinic?create=1');
     }
   }, [isLoading, currentClinic, router]);
-  if (!currentClinic) return null;
-  // While checking payments, avoid flicker
-  if (paymentsReady === null) return null;
+  // Keep rendering and use overlay while loading to avoid flicker and partially rendered navigation
 
   // Locale-aware strings for the access gating modal
   const isPT = typeof navigator !== 'undefined' && navigator.language && navigator.language.toLowerCase().startsWith('pt');
@@ -276,6 +277,15 @@ export default function BusinessDashboard() {
 
   return (
     <div className="min-h-screen bg-white">
+      {pageLoading && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white/95">
+          <div className="flex flex-col items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={currentClinic?.logo || "/logo.png"} alt="Clinic" className="h-8 w-auto object-contain opacity-80" />
+            <div className="h-6 w-6 rounded-full border-2 border-gray-300 border-t-transparent animate-spin" />
+          </div>
+        </div>
+      )}
       {/* Access gating modal */}
       <Dialog open={session?.user?.accessGranted === false} onOpenChange={() => { /* block closing */ }}>
         <DialogContent className="max-w-md">
