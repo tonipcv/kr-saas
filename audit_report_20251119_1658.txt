@@ -4,10 +4,10 @@
 +--------------+-------+
 | provider     | count |
 +--------------+-------+
-| appmax       | 50    |
+| appmax       | 51    |
 | open_banking | 42    |
-| pagarme      | 19    |
-| stripe       | 1     |
+| pagarme      | 23    |
+| stripe       | 2     |
 +--------------+-------+
 
 2) Sessões pagas sem payment_transaction_id
@@ -19,7 +19,7 @@
 +-----------------+--------------------------+-----------------+---------------+---------------------+
 | pct_customer_id | pct_customer_provider_id | pct_provider_v2 | pct_status_v2 | pct_routed_provider |
 +-----------------+--------------------------+-----------------+---------------+---------------------+
-| 56.88           | 0                        | 100             | 100           | 100                 |
+| 52.83           | 16.35                    | 99.37           | 99.37         | 100                 |
 +-----------------+--------------------------+-----------------+---------------+---------------------+
 
 4) Providers: string livre vs enum (provider_v2)
@@ -27,10 +27,11 @@
 +-----------------+-------------+-------+
 | provider_string | provider_v2 | count |
 +-----------------+-------------+-------+
-| pagarme         | PAGARME     | 280   |
-| appmax          | APPMAX      | 54    |
+| pagarme         | PAGARME     | 283   |
+| appmax          | APPMAX      | 55    |
 | open_banking    | OPENFINANCE | 42    |
-| stripe          | STRIPE      | 27    |
+| stripe          | STRIPE      | 28    |
+| pagarme         |             | 1     |
 +-----------------+-------------+-------+
 
 5) Status (string) por provider (90 dias)
@@ -38,16 +39,16 @@
 +--------------+------------+-------+
 | provider     | status     | count |
 +--------------+------------+-------+
-| pagarme      | processing | 188   |
-| pagarme      | paid       | 52    |
+| pagarme      | processing | 189   |
+| pagarme      | paid       | 55    |
 | appmax       | processing | 48    |
 | open_banking | paid       | 41    |
 | pagarme      | pending    | 15    |
-| stripe       | paid       | 14    |
+| stripe       | paid       | 15    |
 | stripe       | processing | 13    |
 | pagarme      | active     | 10    |
 | pagarme      | canceled   | 9     |
-| appmax       | paid       | 6     |
+| appmax       | paid       | 7     |
 | pagarme      | failed     | 6     |
 | open_banking | failed     | 1     |
 +--------------+------------+-------+
@@ -58,28 +59,33 @@
 | provider_v2 | status_v2  | count |
 +-------------+------------+-------+
 | PAGARME     | PROCESSING | 203   |
-| PAGARME     | SUCCEEDED  | 52    |
+| PAGARME     | SUCCEEDED  | 55    |
 | APPMAX      | PROCESSING | 48    |
 | OPENFINANCE | SUCCEEDED  | 41    |
-| STRIPE      | SUCCEEDED  | 14    |
+| STRIPE      | SUCCEEDED  | 15    |
 | STRIPE      | PROCESSING | 13    |
 | PAGARME     |            | 10    |
 | PAGARME     | CANCELED   | 9     |
+| APPMAX      | SUCCEEDED  | 7     |
 | PAGARME     | FAILED     | 6     |
-| APPMAX      | SUCCEEDED  | 6     |
+|             |            | 1     |
 | OPENFINANCE | FAILED     | 1     |
 +-------------+------------+-------+
 
 7) Clientes duplicados (customers) por email
 --------------------------------------------
-(no rows)
++-----------------------+-------+
+| email                 | count |
++-----------------------+-------+
+| xppsalvador@gmail.com | 2     |
++-----------------------+-------+
 
 8) Uso de tabelas antigas (payment_customers) x novas (customers)
 -----------------------------------------------------------------
 +-------------------+-------+
 | table             | count |
 +-------------------+-------+
-| customers         | 3     |
+| customers         | 5     |
 | payment_customers | 13    |
 +-------------------+-------+
 
@@ -88,7 +94,7 @@
 +----------+-------+--------+------------+
 | provider | total | linked | linked_pct |
 +----------+-------+--------+------------+
-| NULL     | 14    | 4      | 28.57      |
+| NULL     | 17    | 4      | 23.53      |
 +----------+-------+--------+------------+
 
 10) Valor (centavos) sem customer_id (30 dias)
@@ -97,9 +103,9 @@
 | provider     | amount_cents | tx_count |
 +--------------+--------------+----------+
 | open_banking | 4087700      | 42       |
-| appmax       | 310100       | 50       |
-| pagarme      | 120000       | 19       |
-| stripe       | 2000         | 1        |
+| pagarme      | 1342061      | 23       |
+| appmax       | 320100       | 51       |
+| stripe       | 5000         | 2        |
 +--------------+--------------+----------+
 
 11) Métodos de pagamento salvos (por provider)
@@ -107,7 +113,7 @@
 +----------+---------+
 | provider | methods |
 +----------+---------+
-| STRIPE   | 3       |
+| STRIPE   | 6       |
 +----------+---------+
 
 12) Comparativo gateways (últimos 30 dias)
@@ -115,10 +121,10 @@
 +--------------+----------+---------+----------+-------------+
 | provider     | tx_total | tx_paid | paid_pct | no_customer |
 +--------------+----------+---------+----------+-------------+
-| pagarme      | 207      | 52      | 25.12    | 19          |
-| appmax       | 54       | 6       | 11.11    | 50          |
+| pagarme      | 178      | 43      | 24.16    | 23          |
+| appmax       | 55       | 7       | 12.73    | 51          |
 | open_banking | 42       | 41      | 97.62    | 42          |
-| stripe       | 27       | 14      | 51.85    | 1           |
+| stripe       | 28       | 15      | 53.57    | 2           |
 +--------------+----------+---------+----------+-------------+
 
 13) Resumo Executivo (Status)
@@ -126,5 +132,5 @@
 +-----------+----------------+--------------+
 | customers | provider_enums | status_enums |
 +-----------+----------------+--------------+
-| 🚨        | ✅              | ⚠️           |
+| 🚨        | ⚠️             | ⚠️           |
 +-----------+----------------+--------------+

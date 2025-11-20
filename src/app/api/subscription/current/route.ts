@@ -71,17 +71,21 @@ export async function GET() {
     const isActive = status === 'ACTIVE' || isTrial;
     const daysRemaining = 0; // Pode ser calculado se trial_ends_at estiver disponível
 
+    const txUsage = (usage as any)?.transactions || { current: 0, limit: 0 };
+
     const responseBody = {
       isActive,
       isTrial,
       isExpired: status === 'EXPIRED',
       daysRemaining,
       limits: {
-        maxPatients: usage?.patients?.limit ?? 0,
+        // Deprecated legacy fields kept for compatibility
+        maxPatients: 0,
         maxProtocols: 0,
         maxCourses: 0,
         maxProducts: 0,
-        features: []
+        // New
+        maxTransactions: Number(txUsage.limit || 0),
       },
       planName,
       status

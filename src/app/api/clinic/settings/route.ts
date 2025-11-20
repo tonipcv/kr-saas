@@ -23,8 +23,8 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Acesso negado. Apenas médicos podem atualizar configurações da clínica.' }, { status: 403 });
     }
 
-    const { name, description, logo, email, phone, address, city, state, zipCode, country, website, theme, buttonColor, buttonTextColor, subdomain } = await request.json();
-    console.log('[CLINIC SETTINGS] Incoming payload', { name, hasLogo: !!logo, email, phone, city, state, website, subdomain });
+    const { name, slug, description, logo, email, phone, address, city, state, zipCode, country, website, theme, buttonColor, buttonTextColor, subdomain } = await request.json();
+    console.log('[CLINIC SETTINGS] Incoming payload', { name, slug, hasLogo: !!logo, email, phone, city, state, website, subdomain });
 
     if (!name?.trim()) {
       return NextResponse.json({ error: 'Nome da clínica é obrigatório' }, { status: 400 });
@@ -123,9 +123,24 @@ export async function PUT(request: NextRequest) {
     const btnColor = buttonColor && typeof buttonColor === 'string' && hexRe.test(buttonColor) ? buttonColor : (buttonColor ? null : undefined);
     const btnTextColor = buttonTextColor && typeof buttonTextColor === 'string' && hexRe.test(buttonTextColor) ? buttonTextColor : (buttonTextColor ? null : undefined);
 
-    // Verificar se o nome mudou para gerar novo slug
+    // Resolver slug desejado: se 'slug' foi enviado, usar após validar; senão, gerar ao mudar nome
     let newSlug = clinic.slug;
-    if (name.trim() !== clinic.name) {
+    if (typeof slug === 'string') {
+      const s = slug.trim().toLowerCase();
+      if (s) {
+        if (!/^[a-z0-9-]{3,63}$/.test(s)) {
+          return NextResponse.json({ error: 'Slug inválido. Use apenas minúsculas, números e hífen (3-63 caracteres)' }, { status: 400 });
+        }
+        if (s.startsWith('-') || s.endsWith('-') || /--/.test(s)) {
+          return NextResponse.json({ error: 'Slug não pode começar/terminar com hífen ou conter hífens duplos' }, { status: 400 });
+        }
+        const exists = await prisma.clinic.findFirst({ where: { slug: s, id: { not: clinic.id } }, select: { id: true } });
+        if (exists) {
+          return NextResponse.json({ error: 'Slug já está em uso' }, { status: 409 });
+        }
+        newSlug = s;
+      }
+    } else if (name.trim() !== clinic.name) {
       newSlug = await generateUniqueSlugForClinic(name.trim(), clinic.id);
     }
 

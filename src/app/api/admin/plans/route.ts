@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
         name: true,
         description: true,
         monthlyPrice: true,
-        baseDoctors: true,
+        monthlyTxLimit: true,
         features: true,
         tier: true,
       },
@@ -76,7 +76,9 @@ export async function GET(request: NextRequest) {
         name: p.name,
         description: p.description,
         price: p.monthlyPrice != null ? Number(p.monthlyPrice) : null,
-        maxDoctors: p.baseDoctors,
+        // Keep the old key name used by the UI for backwards compatibility,
+        // but feed it with the new monthly transactions limit value.
+        maxDoctors: (p as any).monthlyTxLimit,
         features: featuresSummary,
         tier: p.tier,
       } as any;
@@ -110,44 +112,29 @@ export async function POST(request: NextRequest) {
     const {
       name,
       description,
-      price,
-      maxPatients,
-      maxProtocols,
-      maxCourses,
-      maxProducts,
+      price,            // monthlyPrice
+      monthlyTxLimit,   // new tx limit
       trialDays,
-      isDefault,
-      referralsMonthlyLimit,
-      maxRewards,
-      allowCreditPerPurchase,
-      allowCampaigns
+      tier,             // STARTER | GROWTH | ENTERPRISE
+      isActive,
+      isPublic,
     } = body;
 
-    if (!name || !description || price === undefined) {
+    if (!name || price === undefined) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    if (isDefault) {
-      await prisma.subscriptionPlan.updateMany({ where: { isDefault: true }, data: { isDefault: false } });
-    }
-
-    const created = await prisma.subscriptionPlan.create({
+    const created = await prisma.clinicPlan.create({
       data: {
         name,
-        description,
-        price: parseFloat(price),
-        maxPatients: parseInt(maxPatients) || 999999,
-        maxProtocols: parseInt(maxProtocols) || 999999,
-        maxCourses: parseInt(maxCourses) || 999999,
-        maxProducts: parseInt(maxProducts) || 999999,
-        trialDays: parseInt(trialDays) || null,
-        isDefault: Boolean(isDefault),
-        referralsMonthlyLimit: referralsMonthlyLimit !== undefined && referralsMonthlyLimit !== null ? parseInt(referralsMonthlyLimit) : null,
-        maxRewards: maxRewards !== undefined && maxRewards !== null ? parseInt(maxRewards) : null,
-        allowCreditPerPurchase: Boolean(allowCreditPerPurchase),
-        allowCampaigns: Boolean(allowCampaigns),
-        isActive: true,
-      }
+        description: description ?? null,
+        monthlyPrice: parseFloat(price),
+        monthlyTxLimit: parseInt(monthlyTxLimit ?? '1000'),
+        trialDays: trialDays !== undefined && trialDays !== null ? parseInt(trialDays) : 30,
+        tier: tier ?? 'STARTER',
+        isActive: isActive !== undefined ? Boolean(isActive) : true,
+        isPublic: isPublic !== undefined ? Boolean(isPublic) : true,
+      },
     });
 
     return NextResponse.json({ plan: created }, { status: 201 });

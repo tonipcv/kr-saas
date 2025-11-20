@@ -55,16 +55,22 @@ export async function POST(req: Request) {
         // Resolve merchant from clinic
         const merchant = await prisma.merchant.findFirst({ where: { clinicId }, select: { id: true } });
         if (merchant) {
-          // Upsert Customer
+          // Upsert Customer by email ONLY (unique key: merchantId + email)
           const docDigits = document ? document.replace(/\D/g, '') : null;
-          const whereClause: any = { merchantId: merchant.id, OR: [] };
-          if (email) whereClause.OR.push({ email });
-          if (docDigits) whereClause.OR.push({ document: docDigits });
-          let existing = null;
-          if (whereClause.OR.length > 0) {
-            existing = await prisma.customer.findFirst({ where: whereClause, select: { id: true } });
-          }
+          const existing = await prisma.customer.findFirst({
+            where: { merchantId: merchant.id, email },
+            select: { id: true }
+          });
           if (existing) {
+            // Update existing customer with latest data
+            await prisma.customer.update({
+              where: { id: existing.id },
+              data: {
+                name: (metadata as any)?.buyerName || null,
+                phone: phone || undefined,
+                document: docDigits || undefined,
+              }
+            }).catch(() => {});
             unifiedCustomerId = existing.id;
           } else {
             const created = await prisma.customer.create({

@@ -174,35 +174,41 @@ export class SubscriptionService {
       return null;
     }
 
-    // Count active clinic members and patients across ALL clinic members
-    const members: Array<{ userId: string }> = await prisma.clinicMember.findMany({
-      where: { clinicId, isActive: true },
-      select: { userId: true }
-    });
-    const memberUserIds = members.map(m => m.userId);
-
-    const [docRows, patientsCount]: any[] = await Promise.all([
-      prisma.$queryRaw`
-        SELECT COUNT(*)::int as count
-        FROM clinic_members
-        WHERE "clinicId" = ${clinicId}
-        AND "isActive" = true
-      `,
-      memberUserIds.length > 0
-        ? prisma.patientProfile.count({ where: { doctorId: { in: memberUserIds }, isActive: true } })
-        : Promise.resolve(0)
-    ]);
-
+    // Count active clinic members (doctors)
+    const docRows: any[] = await prisma.$queryRaw`
+      SELECT COUNT(*)::int as count
+      FROM clinic_members
+      WHERE "clinicId" = ${clinicId}
+      AND "isActive" = true
+    `;
     const doctorsCount = (docRows?.[0]?.count ?? 0) as number;
 
-    // Resolve patients limit with safe defaults when plan data is missing
-    let patientsLimit = Number((subscription as any).maxPatients ?? 0);
-    if (!patientsLimit || Number.isNaN(patientsLimit)) {
-      const planName = String((subscription as any).name || (subscription as any).plan_name || '').toLowerCase();
-      if (planName.includes('starter')) patientsLimit = 1000;
-      else if (planName.includes('free')) patientsLimit = 100; // conservative default for Free
-      else patientsLimit = 1000; // default safe cap to avoid blocking paid users
-    }
+    // Transactions usage (current calendar month)
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    // Count transactions for clinic within [periodStart, periodEnd)
+    // Count only valid revenue actions: PAID, AUTHORIZED, CAPTURED, CONFIRMED
+    const txRows: any[] = await prisma.$queryRaw`
+      SELECT COUNT(*)::int as count
+      FROM payment_transactions
+      WHERE clinic_id = ${clinicId}
+        AND created_at >= ${periodStart}
+        AND created_at < ${periodEnd}
+        AND status IN ('paid','authorized','captured','confirmed')
+    `;
+    const currentTx = (txRows?.[0]?.count ?? 0) as number;
+
+    // Resolve transactions limit by plan name (Option A)
+    const planName = String((subscription as any).name || (subscription as any).plan_name || '').toLowerCase();
+    const resolveLimit = () => {
+      if (planName.includes('free')) return 100;
+      if (planName.includes('pro') || planName.includes('starter')) return 1000;
+      if (planName.includes('scale') || planName.includes('enterprise')) return 10000;
+      return 100; // conservative default
+    };
+    const txLimit = resolveLimit();
 
     return {
       subscription,
@@ -211,15 +217,24 @@ export class SubscriptionService {
           current: doctorsCount,
           limit: subscription.maxDoctors
         },
-        patients: {
-          current: Number(patientsCount || 0),
-          limit: patientsLimit
-        }
+        transactions: {
+          current: currentTx,
+          limit: txLimit,
+          periodStart: periodStart.toISOString(),
+          periodEnd: periodEnd.toISOString()
+        } as any
       }
     };
   }
 
-  // Validações
+  async canProcessTransaction(clinicId: string): Promise<boolean> {
+    const usage = await this.getSubscriptionUsage(clinicId);
+    if (!usage) return false;
+    const tx = (usage.usage as any).transactions;
+    if (!tx) return false;
+    return Number(tx.current || 0) < Number(tx.limit || 0);
+  }
+
   async canAddDoctor(clinicId: string): Promise<boolean> {
     const usage = await this.getSubscriptionUsage(clinicId);
     if (!usage) return false;

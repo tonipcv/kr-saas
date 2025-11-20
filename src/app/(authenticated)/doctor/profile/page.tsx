@@ -39,6 +39,7 @@ interface UserStats {
 export default function DoctorProfilePage() {
   const router = useRouter();
   const { data: session, update } = useSession();
+  const { currentClinic, refreshClinics } = useClinic();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState('');
@@ -55,6 +56,9 @@ export default function DoctorProfilePage() {
   const [publicPageTemplate, setPublicPageTemplate] = useState<'DEFAULT' | 'MINIMAL' | 'HERO_CENTER' | 'HERO_LEFT'>('DEFAULT');
   const [clinics, setClinics] = useState<any[]>([]);
   const [clinicsLoading, setClinicsLoading] = useState(false);
+  const [clinicName, setClinicName] = useState<string>('');
+  const [clinicSlug, setClinicSlug] = useState<string>('');
+  const [savingClinic, setSavingClinic] = useState<boolean>(false);
 
   const slugify = (value: string) => {
     return (value || '')
@@ -157,6 +161,31 @@ export default function DoctorProfilePage() {
 
     loadUserData();
   }, [session, router, loadClinics]);
+
+  useEffect(() => {
+    if (currentClinic) {
+      setClinicName(currentClinic.name || '');
+      setClinicSlug((currentClinic.slug as any) || '');
+    }
+  }, [currentClinic?.id]);
+
+  const handleSaveClinic = async () => {
+    if (!clinicName.trim()) return;
+    try {
+      setSavingClinic(true);
+      const params = new URLSearchParams();
+      if (currentClinic?.id) params.set('clinicId', currentClinic.id);
+      const res = await fetch(`/api/clinic/settings?${params.toString()}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: clinicName.trim(), slug: clinicSlug.trim() })
+      });
+      if (!res.ok) return;
+      await refreshClinics();
+    } finally {
+      setSavingClinic(false);
+    }
+  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -468,69 +497,36 @@ export default function DoctorProfilePage() {
                     </div>
                   </CardContent>
                 </Card>
-
-                {/* Clinics */}
-                <Card className="mt-6 bg-white border border-gray-100 shadow-none rounded-lg">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base font-semibold text-gray-900">Clinics</CardTitle>
+              </div>
+              <div className="mt-6 lg:col-span-2">
+                <Card className="bg-white border border-gray-100 shadow-none rounded-lg">
+                  <CardHeader className="pb-1">
+                    <CardTitle className="text-xl font-bold text-gray-900">Business Information</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    {clinicsLoading ? (
-                      <div className="space-y-3">
-                        {[1, 2].map((i) => (
-                          <div key={i} className="animate-pulse">
-                            <div className="h-12 bg-gray-100 rounded-lg"></div>
-                          </div>
-                        ))}
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-gray-900">Clinic Name</label>
+                        <Input value={clinicName} onChange={(e) => setClinicName(e.target.value)} disabled={!isEditing} className="border-gray-300 bg-white text-gray-900 rounded-md h-8" />
                       </div>
-                    ) : clinics.length === 0 ? (
-                      <div className="text-sm text-gray-600">You are not a member of any clinic yet.</div>
-                    ) : (
-                      <div className="space-y-3">
-                        {clinics.map((clinic) => (
-                          <div key={clinic.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-200">
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">{clinic.name}</div>
-                              <div className="text-xs text-gray-500">{clinic.role}</div>
-                            </div>
-                            {clinic.role === 'OWNER' && (
-                              <Link href="/clinic/subscription" className="text-sm text-blue-600 hover:text-blue-700 hover:underline">
-                                Manage Subscription
-                              </Link>
-                            )}
-                          </div>
-                        ))}
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-gray-900">Clinic Slug</label>
+                        <Input value={clinicSlug} onChange={(e) => setClinicSlug(e.target.value)} disabled={!isEditing} className="border-gray-300 bg-white text-gray-900 rounded-md h-8" placeholder="ex.: minha-clinica" />
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Restrictions */}
-                <Card className="mt-6 bg-white border border-gray-100 shadow-none rounded-lg">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base font-semibold text-gray-900">Restrictions</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-gray-600">Credit Limit</label>
-                      <Input
-                        value={''}
-                        placeholder=""
-                        onChange={() => {}}
-                        className="h-8 rounded-md bg-white border-gray-200 text-gray-900"
-                      />
-                      <p className="text-xs text-gray-500">Leave this field blank if no limit is required</p>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button onClick={handleSaveClinic} disabled={!isEditing || savingClinic || !clinicName.trim()} className="h-8">
+                        {savingClinic ? 'Saving...' : 'Save'}
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
               </div>
-              {/* Sidebar removed */}
               <div className="hidden lg:block" />
             </div>
           </div>
         </div>
       </div>
-
     </div>
   );
 }

@@ -256,11 +256,9 @@ export default function BusinessDashboard() {
 
   const visibleCount = 10;
   const visibleTransactions = useMemo(() => transactions.slice(0, visibleCount), [transactions]);
-  // If no clinic selected, redirect to blocked/create page
+  // Disable redirect when no clinic is selected
   useEffect(() => {
-    if (!isLoading && !currentClinic) {
-      router.replace('/business/clinic?create=1');
-    }
+    return;
   }, [isLoading, currentClinic, router]);
   // Keep rendering and use overlay while loading to avoid flicker and partially rendered navigation
 
@@ -286,8 +284,8 @@ export default function BusinessDashboard() {
           </div>
         </div>
       )}
-      {/* Access gating modal */}
-      <Dialog open={session?.user?.accessGranted === false} onOpenChange={() => { /* block closing */ }}>
+      {/* Access gating modal disabled */}
+      <Dialog open={false} onOpenChange={() => { /* disabled */ }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{i18n.title}</DialogTitle>

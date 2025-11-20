@@ -116,23 +116,9 @@ function EnforceSubscription({ children }: { children: React.ReactNode }) {
     return !anyPaid;
   }, [availableClinics]);
 
-  // Intercept clicks globally when access is pending to show modal instead of navigating
+  // Disable click interception for access gating
   useEffect(() => {
-    if ((session?.user as any)?.accessGranted !== false) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-      const anchor = target.closest('a') as HTMLAnchorElement | null;
-      if (!anchor) return;
-      const href = anchor.getAttribute('href') || '';
-      const isInternal = href.startsWith('/') && !href.startsWith('/auth') && !href.startsWith('/admin') && !href.startsWith('/business/merchant-application');
-      if (isInternal) {
-        e.preventDefault();
-        setShowAccessModal(true);
-      }
-    };
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
+    return;
   }, [session?.user]);
 
   return (
@@ -144,7 +130,7 @@ function EnforceSubscription({ children }: { children: React.ReactNode }) {
 
       {/* Global access gating modal (client-side) */}
       <Dialog
-        open={((session?.user as any)?.accessGranted === false) && !isMerchantApplication && !pathname?.startsWith('/admin')}
+        open={false}
         onOpenChange={(open) => setShowAccessModal(open)}
       >
         <DialogContent className="max-w-md">

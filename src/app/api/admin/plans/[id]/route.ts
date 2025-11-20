@@ -25,7 +25,7 @@ export async function GET(
 
     const { id: planId } = await params;
 
-    const plan = await prisma.subscriptionPlan.findUnique({
+    const plan = await prisma.clinicPlan.findUnique({
       where: { id: planId }
     });
 
@@ -64,46 +64,29 @@ export async function PUT(
     const {
       name,
       description,
-      price,
-      maxPatients,
-      maxProtocols,
-      maxCourses,
-      maxProducts,
+      price,            // monthlyPrice
+      monthlyTxLimit,   // new tx limit
       trialDays,
-      isDefault,
-      referralsMonthlyLimit,
-      maxRewards,
-      allowCreditPerPurchase,
-      allowCampaigns
+      tier,             // STARTER | GROWTH | ENTERPRISE
+      isActive,
+      isPublic,
     } = await request.json();
 
     if (!name || !description || price === undefined) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    if (isDefault) {
-      await prisma.subscriptionPlan.updateMany({
-        where: { isDefault: true },
-        data: { isDefault: false }
-      });
-    }
-
-    const updatedPlan = await prisma.subscriptionPlan.update({
+    const updatedPlan = await prisma.clinicPlan.update({
       where: { id: planId },
       data: {
         name,
-        description,
-        price: parseFloat(price),
-        maxPatients: parseInt(maxPatients) || 999999,
-        maxProtocols: parseInt(maxProtocols) || 999999,
-        maxCourses: parseInt(maxCourses) || 999999,
-        maxProducts: parseInt(maxProducts) || 999999,
-        trialDays: parseInt(trialDays) || null,
-        isDefault,
-        referralsMonthlyLimit: referralsMonthlyLimit !== undefined && referralsMonthlyLimit !== null ? parseInt(referralsMonthlyLimit) : null,
-        maxRewards: maxRewards !== undefined && maxRewards !== null ? parseInt(maxRewards) : null,
-        allowCreditPerPurchase: Boolean(allowCreditPerPurchase),
-        allowCampaigns: Boolean(allowCampaigns)
+        description: description ?? null,
+        monthlyPrice: parseFloat(price),
+        monthlyTxLimit: parseInt(monthlyTxLimit ?? '1000'),
+        trialDays: trialDays !== undefined && trialDays !== null ? parseInt(trialDays) : 30,
+        tier: tier ?? 'STARTER',
+        isActive: isActive !== undefined ? Boolean(isActive) : undefined,
+        isPublic: isPublic !== undefined ? Boolean(isPublic) : undefined,
       }
     });
 
@@ -136,7 +119,7 @@ export async function DELETE(
 
     const { id: planId } = await params;
 
-    const updated = await prisma.subscriptionPlan.update({
+    const updated = await prisma.clinicPlan.update({
       where: { id: planId },
       data: { isActive: false }
     });

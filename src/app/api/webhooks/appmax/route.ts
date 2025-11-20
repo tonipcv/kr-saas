@@ -202,6 +202,24 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ received: true })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'internal_error' }, { status: 500 })
+    console.error('[appmax][webhook] processing error', e)
+    
+    // CRITICAL: Mesmo com erro, SEMPRE retorna 200 para evitar reenvios duplicados
+    // Marca webhook para retry via worker
+    if (orderId) {
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE webhook_events 
+           SET next_retry_at = NOW(), 
+               processing_error = $2,
+               is_retryable = true
+           WHERE provider = 'appmax' AND provider_event_id = $1`,
+          String(orderId),
+          String(e?.message || 'Unknown error').substring(0, 5000)
+        )
+      } catch {}
+    }
+    
+    return NextResponse.json({ received: true, will_retry: true }, { status: 200 })
   }
 }

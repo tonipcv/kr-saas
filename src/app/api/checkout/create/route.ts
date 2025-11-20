@@ -18,6 +18,7 @@ import { PRICING } from '@/lib/pricing';
 import { selectProvider } from '@/lib/payments/core/routing';
 import Stripe from 'stripe';
 import { getCurrencyForCountry } from '@/lib/payments/countryCurrency';
+import { SubscriptionService } from '@/services/subscription';
 
 function onlyDigits(s: string) { return (s || '').replace(/\D/g, ''); }
 
@@ -59,6 +60,24 @@ export async function POST(req: Request) {
         return NextResponse.json(
           { error: 'Clínica sem recebedor cadastrado. Pagamentos indisponíveis no momento.', code: 'MISSING_RECIPIENT' },
           { status: 400 }
+        );
+      }
+
+      // Subscription/plan guard: enforce monthly transactions limit (Option A)
+      try {
+        const subscriptionService = new SubscriptionService();
+        const allowed = await subscriptionService.canProcessTransaction(String(clinic.id));
+        if (!allowed) {
+          return NextResponse.json(
+            { error: 'Limite mensal de transações atingido. Atualize seu plano para continuar processando pagamentos.', code: 'TX_LIMIT_REACHED' },
+            { status: 402 }
+          );
+        }
+      } catch (e) {
+        try { console.warn('[checkout][create] canProcessTransaction check failed, blocking as safe default', e instanceof Error ? e.message : e); } catch {}
+        return NextResponse.json(
+          { error: 'Não foi possível validar sua assinatura. Tente novamente mais tarde.', code: 'SUBSCRIPTION_CHECK_FAILED' },
+          { status: 503 }
         );
       }
       // Select exact offer if provided; otherwise pick first active one-time offer

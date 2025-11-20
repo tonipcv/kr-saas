@@ -19,7 +19,8 @@ import {
   Loader2,
   Calendar,
   Mail,
-  User
+  User,
+  Trash2
 } from 'lucide-react';
 import Link from 'next/link';
 import { 
@@ -93,7 +94,8 @@ export default function ClinicsPage() {
   const { data: session } = useSession();
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [payStatus, setPayStatus] = useState<Record<string, 'ready' | 'issue'>>({});
+  const [payStatus, setPayStatus] = useState<Record<string, 'ready' | 'issue' | 'checking'>>({});
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     const loadClinics = async () => {
@@ -121,11 +123,9 @@ export default function ClinicsPage() {
   useEffect(() => {
     const controller = new AbortController();
     const run = async () => {
-      // Seed initial status from server data to avoid flicker
-      const initial: Record<string, 'ready' | 'issue'> = {};
-      clinics.forEach(c => {
-        initial[c.id] = c?.merchant?.recipientId ? 'ready' : 'issue';
-      });
+      // Initialize all as 'checking' to avoid false "Integrated" flicker
+      const initial: Record<string, 'ready' | 'issue' | 'checking'> = {};
+      clinics.forEach(c => { initial[c.id] = 'checking'; });
       setPayStatus(initial);
       await Promise.all(
         clinics.map(async (c) => {
@@ -397,6 +397,9 @@ export default function ClinicsPage() {
                             {payStatus[clinic.id] === 'ready' && (
                               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 ring-1 ring-inset ring-green-200">Integrated</span>
                             )}
+                            {payStatus[clinic.id] === 'checking' && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-700 ring-1 ring-inset ring-gray-200">Checking…</span>
+                            )}
                             {payStatus[clinic.id] === 'issue' && (
                               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700 ring-1 ring-inset ring-yellow-200">Not integrated</span>
                             )}
@@ -424,6 +427,38 @@ export default function ClinicsPage() {
                                 <Link href={`/admin/clinics/${clinic.id}`}>
                                   <EyeIcon className="h-4 w-4" />
                                 </Link>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg h-8 w-8 p-0"
+                                title="Delete"
+                                disabled={deletingId === clinic.id}
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  const ok = typeof window !== 'undefined' ? window.confirm(`Delete ${clinic.name}? This action cannot be undone.`) : false;
+                                  if (!ok) return;
+                                  try {
+                                    setDeletingId(clinic.id);
+                                    const res = await fetch(`/api/admin/clinics/${clinic.id}`, { method: 'DELETE' });
+                                    if (res.ok) {
+                                      setClinics(prev => prev.filter(c => c.id !== clinic.id));
+                                    } else {
+                                      const js = await res.json().catch(() => ({} as any));
+                                      if (typeof window !== 'undefined') alert(js?.error || 'Failed to delete clinic');
+                                    }
+                                  } catch (err) {
+                                    if (typeof window !== 'undefined') alert('Failed to delete clinic');
+                                  } finally {
+                                    setDeletingId(null);
+                                  }
+                                }}
+                              >
+                                {deletingId === clinic.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
                               </Button>
                               {/* Integrate payments button */}
                               {payStatus[clinic.id] !== 'ready' && (

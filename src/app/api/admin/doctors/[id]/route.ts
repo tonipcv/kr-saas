@@ -92,50 +92,66 @@ export async function DELETE(
       return NextResponse.json({ error: 'Doctor not found' }, { status: 404 });
     }
 
+    // Find clinics owned by this doctor to clean dependent records first
+    const ownedClinics = await prisma.clinic.findMany({
+      where: { ownerId: doctorId },
+      select: { id: true }
+    });
+    const clinicIds = ownedClinics.map(c => c.id);
+
+    // Find clinic subscriptions for those clinics
+    const clinicSubs = clinicIds.length
+      ? await prisma.clinicSubscription.findMany({
+          where: { clinicId: { in: clinicIds } },
+          select: { id: true }
+        })
+      : [];
+    const clinicSubIds = clinicSubs.map(s => s.id);
+
     // Delete doctor and all related data in a transaction
     await prisma.$transaction([
+      // If there are subscriptions, delete add-on subscriptions first
+      ...(clinicSubIds.length
+        ? [
+            prisma.clinicAddOnSubscription.deleteMany({
+              where: { subscriptionId: { in: clinicSubIds } }
+            })
+          ]
+        : []),
+      // Then delete the clinic subscriptions
+      ...(clinicIds.length
+        ? [
+            prisma.clinicSubscription.deleteMany({
+              where: { clinicId: { in: clinicIds } }
+            })
+          ]
+        : []),
       // Delete clinics owned by the doctor (prevents clinics_ownerId_fkey error)
       prisma.clinic.deleteMany({
-        where: { ownerId: doctorId }
+        where: clinicIds.length ? { id: { in: clinicIds } } : { ownerId: doctorId }
       }),
-      // Delete doctor's services
-      prisma.doctorService.deleteMany({
-        where: { doctor_id: doctorId }
+      // Remove clinic memberships for this user
+      prisma.clinicMember.deleteMany({
+        where: { userId: doctorId }
       }),
-      // Delete doctor's patients
+      // Detach patients from this doctor
       prisma.user.updateMany({
         where: { doctor_id: doctorId },
         data: { doctor_id: null }
-      }),
-      // Delete doctor's protocols
-      prisma.protocol.deleteMany({
-        where: { doctor_id: doctorId }
-      }),
-      // Delete doctor's courses
-      prisma.course.deleteMany({
-        where: { doctorId }
       }),
       // Delete doctor's products
       prisma.products.deleteMany({
         where: { doctorId }
       }),
-      // Delete doctor's FAQs
-      prisma.doctorFAQ.deleteMany({
-        where: { doctorId }
-      }),
-      // Delete doctor's conversations
-      prisma.patientAIConversation.deleteMany({
-        where: { doctorId }
-      }),
-      // Delete doctor's consultation form
-      prisma.consultationForm.deleteMany({
+      // Delete doctor's product categories
+      prisma.productCategory.deleteMany({
         where: { doctorId }
       }),
       // Delete doctor's form settings
       prisma.referralFormSettings.deleteMany({
         where: { doctorId }
       }),
-      // Delete doctor's leads
+      // Delete legacy leads where this user was referrer
       prisma.leads.deleteMany({
         where: { referrerId: doctorId }
       }),
@@ -151,26 +167,9 @@ export async function DELETE(
       prisma.referrals.deleteMany({
         where: { doctorId }
       }),
-      // Delete doctor's redemptions
+      // Delete user's redemptions
       prisma.rewardRedemption.deleteMany({
         where: { userId: doctorId }
-      }),
-      // unified_subscriptions are tied to clinics; no direct user subscription model to delete here
-      // Delete doctor's assigned courses
-      prisma.userCourse.deleteMany({
-        where: { userId: doctorId }
-      }),
-      // Delete doctor's lesson progress
-      prisma.userLesson.deleteMany({
-        where: { userId: doctorId }
-      }),
-      // Delete doctor's symptom reports
-      prisma.symptomReport.deleteMany({
-        where: { userId: doctorId }
-      }),
-      // Delete doctor's reviewed symptom reports
-      prisma.symptomReport.deleteMany({
-        where: { reviewedBy: doctorId }
       }),
       // Finally, delete the doctor
       prisma.user.delete({

@@ -14,32 +14,25 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
-interface SubscriptionPlan {
+interface AdminClinicPlan {
   id: string;
   name: string;
-  description: string;
-  price: number;
-  maxPatients: number;
-  maxProtocols: number;
-  maxCourses: number;
-  maxProducts: number;
-  trialDays: number | null;
-  isDefault: boolean;
-  createdAt: string;
-  updatedAt: string;
-  referralsMonthlyLimit?: number | null;
-  maxRewards?: number | null;
-  allowCreditPerPurchase?: boolean | null;
-  allowCampaigns?: boolean | null;
+  description: string | null;
+  price: number | null; // monthlyPrice
+  monthlyTxLimit: number | null;
+  trialDays?: number | null;
+  tier?: 'STARTER' | 'GROWTH' | 'ENTERPRISE';
+  isActive?: boolean;
+  isPublic?: boolean;
 }
 
 export default function PlansPage() {
   const { data: session } = useSession();
-  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [plans, setPlans] = useState<AdminClinicPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<AdminClinicPlan | null>(null);
 
   // create plan form state
   const [creating, setCreating] = useState(false);
@@ -47,16 +40,11 @@ export default function PlansPage() {
     name: '',
     description: '',
     price: 0,
-    maxPatients: 100,
-    maxProtocols: 100,
-    maxCourses: 50,
-    maxProducts: 50,
-    trialDays: 0,
-    isDefault: false,
-    referralsMonthlyLimit: 0,
-    maxRewards: 0,
-    allowCreditPerPurchase: false,
-    allowCampaigns: false,
+    monthlyTxLimit: 1000,
+    trialDays: 30,
+    tier: 'STARTER' as 'STARTER' | 'GROWTH' | 'ENTERPRISE',
+    isActive: true,
+    isPublic: true,
   });
 
   // edit plan form state
@@ -65,16 +53,11 @@ export default function PlansPage() {
     name: '',
     description: '',
     price: 0,
-    maxPatients: 100,
-    maxProtocols: 100,
-    maxCourses: 50,
-    maxProducts: 50,
-    trialDays: 0,
-    isDefault: false,
-    referralsMonthlyLimit: 0,
-    maxRewards: 0,
-    allowCreditPerPurchase: false,
-    allowCampaigns: false,
+    monthlyTxLimit: 1000,
+    trialDays: 30,
+    tier: 'STARTER' as 'STARTER' | 'GROWTH' | 'ENTERPRISE',
+    isActive: true,
+    isPublic: true,
   });
 
   useEffect(() => {
@@ -85,7 +68,18 @@ export default function PlansPage() {
         
         if (response.ok) {
           const data = await response.json();
-          setPlans(data.plans || []);
+          const normalized: AdminClinicPlan[] = (data.plans || []).map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description ?? null,
+            price: p.price ?? null,
+            monthlyTxLimit: p.monthlyTxLimit ?? p.maxDoctors ?? null,
+            trialDays: p.trialDays ?? null,
+            tier: p.tier ?? 'STARTER',
+            isActive: p.isActive ?? true,
+            isPublic: p.isPublic ?? true,
+          }));
+          setPlans(normalized);
         }
       } catch (error) {
         console.error('Error loading plans:', error);
@@ -109,29 +103,35 @@ export default function PlansPage() {
       const response = await fetch('/api/admin/plans');
       if (response.ok) {
         const data = await response.json();
-        setPlans(data.plans || []);
+        const normalized: AdminClinicPlan[] = (data.plans || []).map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          description: p.description ?? null,
+          price: p.price ?? null,
+          monthlyTxLimit: p.monthlyTxLimit ?? p.maxDoctors ?? null,
+          trialDays: p.trialDays ?? null,
+          tier: p.tier ?? 'STARTER',
+          isActive: p.isActive ?? true,
+          isPublic: p.isPublic ?? true,
+        }));
+        setPlans(normalized);
       }
     } catch (error) {
       console.error('Error deleting plan:', error);
     }
   };
 
-  const openEdit = (plan: SubscriptionPlan) => {
+  const openEdit = (plan: AdminClinicPlan) => {
     setSelectedPlan(plan);
     setEditForm({
       name: plan.name,
-      description: plan.description,
-      price: plan.price,
-      maxPatients: plan.maxPatients,
-      maxProtocols: plan.maxProtocols,
-      maxCourses: plan.maxCourses,
-      maxProducts: plan.maxProducts,
-      trialDays: plan.trialDays || 0,
-      isDefault: plan.isDefault,
-      referralsMonthlyLimit: plan.referralsMonthlyLimit ?? 0,
-      maxRewards: plan.maxRewards ?? 0,
-      allowCreditPerPurchase: !!plan.allowCreditPerPurchase,
-      allowCampaigns: !!plan.allowCampaigns,
+      description: plan.description || '',
+      price: Number(plan.price ?? 0),
+      monthlyTxLimit: Number(plan.monthlyTxLimit ?? 1000),
+      trialDays: Number(plan.trialDays ?? 30),
+      tier: plan.tier ?? 'STARTER',
+      isActive: plan.isActive ?? true,
+      isPublic: plan.isPublic ?? true,
     });
     setEditOpen(true);
   };
@@ -148,16 +148,11 @@ export default function PlansPage() {
           name: editForm.name,
           description: editForm.description,
           price: Number(editForm.price),
-          maxPatients: Number(editForm.maxPatients),
-          maxProtocols: Number(editForm.maxProtocols),
-          maxCourses: Number(editForm.maxCourses),
-          maxProducts: Number(editForm.maxProducts),
-          trialDays: Number(editForm.trialDays) || 0,
-          isDefault: Boolean(editForm.isDefault),
-          referralsMonthlyLimit: Number(editForm.referralsMonthlyLimit) || 0,
-          maxRewards: Number(editForm.maxRewards) || 0,
-          allowCreditPerPurchase: Boolean(editForm.allowCreditPerPurchase),
-          allowCampaigns: Boolean(editForm.allowCampaigns),
+          monthlyTxLimit: Number(editForm.monthlyTxLimit),
+          trialDays: Number(editForm.trialDays),
+          tier: editForm.tier,
+          isActive: Boolean(editForm.isActive),
+          isPublic: Boolean(editForm.isPublic),
         }),
       });
       if (!res.ok) throw new Error('Failed to update plan');
@@ -188,16 +183,11 @@ export default function PlansPage() {
           name: form.name,
           description: form.description,
           price: Number(form.price),
-          maxPatients: Number(form.maxPatients),
-          maxProtocols: Number(form.maxProtocols),
-          maxCourses: Number(form.maxCourses),
-          maxProducts: Number(form.maxProducts),
-          trialDays: Number(form.trialDays) || 0,
-          isDefault: Boolean(form.isDefault),
-          referralsMonthlyLimit: Number(form.referralsMonthlyLimit) || 0,
-          maxRewards: Number(form.maxRewards) || 0,
-          allowCreditPerPurchase: Boolean(form.allowCreditPerPurchase),
-          allowCampaigns: Boolean(form.allowCampaigns),
+          monthlyTxLimit: Number(form.monthlyTxLimit),
+          trialDays: Number(form.trialDays),
+          tier: form.tier,
+          isActive: Boolean(form.isActive),
+          isPublic: Boolean(form.isPublic),
         }),
       });
       if (!res.ok) throw new Error('Failed to create plan');
@@ -210,8 +200,7 @@ export default function PlansPage() {
       }
       setOpen(false);
       setForm({
-        name: '', description: '', price: 0, maxPatients: 100, maxProtocols: 100, maxCourses: 50, maxProducts: 50, trialDays: 0, isDefault: false,
-        referralsMonthlyLimit: 0, maxRewards: 0, allowCreditPerPurchase: false, allowCampaigns: false,
+        name: '', description: '', price: 0, monthlyTxLimit: 1000, trialDays: 30, tier: 'STARTER', isActive: true, isPublic: true,
       });
     } catch (err) {
       console.error(err);
@@ -222,10 +211,10 @@ export default function PlansPage() {
 
   // Statistics calculations
   const totalPlans = plans.length;
-  const defaultPlans = plans.filter(p => p.isDefault).length;
-  const premiumPlans = plans.filter(p => !p.isDefault).length;
-  const averagePrice = plans.length > 0 ? Math.round(plans.reduce((sum, p) => sum + p.price, 0) / plans.length) : 0;
-  const plansWithTrial = plans.filter(p => p.trialDays && p.trialDays > 0).length;
+  const activePlans = plans.filter(p => p.isActive).length;
+  const publicPlans = plans.filter(p => p.isPublic).length;
+  const avgPriceNum = plans.length > 0 ? Math.round(plans.reduce((sum, p) => sum + (Number(p.price ?? 0)), 0) / plans.length) : 0;
+  const avgTxLimit = plans.length > 0 ? Math.round(plans.reduce((sum, p) => sum + (Number(p.monthlyTxLimit ?? 0)), 0) / plans.length) : 0;
 
   if (isLoading) {
     return (
@@ -330,41 +319,25 @@ export default function PlansPage() {
                           <input type="number" min="0" step="1" value={form.trialDays} onChange={(e) => setForm({ ...form, trialDays: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Max patients</label>
-                          <input type="number" min="1" step="1" value={form.maxPatients} onChange={(e) => setForm({ ...form, maxPatients: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                          <label className="block text-sm font-medium text-gray-700">Monthly Transactions Limit</label>
+                          <input type="number" min="0" step="1" value={form.monthlyTxLimit} onChange={(e) => setForm({ ...form, monthlyTxLimit: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Max protocols</label>
-                          <input type="number" min="1" step="1" value={form.maxProtocols} onChange={(e) => setForm({ ...form, maxProtocols: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Max courses</label>
-                          <input type="number" min="1" step="1" value={form.maxCourses} onChange={(e) => setForm({ ...form, maxCourses: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Max products</label>
-                          <input type="number" min="1" step="1" value={form.maxProducts} onChange={(e) => setForm({ ...form, maxProducts: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Referrals per month</label>
-                          <input type="number" min="0" step="1" value={form.referralsMonthlyLimit} onChange={(e) => setForm({ ...form, referralsMonthlyLimit: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Max rewards</label>
-                          <input type="number" min="0" step="1" value={form.maxRewards} onChange={(e) => setForm({ ...form, maxRewards: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
-                        </div>
-                        <div className="sm:col-span-2 flex items-center gap-2 pt-1">
-                          <input id="isDefault" type="checkbox" checked={form.isDefault} onChange={(e) => setForm({ ...form, isDefault: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
-                          <label htmlFor="isDefault" className="text-sm text-gray-700">Mark as default plan</label>
+                          <label className="block text-sm font-medium text-gray-700">Tier</label>
+                          <select value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value as any })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none">
+                            <option value="STARTER">STARTER</option>
+                            <option value="GROWTH">GROWTH</option>
+                            <option value="ENTERPRISE">ENTERPRISE</option>
+                          </select>
                         </div>
                         <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                           <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                            <input type="checkbox" checked={form.allowCreditPerPurchase} onChange={(e) => setForm({ ...form, allowCreditPerPurchase: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
-                            Allow credit per purchase
+                            <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
+                            Active
                           </label>
                           <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                            <input type="checkbox" checked={form.allowCampaigns} onChange={(e) => setForm({ ...form, allowCampaigns: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
-                            Allow campaigns access
+                            <input type="checkbox" checked={form.isPublic} onChange={(e) => setForm({ ...form, isPublic: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
+                            Public (visible)
                           </label>
                         </div>
                       </div>
@@ -405,16 +378,16 @@ export default function PlansPage() {
               value: totalPlans,
               note: 'all'
             }, {
-              title: 'Default plans',
-              value: defaultPlans,
+              title: 'Active plans',
+              value: activePlans,
               note: 'active'
             }, {
-              title: 'Premium plans',
-              value: premiumPlans,
-              note: 'active'
+              title: 'Public plans',
+              value: publicPlans,
+              note: 'visible'
             }, {
               title: 'Avg. price',
-              value: `$ ${averagePrice}`,
+              value: `$ ${avgPriceNum}`,
               note: 'per month'
             }].map((kpi) => (
               <div key={kpi.title} className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
@@ -448,7 +421,8 @@ export default function PlansPage() {
                         <th className="px-3 py-3.5 font-medium">Price</th>
                         <th className="px-3 py-3.5 font-medium">Limits</th>
                         <th className="px-3 py-3.5 font-medium">Trial</th>
-                        <th className="px-3 py-3.5 font-medium">Type</th>
+                        <th className="px-3 py-3.5 font-medium">Tier</th>
+                        <th className="px-3 py-3.5 font-medium">Visibility</th>
                         <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Action</th>
                       </tr>
                     </thead>
@@ -459,24 +433,11 @@ export default function PlansPage() {
                             {plan.name}
                           </td>
                           <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-900">
-                            ${' '}{plan.price}/month
+                            {plan.price != null ? `$ ${plan.price}/month` : '—'}
                           </td>
                           <td className="px-3 py-3.5 text-sm text-gray-600">
                             <div className="flex flex-wrap gap-x-4 gap-y-1">
-                              <span>{plan.maxPatients === 999999 ? 'Unlimited' : plan.maxPatients} patients</span>
-                              <span>{plan.maxProducts === 999999 ? 'Unlimited' : plan.maxProducts} products</span>
-                              {typeof plan.referralsMonthlyLimit === 'number' && (
-                                <span>{plan.referralsMonthlyLimit} referrals/mo</span>
-                              )}
-                              {typeof plan.maxRewards === 'number' && (
-                                <span>{plan.maxRewards} rewards</span>
-                              )}
-                              {plan.allowCreditPerPurchase ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-white text-green-700 ring-1 ring-inset ring-green-200">Credit per purchase</span>
-                              ) : null}
-                              {plan.allowCampaigns ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-white text-blue-700 ring-1 ring-inset ring-blue-200">Campaigns access</span>
-                              ) : null}
+                              <span>{plan.monthlyTxLimit ?? '—'} tx/mo</span>
                             </div>
                           </td>
                           <td className="whitespace-nowrap px-3 py-3.5 text-sm">
@@ -487,7 +448,14 @@ export default function PlansPage() {
                             )}
                           </td>
                           <td className="whitespace-nowrap px-3 py-3.5 text-sm">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-white text-gray-700 ring-1 ring-inset ring-gray-200">{plan.isDefault ? 'Default' : 'Premium'}</span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-white text-gray-700 ring-1 ring-inset ring-gray-200">{plan.tier}</span>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3.5 text-sm">
+                            {plan.isPublic ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-white text-green-700 ring-1 ring-inset ring-green-200">Public</span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-white text-gray-700 ring-1 ring-inset ring-gray-200">Private</span>
+                            )}
                           </td>
                           <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                             <div className="flex items-center justify-end gap-2">
@@ -536,41 +504,25 @@ export default function PlansPage() {
                   <input type="number" min="0" step="1" value={editForm.trialDays} onChange={(e) => setEditForm({ ...editForm, trialDays: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Max patients</label>
-                  <input type="number" min="1" step="1" value={editForm.maxPatients} onChange={(e) => setEditForm({ ...editForm, maxPatients: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
+                  <label className="block text-sm font-medium text-gray-700">Monthly Transactions Limit</label>
+                  <input type="number" min="0" step="1" value={editForm.monthlyTxLimit} onChange={(e) => setEditForm({ ...editForm, monthlyTxLimit: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Max protocols</label>
-                  <input type="number" min="1" step="1" value={editForm.maxProtocols} onChange={(e) => setEditForm({ ...editForm, maxProtocols: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Max courses</label>
-                  <input type="number" min="1" step="1" value={editForm.maxCourses} onChange={(e) => setEditForm({ ...editForm, maxCourses: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Max products</label>
-                  <input type="number" min="1" step="1" value={editForm.maxProducts} onChange={(e) => setEditForm({ ...editForm, maxProducts: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Referrals per month</label>
-                  <input type="number" min="0" step="1" value={editForm.referralsMonthlyLimit} onChange={(e) => setEditForm({ ...editForm, referralsMonthlyLimit: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Max rewards</label>
-                  <input type="number" min="0" step="1" value={editForm.maxRewards} onChange={(e) => setEditForm({ ...editForm, maxRewards: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none" />
-                </div>
-                <div className="sm:col-span-2 flex items-center gap-2 pt-1">
-                  <input id="editIsDefault" type="checkbox" checked={editForm.isDefault} onChange={(e) => setEditForm({ ...editForm, isDefault: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
-                  <label htmlFor="editIsDefault" className="text-sm text-gray-700">Mark as default plan</label>
+                  <label className="block text-sm font-medium text-gray-700">Tier</label>
+                  <select value={editForm.tier} onChange={(e) => setEditForm({ ...editForm, tier: e.target.value as any })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#5893ec] focus:outline-none">
+                    <option value="STARTER">STARTER</option>
+                    <option value="GROWTH">GROWTH</option>
+                    <option value="ENTERPRISE">ENTERPRISE</option>
+                  </select>
                 </div>
                 <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                    <input type="checkbox" checked={editForm.allowCreditPerPurchase} onChange={(e) => setEditForm({ ...editForm, allowCreditPerPurchase: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
-                    Allow credit per purchase
+                    <input type="checkbox" checked={editForm.isActive} onChange={(e) => setEditForm({ ...editForm, isActive: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
+                    Active
                   </label>
                   <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                    <input type="checkbox" checked={editForm.allowCampaigns} onChange={(e) => setEditForm({ ...editForm, allowCampaigns: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
-                    Allow campaigns access
+                    <input type="checkbox" checked={editForm.isPublic} onChange={(e) => setEditForm({ ...editForm, isPublic: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-[#5893ec] focus:ring-[#5893ec]" />
+                    Public (visible)
                   </label>
                 </div>
               </div>

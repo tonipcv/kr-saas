@@ -43,9 +43,8 @@ export async function GET() {
                 id: true,
                 name: true,
                 monthlyPrice: true,
-                baseDoctors: true,
-                basePatients: true,
-                tier: true
+                monthlyTxLimit: true,
+                tier: true,
               }
             }
           }
@@ -66,8 +65,7 @@ export async function GET() {
                   id: sub.plan.id,
                   name: sub.plan.name,
                   price: sub.plan.monthlyPrice != null ? Number(sub.plan.monthlyPrice) : null,
-                  maxDoctors: sub.plan.baseDoctors,
-                  maxPatients: sub.plan.basePatients,
+                  monthlyTxLimit: (sub.plan as any).monthlyTxLimit ?? null,
                   tier: (sub.plan as any).tier ?? null,
                 }
               : null,
@@ -230,8 +228,7 @@ export async function POST(request: NextRequest) {
                 id: true,
                 name: true,
                 monthlyPrice: true,
-                baseDoctors: true,
-                basePatients: true,
+                monthlyTxLimit: true,
                 tier: true,
               }
             }
@@ -253,8 +250,7 @@ export async function POST(request: NextRequest) {
                       price: (createdClinicRaw as any).subscriptions[0].plan.monthlyPrice != null
                         ? Number((createdClinicRaw as any).subscriptions[0].plan.monthlyPrice)
                         : null,
-                      maxDoctors: (createdClinicRaw as any).subscriptions[0].plan.baseDoctors,
-                      maxPatients: (createdClinicRaw as any).subscriptions[0].plan.basePatients,
+                      monthlyTxLimit: (createdClinicRaw as any).subscriptions[0].plan.monthlyTxLimit ?? null,
                       tier: (createdClinicRaw as any).subscriptions[0].plan.tier ?? null,
                     }
                   : null,

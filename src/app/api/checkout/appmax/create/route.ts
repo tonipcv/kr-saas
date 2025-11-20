@@ -121,24 +121,35 @@ export async function POST(req: Request) {
     let unifiedCustomerProviderId: string | null = null
     try {
       console.log('[appmax][create][orchestration] 🔄 Starting dual-write...', { merchantId: merchant.id, buyerEmail: buyer.email })
-      // Upsert Customer
+      // Upsert Customer by email ONLY
       const docDigits = (buyer.document_number || buyer.document || '').toString().replace(/\D/g, '') || null
-      const whereClause: any = { merchantId: merchant.id, OR: [] }
-      if (buyer.email) whereClause.OR.push({ email: String(buyer.email) })
-      if (docDigits) whereClause.OR.push({ document: docDigits })
+      const buyerEmail = buyer.email ? String(buyer.email) : null
       let customer = null
-      if (whereClause.OR.length > 0) {
-        customer = await prisma.customer.findFirst({ where: whereClause, select: { id: true } })
+      if (buyerEmail) {
+        customer = await prisma.customer.findFirst({
+          where: { merchantId: merchant.id, email: buyerEmail },
+          select: { id: true }
+        })
       }
       if (customer) {
+        // Update existing customer
+        await prisma.customer.update({
+          where: { id: customer.id },
+          data: {
+            name: String(buyer.name || ''),
+            phone: (buyer.telephone || buyer.phone || '').toString().replace(/\D/g, '').slice(0, 11) || undefined,
+            document: docDigits || undefined,
+            metadata: { source: 'appmax_checkout', appmaxCustomerId: customer_id },
+          }
+        }).catch(() => {})
         unifiedCustomerId = customer.id
-        console.log('[appmax][create][orchestration] ✅ Customer found', { customerId: unifiedCustomerId })
-      } else {
+        console.log('[appmax][create][orchestration] ✅ Customer found and updated', { customerId: unifiedCustomerId })
+      } else if (buyerEmail) {
         const created = await prisma.customer.create({
           data: {
             merchantId: merchant.id,
             name: String(buyer.name || ''),
-            email: buyer.email ? String(buyer.email) : null,
+            email: buyerEmail,
             phone: (buyer.telephone || buyer.phone || '').toString().replace(/\D/g, '').slice(0, 11) || null,
             document: docDigits,
             metadata: { source: 'appmax_checkout', appmaxCustomerId: customer_id },
@@ -324,6 +335,136 @@ export async function POST(req: Request) {
         amountCents: basePriceCents
       })
       // Don't fail the whole request, just log the error
+    }
+
+    // 3.5) If product is a subscription, create customer_subscriptions row
+    let customerSubscriptionId: string | null = null
+    if (product.type === 'SUBSCRIPTION' && unifiedCustomerId) {
+      try {
+        const interval = product.interval || 'MONTH'
+        const intervalCount = product.intervalCount || 1
+        const trialDays = Number(product.trialDays || 0)
+        const hasTrial = trialDays > 0
+        
+        // Calculate periods
+        const now = new Date()
+        const startAt = now.toISOString()
+        const trialEndsAt = hasTrial ? new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000).toISOString() : null
+        const currentPeriodStart = now.toISOString()
+        
+        // Calculate next billing based on interval
+        const nextBilling = new Date(now)
+        if (interval === 'DAY') nextBilling.setDate(nextBilling.getDate() + intervalCount)
+        else if (interval === 'WEEK') nextBilling.setDate(nextBilling.getDate() + intervalCount * 7)
+        else if (interval === 'MONTH') nextBilling.setMonth(nextBilling.getMonth() + intervalCount)
+        else if (interval === 'YEAR') nextBilling.setFullYear(nextBilling.getFullYear() + intervalCount)
+        const currentPeriodEnd = nextBilling.toISOString()
+        
+        const status = hasTrial ? 'TRIAL' : 'ACTIVE'
+        const metadata = JSON.stringify({
+          interval,
+          intervalCount,
+          buyerName: String(buyer.name || ''),
+          buyerEmail: String(buyer.email || ''),
+          productName: String(product.name || ''),
+          source: 'appmax_checkout',
+          appmaxOrderId: order_id
+        })
+        
+        // Check if subscription already exists
+        const existingSub = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT id FROM customer_subscriptions 
+           WHERE customer_id = $1 AND merchant_id = $2 AND product_id = $3 AND provider = 'APPMAX' 
+           LIMIT 1`,
+          unifiedCustomerId,
+          String(merchant.id),
+          String(product.id)
+        )
+        
+        let subRows: any[]
+        if (existingSub && existingSub.length > 0) {
+          // Update existing
+          subRows = await prisma.$executeRawUnsafe<any[]>(
+            `UPDATE customer_subscriptions 
+             SET status = $5::"SubscriptionStatus",
+                 start_at = $6::timestamp,
+                 trial_ends_at = $7::timestamp,
+                 current_period_start = $8::timestamp,
+                 current_period_end = $9::timestamp,
+                 price_cents = $10,
+                 metadata = $11::jsonb,
+                 updated_at = NOW()
+             WHERE customer_id = $1 AND merchant_id = $2 AND product_id = $3 AND provider = 'APPMAX'
+             RETURNING id`,
+            unifiedCustomerId,
+            String(merchant.id),
+            String(product.id),
+            String(merchant.id), // accountId (not used in WHERE but keeping param order)
+            status,
+            startAt,
+            trialEndsAt,
+            currentPeriodStart,
+            currentPeriodEnd,
+            basePriceCents,
+            metadata
+          )
+        } else {
+          // Insert new
+          subRows = await prisma.$executeRawUnsafe<any[]>(
+            `INSERT INTO customer_subscriptions (
+               id, customer_id, merchant_id, product_id, offer_id, provider, account_id, is_native,
+               provider_subscription_id, status, start_at, trial_ends_at, current_period_start, current_period_end,
+               price_cents, currency, metadata, created_at, updated_at
+             ) VALUES (
+               gen_random_uuid(), $1, $2, $3, NULL, 'APPMAX'::"PaymentProvider", $4, true,
+               NULL, $5::"SubscriptionStatus", $6::timestamp, $7::timestamp, $8::timestamp, $9::timestamp,
+               $10, 'BRL', $11::jsonb, NOW(), NOW()
+             )
+             RETURNING id`,
+            unifiedCustomerId,
+            String(merchant.id),
+            String(product.id),
+            String(merchant.id), // accountId
+            status,
+            startAt,
+            trialEndsAt,
+            currentPeriodStart,
+            currentPeriodEnd,
+            basePriceCents,
+            metadata
+          )
+        }
+        customerSubscriptionId = subRows?.[0]?.id || null
+        console.log('[appmax][create][subscription] ✅ Subscription created/updated', {
+          subscriptionId: customerSubscriptionId,
+          customerId: unifiedCustomerId,
+          productId: product.id,
+          status,
+          interval,
+          intervalCount,
+          hasTrial,
+          trialDays
+        })
+        
+        // Link subscription to payment_transaction
+        if (customerSubscriptionId) {
+          try {
+            await prisma.$executeRawUnsafe(
+              `UPDATE payment_transactions 
+               SET customer_subscription_id = $2 
+               WHERE provider = 'appmax' AND provider_order_id = $1`,
+              String(order_id),
+              customerSubscriptionId
+            )
+          } catch {}
+        }
+      } catch (e) {
+        console.error('[appmax][create][subscription] ❌ Failed to create subscription', {
+          error: e instanceof Error ? e.message : e,
+          productId: product.id,
+          customerId: unifiedCustomerId
+        })
+      }
     }
 
     // 4) Payment (card or pix)

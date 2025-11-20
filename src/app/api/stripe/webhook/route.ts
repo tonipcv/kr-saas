@@ -44,6 +44,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
+  // CRITICAL: Persist webhook BEFORE processing (idempotent)
+  const eventId = event.id;
+  try {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO webhook_events (provider, hook_id, provider_event_id, type, status, raw, processed, retry_count, max_retries, is_retryable)
+       VALUES ('stripe', $1, $1, $2, NULL, $3::jsonb, false, 0, 3, true)
+       ON CONFLICT (provider, hook_id) DO NOTHING`,
+      eventId,
+      event.type,
+      JSON.stringify(event)
+    );
+  } catch {}
+
   try {
     switch (event.type) {
       case 'payment_intent.succeeded': {
@@ -350,7 +363,22 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ received: true });
   } catch (err: any) {
-    console.error('Webhook handling error:', err?.message);
-    return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 });
+    console.error('[stripe][webhook] processing error', err);
+    
+    // CRITICAL: Mesmo com erro, SEMPRE retorna 200 para evitar reenvios duplicados
+    // Marca webhook para retry via worker
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE webhook_events 
+         SET next_retry_at = NOW(), 
+             processing_error = $2,
+             is_retryable = true
+         WHERE provider = 'stripe' AND hook_id = $1`,
+        eventId,
+        String(err?.message || 'Unknown error').substring(0, 5000)
+      );
+    } catch {}
+    
+    return NextResponse.json({ received: true, will_retry: true }, { status: 200 });
   }
 }

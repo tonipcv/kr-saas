@@ -83,6 +83,8 @@ export default function EditOfferPage({ params }: PageProps) {
   const [createStripeAmount, setCreateStripeAmount] = useState<string>('');
   const [createStripeNickname, setCreateStripeNickname] = useState<string>('');
   const [editingCountry, setEditingCountry] = useState<Record<string, boolean>>({});
+  // Integration availability (by clinic)
+  const [integrations, setIntegrations] = useState<{ stripe: boolean; krxpay: boolean; appmax: boolean }>({ stripe: false, krxpay: false, appmax: false });
 
   const currencyForCountry = (code: string): 'BRL'|'USD'|'EUR' => {
     return mapCurrency(code) as any;
@@ -371,6 +373,30 @@ export default function EditOfferPage({ params }: PageProps) {
     } catch {}
   };
 
+  // Load integrations for current clinic to filter available providers
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!currentClinic?.id) { setIntegrations({ stripe: false, krxpay: false, appmax: false }); return; }
+        const clinicId = String(currentClinic.id);
+        const [sRes, kRes, aRes] = await Promise.all([
+          fetch(`/api/admin/integrations/stripe/status?clinicId=${encodeURIComponent(clinicId)}`, { cache: 'no-store' }).catch(() => null),
+          fetch(`/api/payments/pagarme/config/status?clinic_id=${encodeURIComponent(clinicId)}`, { cache: 'no-store' }).catch(() => null),
+          fetch(`/api/admin/integrations/appmax/status?clinicId=${encodeURIComponent(clinicId)}`, { cache: 'no-store' }).catch(() => null),
+        ]);
+        const sJson = sRes && sRes.ok ? await sRes.json().catch(() => ({})) : {};
+        const kJson = kRes && kRes.ok ? await kRes.json().catch(() => ({})) : {};
+        const aJson = aRes && aRes.ok ? await aRes.json().catch(() => ({})) : {};
+        const stripe = !!sJson?.connected;
+        const krxpay = !!kJson && (kRes?.status === 200); // 200 means ready; 424 indicates issues
+        const appmax = !!aJson?.connected;
+        setIntegrations({ stripe, krxpay, appmax });
+      } catch {
+        setIntegrations({ stripe: false, krxpay: false, appmax: false });
+      }
+    })();
+  }, [currentClinic?.id]);
+
   const loadRoutingForCountry = async (oid: string, cc: string) => {
     try {
       const res = await fetch(`/api/payment-routing?offerId=${encodeURIComponent(oid)}&country=${encodeURIComponent(cc)}`, { cache: 'no-store' });
@@ -390,6 +416,14 @@ export default function EditOfferPage({ params }: PageProps) {
   const saveRouting = async (oid: string, cc: string, method: 'CARD'|'PIX'|'OPEN_FINANCE'|'OPEN_FINANCE_AUTOMATIC', provider: 'STRIPE'|'KRXPAY'|'APPMAX'|null) => {
     try {
       if (!provider) return;
+      // Guard: only allow providers with active integrations
+      const allowStripe = integrations.stripe;
+      const allowKrx = integrations.krxpay;
+      const allowAppmax = integrations.appmax;
+      if ((provider === 'STRIPE' && !allowStripe) || (provider === 'KRXPAY' && !allowKrx) || (provider === 'APPMAX' && !allowAppmax)) {
+        alert('Este gateway não está conectado para esta clínica. Vá em Integrations para conectar.');
+        return;
+      }
       const payload = { offerId: oid, country: cc, method, provider, priority: 10, isActive: true } as const;
       console.log('[routing][saveRouting][req]', payload);
       const res = await fetch(`/api/payment-routing`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -973,8 +1007,15 @@ export default function EditOfferPage({ params }: PageProps) {
                                   <div className="mt-3">
                                     <div className="text-xs text-gray-600 mb-1">Meios de pagamento ativos</div>
                                     <div className="flex flex-wrap gap-2">
-                                      {(['CARD','PIX','OPEN_FINANCE','OPEN_FINANCE_AUTOMATIC'] as const)
-                                        .filter(m => routing[cc]?.[m])
+                                      {(['CARD','PIX'] as const)
+                                        .filter(m => {
+                                          const prov = routing[cc]?.[m];
+                                          if (!prov) return false;
+                                          if (prov === 'STRIPE' && !integrations.stripe) return false;
+                                          if (prov === 'KRXPAY' && !integrations.krxpay) return false;
+                                          if (prov === 'APPMAX' && !integrations.appmax) return false;
+                                          return true;
+                                        })
                                         .map(m => (
                                           <span key={m} className="inline-flex items-center gap-2 px-2 py-1 rounded-full text-[11px] bg-gray-100 border border-gray-200 text-gray-700">
                                             <span>{m} · {routing[cc]?.[m]}</span>
@@ -986,7 +1027,14 @@ export default function EditOfferPage({ params }: PageProps) {
                                             >×</button>
                                           </span>
                                         ))}
-                                      {(!routing[cc] || !(['CARD','PIX','OPEN_FINANCE','OPEN_FINANCE_AUTOMATIC'] as const).some(m => routing[cc]?.[m])) && (
+                                      {(!routing[cc] || !(['CARD','PIX'] as const).some(m => {
+                                        const prov = routing[cc]?.[m];
+                                        if (!prov) return false;
+                                        if (prov === 'STRIPE' && !integrations.stripe) return false;
+                                        if (prov === 'KRXPAY' && !integrations.krxpay) return false;
+                                        if (prov === 'APPMAX' && !integrations.appmax) return false;
+                                        return true;
+                                      })) && (
                                         <span className="text-xs text-gray-500">Nenhum método configurado</span>
                                       )}
                                     </div>
@@ -1041,13 +1089,13 @@ export default function EditOfferPage({ params }: PageProps) {
                         <Select value={addingCountryMethod || undefined} onValueChange={(v: any) => setAddingCountryMethod(v)}>
                           <SelectTrigger className="mt-2 h-10"><SelectValue placeholder="Selecionar método" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="CARD">CARD</SelectItem>
-                            {addingCountryCode === 'BR' && (
-                              <>
-                                <SelectItem value="PIX">PIX</SelectItem>
-                                <SelectItem value="OPEN_FINANCE">OPEN_FINANCE</SelectItem>
-                                <SelectItem value="OPEN_FINANCE_AUTOMATIC">OPEN_FINANCE_AUTOMATIC</SelectItem>
-                              </>
+                            {(
+                              (addingCountryCode === 'BR')
+                                ? (integrations.stripe || integrations.krxpay || integrations.appmax)
+                                : integrations.stripe
+                            ) && (<SelectItem value="CARD">CARD</SelectItem>)}
+                            {addingCountryCode === 'BR' && (integrations.krxpay || integrations.appmax) && (
+                              <SelectItem value="PIX">PIX</SelectItem>
                             )}
                           </SelectContent>
                         </Select>
@@ -1057,9 +1105,9 @@ export default function EditOfferPage({ params }: PageProps) {
                         <Select value={addingCountryProvider || undefined} onValueChange={(v: any) => setAddingCountryProvider(v)}>
                           <SelectTrigger className="mt-2 h-10"><SelectValue placeholder="Selecionar gateway" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="STRIPE">STRIPE</SelectItem>
-                            {addingCountryCode === 'BR' && (<SelectItem value="KRXPAY">KRXPAY</SelectItem>)}
-                            {addingCountryCode === 'BR' && (<SelectItem value="APPMAX">APPMAX</SelectItem>)}
+                            {addingCountryMethod !== 'PIX' && integrations.stripe && (<SelectItem value="STRIPE">STRIPE</SelectItem>)}
+                            {addingCountryCode === 'BR' && integrations.krxpay && (<SelectItem value="KRXPAY">KRXPAY</SelectItem>)}
+                            {addingCountryCode === 'BR' && integrations.appmax && (<SelectItem value="APPMAX">APPMAX</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
@@ -1072,7 +1120,20 @@ export default function EditOfferPage({ params }: PageProps) {
                           const cc = (addingCountryCode || 'US').toUpperCase();
                           if (!/^[A-Z]{2}$/.test(cc)) return;
                           const method = addingCountryMethod || 'CARD';
-                          const provider = (addingCountryProvider || (cc==='BR' ? 'APPMAX' : 'STRIPE')) as any;
+                          // Choose a default provider allowed for this clinic and country
+                          let provider: 'STRIPE'|'KRXPAY'|'APPMAX' = (addingCountryProvider as any) || null as any;
+                          if (!provider) {
+                            if (cc === 'BR') {
+                              if (method === 'PIX') {
+                                provider = (integrations.krxpay && 'KRXPAY') || (integrations.appmax && 'APPMAX') || null as any;
+                              } else {
+                                provider = (integrations.krxpay && 'KRXPAY') || (integrations.appmax && 'APPMAX') || (integrations.stripe && 'STRIPE') || null as any;
+                              }
+                            } else {
+                              provider = (integrations.stripe && 'STRIPE') || null as any;
+                            }
+                          }
+                          if (!provider) { alert('Nenhum gateway conectado compatível com o método/país selecionado'); return; }
                           await saveRouting(offer.id, cc, method as any, provider as any);
                           // reload from DB to reflect new country
                           await loadProviderConfig(productId, offer.id);
@@ -1302,13 +1363,13 @@ export default function EditOfferPage({ params }: PageProps) {
                       <Select value={addRouteMethod || undefined} onValueChange={(v: any) => setAddRouteMethod(v)}>
                         <SelectTrigger className="mt-2 h-10"><SelectValue placeholder="Selecionar método" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="CARD">CARD</SelectItem>
-                          {addRouteOpenFor === 'BR' && (
-                            <>
-                              <SelectItem value="PIX">PIX</SelectItem>
-                              <SelectItem value="OPEN_FINANCE">OPEN_FINANCE</SelectItem>
-                              <SelectItem value="OPEN_FINANCE_AUTOMATIC">OPEN_FINANCE_AUTOMATIC</SelectItem>
-                            </>
+                          {(
+                            (addRouteOpenFor === 'BR')
+                              ? (integrations.stripe || integrations.krxpay || integrations.appmax)
+                              : integrations.stripe
+                          ) && (<SelectItem value="CARD">CARD</SelectItem>)}
+                          {addRouteOpenFor === 'BR' && (integrations.krxpay || integrations.appmax) && (
+                            <SelectItem value="PIX">PIX</SelectItem>
                           )}
                         </SelectContent>
                       </Select>
@@ -1318,9 +1379,9 @@ export default function EditOfferPage({ params }: PageProps) {
                       <Select value={addRouteProvider || undefined} onValueChange={(v: any) => setAddRouteProvider(v)}>
                         <SelectTrigger className="mt-2 h-10"><SelectValue placeholder="Selecionar gateway" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="STRIPE">STRIPE</SelectItem>
-                          {addRouteOpenFor === 'BR' && (<SelectItem value="KRXPAY">KRXPAY</SelectItem>)}
-                          {addRouteOpenFor === 'BR' && (<SelectItem value="APPMAX">APPMAX</SelectItem>)}
+                          {addRouteMethod !== 'PIX' && integrations.stripe && (<SelectItem value="STRIPE">STRIPE</SelectItem>)}
+                          {addRouteOpenFor === 'BR' && integrations.krxpay && (<SelectItem value="KRXPAY">KRXPAY</SelectItem>)}
+                          {addRouteOpenFor === 'BR' && integrations.appmax && (<SelectItem value="APPMAX">APPMAX</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>

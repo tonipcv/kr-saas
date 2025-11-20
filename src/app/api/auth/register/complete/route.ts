@@ -60,32 +60,18 @@ export async function POST(req: Request) {
       where: { email: normalizedEmail }
     });
 
-    // Buscar (ou criar) plano Free como padrão (tolerante a ausência de tabela)
+    // Buscar plano Free como padrão via Prisma (sem tabelas legadas)
     const resolveFreePlanId = async (): Promise<string | null> => {
       try {
-        const rows = await prisma.$queryRawUnsafe<any[]>(
-          `SELECT id FROM subscription_plans WHERE LOWER(name) = 'free' LIMIT 1`
-        );
-        if (rows && rows[0]?.id) return rows[0].id as string;
-        const newId = uuidv4();
-        // Tentar criar um plano mínimo "Free" (se a tabela existir)
-        try {
-          await prisma.$executeRawUnsafe(
-            `INSERT INTO subscription_plans (id, name, description, price, is_active, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
-            newId,
-            'Free',
-            'Plano gratuito padrão (auto-criado)',
-            0,
-            true
-          );
-          return newId;
-        } catch (e) {
-          // Tabela pode não existir; seguir sem plano explícito
-          return null;
-        }
-      } catch (e) {
-        // Tabela pode não existir; seguir sem plano explícito
+        const free = await prisma.clinicPlan.findFirst({
+          where: {
+            isActive: true,
+            name: { equals: 'Free', mode: 'insensitive' }
+          },
+          select: { id: true }
+        });
+        return free?.id ?? null;
+      } catch {
         return null;
       }
     };
@@ -197,37 +183,32 @@ export async function POST(req: Request) {
     const now = new Date();
     const trialEnd = resolvedTrialDays > 0 ? new Date(now.getTime() + resolvedTrialDays * 24 * 60 * 60 * 1000) : null;
 
-    // Criar assinatura Free (legado) - opcional. Se tabelas legadas não existirem, ignorar silenciosamente
-    try {
-      // Evitar duplicar assinatura se já existir alguma ativa/trial
-      const legacySub = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT id FROM unified_subscriptions 
-         WHERE type::text = 'CLINIC' 
-           AND subscriber_id = $1 
-           AND status::text IN ('ACTIVE','TRIAL') 
-         LIMIT 1`,
-        clinic.id
-      );
-      if (!legacySub || !legacySub[0]) {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO unified_subscriptions (
-             id, type, subscriber_id, plan_id, status, start_date, end_date, trial_end_date, auto_renew, created_at, updated_at
-           ) VALUES (
-             $1, $2::subscription_type, $3, $4, $5::subscription_status, $6, $7, $8, $9, NOW(), NOW()
-           )`,
-          uuidv4(),
-          'CLINIC',
-          clinic.id,
-          freePlanId,
-          'ACTIVE',
-          now,
-          null,
-          trialEnd,
-          true
-        );
+    // Criar assinatura padrão usando ClinicSubscription (se houver plano)
+    if (freePlanId) {
+      try {
+        const existingActive = await prisma.clinicSubscription.findFirst({
+          where: { clinicId: clinic.id, status: { in: ['ACTIVE', 'TRIAL'] } },
+          select: { id: true }
+        });
+        if (!existingActive) {
+          await prisma.clinicSubscription.create({
+            data: {
+              id: `cs_${clinic.id}-${now.getTime()}`,
+              clinicId: clinic.id,
+              planId: freePlanId,
+              status: trialEnd ? 'TRIAL' : 'ACTIVE',
+              startDate: now,
+              currentPeriodStart: now,
+              currentPeriodEnd: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+              trialEndsAt: trialEnd,
+              currentDoctorsCount: 1,
+              currentPatientsCount: 0
+            }
+          });
+        }
+      } catch {
+        // Ignorar erro de criação de assinatura e prosseguir com cadastro
       }
-    } catch (e) {
-      // Tabelas legadas (unified_subscriptions) podem não existir neste ambiente. Seguir sem criar.
     }
 
     return NextResponse.json({

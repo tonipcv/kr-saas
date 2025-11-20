@@ -203,16 +203,25 @@ export async function POST(req: Request) {
       if (product?.clinicId) {
         const merchant = await prisma.merchant.findFirst({ where: { clinicId: product.clinicId }, select: { id: true } });
         if (merchant) {
-          // Upsert Customer
+          // Upsert Customer by email ONLY
           let customer: any = null;
           const payerEmail = payer?.email ? String(payer.email) : null;
           const payerCpf = payer?.cpf ? String(payer.cpf).replace(/\D/g, '') : null;
-          if (payerEmail || payerCpf) {
-            const whereClause: any = { merchantId: merchant.id, OR: [] };
-            if (payerEmail) whereClause.OR.push({ email: payerEmail });
-            if (payerCpf) whereClause.OR.push({ document: payerCpf });
-            customer = await prisma.customer.findFirst({ where: whereClause, select: { id: true } });
-            if (!customer) {
+          if (payerEmail) {
+            customer = await prisma.customer.findFirst({
+              where: { merchantId: merchant.id, email: payerEmail },
+              select: { id: true }
+            });
+            if (customer) {
+              // Update existing customer
+              await prisma.customer.update({
+                where: { id: customer.id },
+                data: {
+                  name: payer?.name || undefined,
+                  document: payerCpf || undefined,
+                }
+              }).catch(() => {});
+            } else {
               customer = await prisma.customer.create({
                 data: {
                   merchantId: merchant.id,

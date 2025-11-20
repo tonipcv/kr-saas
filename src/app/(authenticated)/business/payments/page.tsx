@@ -192,14 +192,14 @@ export default async function PaymentsDataPage({ searchParams }: { searchParams?
 
   // Sessions list (limit 100 newest)
   const sessions = await prisma.$queryRawUnsafe<any[]>(
-    `SELECT id, started_at, updated_at, status, email, phone,
+    `SELECT id, created_at, started_at, updated_at, status, email, phone,
             (CASE WHEN jsonb_typeof(metadata) IS NOT NULL THEN metadata->>'buyerName' ELSE NULL END) AS buyer_name,
             product_id, offer_id, pix_expires_at, order_id,
             utm_source, utm_medium, utm_campaign, utm_term, utm_content,
             origin, created_by, last_step, last_heartbeat_at, referrer
        FROM checkout_sessions
        ${whereSql}
-    ORDER BY updated_at DESC NULLS LAST, started_at DESC
+    ORDER BY created_at DESC
        LIMIT 100`,
     ...params
   ).catch(() => []);

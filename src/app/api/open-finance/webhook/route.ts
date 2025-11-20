@@ -17,6 +17,19 @@ export async function POST(req: Request) {
     if (!verifySecret(req)) return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
     const event = await req.json().catch(() => ({}));
     const type: string = String(event?.type || event?.event || '').toLowerCase();
+    const eventId: string = String(event?.id || event?.data?.id || `obwh_${Date.now()}`);
+
+    // CRITICAL: Persist webhook BEFORE processing (idempotent)
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO webhook_events (provider, hook_id, provider_event_id, type, status, raw, processed, retry_count, max_retries, is_retryable)
+         VALUES ('openfinance', $1, $1, $2, NULL, $3::jsonb, false, 0, 3, true)
+         ON CONFLICT (provider, hook_id) DO NOTHING`,
+        eventId,
+        type,
+        JSON.stringify(event)
+      );
+    } catch {}
 
     // Update OpenFinanceLink status on enrollment events
     if (type.includes('enrollment') || type.includes('enrol')) {
@@ -86,6 +99,23 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'Webhook handler error' }, { status: 500 });
+    console.error('[open-finance][webhook] processing error', e);
+    
+    // CRITICAL: Mesmo com erro, SEMPRE retorna 200 para evitar reenvios duplicados
+    // Marca webhook para retry via worker
+    const eventId = String(e?.eventId || `obwh_${Date.now()}`);
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE webhook_events 
+         SET next_retry_at = NOW(), 
+             processing_error = $2,
+             is_retryable = true
+         WHERE provider = 'openfinance' AND hook_id = $1`,
+        eventId,
+        String(e?.message || 'Unknown error').substring(0, 5000)
+      );
+    } catch {}
+    
+    return NextResponse.json({ ok: true, will_retry: true }, { status: 200 });
   }
 }

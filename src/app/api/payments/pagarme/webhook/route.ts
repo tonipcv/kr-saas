@@ -11,6 +11,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  let hookId: string | null = null;
   try {
     const rawBody = await req.text();
     const signature = req.headers.get('x-pagarme-signature')
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
     const event = JSON.parse(rawBody || '{}');
     const type = String(event?.type || event?.event || '');
     const typeLower = type.toLowerCase();
-    const hookId: string | null = event?.id ? String(event.id) : null;
+    hookId = event?.id ? String(event.id) : null;
     const initialStatus: string | null = (event?.data?.status || event?.status || null) ? String(event?.data?.status || event?.status) : null;
     try {
       if (hookId) {
@@ -140,6 +141,7 @@ export async function POST(req: Request) {
                   type: 'flat',
                   liable: true,
                   charge_processing_fee: true,
+                  charge_remainder_fee: true,
                 },
                 {
                   recipient_id: String(merchant.recipientId),
@@ -387,15 +389,27 @@ export async function POST(req: Request) {
           if (result === 0) {
             const webhookTxId = `wh_${orderId}_${Date.now()}`;
             try {
+              const webhookAmountCents = Number(
+                event?.data?.amount
+                || event?.data?.order?.amount
+                || event?.order?.amount
+                || event?.data?.charge?.amount
+                || event?.data?.charges?.[0]?.amount
+                || 0
+              ) || 0;
               await prisma.$executeRawUnsafe(
-                `INSERT INTO payment_transactions (id, provider, provider_order_id, status, payment_method_type, installments, amount_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2)
-                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, 0, 'BRL', $6::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END)
+                `INSERT INTO payment_transactions (id, provider, provider_order_id, status, payment_method_type, installments, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2)
+                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, $6, $7, $8, $9, 'BRL', $10::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END)
                  ON CONFLICT DO NOTHING`,
                 webhookTxId,
                 String(orderId),
                 placeholderStatus,
                 paymentMethodType,
                 installmentsVal,
+                webhookAmountCents,
+                splitClinicAmount,
+                splitPlatformAmount,
+                splitPlatformFeeCents,
                 JSON.stringify(event)
               );
               console.log('[pagarme][webhook] created early row by orderId', { orderId, status: placeholderStatus });
@@ -455,15 +469,27 @@ export async function POST(req: Request) {
             // No row matched; create placeholder by charge id to ensure visibility in listings
             const webhookTxId2 = `wh_${chargeId}_${Date.now()}`;
             try {
+              const webhookAmountCents2 = Number(
+                event?.data?.amount
+                || event?.data?.order?.amount
+                || event?.order?.amount
+                || event?.data?.charge?.amount
+                || event?.data?.charges?.[0]?.amount
+                || 0
+              ) || 0;
               await prisma.$executeRawUnsafe(
-                `INSERT INTO payment_transactions (id, provider, provider_charge_id, status, payment_method_type, installments, amount_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2)
-                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, 0, 'BRL', $6::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END)
+                `INSERT INTO payment_transactions (id, provider, provider_charge_id, status, payment_method_type, installments, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2)
+                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, $6, $7, $8, $9, 'BRL', $10::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END)
                  ON CONFLICT DO NOTHING`,
                 webhookTxId2,
                 String(chargeId),
                 placeholderStatus,
                 paymentMethodType,
                 installmentsVal,
+                webhookAmountCents2,
+                splitClinicAmount,
+                splitPlatformAmount,
+                splitPlatformFeeCents,
                 JSON.stringify(event)
               );
               console.log('[pagarme][webhook] created early row by chargeId', { chargeId, status: placeholderStatus });
@@ -958,7 +984,24 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ received: true });
   } catch (e) {
-    console.error('[pagarme][webhook] error', e);
-    return NextResponse.json({ error: 'internal error' }, { status: 500 });
+    console.error('[pagarme][webhook] processing error', e);
+    
+    // CRITICAL: Mesmo com erro, SEMPRE retorna 200 para evitar reenvios duplicados
+    // Marca webhook para retry via worker
+    if (hookId) {
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE webhook_events 
+           SET next_retry_at = NOW(), 
+               processing_error = $2,
+               is_retryable = true
+           WHERE provider = 'pagarme' AND hook_id = $1`,
+          String(hookId),
+          String(e instanceof Error ? e.message : 'Unknown error').substring(0, 5000)
+        );
+      } catch {}
+    }
+    
+    return NextResponse.json({ received: true, will_retry: true }, { status: 200 });
   }
 }

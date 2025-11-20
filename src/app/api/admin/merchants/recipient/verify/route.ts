@@ -37,7 +37,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Provide recipientId or clinicId' }, { status: 400 });
     }
 
-    const data = await pagarmeGetRecipient(recipientId);
+    let data: any = null;
+    try {
+      data = await pagarmeGetRecipient(recipientId);
+    } catch (e: any) {
+      const msg = e?.message || '';
+      // Bubble up a clear 404 when provider says not found
+      if (msg.includes('404') || /not found/i.test(msg)) {
+        console.error('[admin][recipient.verify] Provider 404', { clinicId, recipientId, message: msg });
+        return NextResponse.json({ error: 'Recipient not found at provider', clinicId, recipientId, provider_message: msg }, { status: 404 });
+      }
+      // For other upstream errors, return a 502 with reason
+      console.error('[admin][recipient.verify] Provider upstream error', { clinicId, recipientId, message: msg });
+      return NextResponse.json({ error: 'Upstream provider error', clinicId, recipientId, details: msg }, { status: 502 });
+    }
 
     // Extract a concise status summary for quick troubleshooting
     const summary = {
@@ -53,6 +66,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ recipientId, summary, raw: data });
   } catch (error: any) {
     console.error('Error verifying recipient:', error?.message || error);
-    return NextResponse.json({ error: 'Failed to verify recipient' }, { status: 500 });
+    return NextResponse.json({ error: error?.message || 'Failed to verify recipient' }, { status: 500 });
   }
 }

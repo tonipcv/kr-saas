@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     const merchant = await prisma.merchant.upsert({
       where: { clinicId },
       update: {},
-      create: { clinicId, status: 'PENDING' },
+      create: { clinicId, status: 'PENDING', splitPercent: 70 },
       select: { recipientId: true, externalAccountId: true, splitPercent: true, platformFeeBps: true },
     });
 

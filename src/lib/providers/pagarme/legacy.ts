@@ -209,39 +209,58 @@ export async function createPagarmeSubscription(params: LegacyCreatePagarmeSubsc
       const merchantRow = await prisma.merchant.findFirst({ where: { clinicId: String(clinic.id) }, select: { id: true } });
       const merchantId = merchantRow?.id || null;
       
-      // Resolve or create internal Customer
+      // Resolve or create internal Customer by merchantId + email
       let internalCustomerId: string | null = null;
       try {
         let cust: any = null;
-        try {
-          cust = await prisma.customer.findFirst({ where: { email: String(params.customer?.email || '') }, select: { id: true } });
-        } catch {}
-        if (!cust && merchantId) {
+        const customerEmail = String(params.customer?.email || '');
+        if (merchantId && customerEmail) {
           try {
-            const colRows: any[] = await prisma.$queryRawUnsafe(
-              "SELECT column_name FROM information_schema.columns WHERE table_name = 'customers' AND column_name IN ('merchantId','merchant_id')"
-            );
-            const colNames = Array.isArray(colRows) ? colRows.map((r: any) => r.column_name) : [];
-            const hasCamel = colNames.includes('merchantId');
-            const hasSnake = colNames.includes('merchant_id');
-            if (hasCamel) {
-              cust = await prisma.customer.create({ data: { merchantId: merchantId, name: params.customer?.name, email: params.customer?.email, phone: params.customer?.phone || null, metadata: { clinicId: clinic?.id, productId: product?.id, offerId: offer?.id } as any } });
-            } else if (hasSnake) {
-              const id = crypto.randomUUID();
-              await prisma.$executeRawUnsafe(
-                `INSERT INTO "customers" ("id", "merchant_id", "name", "email", "phone") VALUES ($1, $2, $3, $4, $5)`,
-                id, merchantId, params.customer?.name, params.customer?.email, params.customer?.phone || null
-              );
-              cust = { id };
-            } else {
-              const id = crypto.randomUUID();
-              await prisma.$executeRawUnsafe(
-                `INSERT INTO "customers" ("id", "name", "email", "phone") VALUES ($1, $2, $3, $4)`,
-                id, params.customer?.name, params.customer?.email, params.customer?.phone || null
-              );
-              cust = { id };
-            }
+            cust = await prisma.customer.findFirst({
+              where: { merchantId: merchantId, email: customerEmail },
+              select: { id: true }
+            });
           } catch {}
+          if (cust) {
+            // Update existing customer
+            try {
+              await prisma.customer.update({
+                where: { id: cust.id },
+                data: {
+                  name: params.customer?.name || undefined,
+                  phone: params.customer?.phone || undefined,
+                  metadata: { clinicId: clinic?.id, productId: product?.id, offerId: offer?.id } as any,
+                }
+              });
+            } catch {}
+          } else {
+            // Create new customer
+            try {
+              const colRows: any[] = await prisma.$queryRawUnsafe(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'customers' AND column_name IN ('merchantId','merchant_id')"
+              );
+              const colNames = Array.isArray(colRows) ? colRows.map((r: any) => r.column_name) : [];
+              const hasCamel = colNames.includes('merchantId');
+              const hasSnake = colNames.includes('merchant_id');
+              if (hasCamel) {
+                cust = await prisma.customer.create({ data: { merchantId: merchantId, name: params.customer?.name, email: customerEmail, phone: params.customer?.phone || null, metadata: { clinicId: clinic?.id, productId: product?.id, offerId: offer?.id } as any } });
+              } else if (hasSnake) {
+                const id = crypto.randomUUID();
+                await prisma.$executeRawUnsafe(
+                  `INSERT INTO "customers" ("id", "merchant_id", "name", "email", "phone") VALUES ($1, $2, $3, $4, $5)`,
+                  id, merchantId, params.customer?.name, customerEmail, params.customer?.phone || null
+                );
+                cust = { id };
+              } else {
+                const id = crypto.randomUUID();
+                await prisma.$executeRawUnsafe(
+                  `INSERT INTO "customers" ("id", "name", "email", "phone") VALUES ($1, $2, $3, $4)`,
+                  id, params.customer?.name, customerEmail, params.customer?.phone || null
+                );
+                cust = { id };
+              }
+            } catch {}
+          }
         }
         internalCustomerId = cust?.id || null;
       } catch {}

@@ -321,7 +321,18 @@ export async function DELETE(
     }
 
     // Delete clinic and all related data
+    const subs = await prisma.clinicSubscription.findMany({
+      where: { clinicId },
+      select: { id: true }
+    });
+    const subIds = subs.map(s => s.id);
+
     await prisma.$transaction([
+      ...(subIds.length
+        ? [
+            prisma.clinicAddOnSubscription.deleteMany({ where: { subscriptionId: { in: subIds } } })
+          ]
+        : []),
       prisma.clinicSubscription.deleteMany({ where: { clinicId } }),
       prisma.clinicMember.deleteMany({ where: { clinicId } }),
       prisma.clinic.delete({ where: { id: clinicId } })
