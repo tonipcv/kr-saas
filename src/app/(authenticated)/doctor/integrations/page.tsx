@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { Suspense, useMemo, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { LinkIcon, LockClosedIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useClinic } from '@/contexts/clinic-context';
 import { Input } from '@/components/ui/input';
 import { toast } from 'react-hot-toast';
@@ -14,11 +14,20 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import Image from 'next/image';
 
 export default function IntegrationsPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-gray-600">Loading…</div>}>
+      <IntegrationsInner />
+    </Suspense>
+  );
+}
+
+function IntegrationsInner() {
   const ENABLE_XASE = false;
   const router = useRouter();
   const pathname = usePathname();
   const isBusinessRoute = typeof pathname === 'string' && pathname.includes('/business/');
   const { currentClinic, isLoading } = useClinic();
+  const searchParams = useSearchParams();
   const planName = currentClinic?.subscription?.plan?.name || '';
   const planLower = planName.toLowerCase();
   const isFree = useMemo(() => planLower === 'free', [planLower]);
@@ -151,6 +160,18 @@ export default function IntegrationsPage() {
 
   // Page loading while integrations status are being fetched
   const pageLoading = isLoading || waStatusLoading || pgLoading || emailStatusLoading;
+
+  // Open Add Integration modal based on URL params
+  useEffect(() => {
+    try {
+      const add = searchParams?.get('add');
+      const cat = (searchParams?.get('category') || '').toLowerCase();
+      if (add === 'open') setAddOpen(true);
+      if (cat && ['all','payments','messaging','email'].includes(cat)) {
+        setCategory(cat as any);
+      }
+    } catch {}
+  }, [searchParams]);
 
 
   // (SEO card removed — SEO is automatic and not shown here)

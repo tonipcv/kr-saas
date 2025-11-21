@@ -198,6 +198,59 @@ export async function POST(req: Request) {
       } catch (e) {
         console.warn('[appmax][webhook] paid backfill failed:', e instanceof Error ? e.message : e)
       }
+
+      // Activate subscriptions when payment confirms
+      try {
+        const subRows: any[] = await prisma.$queryRawUnsafe(
+          `SELECT id, product_id, offer_id FROM customer_subscriptions 
+           WHERE metadata->>'appmaxOrderId' = $1 AND status = 'PENDING' LIMIT 1`,
+          String(orderId)
+        );
+        if (subRows && subRows.length > 0) {
+          const subRow = subRows[0];
+          // Calculate period dates from payment confirmation
+          const paidAt = new Date();
+          let periodStart = paidAt;
+          let periodEnd = new Date(paidAt);
+          
+          // Get interval from offer or product
+          let intervalUnit = 'MONTH';
+          let intervalCount = 1;
+          try {
+            if (subRow.offer_id) {
+              const offer = await prisma.offer.findUnique({ where: { id: String(subRow.offer_id) }, select: { intervalUnit: true, intervalCount: true } });
+              if (offer?.intervalUnit) intervalUnit = String(offer.intervalUnit).toUpperCase();
+              if (offer?.intervalCount) intervalCount = Number(offer.intervalCount) || 1;
+            } else if (subRow.product_id) {
+              const product = await prisma.product.findUnique({ where: { id: String(subRow.product_id) }, select: { interval: true, intervalCount: true } } as any);
+              if ((product as any)?.interval) intervalUnit = String((product as any).interval).toUpperCase();
+              if ((product as any)?.intervalCount) intervalCount = Number((product as any).intervalCount) || 1;
+            }
+          } catch {}
+          
+          // Calculate end date based on interval
+          if (intervalUnit === 'DAY') periodEnd.setDate(periodEnd.getDate() + intervalCount);
+          else if (intervalUnit === 'WEEK') periodEnd.setDate(periodEnd.getDate() + 7 * intervalCount);
+          else if (intervalUnit === 'MONTH') periodEnd.setMonth(periodEnd.getMonth() + intervalCount);
+          else if (intervalUnit === 'YEAR') periodEnd.setFullYear(periodEnd.getFullYear() + intervalCount);
+          
+          await prisma.$executeRawUnsafe(
+            `UPDATE customer_subscriptions 
+             SET status = 'ACTIVE'::"SubscriptionStatus",
+                 current_period_start = $2::timestamp,
+                 current_period_end = $3::timestamp,
+                 start_at = COALESCE(start_at, $2::timestamp),
+                 updated_at = NOW()
+             WHERE id = $1`,
+            String(subRow.id),
+            periodStart,
+            periodEnd
+          );
+          console.log('[appmax][webhook] ✅ Activated subscription', { subscriptionId: subRow.id, orderId, periodStart, periodEnd, interval: intervalUnit, count: intervalCount });
+        }
+      } catch (e) {
+        console.warn('[appmax][webhook] subscription activation failed:', e instanceof Error ? e.message : e);
+      }
     }
 
     return NextResponse.json({ received: true })

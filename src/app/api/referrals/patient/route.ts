@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
     const uniqueIds = Array.from(new Set(legacyProductIds));
     const productsById: Record<string, { id: string; name: string | null }> = {};
     if (uniqueIds.length > 0) {
-      const prods = await prisma.products.findMany({
+      const prods = await prisma.product.findMany({
         where: { id: { in: uniqueIds } },
         select: { id: true, name: true }
       });

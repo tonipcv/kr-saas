@@ -20,6 +20,7 @@ export default function AdminPaymentsSetupPage() {
   const [verifying, setVerifying] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [verifySummary, setVerifySummary] = useState<any>(null);
+  const [merchant, setMerchant] = useState<any>(null);
 
   useEffect(() => {
     const selected = qsClinicId || (typeof window !== 'undefined' ? localStorage.getItem('selectedClinicId') : null);
@@ -46,6 +47,29 @@ export default function AdminPaymentsSetupPage() {
 
   useEffect(() => {
     if (clinicId) fetchStatus(clinicId);
+  }, [clinicId]);
+
+  // Load current merchant for this clinic and prefill fields
+  useEffect(() => {
+    const run = async () => {
+      if (!clinicId) return;
+      try {
+        const res = await fetch(`/api/admin/integrations/merchant/by-clinic?clinicId=${encodeURIComponent(clinicId)}`, { cache: 'no-store' });
+        const js = await res.json().catch(() => ({}));
+        if (res.ok && js?.exists) {
+          setMerchant(js);
+          // Prefill only if user hasn't typed yet
+          if (!recipientId) setRecipientId(js?.recipientId || '');
+          if (!splitPercent) setSplitPercent(js?.splitPercent != null ? String(js.splitPercent) : '');
+          if (!platformFeeBps) setPlatformFeeBps(js?.platformFeeBps != null ? String(js.platformFeeBps) : '');
+        } else {
+          setMerchant(null);
+        }
+      } catch {
+        setMerchant(null);
+      }
+    };
+    run();
   }, [clinicId]);
 
   const isReady = Boolean(status?.ready_for_production);
@@ -101,6 +125,32 @@ export default function AdminPaymentsSetupPage() {
                 {!loading && status?.message && (
                   <div className={`mt-4 rounded-xl p-3 text-sm ${isReady ? 'border-green-200 bg-green-50 text-green-800' : 'border-yellow-200 bg-yellow-50 text-yellow-900'} border`}>
                     {status.message}
+                  </div>
+                )}
+
+                {/* Always show current merchant (if exists) */}
+                {merchant && (
+                  <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-xs text-gray-800">
+                    <div className="text-sm font-semibold text-gray-900 mb-2">Current merchant</div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <div>
+                        <div className="text-[11px] text-gray-600">Recipient ID</div>
+                        <div className="font-mono break-all">{merchant.recipientId || '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-gray-600">Split %</div>
+                        <div>{merchant.splitPercent ?? '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-gray-600">Platform fee bps</div>
+                        <div>{merchant.platformFeeBps ?? '-'}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {!merchant && (
+                  <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-xs text-gray-700">
+                    No merchant record found for this clinic yet. Use "Set recipient" below to create/update it.
                   </div>
                 )}
 

@@ -28,7 +28,7 @@ export async function createPagarmeSubscription(params: LegacyCreatePagarmeSubsc
   if (!clinic) throw new Error('Clínica não encontrada');
   const offer = await prisma.offer.findUnique({ where: { id: String(params.offerId) }, include: { paymentMethods: true } });
   if (!offer) throw new Error('Oferta não encontrada');
-  const product = await prisma.products.findUnique({ where: { id: String(offer.productId) } });
+  const product = await prisma.product.findUnique({ where: { id: String(offer.productId) } });
   if (!product) throw new Error('Produto não encontrado');
   if ((product as any).type !== 'SUBSCRIPTION') throw new Error('Produto não é do tipo SUBSCRIPTION');
 
@@ -202,10 +202,41 @@ export async function createPagarmeSubscription(params: LegacyCreatePagarmeSubsc
   try {
     if (!DISABLE_PERSIST && subscriptionId && clinic?.id) {
       const subStatus = String(subscription?.status || (subscription as any)?.subscription?.status || 'active');
-      const startAt: string | null = (subscription?.start_at || subscription?.startAt || null) as any;
-      const curStart: string | null = (subscription?.current_period_start || subscription?.current_period?.start_at || null) as any;
-      const curEnd: string | null = (subscription?.current_period_end || subscription?.current_period?.end_at || null) as any;
-      const meta = { buyerName: params.customer?.name || null, buyerEmail: params.customer?.email || null, clinicId: clinic?.id || null, productId: String(product?.id || ''), offerId: String(offer?.id || '') } as any;
+      let startAt: string | null = (subscription?.start_at || subscription?.startAt || null) as any;
+      let curStart: string | null = (subscription?.current_period_start || subscription?.current_period?.start_at || null) as any;
+      let curEnd: string | null = (subscription?.current_period_end || subscription?.current_period?.end_at || null) as any;
+      
+      // Derive interval from Offer or fallback to 'month'
+      const intervalUnit = (offer?.intervalUnit ? String(offer.intervalUnit).toLowerCase() : (params.interval ? String(params.interval).toLowerCase() : 'month'));
+      const intervalCount = Number(offer?.intervalCount || 1) || 1;
+      
+      // Calculate period dates when provider omits them
+      try {
+        if (!startAt) startAt = new Date().toISOString();
+        if (!curStart || !curEnd) {
+          const base = curStart ? new Date(curStart) : (startAt ? new Date(startAt) : new Date());
+          const unitUpper = intervalUnit.toUpperCase();
+          const startIso = base.toISOString();
+          const end = new Date(base);
+          if (unitUpper === 'DAY') end.setDate(end.getDate() + intervalCount);
+          else if (unitUpper === 'WEEK') end.setDate(end.getDate() + 7 * intervalCount);
+          else if (unitUpper === 'MONTH') end.setMonth(end.getMonth() + intervalCount);
+          else if (unitUpper === 'YEAR') end.setFullYear(end.getFullYear() + intervalCount);
+          const endIso = end.toISOString();
+          if (!curStart) curStart = startIso as any;
+          if (!curEnd) curEnd = endIso as any;
+        }
+      } catch {}
+      
+      const meta = { 
+        buyerName: params.customer?.name || null, 
+        buyerEmail: params.customer?.email || null, 
+        clinicId: clinic?.id || null, 
+        productId: String(product?.id || ''), 
+        offerId: String(offer?.id || ''),
+        interval: intervalUnit,
+        intervalCount: intervalCount
+      } as any;
       const merchantRow = await prisma.merchant.findFirst({ where: { clinicId: String(clinic.id) }, select: { id: true } });
       const merchantId = merchantRow?.id || null;
       
@@ -308,6 +339,58 @@ export async function createPagarmeSubscription(params: LegacyCreatePagarmeSubsc
           }
         }
       }
+      
+      // Create customer_providers link (for Providers tab)
+      if (merchantId && internalCustomerId) {
+        try {
+          const providerCustomerId = subscription?.customer?.id || (subscription as any)?.customer_id || null;
+          if (providerCustomerId) {
+            const provId = crypto.randomUUID();
+            await prisma.$executeRawUnsafe(
+              `INSERT INTO customer_providers (id, customer_id, provider, account_id, provider_customer_id, created_at, updated_at)
+               VALUES ($1, $2, 'PAGARME'::"PaymentProvider", $3, $4, NOW(), NOW())
+               ON CONFLICT (customer_id, provider, account_id) DO UPDATE
+               SET provider_customer_id = EXCLUDED.provider_customer_id, updated_at = NOW()`,
+              provId,
+              String(internalCustomerId),
+              String(merchant?.id || ''),
+              String(providerCustomerId)
+            );
+            try { console.log('[subscribe][persist] created/updated customer_providers', { customerId: internalCustomerId, provider: 'PAGARME', providerCustomerId }); } catch {}
+          }
+        } catch (e: any) {
+          try { console.warn('[subscribe][persist] skip customer_providers', { message: e?.message }); } catch {}
+        }
+      }
+      
+      // Create customer_payment_methods (for Payment Methods tab)
+      if (merchantId && internalCustomerId && params.paymentMethod) {
+        try {
+          const pm = params.paymentMethod;
+          const cardData = subscription?.card || (subscription as any)?.payment_method?.card || pm.card || null;
+          if (cardData) {
+            const pmId = crypto.randomUUID();
+            await prisma.$executeRawUnsafe(
+              `INSERT INTO customer_payment_methods (id, customer_id, provider, account_id, provider_payment_method_id, brand, last4, exp_month, exp_year, status, is_default, created_at, updated_at)
+               VALUES ($1, $2, 'PAGARME'::"PaymentProvider", $3, $4, $5, $6, $7, $8, 'ACTIVE', true, NOW(), NOW())
+               ON CONFLICT (provider, account_id, provider_payment_method_id) DO UPDATE
+               SET customer_id = EXCLUDED.customer_id, status = 'ACTIVE', updated_at = NOW()`,
+              pmId,
+              String(internalCustomerId),
+              String(merchant?.id || ''),
+              String(cardData.id || pm.card_id || pm.saved_card_id || ''),
+              (String(cardData.brand || '').toUpperCase() || 'UNKNOWN'),
+              String(cardData.last_four_digits || cardData.last4 || ''),
+              (Number(cardData.exp_month || 0) || null),
+              (Number(cardData.exp_year || 0) || null)
+            );
+            try { console.log('[subscribe][persist] created/updated customer_payment_methods', { customerId: internalCustomerId, brand: cardData.brand, last4: cardData.last_four_digits }); } catch {}
+          }
+        } catch (e: any) {
+          try { console.warn('[subscribe][persist] skip customer_payment_methods', { message: e?.message }); } catch {}
+        }
+      }
+      
       // Optionally insert a payment_transactions row (best-effort)
       try {
         const existsRows: any[] = await prisma.$queryRawUnsafe('SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = ' + "'public'" + ' AND table_name = ' + "'payment_transactions'" + ') AS exists');
@@ -342,8 +425,8 @@ export async function createPagarmeSubscription(params: LegacyCreatePagarmeSubsc
           const platformAmountCents = Math.max(0, unitAmount - clinicAmountCents);
           try {
             await prisma.$executeRawUnsafe(
-              'INSERT INTO payment_transactions (id, provider, provider_order_id, provider_charge_id, doctor_id, patient_profile_id, clinic_id, product_id, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, installments, payment_method_type, status, raw_payload, routed_provider, client_name, client_email) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::"Currency",$14,$15,$16,$17::jsonb,$18,$19,$20) ON CONFLICT (provider, provider_order_id) DO NOTHING',
-              txId, 'pagarme', String(subscriptionId), null, doctorId, patientProfileId, clinic?.id ? String(clinic.id) : null, String(product?.id || ''), unitAmount, clinicAmountCents, platformAmountCents, platformFeeTotal, String(currency), 1, 'credit_card', 'processing', JSON.stringify({ clinicId: clinic?.id, offerId: String(offer?.id || ''), productId: String(product?.id || ''), subscriptionId }), 'KRXPAY', params.customer?.name || null, params.customer?.email || null
+              'INSERT INTO payment_transactions (id, provider, provider_order_id, provider_charge_id, customer_id, doctor_id, patient_profile_id, clinic_id, product_id, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, installments, payment_method_type, status, raw_payload, routed_provider, client_name, client_email) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::"Currency",$15,$16,$17,$18::jsonb,$19,$20,$21) ON CONFLICT (provider, provider_order_id) DO NOTHING',
+              txId, 'pagarme', String(subscriptionId), null, internalCustomerId, doctorId, patientProfileId, clinic?.id ? String(clinic.id) : null, String(product?.id || ''), unitAmount, clinicAmountCents, platformAmountCents, platformFeeTotal, String(currency), 1, 'credit_card', 'processing', JSON.stringify({ clinicId: clinic?.id, offerId: String(offer?.id || ''), productId: String(product?.id || ''), subscriptionId }), 'KRXPAY', params.customer?.name || null, params.customer?.email || null
             );
             try { console.log('[subscribe][persist] created payment_transactions row', { subscriptionId, status: 'processing', clinicId: clinic?.id }); } catch {}
           } catch (persistErr: any) {

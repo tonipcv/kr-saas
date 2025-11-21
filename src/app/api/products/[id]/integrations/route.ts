@@ -12,7 +12,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const providerRaw = String(url.searchParams.get('provider') || '').toUpperCase()
     if (!providerRaw || !(providerRaw in PaymentProvider)) return bad('Invalid provider')
 
-    const product = await prisma.products.findUnique({ where: { id }, select: { id: true } })
+    const product = await prisma.product.findUnique({ where: { id }, select: { id: true } })
     if (!product) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
 
     await prisma.productIntegration.delete({
@@ -30,7 +30,7 @@ function fail(message: string, extra?: any) { return NextResponse.json({ error: 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const product = await prisma.products.findUnique({ where: { id }, select: { id: true, name: true } })
+    const product = await prisma.product.findUnique({ where: { id }, select: { id: true, name: true } })
     if (!product) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
 
     const rows = await prisma.productIntegration.findMany({ where: { productId: id } })
@@ -84,7 +84,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     if (!externalProductId) return bad('externalProductId is required')
 
-    const product = await prisma.products.findUnique({ where: { id }, select: { id: true } })
+    const product = await prisma.product.findUnique({ where: { id }, select: { id: true } })
     if (!product) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
 
     const up = await prisma.productIntegration.upsert({

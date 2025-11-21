@@ -8,7 +8,15 @@ export async function GET(req: NextRequest) {
     if (!clinicId) return NextResponse.json({ error: 'clinicId is required' }, { status: 400 })
     const merchant = await prisma.merchant.findUnique({ where: { clinicId } })
     if (!merchant) return NextResponse.json({ exists: false })
-    return NextResponse.json({ exists: true, id: merchant.id })
+    return NextResponse.json({
+      exists: true,
+      id: merchant.id,
+      recipientId: merchant.recipientId,
+      splitPercent: merchant.splitPercent,
+      platformFeeBps: merchant.platformFeeBps,
+      status: merchant.status,
+      lastSyncAt: merchant.lastSyncAt,
+    })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'internal_error' }, { status: 500 })
   }

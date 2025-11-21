@@ -186,7 +186,7 @@ export async function POST(req: Request) {
         // Enrich: resolve doctorId from Product
         let doctorId: string | null = null;
         if (productId) {
-          const prod = await prisma.products.findUnique({ where: { id: productId }, select: { doctorId: true } }).catch(() => null as any);
+          const prod = await prisma.product.findUnique({ where: { id: productId }, select: { doctorId: true } }).catch(() => null as any);
           doctorId = (prod?.doctorId as any) || null;
         }
         // Enrich: include minimal user info from session

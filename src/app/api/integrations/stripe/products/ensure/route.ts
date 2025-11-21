@@ -57,7 +57,7 @@ async function ensureStripeProduct(productId: string) {
   }
 
   // Create
-  const prod = await prisma.products.findUnique({ where: { id: productId }, select: { id: true, name: true, description: true } })
+  const prod = await prisma.product.findUnique({ where: { id: productId }, select: { id: true, name: true, description: true } })
   const params = new URLSearchParams()
   params.set('name', (prod?.name && prod.name.trim()) ? prod.name.trim() : `Product ${productId}`)
   if (prod?.description && String(prod.description).trim().length > 0) {

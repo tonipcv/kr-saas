@@ -34,7 +34,7 @@ export async function POST(req: Request) {
         // resolve clinicId from product or slug if not provided
         if (!clinicId) {
           if (body.productId) {
-            const prod = await prisma.products.findUnique({ where: { id: String(body.productId) } });
+            const prod = await prisma.product.findUnique({ where: { id: String(body.productId) } });
             clinicId = (prod as any)?.clinicId ? String((prod as any).clinicId) : null;
           }
           if (!clinicId && body.slug) {
@@ -67,29 +67,8 @@ export async function POST(req: Request) {
             metadata: body.metadata || undefined,
           });
           // Update Provider IDs into unified CustomerProvider and pre-created Transaction (best-effort)
-          try {
-            // Try to persist providerCustomerId on CustomerProvider
-            if (unifiedCustomerProvider && result?.providerData?.customer_id) {
-              await prisma.customerProvider.update({
-                where: { customerId_provider_accountId: { customerId: unifiedCustomerProvider.customerId, provider: PaymentProvider.PAGARME, accountId: String((merchant as any).id) } },
-                data: { providerCustomerId: String(result.providerData.customer_id) },
-              });
-            }
-            // Update transaction with provider IDs and final amount/status
-            if (preTransactionId) {
-              await prisma.paymentTransaction.update({
-                where: { id: preTransactionId },
-                data: {
-                  providerOrderId: String(result?.subscriptionId || result?.id || ''),
-                  providerChargeId: String((result as any)?.chargeId || (result as any)?.current_charge?.id || ''),
-                  amountCents: Number(result?.amount || 0) || undefined,
-                  status: (String((result as any)?.status || 'processing')).toLowerCase(),
-                  status_v2: PaymentStatus.PROCESSING,
-                  rawPayload: (result as any) || undefined,
-                },
-              });
-            }
-          } catch (e) { try { console.warn('[subscribe][orchestration] post-update failed (non-blocking)', e instanceof Error ? e.message : String(e)); } catch {} }
+          // Skip early post-update here to avoid referencing variables before initialization; webhooks will persist IDs.
+          try { /* no-op */ } catch {}
           try { console.log('[subscribe][v1->legacy] delegated', { clinicId, offerId, hasSplit: !!result?.providerData, amount: body.amount }); } catch {}
           return NextResponse.json({ success: true, subscription: result, subscription_id: String(result?.subscriptionId || result?.id || '') });
         } else {
@@ -105,7 +84,7 @@ export async function POST(req: Request) {
     if (!buyer?.name || !buyer?.email || !buyer?.phone) return NextResponse.json({ error: 'Dados do comprador incompletos' }, { status: 400 });
 
     // Load product and ensure type SUBSCRIPTION
-    const product = await prisma.products.findUnique({ where: { id: String(productId) } });
+    const product = await prisma.product.findUnique({ where: { id: String(productId) } });
     if (!product) return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 });
     if ((product as any).type !== 'SUBSCRIPTION') {
       return NextResponse.json({ error: 'Produto não é do tipo SUBSCRIPTION' }, { status: 400 });
@@ -209,7 +188,7 @@ export async function POST(req: Request) {
           if (isDev) console.warn('[subscribe] Creating provider plan', { planPayload });
           const createdPlan = await pagarmeCreatePlan(planPayload);
           providerPlanId = createdPlan?.id || createdPlan?.plan?.id || null;
-          if (providerPlanId) { try { await prisma.products.update({ where: { id: String(productId) }, data: { providerPlanId, providerPlanData: createdPlan || null } }); } catch {} }
+          if (providerPlanId) { try { await prisma.product.update({ where: { id: String(productId) }, data: { providerPlanId, providerPlanData: createdPlan || null } }); } catch {} }
         } catch (e: any) {
           try { console.error('[subscribe] create plan failed', { status: e?.status, message: e?.message, response: e?.responseJson || e?.responseText }); } catch {}
           return NextResponse.json({ error: e?.message || 'Falha ao criar plano de assinatura no provedor' }, { status: 500 });
@@ -297,6 +276,8 @@ export async function POST(req: Request) {
           clinicId: (product as any)?.clinicId || (clinic?.id || null),
           merchantId: (merchant as any)?.id || null,
           productId: String(product.id),
+          offerId: selectedOffer?.id || null,
+          subscriptionId: null,
           amountCents: amountCentsPre || 0,
           currency: String(((selectedOffer as any)?.currency) || 'BRL'),
           installments: 1,
@@ -591,11 +572,13 @@ export async function POST(req: Request) {
           const v = String(s || '').toLowerCase();
           if (v === 'active') return 'ACTIVE';
           if (v === 'trial' || v === 'trialing') return 'TRIAL';
-          if (v === 'past_due' || v === 'incomplete' || v === 'incomplete_expired') return 'PAST_DUE';
+          if (v === 'past_due') return 'PAST_DUE';
+          if (v === 'incomplete' || v === 'incomplete_expired' || v === 'pending') return 'PENDING';
           if (v === 'canceled' || v === 'cancelled') return 'CANCELED';
-          return 'ACTIVE';
+          // Default to PENDING for new subscriptions until first payment confirms
+          return 'PENDING';
         };
-        const subStatus = mapStatus(subscription?.status || (subscription as any)?.subscription?.status || 'ACTIVE');
+        const subStatus = mapStatus(subscription?.status || (subscription as any)?.subscription?.status);
         let startAt: string | null = (subscription?.start_at || subscription?.startAt || null) as any;
         let curStart: string | null = (subscription?.current_period_start || subscription?.current_period?.start_at || null) as any;
         let curEnd: string | null = (subscription?.current_period_end || subscription?.current_period?.end_at || null) as any;
@@ -618,6 +601,11 @@ export async function POST(req: Request) {
             if (!curEnd) curEnd = endIso as any;
           }
         } catch {}
+        // Derive interval metadata for UI (charged every)
+        const intervalUnitMeta = (selectedOffer?.intervalUnit
+          ? String(selectedOffer.intervalUnit).toLowerCase()
+          : ((product as any)?.interval ? String((product as any).interval).toLowerCase() : 'month'));
+        const intervalCountMeta = Number(selectedOffer?.intervalCount || (product as any)?.intervalCount || 1) || 1;
         const meta = {
           buyerName: buyer?.name || customerCore?.name || null,
           buyerEmail: buyer?.email || customerCore?.email || null,
@@ -625,6 +613,8 @@ export async function POST(req: Request) {
           productId: String(productId),
           offerId: selectedOffer?.id || null,
           providerPlanId,
+          interval: intervalUnitMeta,
+          intervalCount: intervalCountMeta,
         } as any;
         // Ensure merchant id
         const merchantRow = await prisma.merchant.findFirst({ where: { clinicId: String(clinic.id) }, select: { id: true } });

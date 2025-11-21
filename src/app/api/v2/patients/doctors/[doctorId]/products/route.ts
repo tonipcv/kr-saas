@@ -13,7 +13,7 @@ export async function GET(
       return NextResponse.json({ success: false, message: 'doctorId inválido' }, { status: 400 });
     }
 
-    const products = await prisma.products.findMany({
+    const products = await prisma.product.findMany({
       where: { doctorId, isActive: true },
       orderBy: { createdAt: 'desc' },
       select: {

@@ -84,7 +84,7 @@ export async function GET(req: Request) {
 
     // Enrich product names
     const productIds = Array.from(new Set(rows.map((r: any) => String(r.productId || '')).filter(Boolean)));
-    const products = productIds.length > 0 ? await prisma.products.findMany({ select: { id: true, name: true }, where: { id: { in: productIds } } }) : [];
+    const products = productIds.length > 0 ? await prisma.product.findMany({ select: { id: true, name: true }, where: { id: { in: productIds } } }) : [];
     const productMap = new Map(products.map(p => [p.id, p.name]));
 
     // Enrich customers
@@ -120,6 +120,7 @@ export async function GET(req: Request) {
         product: productName,
         startedAt: r.startAt || null,
         updatedAt: r.updatedAt || r.currentPeriodStart || null,
+        expiresAt: r.currentPeriodEnd || null,
         interval,
         intervalCount,
       };

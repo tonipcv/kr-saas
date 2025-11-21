@@ -218,9 +218,11 @@ export async function POST(req: NextRequest) {
           const v = String(s || '').toLowerCase();
           if (v === 'active') return 'ACTIVE';
           if (v === 'trialing') return 'TRIAL';
-          if (v === 'past_due' || v === 'unpaid' || v === 'incomplete' || v === 'incomplete_expired') return 'PAST_DUE';
+          if (v === 'past_due' || v === 'unpaid') return 'PAST_DUE';
+          if (v === 'incomplete' || v === 'incomplete_expired') return 'PENDING';
           if (v === 'canceled') return 'CANCELED';
-          return 'ACTIVE';
+          // Default to PENDING until activated
+          return 'PENDING';
         };
         const statusVal = mapStatus(sub?.status);
 

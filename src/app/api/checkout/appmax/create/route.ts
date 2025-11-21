@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     let product: any = null
     let clinic: any = null
     if (productId) {
-      product = await prisma.products.findUnique({ where: { id: String(productId) } })
+      product = await prisma.product.findUnique({ where: { id: String(productId) } })
     }
     if (!product && slug) {
       clinic = await prisma.clinic.findFirst({ where: { slug: String(slug) } })
@@ -360,7 +360,7 @@ export async function POST(req: Request) {
         else if (interval === 'YEAR') nextBilling.setFullYear(nextBilling.getFullYear() + intervalCount)
         const currentPeriodEnd = nextBilling.toISOString()
         
-        const status = hasTrial ? 'TRIAL' : 'ACTIVE'
+        const status = hasTrial ? 'TRIAL' : 'PENDING'
         const metadata = JSON.stringify({
           interval,
           intervalCount,

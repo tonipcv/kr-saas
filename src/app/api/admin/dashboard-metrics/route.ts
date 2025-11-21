@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       prisma.user.count({ where: { role: 'DOCTOR' } }),
       prisma.user.count({ where: { role: 'PATIENT' } }),
-      prisma.products.count(),
+      prisma.product.count(),
       prisma.clinic.count(),
       prisma.clinicSubscription.count({ where: { status: 'ACTIVE' } }),
       prisma.clinicSubscription.count({ where: { status: 'TRIAL' } }),

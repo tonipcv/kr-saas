@@ -70,6 +70,14 @@ export default function CreateProductPage() {
     allowCARD: true,
   });
 
+  // Minimal required country price for the first offer (at least one)
+  const [countryPrice, setCountryPrice] = useState<{ country: string; currency: 'BRL'|'USD'|'EUR'; provider: 'KRXPAY'|'STRIPE'; price: string }>({
+    country: 'BR',
+    currency: 'BRL',
+    provider: 'KRXPAY',
+    price: '',
+  });
+
   // Gateway por localização (MVP)
   const [routingUsePlatformDefault, setRoutingUsePlatformDefault] = useState(true);
   const [routingDefaultProvider, setRoutingDefaultProvider] = useState<'KRXPAY' | 'STRIPE'>('KRXPAY');
@@ -162,6 +170,7 @@ export default function CreateProductPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim()) { alert('Name is required'); return; }
+    if (!countryPrice.price || Number(countryPrice.price) <= 0) { alert('Enter a valid price for the initial country offer'); return; }
     try {
       setIsLoading(true);
       const payload: any = {
@@ -208,6 +217,21 @@ export default function CreateProductPage() {
                   method: 'PUT', headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ checkoutUrl: fullUrl })
                 });
+                // Create required initial country price for the offer
+                try {
+                  const amountCents = Math.round(Number(countryPrice.price) * 100);
+                  await fetch(`/api/offers/${offerId}/prices`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      country: countryPrice.country,
+                      currency: countryPrice.currency,
+                      provider: countryPrice.provider,
+                      amountCents,
+                      active: true,
+                    })
+                  });
+                } catch {}
               } catch {}
             }
             // Payment methods will be defined per country/provider in OfferPrices later
@@ -283,12 +307,12 @@ export default function CreateProductPage() {
                   <CardContent className="space-y-4">
                     <div>
                       <Label htmlFor="name" className="text-gray-900 font-medium">Product Name *</Label>
-                      <Input id="name" value={formData.name} onChange={(e) => handleInputChange('name', e.target.value)} placeholder="e.g., Ultra Light Sunscreen" required className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10" />
+                      <Input id="name" value={formData.name} onChange={(e) => handleInputChange('name', e.target.value)} placeholder="e.g., Ultra Light Sunscreen" required className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-9" />
                     </div>
 
                     <div>
                       <Label htmlFor="subtitle" className="text-gray-900 font-medium">Subtitle</Label>
-                      <Input id="subtitle" value={formData.subtitle} onChange={(e) => handleInputChange('subtitle', e.target.value)} placeholder="Short product subtitle" className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10" />
+                      <Input id="subtitle" value={formData.subtitle} onChange={(e) => handleInputChange('subtitle', e.target.value)} placeholder="Short product subtitle" className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-9" />
                     </div>
 
                     <div>
@@ -302,7 +326,7 @@ export default function CreateProductPage() {
                       <Label htmlFor="category" className="text-gray-900 font-medium">Category</Label>
                       <div className="mt-2">
                         <Select value={formData.category || ''} onValueChange={(val) => { if (val === '__create__') { setCreatingCategory(true); return; } setCreatingCategory(false); handleInputChange('category', val); }}>
-                          <SelectTrigger className="border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 rounded-xl h-10">
+                          <SelectTrigger className="border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 rounded-xl h-9">
                             <SelectValue placeholder={categoriesLoading ? 'Loading...' : 'Select a category'} />
                           </SelectTrigger>
                           <SelectContent>
@@ -323,11 +347,11 @@ export default function CreateProductPage() {
                             value={newCategoryName}
                             onChange={(e) => setNewCategoryName(e.target.value)}
                             placeholder="New category name"
-                            className="border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-10 flex-1"
+                            className="border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-9 flex-1"
                           />
                           <Button 
                             type="button"
-                            className="border border-gray-300 bg-white text-gray-800 hover:bg-gray-50 rounded-xl h-10"
+                            className="border border-gray-300 bg-white text-gray-800 hover:bg-gray-50 rounded-xl h-9"
                             disabled={!newCategoryName.trim()}
                             onClick={async () => {
                               const name = newCategoryName.trim();
@@ -363,7 +387,7 @@ export default function CreateProductPage() {
                           <Button
                             type="button"
                             variant="outline"
-                            className="border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-xl h-10"
+                            className="border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-xl h-9"
                             onClick={() => { setCreatingCategory(false); setNewCategoryName(''); }}
                           >
                             Cancel
@@ -378,7 +402,7 @@ export default function CreateProductPage() {
                       <Label className="text-gray-900 font-medium">Product Type</Label>
                       <div className="mt-2">
                         <Select value={formData.type} onValueChange={(val) => handleInputChange('type', val)}>
-                          <SelectTrigger className="border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 rounded-xl h-10">
+                          <SelectTrigger className="border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 rounded-xl h-9">
                             <SelectValue placeholder="Select type" />
                           </SelectTrigger>
                           <SelectContent>
@@ -423,7 +447,7 @@ export default function CreateProductPage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="md:col-span-1">
                       <Label className="text-gray-900 font-medium">Name</Label>
-                      <Input value={offerForm.name} onChange={(e) => setOfferForm(o => ({ ...o, name: e.target.value }))} className="mt-2 h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900" placeholder="New offer" />
+                      <Input value={offerForm.name} onChange={(e) => setOfferForm(o => ({ ...o, name: e.target.value }))} className="mt-2 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900" placeholder="New offer" />
                     </div>
                   </div>
                   {offerForm.isSubscription && (
@@ -431,7 +455,7 @@ export default function CreateProductPage() {
                       <div>
                         <Label className="text-gray-900 font-medium">Interval</Label>
                         <Select value={offerForm.intervalUnit} onValueChange={(val: any) => setOfferForm(o => ({ ...o, intervalUnit: val }))}>
-                          <SelectTrigger className="mt-2 h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900"><SelectValue placeholder="Interval" /></SelectTrigger>
+                          <SelectTrigger className="mt-2 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900"><SelectValue placeholder="Interval" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="DAY">Day</SelectItem>
                             <SelectItem value="WEEK">Week</SelectItem>
@@ -442,14 +466,67 @@ export default function CreateProductPage() {
                       </div>
                       <div>
                         <Label className="text-gray-900 font-medium">Interval Count</Label>
-                        <Input type="number" min={1} value={offerForm.intervalCount} onChange={(e) => setOfferForm(o => ({ ...o, intervalCount: e.target.value }))} className="mt-2 h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900" />
+                        <Input type="number" min={1} value={offerForm.intervalCount} onChange={(e) => setOfferForm(o => ({ ...o, intervalCount: e.target.value }))} className="mt-2 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900" />
                       </div>
                       <div>
                         <Label className="text-gray-900 font-medium">Trial (days)</Label>
-                        <Input type="number" min={0} value={offerForm.trialDays} onChange={(e) => setOfferForm(o => ({ ...o, trialDays: e.target.value }))} className="mt-2 h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900" />
+                        <Input type="number" min={0} value={offerForm.trialDays} onChange={(e) => setOfferForm(o => ({ ...o, trialDays: e.target.value }))} className="mt-2 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900" />
                       </div>
                     </div>
                   )}
+
+                  {/* Initial Country Price (required) */}
+                  <div className="pt-2">
+                    <Label className="text-gray-900 font-medium">Initial country price</Label>
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <div>
+                        <Label className="text-[11px] text-gray-600">Country</Label>
+                        <Select value={countryPrice.country} onValueChange={(val: any) => setCountryPrice(p => ({ ...p, country: val }))}>
+                          <SelectTrigger className="mt-1 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900">
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {COUNTRIES.map(c => (
+                              <SelectItem key={c.code} value={c.code}>{flagEmoji(c.code)} {c.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-[11px] text-gray-600">Currency</Label>
+                        <Select value={countryPrice.currency} onValueChange={(val: any) => setCountryPrice(p => ({ ...p, currency: val }))}>
+                          <SelectTrigger className="mt-1 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900">
+                            <SelectValue placeholder="Currency" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="BRL">BRL</SelectItem>
+                            <SelectItem value="USD">USD</SelectItem>
+                            <SelectItem value="EUR">EUR</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-[11px] text-gray-600">Provider</Label>
+                        <Select value={countryPrice.provider} onValueChange={(val: any) => setCountryPrice(p => ({ ...p, provider: val }))}>
+                          <SelectTrigger className="mt-1 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900">
+                            <SelectValue placeholder="Provider" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="KRXPAY">KRXPAY</SelectItem>
+                            <SelectItem value="STRIPE">STRIPE</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-[11px] text-gray-600">Price</Label>
+                        <div className="mt-1 flex items-center gap-1">
+                          <span className="text-gray-500 text-sm">$</span>
+                          <Input type="number" min="0" step="0.01" value={countryPrice.price} onChange={(e) => setCountryPrice(p => ({ ...p, price: e.target.value }))} className="h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900" placeholder="0.00" />
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">This first country price will be created for your initial offer.</p>
+                  </div>
                 </CardContent>
               </Card>
 

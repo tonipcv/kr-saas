@@ -23,7 +23,7 @@ export async function POST(
     const { id } = await params;
 
     // Load source product and ensure it belongs to doctor
-    const source = await prisma.products.findFirst({
+    const source = await prisma.product.findFirst({
       where: { id, doctorId: session.user.id }
     });
 
@@ -46,7 +46,7 @@ export async function POST(
       doctorId: session.user.id,
     };
 
-    const duplicated = await prisma.products.create({ data });
+    const duplicated = await prisma.product.create({ data });
 
     const transformed = {
       ...duplicated,

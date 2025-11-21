@@ -15,28 +15,16 @@ interface SubscriptionPlan {
   name: string;
   description: string;
   monthlyPrice: number | null;
-  baseDoctors: number;
-  basePatients: number;
-  // Some API responses use maxPatients; keep it optional to satisfy both
-  maxPatients?: number;
+  monthlyTxLimit?: number;
   // Plan tier (e.g., STARTER, GROWTH, CREATOR, ENTERPRISE)
   tier?: string;
   // Stripe price id for real checkout (non-enterprise)
   priceId?: string;
   features: {
-    customBranding: boolean;
-    advancedReports: boolean;
-    allowPurchaseCredits: boolean;
-    maxReferralsPerMonth: number;
-    // expose product limit if present on features
-    maxProducts?: number;
-    addOns?: {
-      extraDoctor?: { price: number; description: string };
-      extraPatients?: { price: number; amount: number; description: string };
-      advancedReports?: { price: number; description: string };
-    };
+    [key: string]: any;
   };
   contactOnly?: boolean;
+  requireCard?: boolean;
 }
 
 
@@ -293,7 +281,7 @@ function SubscriptionManagement() {
                 <Button variant="ghost" size="sm" asChild className="h-9 items-center text-sm font-medium text-gray-300 hover:bg-[#2F2F2F]">
                   <Link href="/clinic">
                     <ArrowLeft className="h-4 w-4 mr-2" />
-                    Voltar
+                    Back
                   </Link>
                 </Button>
               )}
@@ -302,13 +290,13 @@ function SubscriptionManagement() {
                 onClick={() => signOut({ callbackUrl: '/auth/signin' })}
                 className="px-2 py-1 text-sm font-medium text-gray-300 hover:text-white rounded-lg focus:outline-none"
               >
-                Sair
+                Sign out
               </button>
             </div>
             {isNewClinic && (
               <div className="rounded-lg border border-[#333333] bg-[#232323] p-4 text-gray-200">
-                <div className="text-sm font-medium">Selecionar plano para nova clínica</div>
-                <div className="text-xs text-gray-400 mt-1">Você está criando uma nova clínica. Ao escolher um plano, iniciaremos o checkout e ativaremos a nova clínica automaticamente após a confirmação do pagamento.</div>
+                <div className="text-sm font-medium">Select a plan for your new clinic</div>
+                <div className="text-xs text-gray-400 mt-1">You're creating a new clinic. After selecting a plan, we'll start checkout and activate your clinic once payment is confirmed.</div>
               </div>
             )}
           </div>
@@ -327,7 +315,7 @@ function SubscriptionManagement() {
                     </span>
                   )}
                   <Badge className="bg-[#333333] text-gray-300 border-[#444444] font-normal">
-                    {clinic.subscription.status === 'ACTIVE' ? 'Ativo' : clinic.subscription.status}
+                    {clinic.subscription.status === 'ACTIVE' ? 'Active' : clinic.subscription.status}
                   </Badge>
                 </div>
                 <Button
@@ -339,34 +327,7 @@ function SubscriptionManagement() {
                 </Button>
               </div>
 
-              {clinic.subscription.plan.name.toLowerCase() !== 'free' && (
-                <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {[{
-                    title: 'Médicos',
-                    value: clinic.subscription.maxDoctors,
-                    unlimited: clinic.subscription.maxDoctors === -1
-                  }, {
-                    title: 'Pacientes',
-                    value: clinic.subscription.plan.maxPatients,
-                    unlimited: clinic.subscription.plan.maxPatients === -1
-                  }, {
-                    title: 'Indicações / mês',
-                    value: clinic.subscription.plan.name.toLowerCase() === 'starter' ? 500 : clinic.subscription.plan.name.toLowerCase() === 'creator' ? 2000 : '-',
-                    unlimited: false
-                  }, {
-                    title: 'Recompensas',
-                    value: 50,
-                    unlimited: false
-                  }].map((kpi) => (
-                    <div key={kpi.title} className="rounded-lg border border-[#333333] bg-[#2F2F2F] p-4">
-                      <div className="text-sm text-gray-400">{kpi.title}</div>
-                      <div className="mt-1 text-lg font-medium text-white">
-                        {kpi.unlimited ? 'Ilimitado' : kpi.value}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* Legacy KPIs removed to reflect new plan schema */}
             </div>
           </div>
         )}
@@ -386,7 +347,7 @@ function SubscriptionManagement() {
                 <div key={plan.id} className={`relative flex flex-col rounded-lg border ${isCurrentPlan ? 'border-white bg-[#2F2F2F] ring-1 ring-white' : 'border-[#333333] bg-[#2F2F2F] hover:border-[#444444]'} transition-all duration-200`}>
                   {isCurrentPlan && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <Badge className="bg-white text-black border-transparent font-medium">Plano atual</Badge>
+                      <Badge className="bg-white text-black border-transparent font-medium">Current plan</Badge>
                     </div>
                   )}
                   <div className="p-6">
@@ -398,12 +359,12 @@ function SubscriptionManagement() {
 
                     <div className="mt-4">
                       {isEnterprise ? (
-                        <div className="text-2xl font-medium text-white">Personalizado</div>
+                        <div className="text-2xl font-medium text-white">Custom</div>
                       ) : (
                         <div className="flex items-baseline">
                           <span className="text-2xl font-medium text-white">$</span>
                           <span className="text-2xl font-medium text-white">{plan.monthlyPrice}</span>
-                          <span className="ml-1 text-gray-400">/mês</span>
+                          <span className="ml-1 text-gray-400">/month</span>
                         </div>
                       )}
                     </div>
@@ -415,23 +376,15 @@ function SubscriptionManagement() {
                       </div>
                     )}
 
-                    {/* Quantidades principais (Clientes e Produtos) */}
-                    <div className="mt-4 grid grid-cols-2 gap-2">
+                    {/* Plan core limits (new schema) */}
+                    <div className="mt-4 grid grid-cols-1 gap-2">
                       <div className="rounded-lg border border-[#3a3a3a] bg-[#232323] px-3 py-2">
-                        <div className="text-[11px] text-gray-400">Clientes</div>
-                        <div className="text-sm text-white font-medium">
-                          {plan.basePatients === -1 ? 'Ilimitado' : plan.basePatients}
-                        </div>
-                      </div>
-                      <div className="rounded-lg border border-[#3a3a3a] bg-[#232323] px-3 py-2">
-                        <div className="text-[11px] text-gray-400">Produtos</div>
+                        <div className="text-[11px] text-gray-400">Monthly transactions</div>
                         <div className="text-sm text-white font-medium">
                           {(() => {
-                            const maxP = typeof plan.features?.maxProducts === 'number'
-                              ? plan.features.maxProducts
-                              : (plan as any)?.maxProducts; // fallback if backend places it at root
-                            if (maxP === -1) return 'Ilimitado';
-                            if (typeof maxP === 'number') return maxP;
+                            const lim = (plan as any).monthlyTxLimit;
+                            if (lim === -1) return 'Unlimited';
+                            if (typeof lim === 'number') return `${lim}`;
                             return '-';
                           })()}
                         </div>
@@ -449,10 +402,10 @@ function SubscriptionManagement() {
                         disabled={isCurrentPlan || (!isEnterprise && redirectingPlanId === plan.id)}
                       >
                         {isCurrentPlan
-                          ? 'Plano atual'
+                          ? 'Current plan'
                           : isEnterprise
-                            ? 'Agendar demo'
-                            : (redirectingPlanId === plan.id ? 'Redirecionando…' : (eligibleTrial ? 'Teste Grátis 14 dias' : 'Assinar agora'))}
+                            ? 'Book a demo'
+                            : (redirectingPlanId === plan.id ? 'Redirecting…' : (eligibleTrial ? 'Start 14-day trial' : 'Subscribe now'))}
                       </Button>
                     </div>
                   </div>
@@ -461,57 +414,28 @@ function SubscriptionManagement() {
                     <div className="h-px bg-[#333333] -mx-6 mb-6"></div>
                     <div className="space-y-4">
                       <div>
-                        <h4 className="text-sm font-medium text-white mb-4">O que está incluído</h4>
+                        <h4 className="text-sm font-medium text-white mb-4">What’s included</h4>
                         <ul className="space-y-2">
                           <li className="text-sm text-gray-300">
-                            {plan.baseDoctors === -1 ? 'Médicos ilimitados' : `Até ${plan.baseDoctors} médicos`}
-                          </li>
-                          <li className="text-sm text-gray-300">
-                            {plan.basePatients === -1 ? 'Pacientes (clientes) ilimitados' : `Até ${plan.basePatients} clientes`}
-                          </li>
-                          <li className="text-sm text-gray-300">
-                            {plan.features?.maxReferralsPerMonth === -1 
-                              ? 'Indicações ilimitadas' 
-                              : `${plan.features?.maxReferralsPerMonth ?? 0} indicações/mês`}
-                          </li>
-                          <li className="text-sm text-gray-300">
                             {(() => {
-                              const f: any = plan.features || {};
-                              const maxProducts = typeof f.maxProducts === 'number' ? f.maxProducts : undefined;
-                              if (maxProducts === -1) return 'Produtos ilimitados';
-                              if (typeof maxProducts === 'number') return `Até ${maxProducts} produtos`;
-                              return 'Quantidade de produtos conforme plano';
+                              const lim = (plan as any).monthlyTxLimit;
+                              if (lim === -1) return 'Transações mensais: Ilimitadas';
+                              if (typeof lim === 'number') return `Transações mensais: até ${lim}`;
+                              return 'Transações mensais conforme plano';
                             })()}
                           </li>
-                          {plan.features?.customBranding && (
-                            <li className="text-sm text-gray-300">Custom branding</li>
-                          )}
-                          {plan.features?.advancedReports && (
-                            <li className="text-sm text-gray-300">Relatórios avançados</li>
-                          )}
+                          {(() => {
+                            const f = (plan?.features || {}) as Record<string, any>;
+                            const enabled = Object.entries(f)
+                              .filter(([k, v]) => typeof v === 'boolean' && v)
+                              .map(([k]) => k.replace(/([A-Z])/g, ' $1').replace(/^\w/, (c) => c.toUpperCase()));
+                            return enabled.map((label) => (
+                              <li key={label} className="text-sm text-gray-300">{label}</li>
+                            ));
+                          })()}
                         </ul>
                       </div>
-
-                      {plan.features?.addOns && (
-                        <div>
-                          <h4 className="text-sm font-medium text-white mb-3">Add-ons disponíveis</h4>
-                          <ul className="space-y-2">
-                            {plan.features.addOns.extraDoctor && (
-                              <li className="text-sm text-gray-300">Médico extra: $20/mês</li>
-                            )}
-                            {plan.features.addOns.extraPatients && (
-                              <li className="text-sm text-gray-300">+500 pacientes: $40/mês</li>
-                            )}
-                            {(() => {
-                              const f: any = plan.features || {};
-                              if (f.addOns?.advancedReports?.price) {
-                                return <li className="text-sm text-gray-300">Relatórios avançados (add-on)</li>;
-                              }
-                              return null;
-                            })()}
-                          </ul>
-                        </div>
-                      )}
+                      {/* Optional: you can render specific add-ons if present in features.addOns */}
                     </div>
                   </div>
                 </div>

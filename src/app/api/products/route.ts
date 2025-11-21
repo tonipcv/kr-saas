@@ -84,7 +84,7 @@ export async function GET(request: Request) {
       }
 
       // Buscar produtos do médico atual
-      const products = await prisma.products.findMany({
+      const products = await prisma.product.findMany({
         where: {
           doctorId: session.user.id,
           ...(clinicId
@@ -96,7 +96,7 @@ export async function GET(request: Request) {
             select: {
               purchases: true,
               categories: true,
-              coupons: true,
+              offers: true,
             },
           },
           // Usar a relação correta definida no schema
@@ -149,7 +149,7 @@ export async function GET(request: Request) {
           _count: {
             purchases: product._count?.purchases || 0,
             categories: product._count?.categories || 0,
-            coupons: product._count?.coupons || 0,
+            coupons: product._count?.offers || 0,
           }
         };
       });
@@ -277,14 +277,14 @@ export async function POST(request: Request) {
 
     let product;
     try {
-      product = await prisma.products.create({ data: dataWithCredits });
+      product = await prisma.product.create({ data: dataWithCredits });
     } catch (e: any) {
       const message = e?.message || String(e);
       console.error('❌ Prisma create failed:', message);
       if (message.includes('Unknown argument `creditsPerUnit`')) {
         console.warn('⚠️ Retrying without creditsPerUnit due to unknown argument error. This suggests Prisma Client or DB is out-of-sync.');
         console.log('🧪 [POST /api/products] Prepared data (without creditsPerUnit):', baseData);
-        product = await prisma.products.create({ data: baseData });
+        product = await prisma.product.create({ data: baseData });
       } else {
         throw e;
       }
@@ -311,7 +311,7 @@ export async function POST(request: Request) {
 
     // Retornar no formato esperado pelo frontend
     // Re-fetch with categories
-    const createdWithCategories = await prisma.products.findFirst({
+    const createdWithCategories = await prisma.product.findFirst({
       where: { id: product.id },
       include: { 
         categories: { include: { category: true } },

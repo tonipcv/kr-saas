@@ -15,6 +15,7 @@ interface SubscriptionRow {
   product: string;
   startedAt: string | null;
   updatedAt: string | null;
+  expiresAt?: string | null;
   provider?: string | null;
   interval?: string | null;
   intervalCount?: number | null;
@@ -144,7 +145,7 @@ export default function BusinessSubscriptionsPage() {
                     <th className="px-2 py-2 text-left">Provider</th>
                     <th className="px-2 py-2 text-left">Status</th>
                     <th className="px-2 py-2 text-left">Started</th>
-                    <th className="px-2 py-2 text-left">Updated</th>
+                    <th className="px-2 py-2 text-left">Expires</th>
                     <th className="px-2 py-2 text-left">Charged Every</th>
                   </tr>
                 </thead>
@@ -192,7 +193,7 @@ export default function BusinessSubscriptionsPage() {
                   <th className="px-2 py-2 text-left">Provider</th>
                   <th className="px-2 py-2 text-left">Status</th>
                   <th className="px-2 py-2 text-left">Started</th>
-                  <th className="px-2 py-2 text-left">Updated</th>
+                  <th className="px-2 py-2 text-left">Expires</th>
                   <th className="px-2 py-2 text-left">Charged Every</th>
                 </tr>
               </thead>
@@ -235,7 +236,7 @@ export default function BusinessSubscriptionsPage() {
                       <td className="px-2 py-2 whitespace-nowrap text-gray-700">{row.provider || '-'}</td>
                       <td className="px-2 py-2 whitespace-nowrap">{renderStatusBadge(row.status)}</td>
                       <td className="px-2 py-2 whitespace-nowrap text-gray-500">{formatDate(row.startedAt)}</td>
-                      <td className="px-2 py-2 whitespace-nowrap text-gray-500">{formatDate(row.updatedAt)}</td>
+                      <td className="px-2 py-2 whitespace-nowrap text-gray-500">{formatDate(row.expiresAt)}</td>
                       <td className="px-2 py-2 whitespace-nowrap text-gray-600">{row.interval ? `${String(row.interval).toLowerCase()}${row.intervalCount && row.intervalCount > 1 ? ` x${row.intervalCount}` : ''}` : '-'}</td>
                     </tr>
                   ))

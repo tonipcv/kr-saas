@@ -6,7 +6,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const { id, offerId } = await params;
     const body = await req.json();
     // Enforce parent product constraints
-    const product = await prisma.products.findUnique({ where: { id: String(id) }, select: { type: true } });
+    const product = await prisma.product.findUnique({ where: { id: String(id) }, select: { type: true } });
     if (!product) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     const parentType = String(product.type);
     const data: any = {

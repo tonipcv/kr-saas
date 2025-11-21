@@ -227,8 +227,9 @@ export async function POST(req: Request) {
           if (v === 'trialing') return 'TRIAL'
           if (v === 'past_due') return 'PAST_DUE'
           if (v === 'canceled') return 'CANCELED'
-          if (v === 'incomplete' || v === 'incomplete_expired') return 'PAST_DUE'
-          return 'ACTIVE'
+          if (v === 'incomplete' || v === 'incomplete_expired') return 'PENDING'
+          // Default to PENDING for new subscriptions until first payment confirms
+          return 'PENDING'
         }
 
         const existRows: any[] = await prisma.$queryRawUnsafe(

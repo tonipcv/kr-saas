@@ -140,7 +140,7 @@ export async function DELETE(
         data: { doctor_id: null }
       }),
       // Delete doctor's products
-      prisma.products.deleteMany({
+      prisma.product.deleteMany({
         where: { doctorId }
       }),
       // Delete doctor's product categories

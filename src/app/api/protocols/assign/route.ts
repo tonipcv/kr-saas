@@ -402,7 +402,7 @@ export async function GET(request: Request) {
       // Load products if there are any
       let productsMap = new Map();
       if (productIds.size > 0) {
-        const products = await prisma.products.findMany({
+        const products = await prisma.product.findMany({
           where: {
             id: { in: Array.from(productIds) }
           }

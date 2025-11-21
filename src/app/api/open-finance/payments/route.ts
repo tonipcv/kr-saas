@@ -199,7 +199,7 @@ export async function POST(req: Request) {
 
     // BEGIN Non-blocking orchestration dual-write (Customer, CustomerProvider, PaymentTransaction)
     try {
-      const product = await prisma.products.findUnique({ where: { id: productId }, select: { id: true, clinicId: true, doctorId: true } });
+      const product = await prisma.product.findUnique({ where: { id: productId }, select: { id: true, clinicId: true, doctorId: true } });
       if (product?.clinicId) {
         const merchant = await prisma.merchant.findFirst({ where: { clinicId: product.clinicId }, select: { id: true } });
         if (merchant) {

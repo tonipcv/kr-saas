@@ -9,6 +9,8 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { CheckCircleIcon } from '@heroicons/react/24/solid';
 
 const ApexChart = dynamic(() => import('react-apexcharts'), { ssr: false }) as any;
 
@@ -116,10 +118,16 @@ export default function BusinessDashboard() {
   const [summary, setSummary] = useState<RevenueSummary>({ total: 0, purchasesCount: 0, aov: 0 });
   const [seriesApi, setSeriesApi] = useState<Array<[number, number]>>([]);
   const [transactions, setTransactions] = useState<TxRow[]>([]);
+  const [productsCount, setProductsCount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
+  const [hasAnyTransaction, setHasAnyTransaction] = useState<boolean>(false);
   const pageLoading = useMemo(() => {
     return isLoading || loading || paymentsReady === null || !currentClinic;
   }, [isLoading, loading, paymentsReady, currentClinic]);
+  const showWelcome = useMemo(
+    () => !pageLoading && productsCount === 0 && !hasAnyTransaction && summary.purchasesCount === 0 && transactions.length === 0,
+    [pageLoading, productsCount, hasAnyTransaction, summary.purchasesCount, transactions.length]
+  );
 
   useEffect(() => {
     const load = async () => {
@@ -127,10 +135,12 @@ export default function BusinessDashboard() {
       setLoading(true);
       try {
         const qs = new URLSearchParams({ clinicId: currentClinic.id, from: dateFrom, to: dateTo });
-        const [revRes, revSeriesRes, txRes] = await Promise.all([
+        const [revRes, revSeriesRes, txRes, prodsRes, anyTxRes] = await Promise.all([
           fetch(`/api/business/revenue?${qs.toString()}`, { cache: 'no-store' }),
           fetch(`/api/business/revenue/series?${qs.toString()}`, { cache: 'no-store' }),
           fetch(`/api/business/transactions?${qs.toString()}&limit=100`, { cache: 'no-store' }),
+          fetch(`/api/products?clinicId=${encodeURIComponent(currentClinic.id)}&limit=1`, { cache: 'no-store' }),
+          fetch(`/api/business/transactions?clinicId=${encodeURIComponent(currentClinic.id)}&limit=1`, { cache: 'no-store' }),
         ]);
         if (revRes.ok) {
           const rj = await revRes.json();
@@ -149,6 +159,23 @@ export default function BusinessDashboard() {
           const tj = await txRes.json();
           const items: TxRow[] = Array.isArray(tj?.data?.items) ? tj.data.items : (Array.isArray(tj?.items) ? tj.items : []);
           setTransactions(items);
+        }
+        if (prodsRes.ok) {
+          const pj = await prodsRes.json().catch(() => ({}));
+          let count = 0;
+          if (Array.isArray(pj)) {
+            count = pj.length;
+          } else if (Array.isArray(pj?.data?.items)) {
+            count = pj.data.items.length;
+          } else if (Array.isArray(pj?.items)) {
+            count = pj.items.length;
+          }
+          setProductsCount(count);
+        }
+        if (anyTxRes.ok) {
+          const aj = await anyTxRes.json().catch(() => ({}));
+          const arr = Array.isArray(aj?.data?.items) ? aj.data.items : (Array.isArray(aj?.items) ? aj.items : (Array.isArray(aj) ? aj : []));
+          setHasAnyTransaction(Array.isArray(arr) && arr.length > 0);
         }
       } catch (e) {
         console.error('Failed to load business dashboard', e);
@@ -307,77 +334,168 @@ export default function BusinessDashboard() {
       </Dialog>
       <div className="lg:ml-64">
         <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 bg-gray-50">
-          {/* Header */}
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h1 className="text-[20px] font-semibold text-gray-900 tracking-tight">Dashboard</h1>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="h-8 rounded-md border border-gray-300 bg-white px-2 text-sm"
-              />
-              <span className="text-gray-500 text-sm">to</span>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="h-8 rounded-md border border-gray-300 bg-white px-2 text-sm"
-              />
-            </div>
-          </div>
-
-          {/* KPIs */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-            <div className="rounded-2xl border border-gray-200 bg-white p-3">
-              <div className="text-[11px] text-gray-500">Revenue</div>
-              <div className="text-[22px] font-semibold text-gray-900">{formatBRL(summary.total)}</div>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-white p-3">
-              <div className="text-[11px] text-gray-500">Transactions</div>
-              <div className="text-[22px] font-semibold text-gray-900">{summary.purchasesCount}</div>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-white p-3">
-              <div className="text-[11px] text-gray-500">Average order value</div>
-              <div className="text-[22px] font-semibold text-gray-900">{formatBRL(summary.aov)}</div>
-            </div>
-          </div>
-
-          {/* Chart full width + Breakdowns below */}
-          <div className="space-y-3 mb-4">
-            <div className="rounded-2xl border border-gray-200 bg-white p-3">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-sm font-medium text-gray-900">Revenue per day</div>
-                <div className="text-xs text-gray-500">{revenueSeries.length} days</div>
-              </div>
-              <RevenueLineChart series={revenueSeries} height={260} />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="rounded-2xl border border-gray-200 bg-white p-3">
-                <DonutBreakdown title="Methods" data={methodBreakdown} palette={["#22C55E", "#60A5FA", "#F59E0B", "#9CA3AF"]} />
-              </div>
-              <div className="rounded-2xl border border-gray-200 bg-white p-3">
-                <DonutBreakdown title="Status" data={statusBreakdown} palette={["#16A34A", "#F59E0B", "#EF4444", "#93C5FD", "#A78BFA"]} />
-              </div>
-            </div>
-          </div>
-
-          {/* Recent transactions */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-3">
-            <div className="flex items-center justify-between mb-3">
+          {/* Header (hidden on welcome) */}
+          {!showWelcome && (
+            <div className="mb-4 flex items-center justify-between">
               <div>
-                <div className="text-sm font-medium text-gray-900">Recent transactions</div>
-                <div className="text-xs text-gray-500">Showing {Math.min(transactions.length, visibleCount)} of {transactions.length}</div>
+                <h1 className="text-[20px] font-semibold text-gray-900 tracking-tight">Dashboard</h1>
               </div>
-              <Link
-                href="/business/payments"
-                className="inline-flex items-center h-8 px-3 rounded-md text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
-              >View more</Link>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="h-8 rounded-md border border-gray-300 bg-white px-2 text-sm"
+                />
+                <span className="text-gray-500 text-sm">to</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="h-8 rounded-md border border-gray-300 bg-white px-2 text-sm"
+                />
+              </div>
             </div>
-            <TransactionsTable transactions={visibleTransactions as any} />
-          </div>
+          )}
+
+          {showWelcome ? (
+            <div className="space-y-3">
+              <div className="mb-1">
+                <div className="text-[18px] font-semibold text-gray-900">Welcome</div>
+                <div className="text-sm text-gray-600">Let's get you set up</div>
+              </div>
+              {(() => {
+                const steps = [
+                  { key: 'payments', title: 'Accept payments', completed: paymentsReady === true },
+                  { key: 'product', title: 'Add a product', completed: productsCount > 0 },
+                  { key: 'global', title: 'Set up global market', completed: false },
+                ];
+                const completed = steps.filter(s => s.completed).length;
+                const total = steps.length;
+                const pct = Math.round((completed / total) * 100);
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-xs text-gray-600">
+                      <span>{completed} / {total} completed</span>
+                      <div className="h-2 bg-gray-200 rounded-full w-40">
+                        <div className="h-2 bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-gray-200 bg-white">
+                      <div className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-sm font-medium text-gray-900">Accept payments</div>
+                              {paymentsReady ? (
+                                <CheckCircleIcon className="h-4 w-4 text-green-600" />
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200 text-[11px]">First step</span>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-600 mt-1">Connect payments to receive your sales.</div>
+                          </div>
+                          {!paymentsReady && (
+                            <div>
+                              <Link href="/business/integrations?add=open&category=payments">
+                                <Button variant="outline" className="h-9 rounded-lg">Configure</Button>
+                              </Link>
+                            </div>
+                          )}
+                        </div>
+                        {!paymentsReady && (
+                          <div className="mt-3">
+                            <Link href="/business/integrations?add=open&category=payments">
+                              <Button className="h-9 rounded-lg w-full sm:w-auto">Connect payments</Button>
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <Accordion type="single" collapsible defaultValue={paymentsReady ? 'product' : undefined} className="rounded-2xl border border-gray-200 bg-white">
+                      <AccordionItem value="product">
+                        <AccordionTrigger className="px-4 text-sm font-medium text-gray-900">Add a product</AccordionTrigger>
+                        <AccordionContent className="px-4 pb-4">
+                          <div className="text-sm text-gray-600 mt-1 max-w-prose">Create your first product to start selling. You can add price, images and description.</div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Link href="/business/products/create">
+                              <Button className="h-9 rounded-lg">Create product</Button>
+                            </Link>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                      <AccordionItem value="global">
+                        <AccordionTrigger className="px-4 text-sm font-medium text-gray-900">Set up global market</AccordionTrigger>
+                        <AccordionContent className="px-4 pb-4">
+                          <div className="text-sm text-gray-600 mt-1">Enable currencies and languages to sell globally.</div>
+                          <div className="mt-3">
+                            <Button disabled className="h-9 rounded-lg">Coming soon</Button>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+
+                    <div className="text-center text-xs text-gray-500 pt-2">Have a question? Contact support.</div>
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            <>
+            {/* KPIs */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+              <div className="rounded-2xl border border-gray-200 bg-white p-3">
+                <div className="text-[11px] text-gray-500">Revenue</div>
+                <div className="text-[22px] font-semibold text-gray-900">{formatBRL(summary.total)}</div>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-white p-3">
+                <div className="text-[11px] text-gray-500">Transactions</div>
+                <div className="text-[22px] font-semibold text-gray-900">{summary.purchasesCount}</div>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-white p-3">
+                <div className="text-[11px] text-gray-500">Average order value</div>
+                <div className="text-[22px] font-semibold text-gray-900">{formatBRL(summary.aov)}</div>
+              </div>
+            </div>
+
+            {/* Chart full width + Breakdowns below */}
+            <div className="space-y-3 mb-4">
+              <div className="rounded-2xl border border-gray-200 bg-white p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm font-medium text-gray-900">Revenue per day</div>
+                  <div className="text-xs text-gray-500">{revenueSeries.length} days</div>
+                </div>
+                <RevenueLineChart series={revenueSeries} height={260} />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-gray-200 bg-white p-3">
+                  <DonutBreakdown title="Methods" data={methodBreakdown} palette={["#22C55E", "#60A5FA", "#F59E0B", "#9CA3AF"]} />
+                </div>
+                <div className="rounded-2xl border border-gray-200 bg-white p-3">
+                  <DonutBreakdown title="Status" data={statusBreakdown} palette={["#16A34A", "#F59E0B", "#EF4444", "#93C5FD", "#A78BFA"]} />
+                </div>
+              </div>
+            </div>
+
+            {/* Recent transactions */}
+            <div className="rounded-2xl border border-gray-200 bg-white p-3">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="text-sm font-medium text-gray-900">Recent transactions</div>
+                  <div className="text-xs text-gray-500">Showing {Math.min(transactions.length, visibleCount)} of {transactions.length}</div>
+                </div>
+                <Link
+                  href="/business/payments"
+                  className="inline-flex items-center h-8 px-3 rounded-md text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                >View more</Link>
+              </div>
+              <TransactionsTable transactions={visibleTransactions as any} />
+            </div>
+            </>
+          )}
+          
         </div>
       </div>
     </div>

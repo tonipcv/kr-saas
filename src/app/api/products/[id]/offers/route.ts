@@ -20,7 +20,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { id } = await params;
     const body = await req.json();
     // Enforce product type constraints: if product is SUBSCRIPTION, offer must be subscription
-    const product = await prisma.products.findUnique({ where: { id: String(id) }, select: { type: true } });
+    const product = await prisma.product.findUnique({ where: { id: String(id) }, select: { type: true } });
     if (!product) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     if (String(product.type) === 'SUBSCRIPTION' && body?.isSubscription === false) {
       return NextResponse.json({ error: 'Offers for subscription products must be subscription (isSubscription=true)' }, { status: 400 });

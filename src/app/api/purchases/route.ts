@@ -193,7 +193,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch product for price and credits per unit
-    const product = await prisma.products.findUnique({
+    const product = await prisma.product.findUnique({
       where: { id: productId },
       select: { id: true, name: true, price: true, creditsPerUnit: true, category: true, productCategory: { select: { name: true } }, clinicId: true }
     });

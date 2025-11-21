@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     const { productId, interval, intervalCount, trialDays, priceCents } = body || {};
     if (!productId) return NextResponse.json({ error: 'productId é obrigatório' }, { status: 400 });
 
-    const product = await prisma.products.findUnique({ where: { id: String(productId) } });
+    const product = await prisma.product.findUnique({ where: { id: String(productId) } });
     if (!product) return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 });
 
     // Validate type = SUBSCRIPTION via Prisma enum value
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     const created = await pagarmeCreatePlan(planPayload);
     const providerPlanId = created?.id || created?.plan?.id || null;
 
-    const updated = await prisma.products.update({
+    const updated = await prisma.product.update({
       where: { id: String(productId) },
       data: {
         providerPlanId,

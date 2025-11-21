@@ -29,7 +29,7 @@ export async function GET(
       return NextResponse.json({ error: 'Acesso negado. Apenas médicos podem visualizar produtos.' }, { status: 403 });
     }
 
-    const product = await prisma.products.findFirst({
+    const product = await prisma.product.findFirst({
       where: {
         id: productId
       },
@@ -38,7 +38,7 @@ export async function GET(
           select: {
             purchases: true,
             categories: true,
-            coupons: true,
+            offers: true,
           }
         },
         // include categories through pivot
@@ -73,7 +73,7 @@ export async function GET(
       _count: {
         purchases: (product as any)._count?.purchases || 0,
         categories: (product as any)._count?.categories || 0,
-        coupons: (product as any)._count?.coupons || 0,
+        coupons: (product as any)._count?.offers || 0,
       },
     };
 
@@ -129,7 +129,7 @@ export async function PUT(
     } = body;
 
     // Verificar se o produto existe
-    const existingProduct = await prisma.products.findFirst({
+    const existingProduct = await prisma.product.findFirst({
       where: {
         id: productId
       }
@@ -195,7 +195,7 @@ export async function PUT(
       }
     }
 
-    const updatedProduct = await prisma.products.update({
+    const updatedProduct = await prisma.product.update({
       where: { id: productId },
       data: updateData,
     });
@@ -237,7 +237,7 @@ export async function PUT(
 
     // Retornar no formato esperado pelo frontend
     // Re-fetch categories for response
-    const withCategories = await prisma.products.findFirst({
+    const withCategories = await prisma.product.findFirst({
       where: { id: productId },
       include: {
         categories: { include: { category: true } },
@@ -282,7 +282,7 @@ export async function DELETE(
     }
 
     // Verificar se o produto existe
-    const existingProduct = await prisma.products.findFirst({
+    const existingProduct = await prisma.product.findFirst({
       where: {
         id: productId
       }
@@ -298,7 +298,7 @@ export async function DELETE(
     }
 
     // Excluir produto
-    await prisma.products.delete({
+    await prisma.product.delete({
       where: { id: productId }
     });
 

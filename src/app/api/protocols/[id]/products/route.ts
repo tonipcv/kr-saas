@@ -104,7 +104,7 @@ export async function POST(
     }
 
     // Verificar se o produto pertence ao médico
-    const product = await prisma.products.findFirst({
+    const product = await prisma.product.findFirst({
       where: {
         id: productId,
         doctorId: session.user.id,

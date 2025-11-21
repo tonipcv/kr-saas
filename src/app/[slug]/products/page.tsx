@@ -82,7 +82,7 @@ export default async function DoctorProductsPage({ params, searchParams }: {
 
   // List active products
   const raw = doctor
-    ? await prisma.products.findMany({
+    ? await prisma.product.findMany({
         where: { doctorId: doctor.id, isActive: true } as any,
         orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }] as any,
         select: {

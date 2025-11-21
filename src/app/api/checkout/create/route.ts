@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     let resolvedOfferPrice: any = null;
     try {
       // Load product
-      product = await prisma.products.findUnique({ where: { id: String(productId) } });
+      product = await prisma.product.findUnique({ where: { id: String(productId) } });
       if (!product) return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 });
       // Resolve clinic
       if (slug) {
@@ -1234,7 +1234,7 @@ export async function POST(req: Request) {
           if (!doctorId) {
             // Fallback: product's doctor
             try {
-              const prod = await prisma.products.findUnique({ where: { id: String(productId) }, select: { doctorId: true, clinicId: true } });
+              const prod = await prisma.product.findUnique({ where: { id: String(productId) }, select: { doctorId: true, clinicId: true } });
               doctorId = prod?.doctorId || null;
               if (!clinic && prod?.clinicId) clinic = await prisma.clinic.findUnique({ where: { id: prod.clinicId }, select: { id: true, ownerId: true } });
               if (!doctorId) doctorId = clinic?.ownerId || null;
@@ -1299,7 +1299,7 @@ export async function POST(req: Request) {
           // Create purchase; patientId may be null in some flows (we still record the sale)
           if (doctorId) {
             try {
-              const prod = await prisma.products.findUnique({ where: { id: String(productId) } });
+              const prod = await prisma.product.findUnique({ where: { id: String(productId) } });
               if (prod) {
                 const unitPriceNumber = (typeof amountCents === 'number' ? amountCents : Number(amountCents)) / 100;
                 const created = await prisma.purchase.create({

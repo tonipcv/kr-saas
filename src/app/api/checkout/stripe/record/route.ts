@@ -19,12 +19,12 @@ export async function POST(req: NextRequest) {
     let product: any = null
     let clinic: any = null
     if (productId) {
-      product = await prisma.products.findUnique({ where: { id: productId } })
+      product = await prisma.product.findUnique({ where: { id: productId } })
     }
     if (!product && slug) {
       clinic = await prisma.clinic.findFirst({ where: { slug } })
       if (clinic) {
-        product = await prisma.products.findFirst({ where: { clinicId: clinic.id } })
+        product = await prisma.product.findFirst({ where: { clinicId: clinic.id } })
       }
     }
     if (!product) {

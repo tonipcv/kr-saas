@@ -10,7 +10,7 @@ export async function GET(
     const { id } = await params;
     if (!id) return NextResponse.json({ error: 'id é obrigatório' }, { status: 400 });
 
-    const product = await prisma.products.findFirst({
+    const product = await prisma.product.findFirst({
       where: { id },
       select: {
         id: true,
