@@ -105,7 +105,7 @@ export default function BrandedCheckoutPage() {
   const [buyerEmail, setBuyerEmail] = useState('');
   const [buyerPhone, setBuyerPhone] = useState('');
   const [buyerDocument, setBuyerDocument] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | 'pix_ob' | null>('card');
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | 'pix_ob' | null>(null);
   const [hasRedirected, setHasRedirected] = useState(false);
   const LOCAL_REDIRECT_KEY = 'checkout_pending_redirect_to';
   const [showEmergency, setShowEmergency] = useState(false);
@@ -313,26 +313,7 @@ export default function BrandedCheckoutPage() {
     } catch {}
   }
 
-  // Ensure selected method is allowed whenever offer changes (baseline when no routing applies)
-  useEffect(() => {
-    const isSub = !!offer?.isSubscription;
-    const methods = offer?.paymentMethods || [];
-    const pixOn = methods.some(x => x.method === 'PIX' && x.active);
-    const cardOn = methods.some(x => x.method === 'CARD' && x.active);
-    const ofOn = PIX_OB_ENABLED && methods.some(x => x.method === 'OPEN_FINANCE' && x.active);
-    const ofAutoOn = PIX_OB_ENABLED && methods.some(x => x.method === 'OPEN_FINANCE_AUTOMATIC' && x.active);
-    if (isSub) {
-      if (ofAutoOn) setPaymentMethod('pix_ob');
-      else if (pixOn) setPaymentMethod('pix');
-      else if (cardOn) setPaymentMethod('card');
-      else setPaymentMethod(null);
-      return;
-    }
-    if (cardOn) setPaymentMethod('card');
-    else if (ofOn) setPaymentMethod('pix_ob');
-    else if (pixOn) setPaymentMethod('pix');
-    else setPaymentMethod(null);
-  }, [offer?.isSubscription, offer?.paymentMethods, PIX_OB_ENABLED]);
+  // Payment method auto-selection will be added after variables are declared
   // Checkout countdown (10 minutes)
   const [checkoutRemaining, setCheckoutRemaining] = useState<number>(600);
   // Minimalist approval modal
@@ -508,6 +489,7 @@ export default function BrandedCheckoutPage() {
   const [stripeProductActive, setStripeProductActive] = useState<boolean | null>(null);
   const [offerPriceCents, setOfferPriceCents] = useState<number | null>(null);
   const [offerPriceRows, setOfferPriceRows] = useState<any[] | null>(null);
+  const [allOfferPrices, setAllOfferPrices] = useState<any[] | null>(null);
   const [routingMap, setRoutingMap] = useState<{ methods?: Record<string, { provider: 'STRIPE'|'KRXPAY'|null }>, currency?: string } | null>(null);
 
   // Countries from DB (routing + prices), no providerConfig dependency
@@ -554,14 +536,9 @@ export default function BrandedCheckoutPage() {
     return null;
   }, [routedProvider, offerPriceRows]);
 
-  // Per-method providers from routing map (fallback to effectiveProvider if missing)
-  const cardProvider = useMemo(() => (routingMap?.methods?.CARD?.provider ?? effectiveProvider) as ('KRXPAY'|'STRIPE'|'APPMAX'|null), [routingMap, effectiveProvider]);
-  const pixProvider = useMemo(() => {
-    const routed = routingMap?.methods?.PIX?.provider ?? null;
-    if (routed) return routed;
-    if (currentCountry !== 'BR') return null;
-    return effectiveProvider === 'KRXPAY' ? 'KRXPAY' : null;
-  }, [routingMap, effectiveProvider, currentCountry]) as ('KRXPAY'|'STRIPE'|'APPMAX'|null);
+  // Per-method providers strictly from routing chips
+  const cardProvider = useMemo(() => (routingMap?.methods?.CARD?.provider ?? null) as ('KRXPAY'|'STRIPE'|'APPMAX'|null), [routingMap]);
+  const pixProvider = useMemo(() => (routingMap?.methods?.PIX?.provider ?? null) as ('KRXPAY'|'STRIPE'|'APPMAX'|null), [routingMap]);
   const ofProvider = useMemo(() => {
     // Only respect explicit routing; otherwise do not infer provider
     const routed = routingMap?.methods?.OPEN_FINANCE?.provider ?? null;
@@ -651,6 +628,38 @@ export default function BrandedCheckoutPage() {
     return () => { active = false; };
   }, [offer?.id, currentCountry, currentCurrency]);
 
+  // Fetch all offer prices (any country/currency/provider) to enable fallback when current country has no price
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        if (!offer?.id) { if (alive) setAllOfferPrices(null); return; }
+        const res = await fetch(`/api/offers/${offer.id}/prices`, { cache: 'no-store' });
+        const js = await res.json().catch(() => ({}));
+        const rows = Array.isArray(js?.prices) ? js.prices : [];
+        if (alive) setAllOfferPrices(rows);
+      } catch {
+        if (alive) setAllOfferPrices(null);
+      }
+    })();
+    return () => { alive = false; };
+  }, [offer?.id]);
+
+  // If current country has no price configured, automatically switch to the first available country with a price
+  useEffect(() => {
+    try {
+      const rows = allOfferPrices || [];
+      const cur = (currentCountry || '').toUpperCase();
+      const hasForCurrent = rows.some(r => String(r?.country || '').toUpperCase() === cur);
+      if (!hasForCurrent && rows.length > 0) {
+        const first = String(rows[0]?.country || '').toUpperCase();
+        if (first && hasCurrencyMapping(first) && first !== cur) {
+          setAddrCountry(first);
+        }
+      }
+    } catch {}
+  }, [allOfferPrices, currentCountry]);
+
   // Fetch per-method routing for current country
   useEffect(() => {
     let active = true;
@@ -690,6 +699,24 @@ export default function BrandedCheckoutPage() {
     }
   }, [offerPriceRows, cardProvider]);
 
+  // Derive provider price availability from OfferPrice rows (current country/currency)
+  const providerHasPrice = useMemo(() => {
+    const rows = Array.isArray(offerPriceRows) ? offerPriceRows : [];
+    const norm = rows.map((r: any) => ({
+      provider: String(r?.provider || '').toUpperCase(),
+      amountCents: Number(r?.amountCents ?? 0),
+      externalPriceId: r?.externalPriceId ? String(r.externalPriceId) : '',
+      active: (r?.active !== false)
+    }));
+    const by = (p: 'KRXPAY'|'STRIPE'|'APPMAX') => norm.filter(r => r.provider === p && r.active);
+    const hasStripe = by('STRIPE').some(r => (!!r.externalPriceId) || (r.amountCents > 0));
+    const hasKrx = by('KRXPAY').some(r => r.amountCents > 0);
+    const hasAppmax = by('APPMAX').some(r => r.amountCents > 0);
+    const out = { KRXPAY: hasKrx, STRIPE: hasStripe, APPMAX: hasAppmax } as Record<'KRXPAY'|'STRIPE'|'APPMAX', boolean>;
+    try { if (debugOn) console.log('[checkout][prices][providerHasPrice]', { currentCountry, currentCurrency, out, rows }); } catch {}
+    return out;
+  }, [offerPriceRows, currentCountry, currentCurrency, debugOn]);
+
   // Compute price override from providerConfig when present (country/currency)
   const priceOverrideCents: number | null = useMemo(() => {
     try {
@@ -713,34 +740,32 @@ export default function BrandedCheckoutPage() {
     return 0;
   }, [cardProvider, stripePriceCents, offerPriceCents, priceOverrideCents]);
 
-  // Compute final allowed methods considering routing + offer methods
+  // Visibility strictly from routing chips
   const cardAllowedRouted = useMemo(() => {
-    // DB-driven
-    // - STRIPE: needs a stripe price_id OR any price available for current country/currency
-    // - KRXPAY: needs an OfferPrice (DB) or an override amount
-    if (cardProvider === 'STRIPE') {
-      return !!(stripePriceId || (offerPriceCents != null) || (priceOverrideCents != null));
-    }
-    if (cardProvider === 'KRXPAY') {
-      // Accept only DB price or override
-      return !!(offerPriceCents != null || priceOverrideCents != null);
-    }
-    if (cardProvider === 'APPMAX') {
-      // Appmax: exigir OfferPrice (DB) ou override
-      return !!(offerPriceCents != null || priceOverrideCents != null);
-    }
-    return false;
-  }, [cardProvider, stripePriceId, offerPriceCents, priceOverrideCents]);
+    // Show Card when there is an active CARD routing rule for the current country
+    return !!cardProvider;
+  }, [cardProvider]);
 
   const pixAllowedRouted = useMemo(() => {
-    // PIX allowed when routed to KRXPAY regardless of offer flag; otherwise rely on offer flag
-    const offerPix = (offer?.paymentMethods || []).some(x => x.method === 'PIX' && x.active);
-    if (currentCountry !== 'BR') return false; // BR-only
-    if (pixProvider === 'KRXPAY') return true;
-    if (pixProvider === 'STRIPE') return false;
-    if (pixProvider === 'APPMAX') return true;
-    return offerPix;
-  }, [offer?.paymentMethods, pixProvider, currentCountry]);
+    // Show Pix when there is an active PIX routing rule for BR
+    if (currentCountry !== 'BR') return false;
+    return !!pixProvider;
+  }, [currentCountry, pixProvider]);
+
+  // Price presence for routed providers (used to disable actions if missing)
+  const cardPriced = useMemo(() => {
+    if (!cardProvider) return false;
+    const rows = Array.isArray(offerPriceRows) ? offerPriceRows : [];
+    const cur = currentCurrency;
+    return rows.some((r: any) => String(r.provider).toUpperCase() === cardProvider && String(r.country).toUpperCase() === currentCountry && String(r.currency).toUpperCase() === cur && (r.active !== false) && Number(r.amountCents || 0) > 0 || (cardProvider==='STRIPE' && !!r?.externalPriceId));
+  }, [offerPriceRows, cardProvider, currentCountry, currentCurrency]);
+
+  const pixPriced = useMemo(() => {
+    if (!pixProvider) return false;
+    const rows = Array.isArray(offerPriceRows) ? offerPriceRows : [];
+    const cur = currentCurrency;
+    return rows.some((r: any) => String(r.provider).toUpperCase() === pixProvider && String(r.country).toUpperCase() === currentCountry && String(r.currency).toUpperCase() === cur && (r.active !== false) && Number(r.amountCents || 0) > 0);
+  }, [offerPriceRows, pixProvider, currentCountry, currentCurrency]);
 
   const openFinanceAllowedRouted = useMemo(() => {
     // Only when explicitly routed to KRXPAY in BR
@@ -806,19 +831,7 @@ export default function BrandedCheckoutPage() {
     };
   }, [paymentMethod, cardProvider, stripePriceId]);
 
-  // Auto-adjust selected payment method when routing changes (per-method providers)
-  useEffect(() => {
-    const isSub = !!offer?.isSubscription;
-    // Prefer a method that is actually enabled for its provider
-    if (isSub && openFinanceAutoAllowedRouted && ofAutoProvider === 'KRXPAY') { setPaymentMethod('pix_ob'); return; }
-    // Card first
-    if (cardAllowedRouted && cardProvider === 'STRIPE') { setPaymentMethod('card'); return; }
-    if (cardAllowedRouted && cardProvider === 'APPMAX') { setPaymentMethod('card'); return; }
-    // Then Pix
-    if (pixAllowedRouted && pixProvider === 'KRXPAY') { setPaymentMethod('pix'); return; }
-    if (pixAllowedRouted && pixProvider === 'APPMAX') { setPaymentMethod('pix'); return; }
-    // No routing: keep previous heuristics
-  }, [cardProvider, pixProvider, ofAutoProvider, cardAllowedRouted, pixAllowedRouted, openFinanceAutoAllowedRouted, offer?.isSubscription]);
+  // Payment method selection is now handled by the OfferPrice-based useEffect above
 
   // Aliases for UI code that still references these names
   const pixAllowed = pixAllowedRouted;
@@ -841,6 +854,25 @@ export default function BrandedCheckoutPage() {
   useEffect(() => {
     setUiReady(false);
   }, [currentCountry, offer?.id]);
+
+  // Auto-select payment method based on OfferPrice availability (not offer.paymentMethods)
+  useEffect(() => {
+    // Wait until prices are loaded to make selection
+    if (!offer || offerPriceRows === null) return;
+    
+    const isSub = !!offer?.isSubscription;
+    if (isSub) {
+      if (openFinanceAutoAllowed) setPaymentMethod('pix_ob');
+      else if (pixAllowed) setPaymentMethod('pix');
+      else if (cardAllowed) setPaymentMethod('card');
+      else setPaymentMethod(null);
+      return;
+    }
+    // One-time: prefer CARD, then PIX
+    if (cardAllowed) setPaymentMethod('card');
+    else if (pixAllowed) setPaymentMethod('pix');
+    else setPaymentMethod(null);
+  }, [offer?.isSubscription, offerPriceRows, cardAllowed, pixAllowed, openFinanceAutoAllowed]);
 
   function resetCardForm() {
     setCardNumber('');
@@ -1081,22 +1113,7 @@ export default function BrandedCheckoutPage() {
             });
             if (active) {
               setOffer(active);
-              // Default payment method from offer
-              const pixOn = (active.paymentMethods || []).some(x => x.method === 'PIX' && x.active);
-              const cardOn = (active.paymentMethods || []).some(x => x.method === 'CARD' && x.active);
-              const ofOn = (active.paymentMethods || []).some(x => x.method === 'OPEN_FINANCE' && x.active);
-              const ofAutoOn = (active.paymentMethods || []).some(x => x.method === 'OPEN_FINANCE_AUTOMATIC' && x.active);
-              if (active.isSubscription) {
-                // Prefer OPEN_FINANCE_AUTOMATIC, then PIX, then CARD
-                if (ofAutoOn) setPaymentMethod('pix_ob');
-                else if (pixOn) setPaymentMethod('pix');
-                else setPaymentMethod(cardOn ? 'card' : null);
-              } else {
-                // One-time: prefer CARD, then OPEN_FINANCE, then PIX
-                if (cardOn) setPaymentMethod('card');
-                else if (ofOn) setPaymentMethod('pix_ob');
-                else setPaymentMethod(pixOn ? 'pix' : null);
-              }
+              // Payment method will be auto-selected by the useEffect above once prices load
             }
           }
         } catch (e) {

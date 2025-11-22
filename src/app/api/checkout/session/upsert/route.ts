@@ -48,50 +48,10 @@ export async function POST(req: Request) {
 
     const exists = await prisma.checkoutSession.findUnique({ where: { resumeToken }, select: { id: true, resumeToken: true } });
 
-    // BEGIN Non-blocking orchestration dual-write (Customer)
+    // REMOVED: Customer creation from session upsert
+    // Customers should only be created when there's an actual payment attempt,
+    // not during checkout navigation. This prevents incomplete customer records.
     let unifiedCustomerId: string | null = null;
-    try {
-      if (email && clinicId) {
-        // Resolve merchant from clinic
-        const merchant = await prisma.merchant.findFirst({ where: { clinicId }, select: { id: true } });
-        if (merchant) {
-          // Upsert Customer by email ONLY (unique key: merchantId + email)
-          const docDigits = document ? document.replace(/\D/g, '') : null;
-          const existing = await prisma.customer.findFirst({
-            where: { merchantId: merchant.id, email },
-            select: { id: true }
-          });
-          if (existing) {
-            // Update existing customer with latest data
-            await prisma.customer.update({
-              where: { id: existing.id },
-              data: {
-                name: (metadata as any)?.buyerName || null,
-                phone: phone || undefined,
-                document: docDigits || undefined,
-              }
-            }).catch(() => {});
-            unifiedCustomerId = existing.id;
-          } else {
-            const created = await prisma.customer.create({
-              data: {
-                merchantId: merchant.id,
-                name: (metadata as any)?.buyerName || null,
-                email,
-                phone,
-                document: docDigits,
-                metadata: { source: 'checkout_session_upsert' },
-              },
-              select: { id: true },
-            });
-            unifiedCustomerId = created.id;
-          }
-        }
-      }
-    } catch (e) {
-      try { console.warn('[checkout][session][upsert][orchestration] customer upsert failed (non-blocking)', e instanceof Error ? e.message : String(e)); } catch {}
-    }
-    // END Non-blocking orchestration dual-write
 
     let sess;
     try {

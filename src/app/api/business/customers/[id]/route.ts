@@ -4,14 +4,15 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 // GET /api/business/customers/[id]?clinicId=...
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { searchParams } = new URL(req.url)
     const clinicId = String(searchParams.get('clinicId') || '')
-    const customerId = String(params.id || '')
+    const { id } = await context.params
+    const customerId = String(id || '')
     if (!clinicId || !customerId) return NextResponse.json({ error: 'clinicId and id are required' }, { status: 400 })
 
     // Access check (owner or active member); allow dev fallback if clinic exists
@@ -102,5 +103,78 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   } catch (e: any) {
     console.error('[GET /api/business/customers/[id]] Error:', e?.message || e)
     return NextResponse.json({ error: 'Failed to load customer details' }, { status: 500 })
+  }
+}
+
+// DELETE /api/business/customers/[id]?clinicId=...
+export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { searchParams } = new URL(req.url)
+    const clinicId = String(searchParams.get('clinicId') || '')
+    const { id } = await context.params
+    const customerId = String(id || '')
+    if (!clinicId || !customerId) return NextResponse.json({ error: 'clinicId and id are required' }, { status: 400 })
+
+    // Access check
+    let clinic = await prisma.clinic.findFirst({
+      where: {
+        id: clinicId,
+        OR: [
+          { ownerId: session.user.id },
+          { members: { some: { userId: session.user.id, isActive: true } } },
+        ],
+      },
+      select: { id: true },
+    })
+    if (!clinic) {
+      const exists = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { id: true } })
+      if (!exists) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      clinic = exists
+    }
+
+    const merchant = await prisma.merchant.findFirst({ where: { clinicId }, select: { id: true } })
+    if (!merchant) return NextResponse.json({ error: 'No merchant for clinic' }, { status: 404 })
+
+    // Ensure the customer belongs to this merchant
+    const owns = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT 1 FROM customers WHERE id = $1 AND merchant_id = $2 LIMIT 1`,
+      customerId,
+      String(merchant.id),
+    )
+    if (!Array.isArray(owns) || owns.length === 0) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+    }
+
+    // Delete related objects first (keep transactions for history, but nullify link)
+    await prisma.$executeRawUnsafe(
+      `UPDATE payment_transactions SET customer_id = NULL WHERE customer_id = $1`,
+      customerId,
+    )
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM customer_payment_methods WHERE customer_id = $1`,
+      customerId,
+    )
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM customer_providers WHERE customer_id = $1`,
+      customerId,
+    )
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM customer_subscriptions WHERE customer_id = $1 AND merchant_id = $2`,
+      customerId,
+      String(merchant.id),
+    )
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM customers WHERE id = $1 AND merchant_id = $2`,
+      customerId,
+      String(merchant.id),
+    )
+
+    return NextResponse.json({ ok: true })
+  } catch (e: any) {
+    console.error('[DELETE /api/business/customers/[id]] Error:', e?.message || e)
+    return NextResponse.json({ error: 'Failed to delete customer' }, { status: 500 })
   }
 }

@@ -124,6 +124,22 @@ export async function POST(req: Request) {
       // Upsert Customer by email ONLY
       const docDigits = (buyer.document_number || buyer.document || '').toString().replace(/\D/g, '') || null
       const buyerEmail = buyer.email ? String(buyer.email) : null
+      
+      // VALIDATION: Only create customer if we have complete data (name, email, phone)
+      const buyerName = String(buyer.name || '').trim()
+      const buyerPhone = (buyer.telephone || buyer.phone || '').toString().replace(/\D/g, '').slice(0, 11) || ''
+      const hasCompleteData = buyerName && buyerEmail && buyerPhone && 
+                              buyerName !== '' && buyerEmail !== '' && buyerPhone !== ''
+      
+      if (!hasCompleteData) {
+        console.warn('[appmax][create][orchestration] Skipping customer creation - incomplete data', { 
+          hasName: !!buyerName, 
+          hasEmail: !!buyerEmail, 
+          hasPhone: !!buyerPhone 
+        })
+        throw new Error('Incomplete customer data')
+      }
+      
       let customer = null
       if (buyerEmail) {
         customer = await prisma.customer.findFirst({
@@ -131,26 +147,26 @@ export async function POST(req: Request) {
           select: { id: true }
         })
       }
-      if (customer) {
+      if (customer && hasCompleteData) {
         // Update existing customer
         await prisma.customer.update({
           where: { id: customer.id },
           data: {
-            name: String(buyer.name || ''),
-            phone: (buyer.telephone || buyer.phone || '').toString().replace(/\D/g, '').slice(0, 11) || undefined,
+            name: buyerName,
+            phone: buyerPhone,
             document: docDigits || undefined,
             metadata: { source: 'appmax_checkout', appmaxCustomerId: customer_id },
           }
         }).catch(() => {})
         unifiedCustomerId = customer.id
         console.log('[appmax][create][orchestration] ✅ Customer found and updated', { customerId: unifiedCustomerId })
-      } else if (buyerEmail) {
+      } else if (!customer && buyerEmail && hasCompleteData) {
         const created = await prisma.customer.create({
           data: {
             merchantId: merchant.id,
-            name: String(buyer.name || ''),
+            name: buyerName,
             email: buyerEmail,
-            phone: (buyer.telephone || buyer.phone || '').toString().replace(/\D/g, '').slice(0, 11) || null,
+            phone: buyerPhone,
             document: docDigits,
             metadata: { source: 'appmax_checkout', appmaxCustomerId: customer_id },
           },
@@ -341,9 +357,22 @@ export async function POST(req: Request) {
     let customerSubscriptionId: string | null = null
     if (product.type === 'SUBSCRIPTION' && unifiedCustomerId) {
       try {
-        const interval = product.interval || 'MONTH'
-        const intervalCount = product.intervalCount || 1
-        const trialDays = Number(product.trialDays || 0)
+        // Resolve subscription interval from Offer if available; fallback to Product config
+        let interval: any = product.interval || null
+        let intervalCount: any = product.intervalCount || null
+        let trialDays = Number(product.trialDays ?? 0)
+        try {
+          const subOffer = await prisma.offer.findFirst({
+            where: { productId: String(product.id), isSubscription: true, active: true },
+            orderBy: { createdAt: 'desc' },
+            select: { intervalUnit: true, intervalCount: true, trialDays: true }
+          })
+          if (subOffer?.intervalUnit) interval = subOffer.intervalUnit
+          if (subOffer?.intervalCount != null) intervalCount = subOffer.intervalCount
+          if (subOffer?.trialDays != null) trialDays = Number(subOffer.trialDays)
+        } catch {}
+        interval = interval || 'MONTH'
+        intervalCount = intervalCount || 1
         const hasTrial = trialDays > 0
         
         // Calculate periods
@@ -383,8 +412,8 @@ export async function POST(req: Request) {
         
         let subRows: any[]
         if (existingSub && existingSub.length > 0) {
-          // Update existing
-          subRows = await prisma.$executeRawUnsafe<any[]>(
+          // Update existing (use queryRaw to fetch RETURNING values)
+          subRows = await prisma.$queryRawUnsafe<any[]>(
             `UPDATE customer_subscriptions 
              SET status = $5::"SubscriptionStatus",
                  start_at = $6::timestamp,
@@ -410,7 +439,7 @@ export async function POST(req: Request) {
           )
         } else {
           // Insert new
-          subRows = await prisma.$executeRawUnsafe<any[]>(
+          subRows = await prisma.$queryRawUnsafe<any[]>(
             `INSERT INTO customer_subscriptions (
                id, customer_id, merchant_id, product_id, offer_id, provider, account_id, is_native,
                provider_subscription_id, status, start_at, trial_ends_at, current_period_start, current_period_end,
@@ -494,15 +523,22 @@ export async function POST(req: Request) {
         return jsonError(400, 'Dados de cartão ou token ausentes', 'input_validation', { need: 'card or token' })
       }
 
+      const buyerDoc = (buyer.document_number || buyer.document || '').toString().replace(/\D+/g, '').slice(0, 14)
       const payPayload: any = {
         cart: { order_id },
         customer: { customer_id },
-        payment: { CreditCard: ccToken ? { token: ccToken, installments: Number(installments || 1), soft_descriptor: 'KRXLABS' } : {
+        payment: { CreditCard: ccToken ? {
+          token: ccToken,
+          installments: Number(installments || 1),
+          soft_descriptor: 'KRXLABS',
+          document_number: buyerDoc,
+          name: String(card?.name || buyer?.name || '')
+        } : {
           number: String(card.number),
           cvv: String(card.cvv),
           month: Number(card.month),
           year: Number(card.year),
-          document_number: (buyer.document_number || buyer.document || '').toString().replace(/\D+/g, '').slice(0, 14),
+          document_number: buyerDoc,
           name: String(card.name || buyer.name),
           installments: Number(installments || 1),
           soft_descriptor: 'KRXLABS',
@@ -513,6 +549,17 @@ export async function POST(req: Request) {
       try {
         payResp = await client.paymentsCreditCard(payPayload)
       } catch (e: any) {
+        try {
+          await prisma.$executeRawUnsafe(
+            `UPDATE payment_transactions
+               SET status = 'failed', status_v2 = 'FAILED'::"PaymentStatus",
+                   provider_v2 = COALESCE(provider_v2,'APPMAX'::"PaymentProvider"),
+                   raw_payload = $2::jsonb, updated_at = NOW()
+             WHERE provider = 'appmax' AND provider_order_id = $1`,
+            String(order_id),
+            JSON.stringify({ step: 'payment_card_error', error: e?.message || String(e), response: e?.response || null })
+          )
+        } catch {}
         return jsonError(400, 'Falha ao criar pagamento (cartão)', 'appmax_payment_card', { msg: e?.message, resp: e?.response })
       }
 
@@ -566,6 +613,17 @@ export async function POST(req: Request) {
       try {
         payResp = await client.paymentsPix(payPayload)
       } catch (e: any) {
+        try {
+          await prisma.$executeRawUnsafe(
+            `UPDATE payment_transactions
+               SET status = 'failed', status_v2 = 'FAILED'::"PaymentStatus",
+                   provider_v2 = COALESCE(provider_v2,'APPMAX'::"PaymentProvider"),
+                   raw_payload = $2::jsonb, updated_at = NOW()
+             WHERE provider = 'appmax' AND provider_order_id = $1`,
+            String(order_id),
+            JSON.stringify({ step: 'payment_pix_error', error: e?.message || String(e), response: e?.response || null })
+          )
+        } catch {}
         return jsonError(400, 'Falha ao criar pagamento (pix)', 'appmax_payment_pix', { msg: e?.message, resp: e?.response })
       }
 

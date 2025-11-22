@@ -140,22 +140,57 @@ export async function POST(req: Request) {
           const clinicId = tx.clinic_id ? String(tx.clinic_id) : null
           const amountCents = Number(tx.amount_cents || 0)
 
-          // 1) Upsert PaymentCustomer (provider_customer_id = appmax customer.id)
+          // 1) Ensure Unified Customer and upsert customer_providers (APPMAX)
           const appmaxCustomerId = cust?.id ? String(cust.id) : null
-          if (appmaxCustomerId) {
-            const pcId = crypto.randomUUID()
-            await prisma.$executeRawUnsafe(
-              `INSERT INTO payment_customers (id, provider, provider_customer_id, doctor_id, patient_profile_id, clinic_id)
-               VALUES ($1, 'appmax', $2, $3, $4, $5)
-               ON CONFLICT (doctor_id, patient_profile_id, provider)
-               DO UPDATE SET provider_customer_id = EXCLUDED.provider_customer_id`,
-              pcId,
-              String(appmaxCustomerId),
-              doctorId,
-              patientProfileId,
-              clinicId
-            )
-            console.log('[appmax][webhook] ✅ Upserted payment_customer', { pcId, appmaxCustomerId, doctorId, patientProfileId })
+          try {
+            // Resolve merchant by clinicId
+            let merchantId: string | null = null
+            try {
+              if (clinicId) {
+                const m = await prisma.merchant.findFirst({ where: { clinicId: String(clinicId) }, select: { id: true } })
+                merchantId = m?.id || null
+              }
+            } catch {}
+            // Resolve or create Customer by merchant+buyer email
+            let unifiedCustomerId: string | null = null
+            try {
+              if (merchantId && buyerEmail) {
+                const existing = await prisma.customer.findFirst({ where: { merchantId: String(merchantId), email: String(buyerEmail) }, select: { id: true } })
+                if (existing?.id) unifiedCustomerId = existing.id
+                else {
+                  const created = await prisma.customer.create({ data: { merchantId: String(merchantId), email: String(buyerEmail), name: buyerName || null } as any, select: { id: true } } as any)
+                  unifiedCustomerId = created.id
+                }
+              }
+            } catch {}
+            // Upsert provider mapping and link payment transaction to customer
+            if (unifiedCustomerId && merchantId) {
+              if (appmaxCustomerId) {
+                const existProv: any[] = await prisma.$queryRawUnsafe<any[]>(
+                  `SELECT id FROM customer_providers WHERE customer_id = $1 AND provider = 'APPMAX' AND account_id = $2 LIMIT 1`,
+                  String(unifiedCustomerId), String(merchantId)
+                ).catch(() => [])
+                if (existProv && existProv.length) {
+                  await prisma.$executeRawUnsafe(
+                    `UPDATE customer_providers SET provider_customer_id = $2, updated_at = NOW() WHERE id = $1`,
+                    String(existProv[0].id), String(appmaxCustomerId)
+                  )
+                } else {
+                  await prisma.$executeRawUnsafe(
+                    `INSERT INTO customer_providers (id, customer_id, provider, account_id, provider_customer_id, created_at, updated_at)
+                     VALUES (gen_random_uuid(), $1, 'APPMAX'::"PaymentProvider", $2, $3, NOW(), NOW())`,
+                    String(unifiedCustomerId), String(merchantId), String(appmaxCustomerId)
+                  )
+                }
+              }
+              // Link transaction to unified customer
+              await prisma.$executeRawUnsafe(
+                `UPDATE payment_transactions SET customer_id = $2, updated_at = NOW() WHERE provider = 'appmax' AND provider_order_id = $1 AND customer_id IS NULL`,
+                String(orderId), String(unifiedCustomerId)
+              )
+            }
+          } catch (e) {
+            console.warn('[appmax][webhook] mirror to unified customer tables failed', e instanceof Error ? e.message : e)
           }
 
           // 2) Upsert PaymentMethod if card data present

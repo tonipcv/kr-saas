@@ -212,20 +212,33 @@ export async function POST(req: Request) {
               where: { merchantId: merchant.id, email: payerEmail },
               select: { id: true }
             });
-            if (customer) {
+            
+            // VALIDATION: Only create customer if we have complete data (name, email, phone)
+            // Open Finance may not have phone, so we'll be more lenient here
+            const payerName = payer?.name ? String(payer.name).trim() : '';
+            const hasMinimalData = payerName && payerEmail && payerName !== '' && payerEmail !== '';
+            
+            if (!hasMinimalData) {
+              console.warn('[open-finance][payment] Skipping customer creation - incomplete data', { 
+                hasName: !!payerName, 
+                hasEmail: !!payerEmail 
+              });
+            }
+            
+            if (customer && hasMinimalData) {
               // Update existing customer
               await prisma.customer.update({
                 where: { id: customer.id },
                 data: {
-                  name: payer?.name || undefined,
+                  name: payerName,
                   document: payerCpf || undefined,
                 }
               }).catch(() => {});
-            } else {
+            } else if (!customer && hasMinimalData) {
               customer = await prisma.customer.create({
                 data: {
                   merchantId: merchant.id,
-                  name: payer?.name || null,
+                  name: payerName,
                   email: payerEmail,
                   phone: null,
                   document: payerCpf,

@@ -78,6 +78,24 @@ export default function CreateProductPage() {
     price: '',
   });
 
+  // Enforce regional rules:
+  // - BR: allow KRXPAY or STRIPE, PIX toggle available
+  // - Non-BR (e.g., US): force STRIPE, disable PIX
+  useEffect(() => {
+    try {
+      const cc = String(countryPrice.country || '').toUpperCase();
+      if (cc !== 'BR') {
+        if (countryPrice.provider !== 'STRIPE') {
+          setCountryPrice((p) => ({ ...p, provider: 'STRIPE' }));
+        }
+        if (offerForm.allowPIX) {
+          setOfferForm((o) => ({ ...o, allowPIX: false }));
+        }
+      }
+      // BR keeps current selections
+    } catch {}
+  }, [countryPrice.country]);
+
   // Gateway por localização (MVP)
   const [routingUsePlatformDefault, setRoutingUsePlatformDefault] = useState(true);
   const [routingDefaultProvider, setRoutingDefaultProvider] = useState<'KRXPAY' | 'STRIPE'>('KRXPAY');
@@ -231,6 +249,81 @@ export default function CreateProductPage() {
                       active: true,
                     })
                   });
+                  // Align initial routing for this offer (CARD and optionally PIX) similar to the edit page
+                  try {
+                    const methodProvider = countryPrice.provider as 'KRXPAY' | 'STRIPE';
+                    // Route CARD to selected provider for the chosen country
+                    await fetch(`/api/payment-routing`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        offerId,
+                        country: String(countryPrice.country).toUpperCase(),
+                        method: 'CARD',
+                        provider: methodProvider,
+                        priority: 10,
+                        isActive: true,
+                      })
+                    });
+                    // Route PIX when enabled in the form
+                    if (offerForm.allowPIX) {
+                      await fetch(`/api/payment-routing`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          offerId,
+                          country: String(countryPrice.country).toUpperCase(),
+                          method: 'PIX',
+                          provider: methodProvider,
+                          priority: 10,
+                          isActive: true,
+                        })
+                      });
+                    }
+                  } catch {}
+                  // Persist payment methods for the offer (enable/disable)
+                  try {
+                    await fetch(`/api/products/${productId}/offers/${offerId}/methods`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        methods: [
+                          { method: 'CARD', active: !!offerForm.allowCARD },
+                          { method: 'PIX', active: !!offerForm.allowPIX },
+                          // OPEN_FINANCE flags can be added later if desired
+                        ]
+                      })
+                    });
+                  } catch {}
+                  // Compute and persist BR installments like the edit page logic
+                  try {
+                    const monthsFromInterval = (unit: string, count: number) => {
+                      const u = String(unit || 'MONTH').toUpperCase();
+                      if (u === 'YEAR') return Math.max(1, count * 12);
+                      if (u === 'MONTH') return Math.max(1, count);
+                      if (u === 'WEEK') return Math.max(1, Math.ceil(count / 4));
+                      if (u === 'DAY') return Math.max(1, Math.ceil(count / 30));
+                      return 1;
+                    };
+                    const platformCap = 12;
+                    const offeredMax = Math.max(1, Number(offerForm.maxInstallments || '1'));
+                    const isSub = !!offerForm.isSubscription;
+                    const periodMonths = isSub ? monthsFromInterval(offerForm.intervalUnit, Number(offerForm.intervalCount || '1')) : 0;
+                    const finalMaxInstallments = isSub
+                      ? Math.max(1, Math.min(offeredMax, periodMonths, platformCap))
+                      : Math.max(1, Math.min(offeredMax, platformCap));
+                    await fetch(`/api/products/${productId}/offers/${offerId}`, {
+                      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ maxInstallments: finalMaxInstallments })
+                    });
+                  } catch {}
+                  // Set default checkout country for providers config to the initial country
+                  try {
+                    await fetch(`/api/products/${productId}/offers/${offerId}/providers/config`, {
+                      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ config: { CHECKOUT_DEFAULT_COUNTRY: String(countryPrice.country).toUpperCase() } })
+                    });
+                  } catch {}
                 } catch {}
               } catch {}
             }
@@ -512,8 +605,14 @@ export default function CreateProductPage() {
                             <SelectValue placeholder="Provider" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="KRXPAY">KRXPAY</SelectItem>
-                            <SelectItem value="STRIPE">STRIPE</SelectItem>
+                            {String(countryPrice.country).toUpperCase() === 'BR' ? (
+                              <>
+                                <SelectItem value="KRXPAY">KRXPAY</SelectItem>
+                                <SelectItem value="STRIPE">STRIPE</SelectItem>
+                              </>
+                            ) : (
+                              <SelectItem value="STRIPE">STRIPE</SelectItem>
+                            )}
                           </SelectContent>
                         </Select>
                       </div>
@@ -526,6 +625,42 @@ export default function CreateProductPage() {
                       </div>
                     </div>
                     <p className="text-xs text-gray-500 mt-2">This first country price will be created for your initial offer.</p>
+                  </div>
+                  {/* Payment methods and BR installments */}
+                  <div className="pt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="md:col-span-1">
+                      <Label className="text-gray-900 font-medium">Payment methods</Label>
+                      <div className="mt-2 flex items-center gap-4 text-sm">
+                        <label className="inline-flex items-center gap-2">
+                          <input type="checkbox" checked={offerForm.allowCARD} onChange={(e) => setOfferForm(o => ({ ...o, allowCARD: e.target.checked }))} />
+                          <span>Card</span>
+                        </label>
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={offerForm.allowPIX}
+                            disabled={String(countryPrice.country).toUpperCase() !== 'BR'}
+                            onChange={(e) => setOfferForm(o => ({ ...o, allowPIX: e.target.checked }))}
+                          />
+                          <span>PIX</span>
+                        </label>
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-1">Habilita os meios de pagamento na oferta inicial.</p>
+                    </div>
+                    {String(countryPrice.country).toUpperCase() === 'BR' && (
+                      <div className="md:col-span-1">
+                        <Label className="text-gray-900 font-medium">Parcelamento máximo (Brasil)</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={12}
+                          value={offerForm.maxInstallments}
+                          onChange={(e) => setOfferForm(o => ({ ...o, maxInstallments: e.target.value }))}
+                          className="mt-2 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                        />
+                        <p className="text-[11px] text-gray-500 mt-1">Até 12x, ou limitado pelo período da assinatura.</p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

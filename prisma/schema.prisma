@@ -68,12 +68,13 @@ enum DocumentStatus {
 // --- Enums de Assinatura e Planos ---
 enum SubscriptionStatus {
   TRIAL
+  PENDING
   ACTIVE
   PAST_DUE
   CANCELED
   EXPIRED
 
-  @@map("subscription_status")
+  @@map("SubscriptionStatus")
 }
 
 enum PlanTier {
@@ -1051,28 +1052,28 @@ model CustomerPaymentMethod {
 
 model CustomerSubscription {
   id                     String             @id @default(cuid())
-  customerId             String
-  merchantId             String
-  productId              String
-  offerId                String?
+  customerId             String             @map("customer_id")
+  merchantId             String             @map("merchant_id")
+  productId              String             @map("product_id")
+  offerId                String?            @map("offer_id")
   provider               PaymentProvider
-  accountId              String?
-  isNative               Boolean            @default(true)
-  customerProviderId     String?
-  providerSubscriptionId String?
-  vaultPaymentMethodId   String?
-  status                 SubscriptionStatus @default(TRIAL)
-  startAt                DateTime           @default(now())
-  trialEndsAt            DateTime?
-  currentPeriodStart     DateTime?
-  currentPeriodEnd       DateTime?
-  cancelAt               DateTime?
-  canceledAt             DateTime?
-  priceCents             Int
+  accountId              String?            @map("account_id")
+  isNative               Boolean            @default(true) @map("is_native")
+  customerProviderId     String?            @map("customer_provider_id")
+  providerSubscriptionId String?            @map("provider_subscription_id")
+  vaultPaymentMethodId   String?            @map("vault_payment_method_id")
+  status                 SubscriptionStatus @default(TRIAL) @map("status")
+  startAt                DateTime           @default(now()) @map("start_at")
+  trialEndsAt            DateTime?          @map("trial_ends_at")
+  currentPeriodStart     DateTime?          @map("current_period_start")
+  currentPeriodEnd       DateTime?          @map("current_period_end")
+  cancelAt               DateTime?          @map("cancel_at")
+  canceledAt             DateTime?          @map("canceled_at")
+  priceCents             Int                @map("price_cents")
   currency               Currency
-  metadata               Json?
-  createdAt              DateTime           @default(now())
-  updatedAt              DateTime           @updatedAt
+  metadata               Json?              @map("metadata")
+  createdAt              DateTime           @default(now()) @map("created_at")
+  updatedAt              DateTime           @updatedAt @map("updated_at")
 
   customer         Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
   customerProvider CustomerProvider? @relation(fields: [customerProviderId], references: [id])

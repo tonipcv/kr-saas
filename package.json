@@ -64,6 +64,7 @@
     "@tiptap/pm": "^2.11.3",
     "@tiptap/react": "^2.26.2",
     "@tiptap/starter-kit": "^2.26.1",
+    "@trigger.dev/sdk": "4.1.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/nodemailer": "^6.4.17",

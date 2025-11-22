@@ -22,58 +22,44 @@ export async function POST(req: NextRequest) {
     if (!email && !document && !userId) return NextResponse.json({ error: 'one of email, document, userId required' }, { status: 400 });
 
     const docDigits = typeof document === 'string' ? document.replace(/\D/g, '') : null;
-    const phonesJson = phones ? JSON.stringify(phones) : null;
+    const primaryEmail = typeof email === 'string' ? email : null;
+    const primaryName = typeof fullName === 'string' ? fullName : null;
+    const primaryPhone = Array.isArray(phones) && phones.length > 0 ? String(phones[0]) : null;
 
-    // Match precedence: userId > (clinicId + document) > email
-    const where: any = userId
-      ? { user_id: userId }
-      : docDigits
-      ? { clinic_id: clinicId, document: docDigits }
-      : { clinic_id: clinicId, email };
+    const merchant = await prisma.merchant.findFirst({ where: { clinicId: String(clinicId) }, select: { id: true } });
+    if (!merchant?.id) return NextResponse.json({ error: 'merchant not found for clinic' }, { status: 404 });
 
-    // payment_customers table is legacy/custom; use $executeRawUnsafe for flexibility
-    // Upsert-like behavior: try update first, then insert if no row was affected
-    const updates: string[] = [];
-    const params: any[] = [];
+    // Upsert unified Customer by merchant + email (preferred) or document
+    let where: any = null;
+    if (primaryEmail) where = { merchantId: String(merchant.id), email: primaryEmail };
+    else if (docDigits) where = { merchantId: String(merchant.id), document: docDigits };
+    else return NextResponse.json({ error: 'email or document required for unified customer' }, { status: 400 });
 
-    if (email) { updates.push('email = $' + (params.push(email))); }
-    if (docDigits) { updates.push('document = $' + (params.push(docDigits))); }
-    if (fullName) { updates.push('full_name = $' + (params.push(fullName))); }
-    if (phonesJson) { updates.push('phones_json = $' + (params.push(phonesJson))); }
-    if (userId) { updates.push('user_id = $' + (params.push(userId))); }
-    updates.push('updated_at = CURRENT_TIMESTAMP');
-
-    const whereClauses: string[] = [];
-    const whereParams: any[] = [];
-
-    if (where.user_id) { whereClauses.push('user_id = $' + (params.length + whereParams.push(where.user_id))); }
-    if (where.clinic_id) { whereClauses.push('clinic_id = $' + (params.length + whereParams.push(where.clinic_id))); }
-    if (where.document) { whereClauses.push('document = $' + (params.length + whereParams.push(where.document))); }
-    if (where.email) { whereClauses.push('email = $' + (params.length + whereParams.push(where.email))); }
-
-    const updateSql = `UPDATE payment_customers SET ${updates.join(', ')} WHERE ${whereClauses.join(' AND ')}`;
-
-    const updated = await prisma.$executeRawUnsafe(updateSql, ...params, ...whereParams);
-
-    if (updated && Number(updated) > 0) {
+    const existing = await prisma.customer.findFirst({ where, select: { id: true } });
+    if (existing?.id) {
+      await prisma.customer.update({
+        where: { id: existing.id },
+        data: {
+          email: primaryEmail || undefined,
+          document: docDigits || undefined,
+          name: primaryName || undefined,
+          phone: primaryPhone || undefined,
+          metadata: { source: 'v2_buyer_upsert' } as any,
+        } as any,
+      } as any);
       return NextResponse.json({ ok: true, updated: true }, { status: 200 });
     }
 
-    // Insert path
-    const insertCols: string[] = ['id'];
-    const insertVals: string[] = ['gen_random_uuid()'];
-    const insertParams: any[] = [];
-
-    insertCols.push('clinic_id'); insertVals.push('$' + (insertParams.push(clinicId)));
-    if (userId) { insertCols.push('user_id'); insertVals.push('$' + (insertParams.push(userId))); }
-    if (email) { insertCols.push('email'); insertVals.push('$' + (insertParams.push(email))); }
-    if (docDigits) { insertCols.push('document'); insertVals.push('$' + (insertParams.push(docDigits))); }
-    if (fullName) { insertCols.push('full_name'); insertVals.push('$' + (insertParams.push(fullName))); }
-    if (phonesJson) { insertCols.push('phones_json'); insertVals.push('$' + (insertParams.push(phonesJson))); }
-
-    const insertSql = `INSERT INTO payment_customers (${insertCols.join(',')}) VALUES (${insertVals.join(',')})`;
-    await prisma.$executeRawUnsafe(insertSql, ...insertParams);
-
+    await prisma.customer.create({
+      data: {
+        merchantId: String(merchant.id),
+        email: primaryEmail,
+        document: docDigits,
+        name: primaryName,
+        phone: primaryPhone,
+        metadata: { source: 'v2_buyer_upsert', userId: userId || null } as any,
+      } as any,
+    } as any);
     return NextResponse.json({ ok: true, created: true }, { status: 201 });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'unexpected error' }, { status: 500 });

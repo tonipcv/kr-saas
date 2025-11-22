@@ -114,6 +114,48 @@ export async function POST(req: NextRequest) {
       }
     } catch {}
 
+    // Resolve unified Customer (merchant + buyer.email)
+    let unifiedCustomerId: string | null = null
+    try {
+      const buyerEmail = String(buyer.email || '')
+      if (buyerEmail) {
+        const existing = await prisma.customer.findFirst({ where: { merchantId: String(merchant.id), email: buyerEmail }, select: { id: true } })
+        if (existing?.id) unifiedCustomerId = existing.id
+        else {
+          const created = await prisma.customer.create({ data: { merchantId: String(merchant.id), email: buyerEmail, name: String(buyer.name || '') } as any, select: { id: true } } as any)
+          unifiedCustomerId = created.id
+        }
+      }
+    } catch {}
+
+    // Upsert customer_providers (STRIPE) using accountId if present on integration
+    try {
+      if (unifiedCustomerId) {
+        const acct = accountId || null
+        const stripeCustomerId = (pi as any)?.customer ? String((pi as any).customer) : null
+        const existCp: any[] = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT id FROM customer_providers WHERE customer_id = $1 AND provider = 'STRIPE' AND ${acct ? 'account_id = $2' : 'account_id IS NULL'} LIMIT 1`,
+          String(unifiedCustomerId),
+          ...(acct ? [String(acct)] as any : [])
+        ).catch(() => [])
+        if (Array.isArray(existCp) && existCp.length > 0) {
+          await prisma.$executeRawUnsafe(
+            `UPDATE customer_providers SET provider_customer_id = $2, updated_at = NOW() WHERE id = $1`,
+            String(existCp[0].id),
+            stripeCustomerId || null
+          )
+        } else {
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO customer_providers (id, customer_id, provider, account_id, provider_customer_id, created_at, updated_at)
+             VALUES (gen_random_uuid(), $1, 'STRIPE'::"PaymentProvider", $2, $3, NOW(), NOW())`,
+            String(unifiedCustomerId),
+            acct,
+            stripeCustomerId || null
+          )
+        }
+      }
+    } catch {}
+
     // Persist minimal payment_transactions row (upsert via ON CONFLICT), only if table exists
     try {
       const existsRows: any[] = await prisma.$queryRawUnsafe(
@@ -124,13 +166,13 @@ export async function POST(req: NextRequest) {
         const txId = randomUUID()
         await prisma.$executeRawUnsafe(
           `INSERT INTO payment_transactions (
-            id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, merchant_id, product_id,
+            id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, merchant_id, product_id, customer_id,
             amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency,
             installments, payment_method_type, status, raw_payload, routed_provider, provider_v2, status_v2
           ) VALUES (
-            $1, 'stripe', $2, $3, $4, $5, $10, $11,
+            $1, 'stripe', $2, $3, $4, $5, $10, $11, $12,
             $6, NULL, NULL, NULL, $7,
-            1, 'credit_card', $8, $9::jsonb, 'STRIPE', 'STRIPE'::"PaymentProvider", $12::"PaymentStatus"
+            1, 'credit_card', $8, $9::jsonb, 'STRIPE', 'STRIPE'::"PaymentProvider", $13::"PaymentStatus"
           )
           ON CONFLICT (provider, provider_order_id) DO NOTHING`,
           txId,
@@ -144,8 +186,28 @@ export async function POST(req: NextRequest) {
           JSON.stringify({ provider: 'stripe', payment_intent_id: pi.id, buyer }),
           String(merchant.id),
           String(product.id),
+          unifiedCustomerId,
           isSucceeded ? 'SUCCEEDED' : (isRequiresCapture ? 'PROCESSING' : 'PROCESSING')
         )
+        // Best-effort: update client_name and client_email if columns exist
+        try {
+          const cols: any[] = await prisma.$queryRawUnsafe(
+            `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'payment_transactions' AND column_name IN ('client_name','client_email')`
+          )
+          const haveName = Array.isArray(cols) && cols.some((r: any) => String(r.column_name) === 'client_name')
+          const haveEmail = Array.isArray(cols) && cols.some((r: any) => String(r.column_name) === 'client_email')
+          if (haveName || haveEmail) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE payment_transactions
+                 SET ${haveName ? 'client_name = $3,' : ''} ${haveEmail ? 'client_email = $4,' : ''} updated_at = NOW()
+               WHERE provider = 'stripe' AND provider_order_id = $1 AND clinic_id = $2`,
+              String(pi.id),
+              String(clinic.id),
+              String(buyer?.name || ''),
+              String(buyer?.email || '')
+            )
+          }
+        } catch {}
       } else {
         if (process.env.NODE_ENV !== 'production') console.warn('[stripe][record] payment_transactions table not found — skipping persistence')
       }

@@ -388,7 +388,9 @@ export default function EditOfferPage({ params }: PageProps) {
         const kJson = kRes && kRes.ok ? await kRes.json().catch(() => ({})) : {};
         const aJson = aRes && aRes.ok ? await aRes.json().catch(() => ({})) : {};
         const stripe = !!sJson?.connected;
-        const krxpay = !!kJson && (kRes?.status === 200); // 200 means ready; 424 indicates issues
+        // Consider Pagar.me connected if diagnostic endpoint responds (200 OK or 424 with issues),
+        // only treat 4xx other than 424 or 5xx as disconnected
+        const krxpay = !!kRes && (kRes?.status === 200 || kRes?.status === 424);
         const appmax = !!aJson?.connected;
         setIntegrations({ stripe, krxpay, appmax });
       } catch {

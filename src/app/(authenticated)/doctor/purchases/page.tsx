@@ -326,19 +326,15 @@ export default function PurchasesPage() {
   if (!currentClinic) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <div className="lg:ml-64">
-          <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24 flex items-center justify-center min-h-[calc(100vh-88px)]">
-            <Card className="w-full max-w-md bg-white border-gray-200 shadow-lg rounded-2xl">
-              <CardHeader className="text-center p-6">
-                <CardTitle className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                  Select a Clinic
-                </CardTitle>
-                <p className="text-gray-600 font-medium mt-2">
-                  Please select a clinic from the sidebar to view purchases.
-                </p>
-              </CardHeader>
-            </Card>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white/95">
+          <div className="flex flex-col items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Loading" className="h-8 w-auto object-contain opacity-80" />
+            <div className="h-6 w-6 rounded-full border-2 border-gray-300 border-t-transparent animate-spin" />
           </div>
+        </div>
+        <div className="lg:ml-64">
+          <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24" />
         </div>
       </div>
     );

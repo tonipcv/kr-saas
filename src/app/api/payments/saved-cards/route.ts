@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 // GET /api/payments/saved-cards?userId=...&slug=...
-// Lists saved cards (payment_methods) for a patient user within a business (clinic owner resolved by slug)
+// Unified: Lists saved cards from customer_payment_methods for the unified Customer (merchant + email)
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -13,93 +13,43 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'userId and slug are required' }, { status: 400 });
     }
 
-    // Resolve clinic by slug (scope payments to this business)
+    // Resolve clinic by slug and merchant for this business
     const clinic = await prisma.clinic.findFirst({ where: { slug }, select: { id: true } });
     if (!clinic?.id) {
       return NextResponse.json({ ok: false, error: 'Business (clinic) not found' }, { status: 404 });
     }
-    // Collect ALL patient profiles for this user (across staff/doctors)
-    const profiles = await prisma.patientProfile.findMany({ where: { userId }, select: { id: true } });
-    if (!profiles.length) return NextResponse.json({ ok: true, data: [] });
-    const profileIds = profiles.map(p => p.id);
+    const merchant = await prisma.merchant.findFirst({ where: { clinicId: String(clinic.id) }, select: { id: true } });
+    if (!merchant?.id) return NextResponse.json({ ok: true, data: [] });
 
-    // Short-circuit if payment tables are not present in this environment
-    const existsRows = await prisma.$queryRaw<any[]>`
-      SELECT 
-        to_regclass('public.payment_customers') IS NOT NULL as has_pc,
-        to_regclass('public.payment_methods') IS NOT NULL as has_pm
-    `;
-    const hasPc = !!existsRows?.[0]?.has_pc;
-    const hasPm = !!existsRows?.[0]?.has_pm;
-    if (!hasPc || !hasPm) {
-      return NextResponse.json({ ok: true, data: [] });
-    }
+    // Resolve user email to find unified Customer
+    const user = await prisma.user.findUnique({ where: { id: String(userId) }, select: { email: true } });
+    const email = user?.email || null;
+    if (!email) return NextResponse.json({ ok: true, data: [] });
 
-    // List payment customers for these profiles, restricted to this clinic
-    let customers = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT id, provider, provider_customer_id, created_at
-         FROM payment_customers
-        WHERE patient_profile_id = ANY($1)
-          AND clinic_id = $2
-        ORDER BY created_at DESC
-        LIMIT 25`,
-      profileIds,
-      clinic.id
-    );
+    const customer = await prisma.customer.findFirst({ where: { merchantId: String(merchant.id), email }, select: { id: true } });
+    if (!customer?.id) return NextResponse.json({ ok: true, data: [] });
 
-    // Fallback: if none for this clinic, return latest across any clinic
-    if (customers.length === 0) {
-      customers = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT id, provider, provider_customer_id, created_at
-           FROM payment_customers
-          WHERE patient_profile_id = ANY($1)
-          ORDER BY created_at DESC
-          LIMIT 25`,
-        profileIds
-      );
-    }
-
-    const customerIds = customers.map(c => c.id);
-    if (customerIds.length === 0) {
-      return NextResponse.json({ ok: true, data: [] });
-    }
-
-    // List payment methods for those customers
     const methods = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT pm.id,
-              pm.payment_customer_id,
-              pm.provider_card_id,
-              pm.brand,
-              pm.last4,
-              pm.exp_month,
-              pm.exp_year,
-              pm.is_default,
-              pm.status,
-              pm.created_at
-         FROM payment_methods pm
-        WHERE pm.payment_customer_id = ANY($1)
-        ORDER BY pm.is_default DESC, pm.created_at DESC
+      `SELECT id,
+              customer_id as customer_id,
+              provider,
+              account_id as account_id,
+              provider_payment_method_id as provider_payment_method_id,
+              brand,
+              last4,
+              exp_month,
+              exp_year,
+              is_default,
+              status,
+              created_at
+         FROM customer_payment_methods
+        WHERE customer_id = $1
+        ORDER BY is_default DESC, created_at DESC
         LIMIT 50`,
-      customerIds
+      String(customer.id)
     );
 
-    // join provider_customer_id for convenience
-    const byId: Record<string, string> = Object.fromEntries(customers.map(c => [c.id, c.provider_customer_id]));
-    const data = methods.map(m => ({
-      id: m.id,
-      payment_customer_id: m.payment_customer_id,
-      provider_customer_id: byId[m.payment_customer_id] || null,
-      provider_card_id: m.provider_card_id,
-      brand: m.brand,
-      last4: m.last4,
-      exp_month: m.exp_month,
-      exp_year: m.exp_year,
-      is_default: m.is_default,
-      status: m.status,
-      created_at: m.created_at,
-    }));
-
-    return NextResponse.json({ ok: true, data });
+    return NextResponse.json({ ok: true, data: methods });
   } catch (e: any) {
     console.error('[saved-cards] error', e);
     return NextResponse.json({ ok: false, error: e?.message || 'Internal error' }, { status: 500 });

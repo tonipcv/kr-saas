@@ -5,7 +5,8 @@ import { useClinic } from '@/contexts/clinic-context';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { MagnifyingGlassIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
+import { MagnifyingGlassIcon, ChevronLeftIcon, ChevronRightIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 type ProviderInfo = {
   provider: string;
@@ -35,6 +36,8 @@ export default function BusinessCustomersPage() {
   const [total, setTotal] = useState<number>(0);
   const pageSize = 20;
   const router = useRouter();
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async (p = 1) => {
@@ -75,7 +78,14 @@ export default function BusinessCustomersPage() {
   if (!currentClinic) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <div className="lg:ml-64"><div className="p-4 pt-[88px]">Select a clinic to view customers</div></div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white/95">
+          <div className="flex flex-col items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Loading" className="h-8 w-auto object-contain opacity-80" />
+            <div className="h-6 w-6 rounded-full border-2 border-gray-300 border-t-transparent animate-spin" />
+          </div>
+        </div>
+        <div className="lg:ml-64"><div className="p-4 pt-[88px]" /></div>
       </div>
     );
   }
@@ -112,13 +122,14 @@ export default function BusinessCustomersPage() {
                   <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Name</th>
                   <th className="px-3 py-3.5 font-medium">Email</th>
                   <th className="px-3 py-3.5 font-medium">Phone</th>
+                  <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {isLoading ? (
-                  <tr><td colSpan={3} className="px-4 py-6 text-sm text-gray-500">Loading...</td></tr>
+                  <tr><td colSpan={4} className="px-4 py-6 text-sm text-gray-500">Loading...</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={3} className="px-4 py-6 text-sm text-gray-500">No customers</td></tr>
+                  <tr><td colSpan={4} className="px-4 py-6 text-sm text-gray-500">No customers</td></tr>
                 ) : (
                   filtered.map((c) => (
                     <tr
@@ -131,6 +142,52 @@ export default function BusinessCustomersPage() {
                       </td>
                       <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-700">{c.email || '-'}</td>
                       <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-700">{c.phone || '-'}</td>
+                      <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                        <DropdownMenu open={menuOpenId === c.id} onOpenChange={(open) => setMenuOpenId(open ? c.id : null)}>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-gray-600 hover:bg-gray-100"
+                              onClick={(e) => { e.stopPropagation(); setMenuOpenId(prev => prev === c.id ? null : c.id); }}
+                              aria-haspopup="menu"
+                              aria-expanded={menuOpenId === c.id}
+                            >
+                              <EllipsisVerticalIcon className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-40">
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/business/clients/${c.id}`); }}>View</DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-red-600"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (!currentClinic?.id) return;
+                                if (deletingId) return;
+                                const ok = confirm('Excluir cliente? Esta ação não pode ser desfeita.');
+                                if (!ok) return;
+                                try {
+                                  setDeletingId(c.id);
+                                  const res = await fetch(`/api/business/customers/${encodeURIComponent(c.id)}?clinicId=${encodeURIComponent(currentClinic.id)}`, { method: 'DELETE' });
+                                  if (!res.ok) {
+                                    const js = await res.json().catch(() => ({}));
+                                    throw new Error(js?.error || `Falha ao excluir (${res.status})`);
+                                  }
+                                  setItems(prev => prev.filter(it => it.id !== c.id));
+                                } catch (err: any) {
+                                  alert(err?.message || 'Erro ao excluir cliente');
+                                } finally {
+                                  setDeletingId(null);
+                                  setMenuOpenId(null);
+                                }
+                              }}
+                            >
+                              {deletingId === c.id ? 'Excluindo…' : 'Excluir'}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
                     </tr>
                   ))
                 )}

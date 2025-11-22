@@ -85,10 +85,26 @@ export async function POST(req: Request) {
 
       // Ensure Customer (internal). Be resilient to older DBs without customers.merchantId
       let customer = null as any
+      
+      // VALIDATION: Only create customer if we have complete data (name, email, phone)
+      const hasCompleteData = buyerName && buyerEmail && buyerPhone && 
+                              String(buyerName).trim() !== '' && 
+                              String(buyerEmail).trim() !== '' && 
+                              String(buyerPhone).trim() !== ''
+      
+      if (!hasCompleteData) {
+        console.warn('[stripe][subscribe] Skipping customer creation - incomplete data', { 
+          hasName: !!buyerName, 
+          hasEmail: !!buyerEmail, 
+          hasPhone: !!buyerPhone 
+        })
+      }
+      
       try {
         customer = await prisma.customer.findFirst({ where: { email: buyerEmail || undefined }, select: { id: true } })
       } catch {}
-      if (!customer) {
+      
+      if (!customer && hasCompleteData) {
         try {
           // Detect if customers has merchant id column (camel or snake)
           const colRows: any[] = await prisma.$queryRawUnsafe(

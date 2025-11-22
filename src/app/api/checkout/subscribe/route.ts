@@ -211,6 +211,21 @@ export async function POST(req: Request) {
       const buyerEmail = buyer.email ? String(buyer.email) : null;
       if (!buyerEmail) throw new Error('Email is required for customer');
       
+      // VALIDATION: Only create customer if we have complete data (name, email, phone)
+      const buyerName = buyer.name ? String(buyer.name).trim() : '';
+      const buyerPhone = buyer.phone ? String(buyer.phone).trim() : '';
+      const hasCompleteData = buyerName && buyerEmail && buyerPhone && 
+                              buyerName !== '' && buyerEmail !== '' && buyerPhone !== '';
+      
+      if (!hasCompleteData) {
+        console.warn('[subscribe][orchestration] Skipping customer creation - incomplete data', { 
+          hasName: !!buyerName, 
+          hasEmail: !!buyerEmail, 
+          hasPhone: !!buyerPhone 
+        });
+        throw new Error('Incomplete customer data');
+      }
+      
       const existing = await prisma.customer.findFirst({
         where: {
           merchantId: String((merchant as any)?.id || ''),
@@ -223,8 +238,8 @@ export async function POST(req: Request) {
         unifiedCustomer = await prisma.customer.update({
           where: { id: existing.id },
           data: {
-            name: String(buyer.name || ''),
-            phone: String(buyer.phone || ''),
+            name: buyerName,
+            phone: buyerPhone,
             document: docDigits || undefined,
             address: (buyer as any)?.address ? (buyer as any).address : undefined,
           } as any,
@@ -233,9 +248,9 @@ export async function POST(req: Request) {
         unifiedCustomer = await prisma.customer.create({
           data: {
             merchantId: String((merchant as any)?.id || ''),
-            name: String(buyer.name || ''),
+            name: buyerName,
             email: buyerEmail,
-            phone: String(buyer.phone || ''),
+            phone: buyerPhone,
             document: docDigits,
             address: (buyer as any)?.address ? (buyer as any).address : undefined,
             metadata: { source: 'subscribe_v1' },
@@ -519,19 +534,32 @@ export async function POST(req: Request) {
               select: { id: true }
             });
           } catch {}
-          if (cust) {
+          // VALIDATION: Only create/update customer if we have complete data
+          const buyerNameStr = String(buyer?.name || '').trim();
+          const buyerPhoneStr = String(buyer?.phone || '').trim();
+          const hasCompleteData = buyerNameStr && buyerEmail && buyerPhoneStr;
+          
+          if (!hasCompleteData) {
+            console.warn('[subscribe][post-order] Skipping customer creation - incomplete data', { 
+              hasName: !!buyerNameStr, 
+              hasEmail: !!buyerEmail, 
+              hasPhone: !!buyerPhoneStr 
+            });
+          }
+          
+          if (cust && hasCompleteData) {
             // Update existing customer
             try {
               await prisma.customer.update({
                 where: { id: cust.id },
                 data: {
-                  name: String(buyer?.name || ''),
-                  phone: String(buyer?.phone || ''),
+                  name: buyerNameStr,
+                  phone: buyerPhoneStr,
                   metadata: { clinicId: clinic.id, productId, offerId: selectedOffer?.id || null } as any,
                 }
               });
             } catch {}
-          } else {
+          } else if (!cust && hasCompleteData) {
             // Create new customer
             try {
               const colRows: any[] = await prisma.$queryRawUnsafe(
@@ -541,19 +569,19 @@ export async function POST(req: Request) {
               const hasCamel = colNames.includes('merchantId');
               const hasSnake = colNames.includes('merchant_id');
               if (hasCamel) {
-                cust = await prisma.customer.create({ data: { merchantId: String(merchantId), name: String(buyer?.name || ''), email: buyerEmail, phone: String(buyer?.phone || ''), metadata: { clinicId: clinic.id, productId, offerId: selectedOffer?.id || null } as any } });
+                cust = await prisma.customer.create({ data: { merchantId: String(merchantId), name: buyerNameStr, email: buyerEmail, phone: buyerPhoneStr, metadata: { clinicId: clinic.id, productId, offerId: selectedOffer?.id || null } as any } });
               } else if (hasSnake) {
                 const id = crypto.randomUUID();
                 await prisma.$executeRawUnsafe(
                   `INSERT INTO "customers" ("id", "merchant_id", "name", "email", "phone") VALUES ($1, $2, $3, $4, $5)`,
-                  id, String(merchantId), String(buyer?.name || ''), buyerEmail, String(buyer?.phone || '')
+                  id, String(merchantId), buyerNameStr, buyerEmail, buyerPhoneStr
                 );
                 cust = { id };
               } else {
                 const id = crypto.randomUUID();
                 await prisma.$executeRawUnsafe(
                   `INSERT INTO "customers" ("id", "name", "email", "phone") VALUES ($1, $2, $3, $4)`,
-                  id, String(buyer?.name || ''), buyerEmail, String(buyer?.phone || '')
+                  id, buyerNameStr, buyerEmail, buyerPhoneStr
                 );
                 cust = { id };
               }
@@ -754,68 +782,95 @@ export async function POST(req: Request) {
         } catch {}
       }
 
-      if (doctorId && profileId) {
-        // Upsert payment_customers if table exists and provider customer id is available
-        try {
-          if (providerCustomerId) {
-            const custTableRows: any[] = await prisma.$queryRawUnsafe(
-              "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'payment_customers') AS exists"
-            );
-            const custTableExists = Array.isArray(custTableRows) && !!(custTableRows[0]?.exists || custTableRows[0]?.exists === true);
-            if (custTableExists) {
-              const pcId = crypto.randomUUID();
-              const inserted: any[] = await prisma.$queryRawUnsafe(
-                `INSERT INTO payment_customers (id, provider, provider_customer_id, doctor_id, patient_profile_id, clinic_id, raw_payload)
-                 VALUES ($1, 'pagarme', $2, $3, $4, $5, $6::jsonb)
-                 ON CONFLICT DO NOTHING
-                 RETURNING id`,
-                pcId,
-                String(providerCustomerId),
-                String(doctorId),
-                String(profileId),
-                clinic?.id ? String(clinic.id) : null,
-                JSON.stringify({ buyer: { name: buyer?.name, email: buyer?.email }, metadata })
-              );
-              // If ON CONFLICT prevented insert, try to fetch existing row id by provider_customer_id
-              let finalPcId = inserted?.[0]?.id || null;
-              if (!finalPcId) {
-                const existing: any[] = await prisma.$queryRawUnsafe(
-                  `SELECT id FROM payment_customers WHERE provider_customer_id = $1 LIMIT 1`,
-                  String(providerCustomerId)
-                );
-                finalPcId = existing?.[0]?.id || pcId;
-              }
-              // Insert payment_methods if table exists and we have a cardId
-              if (cardId) {
-                const methodsTableRows: any[] = await prisma.$queryRawUnsafe(
-                  "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'payment_methods') AS exists"
-                );
-                const methodsTableExists = Array.isArray(methodsTableRows) && !!(methodsTableRows[0]?.exists || methodsTableRows[0]?.exists === true);
-                if (methodsTableExists) {
-                  const pmId = crypto.randomUUID();
-                  const last4 = (payment?.card?.number ? String(payment.card.number).replace(/\s+/g, '') : '').slice(-4) || null;
-                  await prisma.$executeRawUnsafe(
-                    `INSERT INTO payment_methods (id, payment_customer_id, provider_card_id, brand, last4, exp_month, exp_year, is_default, status, raw_payload)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, 'active', $8::jsonb)
-                     ON CONFLICT (payment_customer_id, provider_card_id) DO NOTHING`,
-                    pmId,
-                    String(finalPcId),
-                    String(cardId),
-                    null,
-                    last4,
-                    Number(payment?.card?.exp_month || 0),
-                    Number((() => { const y = Number(payment?.card?.exp_year || 0); return y < 100 ? 2000 + y : y; })()),
-                    JSON.stringify({ providerCustomerId, cardId })
-                  );
-                }
-              }
-            } else {
-              if (process.env.NODE_ENV !== 'production') console.warn('[subscribe] payment_customers table not found — skipping persistence');
+      // MIRROR to Business Client data model (unified tables only)
+      let unifiedCustomerId: string | null = null;
+      let merchantId: string | null = null;
+      try {
+        const buyerEmailStr = String(buyer?.email || '');
+        
+        if (buyerEmailStr && clinic?.id) {
+          const merchantRow = await prisma.merchant.findFirst({ 
+            where: { clinicId: String(clinic.id) }, 
+            select: { id: true } 
+          });
+          if (merchantRow?.id) {
+            merchantId = merchantRow.id;
+            const existing = await prisma.customer.findFirst({ 
+              where: { merchantId: String(merchantId), email: buyerEmailStr }, 
+              select: { id: true } 
+            });
+            if (existing?.id) unifiedCustomerId = existing.id;
+            else {
+              const created = await prisma.customer.create({ 
+                data: { 
+                  merchantId: String(merchantId), 
+                  email: buyerEmailStr, 
+                  name: String(buyer?.name || '') 
+                } as any, 
+                select: { id: true } 
+              } as any);
+              unifiedCustomerId = created.id;
             }
           }
-        } catch (e) {
-          console.warn('[subscribe] persist payment_customers/methods failed:', e instanceof Error ? e.message : e);
         }
+        
+        if (unifiedCustomerId && merchantId) {
+          // Upsert customer_providers
+          if (providerCustomerId) {
+            const rowsCP = await prisma.$queryRawUnsafe<any[]>(
+              `SELECT id FROM customer_providers WHERE customer_id = $1 AND provider = 'PAGARME' AND account_id = $2 LIMIT 1`,
+              String(unifiedCustomerId), String(merchantId)
+            ).catch(() => []);
+            
+            if (rowsCP && rowsCP.length > 0) {
+              await prisma.$executeRawUnsafe(
+                `UPDATE customer_providers SET provider_customer_id = $2, updated_at = NOW() WHERE id = $1`,
+                String(rowsCP[0].id), String(providerCustomerId)
+              );
+            } else {
+              await prisma.$executeRawUnsafe(
+                `INSERT INTO customer_providers (id, customer_id, provider, account_id, provider_customer_id, created_at, updated_at)
+                 VALUES (gen_random_uuid(), $1, 'PAGARME'::"PaymentProvider", $2, $3, NOW(), NOW())`,
+                String(unifiedCustomerId), String(merchantId), String(providerCustomerId)
+              );
+            }
+          }
+          
+          // Upsert customer_payment_methods
+          if (cardId) {
+            const brand = null;
+            const last4 = (payment?.card?.number ? String(payment.card.number).replace(/\s+/g, '') : '').slice(-4) || null;
+            const expMonth = Number(payment?.card?.exp_month || 0);
+            const expYear = Number((() => { const y = Number(payment?.card?.exp_year || 0); return y < 100 ? 2000 + y : y; })());
+            
+            const rowsPM = await prisma.$queryRawUnsafe<any[]>(
+              `SELECT id FROM customer_payment_methods 
+               WHERE customer_id = $1 AND provider = 'PAGARME' AND account_id = $2 AND last4 = $3 
+               ORDER BY created_at DESC LIMIT 1`,
+              String(unifiedCustomerId), String(merchantId), String(last4 || '')
+            ).catch(() => []);
+            
+            if (rowsPM && rowsPM.length > 0) {
+              await prisma.$executeRawUnsafe(
+                `UPDATE customer_payment_methods SET brand = $2, exp_month = $3, exp_year = $4, status = 'ACTIVE', updated_at = NOW() WHERE id = $1`,
+                String(rowsPM[0].id), brand, expMonth, expYear
+              );
+            } else {
+              await prisma.$executeRawUnsafe(
+                `INSERT INTO customer_payment_methods (id, customer_id, provider, account_id, brand, last4, exp_month, exp_year, status, is_default, created_at, updated_at)
+                 VALUES (gen_random_uuid(), $1, 'PAGARME'::"PaymentProvider", $2, $3, $4, $5, $6, 'ACTIVE', true, NOW(), NOW())`,
+                String(unifiedCustomerId), String(merchantId), brand, last4, expMonth, expYear
+              );
+            }
+          }
+          
+          try { console.log('[subscribe] ✅ Mirrored to Business Client tables', { customerId: unifiedCustomerId, hasProvider: !!providerCustomerId, hasMethod: !!cardId }); } catch {}
+        }
+      } catch (e) {
+        console.warn('[subscribe] mirror to business tables failed (non-fatal):', e instanceof Error ? e.message : e);
+      }
+
+      if (doctorId && profileId) {
 
         // Check if payment_transactions table exists before inserting
         const existsRows: any[] = await prisma.$queryRawUnsafe(
@@ -863,8 +918,8 @@ export async function POST(req: Request) {
           const clinicAmountCents = Math.max(0, clinicShare - platformFeeTotal);
           const platformAmountCents = Math.max(0, grossCents - clinicAmountCents);
           await prisma.$executeRawUnsafe(
-            `INSERT INTO payment_transactions (id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, product_id, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, installments, payment_method_type, status, raw_payload)
-             VALUES ($1, 'pagarme', $2, $3, $4, $5, $6, $7, $8, $9, $10, 'BRL', $11, $12, 'processing', $13::jsonb)
+            `INSERT INTO payment_transactions (id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, product_id, customer_id, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, installments, payment_method_type, status, raw_payload)
+             VALUES ($1, 'pagarme', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'BRL', $12, $13, 'processing', $14::jsonb)
              ON CONFLICT (provider, provider_order_id) DO NOTHING`,
             txId,
             String(subscriptionId),
@@ -872,6 +927,7 @@ export async function POST(req: Request) {
             profileId || null,
             clinic?.id ? String(clinic.id) : null,
             String(productId),
+            unifiedCustomerId,
             Number(amountCents),
             clinicAmountCents,
             platformAmountCents,

@@ -507,10 +507,10 @@ export async function POST(req: Request) {
         try {
           const subIdToActivate = subscriptionId || orderId;
           if (subIdToActivate) {
-            // Find subscription by provider_subscription_id
+            // Find subscription by provider_subscription_id OR metadata->>'pagarmeOrderId'
             const subRows: any[] = await prisma.$queryRawUnsafe(
-              `SELECT id, product_id, offer_id, start_at FROM customer_subscriptions 
-               WHERE provider_subscription_id = $1 AND status != 'ACTIVE' LIMIT 1`,
+              `SELECT id, product_id, offer_id, start_at, provider_subscription_id FROM customer_subscriptions 
+               WHERE (provider_subscription_id = $1 OR metadata->>'pagarmeOrderId' = $1) AND status != 'ACTIVE' LIMIT 1`,
               String(subIdToActivate)
             );
             if (subRows && subRows.length > 0) {
@@ -548,12 +548,12 @@ export async function POST(req: Request) {
                      current_period_end = $3::timestamp,
                      start_at = COALESCE(start_at, $2::timestamp),
                      updated_at = NOW()
-                 WHERE provider_subscription_id = $1`,
-                String(subIdToActivate),
+                 WHERE id = $1`,
+                String(subRow.id),
                 periodStart,
                 periodEnd
               );
-              console.log('[pagarme][webhook] activated subscription', { subscriptionId: subIdToActivate, periodStart, periodEnd, interval: intervalUnit, count: intervalCount });
+              console.log('[pagarme][webhook] activated subscription', { subscriptionId: subRow.id, providerSubId: subRow.provider_subscription_id, orderId: subIdToActivate, periodStart, periodEnd, interval: intervalUnit, count: intervalCount });
             }
           }
         } catch (e) {
@@ -853,51 +853,92 @@ export async function POST(req: Request) {
                 }
               }
             }
-            // Upsert PaymentCustomer/PaymentMethod if provider ids present
+            // Mirror to Business Client data model (unified tables only)
             try {
               const pgCustomerId = event?.data?.customer?.id || event?.customer?.id || null;
               const ch = event?.data?.charge || (Array.isArray(event?.data?.charges) ? event?.data?.charges?.[0] : null) || event?.charge || null;
               const txo = ch?.last_transaction || event?.data?.transaction || null;
               const cardObj = txo?.card || ch?.card || null;
               const pgCardId = cardObj?.id || null;
-              if (pgCustomerId && backfillDoctorId && backfillProfileId) {
-                const pcId = crypto.randomUUID();
-                await prisma.$executeRawUnsafe(
-                  `INSERT INTO payment_customers (id, provider, provider_customer_id, doctor_id, patient_profile_id, clinic_id)
-                   VALUES ($1, 'pagarme', $2, $3, $4, $5)
-                   ON CONFLICT (doctor_id, patient_profile_id, provider)
-                   DO UPDATE SET provider_customer_id = EXCLUDED.provider_customer_id`,
-                  pcId,
-                  String(pgCustomerId),
-                  String(backfillDoctorId),
-                  String(backfillProfileId),
-                  backfillClinicId ? String(backfillClinicId) : null
-                );
-              }
-              if (pgCardId && backfillDoctorId && backfillProfileId) {
-                // lookup payment_customer id we just ensured
-                const rows = await prisma.$queryRawUnsafe<any[]>(
-                  `SELECT id FROM payment_customers WHERE doctor_id = $1 AND patient_profile_id = $2 AND provider = 'pagarme' LIMIT 1`,
-                  String(backfillDoctorId), String(backfillProfileId)
-                ).catch(() => []);
-                const paymentCustomerId = rows?.[0]?.id || null;
-                if (paymentCustomerId) {
-                  const pmId = crypto.randomUUID();
-                  await prisma.$executeRawUnsafe(
-                    `INSERT INTO payment_methods (id, payment_customer_id, provider_card_id, brand, last4, exp_month, exp_year, is_default, status)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ACTIVE')
-                     ON CONFLICT (payment_customer_id, provider_card_id)
-                     DO UPDATE SET brand = EXCLUDED.brand, last4 = EXCLUDED.last4, exp_month = EXCLUDED.exp_month, exp_year = EXCLUDED.exp_year`,
-                    pmId,
-                    String(paymentCustomerId),
-                    String(pgCardId),
-                    cardObj?.brand || null,
-                    cardObj?.last_four_digits || cardObj?.last4 || null,
-                    cardObj?.exp_month || null,
-                    cardObj?.exp_year || null,
-                    true
-                  );
+              
+              // MIRROR to Business Client tables (customer_providers, customer_payment_methods, payment_transactions.customer_id)
+              try {
+                const buyerEmailStr = String(event?.data?.customer?.email || orderMeta?.buyerEmail || '');
+                let unifiedCustomerId: string | null = null;
+                let merchantRowId: string | null = null;
+                
+                if (buyerEmailStr && backfillClinicId) {
+                  const merchantRow = await prisma.merchant.findFirst({ where: { clinicId: String(backfillClinicId) }, select: { id: true } });
+                  if (merchantRow?.id) {
+                    merchantRowId = merchantRow.id;
+                    const cust = await prisma.customer.findFirst({ where: { merchantId: String(merchantRow.id), email: buyerEmailStr }, select: { id: true } });
+                    unifiedCustomerId = cust?.id || null;
+                  }
                 }
+                
+                if (unifiedCustomerId && merchantRowId) {
+                  // Upsert customer_providers
+                  if (pgCustomerId) {
+                    const rowsCP = await prisma.$queryRawUnsafe<any[]>(
+                      `SELECT id FROM customer_providers WHERE customer_id = $1 AND provider = 'PAGARME' AND account_id = $2 LIMIT 1`,
+                      String(unifiedCustomerId), String(merchantRowId)
+                    ).catch(() => []);
+                    
+                    if (rowsCP && rowsCP.length > 0) {
+                      await prisma.$executeRawUnsafe(
+                        `UPDATE customer_providers SET provider_customer_id = $2, updated_at = NOW() WHERE id = $1`,
+                        String(rowsCP[0].id), String(pgCustomerId)
+                      );
+                    } else {
+                      await prisma.$executeRawUnsafe(
+                        `INSERT INTO customer_providers (id, customer_id, provider, account_id, provider_customer_id, created_at, updated_at)
+                         VALUES (gen_random_uuid(), $1, 'PAGARME'::"PaymentProvider", $2, $3, NOW(), NOW())`,
+                        String(unifiedCustomerId), String(merchantRowId), String(pgCustomerId)
+                      );
+                    }
+                  }
+                  
+                  // Upsert customer_payment_methods
+                  if (pgCardId && cardObj) {
+                    const brand = cardObj?.brand || null;
+                    const last4 = cardObj?.last_four_digits || cardObj?.last4 || null;
+                    const expMonth = cardObj?.exp_month || null;
+                    const expYear = cardObj?.exp_year || null;
+                    
+                    const rowsPM = await prisma.$queryRawUnsafe<any[]>(
+                      `SELECT id FROM customer_payment_methods 
+                       WHERE customer_id = $1 AND provider = 'PAGARME' AND account_id = $2 AND last4 = $3 
+                       ORDER BY created_at DESC LIMIT 1`,
+                      String(unifiedCustomerId), String(merchantRowId), String(last4 || '')
+                    ).catch(() => []);
+                    
+                    if (rowsPM && rowsPM.length > 0) {
+                      await prisma.$executeRawUnsafe(
+                        `UPDATE customer_payment_methods SET brand = $2, exp_month = $3, exp_year = $4, status = 'ACTIVE', updated_at = NOW() WHERE id = $1`,
+                        String(rowsPM[0].id), brand, expMonth, expYear
+                      );
+                    } else {
+                      await prisma.$executeRawUnsafe(
+                        `INSERT INTO customer_payment_methods (id, customer_id, provider, account_id, brand, last4, exp_month, exp_year, status, is_default, created_at, updated_at)
+                         VALUES (gen_random_uuid(), $1, 'PAGARME'::"PaymentProvider", $2, $3, $4, $5, $6, 'ACTIVE', true, NOW(), NOW())`,
+                        String(unifiedCustomerId), String(merchantRowId), brand, last4, expMonth, expYear
+                      );
+                    }
+                  }
+                  
+                  // Link payment_transactions to customer_id
+                  if (orderId) {
+                    await prisma.$executeRawUnsafe(
+                      `UPDATE payment_transactions SET customer_id = $2, updated_at = NOW() 
+                       WHERE provider = 'pagarme' AND provider_order_id = $1 AND customer_id IS NULL`,
+                      String(orderId), String(unifiedCustomerId)
+                    );
+                  }
+                  
+                  try { console.log('[pagarme][webhook] ✅ Mirrored to Business Client tables', { customerId: unifiedCustomerId, orderId }); } catch {}
+                }
+              } catch (e) {
+                console.warn('[pagarme][webhook] mirror to business tables failed (non-fatal):', e instanceof Error ? e.message : e);
               }
             } catch (e) {
               console.warn('[pagarme][webhook] backfill PC/PM failed:', e instanceof Error ? e.message : e);
