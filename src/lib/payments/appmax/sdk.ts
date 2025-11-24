@@ -16,7 +16,7 @@ export class AppmaxClient {
   private async post<T = any>(path: string, body: Record<string, any>, retryAttempts: number = 2): Promise<T> {
     const url = `${this.baseURL}${path}`
     const payload = { ...(body || {}), ['access-token']: this.apiKey }
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', 'access-token': this.apiKey }
     const sanitize = (obj: any) => {
       try {
         const c = JSON.parse(JSON.stringify(obj || {}))
