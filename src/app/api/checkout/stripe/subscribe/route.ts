@@ -24,8 +24,8 @@ export async function POST(req: Request) {
     const offerId: string | undefined = body?.offerId ? String(body.offerId) : undefined
     const paymentMethodId: string | undefined = body?.paymentMethodId ? String(body.paymentMethodId) : undefined
     const buyer = body?.buyer || {}
-    if (!clinicId) return NextResponse.json({ error: 'clinicId is required' }, { status: 400 })
-    if (!stripePriceId) return NextResponse.json({ error: 'stripePriceId is required' }, { status: 400 })
+    if (!clinicId) return NextResponse.json({ error: 'clinicId is required', code: 'missing_param' }, { status: 400 })
+    if (!stripePriceId) return NextResponse.json({ error: 'stripePriceId is required', code: 'missing_param' }, { status: 400 })
 
     const { stripe, accountId } = await getStripeFromClinicIntegration(clinicId) as { stripe: any; accountId?: string }
 
@@ -353,6 +353,23 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, phase: 'subscribe', subscriptionId: sub.id, clientSecret })
   } catch (e: any) {
-    return NextResponse.json({ error: 'Failed to create Stripe subscription', message: e?.message || 'Unknown error' }, { status: 500 })
+    // Normalize Stripe error payload
+    const raw: any = e?.raw || e || {}
+    const decline_code: string | null = raw?.decline_code || e?.decline_code || null
+    const code: string | null = raw?.code || e?.code || null
+    const type: string | null = raw?.type || e?.type || null
+    const payment_intent: any = raw?.payment_intent || e?.payment_intent || null
+    const pi_id: string | null = payment_intent?.id || null
+    const pi_status: string | null = payment_intent?.status || null
+    const status = typeof e?.statusCode === 'number' ? e.statusCode : (decline_code ? 402 : 500)
+    return NextResponse.json({
+      error: 'Failed to create Stripe subscription',
+      message: e?.message || raw?.message || 'Unknown error',
+      decline_code,
+      code,
+      type,
+      payment_intent_id: pi_id,
+      payment_intent_status: pi_status,
+    }, { status })
   }
 }

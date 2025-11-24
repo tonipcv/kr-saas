@@ -336,6 +336,43 @@ export default function BrandedCheckoutPage() {
     setApproveModal({ open: false, stage: 'loading' });
   }
 
+  // Minimalist error modal
+  const [errorModal, setErrorModal] = useState<{ open: boolean; title: string; message: string; code?: string | null }>(
+    { open: false, title: '', message: '', code: null }
+  );
+  function mapDeclineCode(code?: string | null): string {
+    const c = String(code || '').toLowerCase();
+    const isPt = !isEN;
+    const tbl: Record<string, { pt: string; en: string }> = {
+      do_not_honor: { pt: 'Transação não autorizada pelo emissor. Use outro cartão ou contate o banco.', en: "Transaction not approved by the issuer. Try another card or contact your bank." },
+      card_not_supported: { pt: 'Este cartão não suporta este tipo de compra (on-line/internacional/recorrente).', en: 'This card does not support this type of purchase (online/international/recurring).' },
+      transaction_not_allowed: { pt: 'Transação não permitida para este cartão. Tente outro método.', en: 'Transaction not allowed for this card. Try another method.' },
+      insufficient_funds: { pt: 'Saldo/limite insuficiente.', en: 'Insufficient funds.' },
+      expired_card: { pt: 'Cartão expirado.', en: 'Expired card.' },
+      incorrect_cvc: { pt: 'Código de segurança incorreto.', en: 'Incorrect security code.' },
+      processing_error: { pt: 'Falha de processamento. Tente novamente mais tarde.', en: 'Processing error. Please try again later.' },
+      pickup_card: { pt: 'Cartão bloqueado. Contate o emissor.', en: 'Card retained/blocked. Contact issuer.' },
+      lost_card: { pt: 'Cartão reportado como perdido. Use outro cartão.', en: 'Card reported lost. Use another card.' },
+      stolen_card: { pt: 'Cartão reportado como roubado. Use outro cartão.', en: 'Card reported stolen. Use another card.' },
+    };
+    const msg = tbl[c as keyof typeof tbl] || { pt: 'Não foi possível autorizar seu pagamento. Use outro cartão ou tente Pix.', en: 'We could not authorize your payment. Try another card or use Pix.' };
+    return isPt ? msg.pt : msg.en;
+  }
+  function showErrorModal(message: string, opts?: { code?: string | null }) {
+    const code = opts?.code || null;
+    const title = isEN ? 'Payment failed' : 'Pagamento não autorizado';
+    let baseMsg = (message || '').trim();
+    // Sanitize technical/internal errors
+    const m = baseMsg.toLowerCase();
+    if (!baseMsg || m.includes('no such') || m.includes('setupintent') || m.includes('paymentintent') || m.includes('resource_missing')) {
+      baseMsg = mapDeclineCode(code);
+    }
+    setErrorModal({ open: true, title, message: baseMsg, code });
+  }
+  function closeErrorModal() {
+    setErrorModal({ open: false, title: '', message: '', code: null });
+  }
+
   // Auto-preencher endereço padrão quando for cartão (não há entrega)
   useEffect(() => {
     if (paymentMethod === 'card') {
@@ -862,9 +899,10 @@ export default function BrandedCheckoutPage() {
     
     const isSub = !!offer?.isSubscription;
     if (isSub) {
-      if (openFinanceAutoAllowed) setPaymentMethod('pix_ob');
+      // Prefer CARD for subscriptions; fallback to Open Finance Pix Automatic, then Pix
+      if (cardAllowed) setPaymentMethod('card');
+      else if (openFinanceAutoAllowed) setPaymentMethod('pix_ob');
       else if (pixAllowed) setPaymentMethod('pix');
-      else if (cardAllowed) setPaymentMethod('card');
       else setPaymentMethod(null);
       return;
     }
@@ -926,7 +964,9 @@ export default function BrandedCheckoutPage() {
         await ensureStripeMountedStandalone();
       } catch (e: any) {
         if (stopped) return;
-        setError(e?.message || 'Falha ao preparar Stripe');
+        const msg = e?.message || 'Falha ao preparar Stripe';
+        setError(msg);
+        showErrorModal(msg);
         setStripeFlowActive(false);
         setStripeClientSecret(null);
       }
@@ -1685,7 +1725,9 @@ export default function BrandedCheckoutPage() {
           // Cleanup Stripe flow on mount failure
           setStripeFlowActive(false);
           setStripeClientSecret(null);
-          setError(e?.message || 'Falha ao inicializar Stripe');
+          const msg = e?.message || 'Falha ao inicializar Stripe';
+          setError(msg);
+          showErrorModal(msg);
           return;
         }
       }
@@ -1838,9 +1880,9 @@ export default function BrandedCheckoutPage() {
       const { error, setupIntent } = await stripe.confirmCardSetup(setupSecret, {
         payment_method: { card: cardEl, billing_details },
       });
-      if (error) { setError(error.message || 'Falha ao salvar método de pagamento'); return; }
+      if (error) { const code: any = (error as any)?.decline_code || (error as any)?.code || null; const msg = error.message || mapDeclineCode(code); setError(msg); showErrorModal(msg, { code }); return; }
       const pmId = String(setupIntent?.payment_method || '');
-      if (!pmId) { setError('Método de pagamento não retornado'); return; }
+      if (!pmId) { const msg = 'Método de pagamento não retornado'; setError(msg); showErrorModal(msg); return; }
       const payload: any = {
         clinicId: branding?.clinicId || null,
         productId,
@@ -1853,7 +1895,7 @@ export default function BrandedCheckoutPage() {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
       });
       const js = await res.json().catch(() => ({}));
-      if (!res.ok) { setError(js?.error || 'Falha ao criar assinatura Stripe'); return; }
+      if (!res.ok) { const code = (js?.decline_code || js?.code || js?.errorCode || null) as any; const msg = (js?.error || js?.message || 'Falha ao criar assinatura Stripe'); setError(msg); showErrorModal(msg, { code }); return; }
       if (js?.phase === 'subscribe' && js?.subscriptionId) {
         if (js?.clientSecret) { await confirmStripePayment(String(js.clientSecret)); return; }
         setSuccess(true);
@@ -1964,9 +2006,11 @@ export default function BrandedCheckoutPage() {
         showApprovedAndRedirect(to);
         return;
       }
-      setError('Pagamento não concluído');
+      { const msg = 'Pagamento não concluído'; setError(msg); showErrorModal(msg); }
     } catch (e: any) {
-      setError(e?.message || 'Falha ao processar Stripe');
+      const msg = e?.message || 'Falha ao processar Stripe';
+      setError(msg);
+      showErrorModal(msg);
     } finally {
       setSubmitting(false);
     }
@@ -2472,7 +2516,7 @@ export default function BrandedCheckoutPage() {
                         </div>
 
                         {/* Parcelas abaixo dos inputs do cartão (somente BR e sem Stripe) */}
-                        {currentCountry === 'BR' && !stripeFlowActive && (
+                        {currentCountry === 'BR' && !stripeFlowActive && installmentOptions.length > 1 && (
                           <div>
                             <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>{t.installments}</div>
                             <select value={installments} onChange={(e) => setInstallments(parseInt(e.target.value, 10))} className={`${selectClass} h-11 w-full rounded-md border px-3 text-sm`}>
@@ -2485,38 +2529,13 @@ export default function BrandedCheckoutPage() {
                           </div>
                         )}
 
-                        {/* País no final */}
-                        <div>
-                          <div className={`text-sm ${theme==='DARK'?'text-gray-400':'text-gray-600'} mb-1.5`}>{t.country_region}</div>
-                          <select
-                            value={addrCountry}
-                            onChange={(e) => setAddrCountry(e.target.value)}
-                            className={`w-full rounded-md border ${theme==='DARK'?'bg-[#0f0f0f] border-gray-800 text-gray-100':'bg-white border-gray-300 text-gray-900'} h-9 px-2 text-sm`}
-                          >
-                            {(
-                              (Array.isArray(availableCountries) && availableCountries.length ? availableCountries : ['BR'])
-                            ).map((cc) => {
-                              const m = countryOptions.find(o => o.code === cc);
-                              const label = m?.name || cc;
-                              return (
-                                <option key={cc} value={cc}>{label}</option>
-                              );
-                            })}
-                          </select>
-                        </div>
+                        {/* País no final — removido para evitar duplicidade (controle já existe no topo) */}
                       </>
                     )}
                   </div>
                 )}
 
-                {error && <div className="mt-3 text-sm text-red-500">{error}</div>}
-
-                
-
                 <div className="mt-6 flex items-center justify-end gap-3">
-                  {error && (
-                    <div className={`text-sm ${theme === 'DARK' ? 'text-red-400' : 'text-red-600'} mr-auto`}>{error}</div>
-                  )}
                   <button
                     type="button"
                     disabled={submitting}
@@ -2631,6 +2650,30 @@ export default function BrandedCheckoutPage() {
             {pixRemaining === 0 && (
               <div className={`${theme==='DARK'?'text-gray-300':'text-gray-700'} text-xs mt-2`}>Prazo expirado — gere um novo Pix clicando em Pagar agora.</div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Error Modal (Card/Pix/General) */}
+      {errorModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className={`${theme==='DARK'?'bg-[#111] text-gray-100 border border-gray-800':'bg-white text-gray-900 border border-gray-200'} w-full max-w-xs rounded-2xl p-5 shadow-xl text-center`}> 
+            <div className="mx-auto h-10 w-10 rounded-full bg-red-500 flex items-center justify-center">
+              <span className="text-white text-lg">!</span>
+            </div>
+            <div className="mt-3 text-sm font-semibold">{errorModal.title}</div>
+            <div className={`${theme==='DARK'?'text-gray-300':'text-gray-700'} text-xs mt-1 whitespace-pre-line`}>{errorModal.message}</div>
+            {errorModal.code && (
+              <div className={`${theme==='DARK'?'text-gray-400':'text-gray-500'} text-[11px] mt-1`}>{isEN ? 'Code' : 'Código'}: {String(errorModal.code)}</div>
+            )}
+            <div className="mt-4">
+              <button
+                className={`${theme==='DARK'?'bg-[#0f0f0f] border-gray-800 text-gray-100':'bg-white border-gray-300 text-gray-900'} h-9 rounded-md text-sm border px-4`}
+                onClick={closeErrorModal}
+              >
+                {t.close}
+              </button>
+            </div>
           </div>
         </div>
       )}

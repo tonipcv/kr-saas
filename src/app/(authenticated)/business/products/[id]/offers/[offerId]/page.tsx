@@ -54,16 +54,6 @@ export default function EditOfferPage({ params }: PageProps) {
   const { currentClinic } = useClinic();
   const [providerConfig, setProviderConfig] = useState<any>({});
   const [defaultCountry, setDefaultCountry] = useState<string>('BR');
-  const [stripeBRL, setStripeBRL] = useState<string>('');
-  const [stripeUSD, setStripeUSD] = useState<string>('');
-  const [krxBRL, setKrxBRL] = useState<string>('');
-  const [validating, setValidating] = useState<boolean>(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchCurrency, setSearchCurrency] = useState<'BRL'|'USD'>('BRL');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [searchCountry, setSearchCountry] = useState<string>('');
   // Country overrides (dynamic)
   const [overrideCountries, setOverrideCountries] = useState<string[]>([]);
   const [overrideEnabled, setOverrideEnabled] = useState<Record<string, boolean>>({});
@@ -79,9 +69,7 @@ export default function EditOfferPage({ params }: PageProps) {
   const [addRouteOpenFor, setAddRouteOpenFor] = useState<string>('');
   const [addRouteMethod, setAddRouteMethod] = useState<'CARD'|'PIX'|'OPEN_FINANCE'|'OPEN_FINANCE_AUTOMATIC' | ''>('');
   const [addRouteProvider, setAddRouteProvider] = useState<'STRIPE'|'KRXPAY'|'APPMAX' | ''>('');
-  const [createStripeOpenFor, setCreateStripeOpenFor] = useState<{ country: string, currency: string } | null>(null);
-  const [createStripeAmount, setCreateStripeAmount] = useState<string>('');
-  const [createStripeNickname, setCreateStripeNickname] = useState<string>('');
+  
   const [editingCountry, setEditingCountry] = useState<Record<string, boolean>>({});
   // Integration availability (by clinic)
   const [integrations, setIntegrations] = useState<{ stripe: boolean; krxpay: boolean; appmax: boolean }>({ stripe: false, krxpay: false, appmax: false });
@@ -119,6 +107,40 @@ export default function EditOfferPage({ params }: PageProps) {
       if (cc === 'BR') {
         await saveMaxInstallmentsBR();
       }
+      // Stripe-only: if CARD routed to STRIPE for this country and we have a positive amount, ensure Stripe Price and upsert OfferPrice with externalPriceId
+      try {
+        const routedProv = (routing[cc]?.CARD || null) as ('STRIPE'|'KRXPAY'|'APPMAX'|null);
+        const cardOn = !!methods.CARD;
+        if (routedProv === 'STRIPE' && cardOn) {
+          // Determine amount cents priority: overridePrice[cc] -> providerConfig merged -> leave as 0 if none
+          let cents = parseAmountToCents(overridePrice[cc] || '');
+          if (!(cents > 0)) {
+            const cfgAmt = Number(providerConfig?.STRIPE?.[cc]?.[cur]?.amountCents || 0);
+            if (Number.isFinite(cfgAmt) && cfgAmt > 0) cents = cfgAmt;
+          }
+          if (cents > 0) {
+            const ensBody: any = { currency: cur, amountCents: cents, nickname: `${offer.name || 'Offer'} ${cc}` };
+            if (currentClinic?.id) ensBody.clinicId = String(currentClinic.id);
+            // Include subscription params when applicable
+            if (form.isSubscription) {
+              ensBody.interval = form.intervalUnit;
+              ensBody.intervalCount = Number(form.intervalCount || '1');
+              const td = Number(form.trialDays || '0');
+              if (Number.isFinite(td) && td >= 0) ensBody.trialDays = td;
+            }
+            const ensRes = await fetch(`/api/products/${productId}/offers/${offer.id}/providers/stripe/ensure`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ensBody)
+            });
+            const ensJs = await ensRes.json().catch(() => ({}));
+            if (ensRes.ok && ensJs?.priceId) {
+              await fetch(`/api/offers/${offer.id}/prices`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ country: cc, currency: cur, provider: 'STRIPE', amountCents: cents, externalPriceId: String(ensJs.priceId), active: true })
+              });
+            }
+          }
+        }
+      } catch {}
       await loadProviderConfig(productId, offer.id);
       setEditingCountry(prev => ({ ...prev, [cc]: false }));
     } catch (e) {
@@ -220,88 +242,7 @@ export default function EditOfferPage({ params }: PageProps) {
     return 'https://www.zuzz.vu';
   };
 
-  const openStripeSearch = async (currency: 'BRL'|'USD') => {
-    setSearchCurrency(currency);
-    setSearchQuery('');
-    setSearchResults([]);
-    setSearchOpen(true);
-    await fetchStripePrices(currency, '');
-  };
-
-  const fetchStripePrices = async (currency: string, query: string) => {
-    try {
-      setSearchLoading(true);
-      const url = new URL('/api/integrations/stripe/prices', window.location.origin);
-      url.searchParams.set('currency', currency);
-      if (query) url.searchParams.set('query', query);
-      url.searchParams.set('limit', '20');
-      // Use clinic integration (secret) instead of env/current doctor when available
-      if (currentClinic?.id) url.searchParams.set('clinicId', String(currentClinic.id));
-      const res = await fetch(url.toString(), { cache: 'no-store' });
-      const js = await res.json().catch(() => ({}));
-      setSearchResults(Array.isArray(js?.items) ? js.items : []);
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
-  const selectStripePrice = async (priceId: string) => {
-    try {
-      if (!offer) return;
-      const cc = (searchCountry || '').toUpperCase();
-      const cur = (searchCurrency || '').toUpperCase();
-      if (!cc || !/^[A-Z]{2}$/.test(cc)) {
-        alert('Selecione um país para aplicar o price_id');
-        return;
-      }
-      const it = (searchResults || []).find((x: any) => String(x.priceId) === String(priceId));
-      const amountCents = typeof it?.unitAmount === 'number'
-        ? it.unitAmount
-        : Math.round(Math.max(0, Number((overridePrice[cc] || '0').replace(',', '.')) * 100));
-      await fetch(`/api/offers/${offer.id}/prices`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ country: cc, currency: cur, provider: 'STRIPE', amountCents, externalPriceId: priceId })
-      });
-      setSearchOpen(false);
-      await loadProviderConfig(productId, offer.id);
-    } catch (e) {
-      console.error(e);
-      alert('Falha ao aplicar price_id');
-    }
-  };
-
-  const ensureStripePrice = async (currency: 'BRL'|'USD') => {
-    if (!offer) return;
-    try {
-      // Derive amount from the modal quick input if provided; fallback to override price for current country
-      const centsQuick = Math.round(Math.max(0, Number((createStripeAmount || '0').replace(',', '.')) * 100));
-      const nickname = `${offer.name || 'Offer'} ${currency}`;
-      const body: any = { currency, nickname };
-      if (currentClinic?.id) body.clinicId = String(currentClinic.id);
-      if (centsQuick > 0) body.amountCents = centsQuick;
-
-      const res = await fetch(`/api/products/${productId}/offers/${offer.id}/providers/stripe/ensure`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      const js = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(js?.error || 'Failed to ensure Stripe price');
-      if (currency === 'BRL') {
-        setStripeBRL(js?.priceId || '');
-        await loadProviderConfig(productId, offer.id);
-      } else {
-        setStripeUSD(js?.priceId || '');
-        await loadProviderConfig(productId, offer.id);
-      }
-      alert('Stripe price ensured');
-    } catch (e) {
-      alert('Falha ao criar/garantir preço no Stripe');
-    }
-  };
+  // Removed manual Stripe price search/creation UI and helpers; Stripe is ensured automatically on save
 
   const loadProviderConfig = async (pid: string, oid: string) => {
     try {
@@ -337,10 +278,6 @@ export default function EditOfferPage({ params }: PageProps) {
         }
       }
       setProviderConfig(cfg);
-      // Stripe quick refs (optional): try BR and US by currency from merged cfg
-      setStripeBRL(cfg?.STRIPE?.BR?.BRL?.externalPriceId || '');
-      setStripeUSD(cfg?.STRIPE?.US?.USD?.externalPriceId || '');
-      setKrxBRL(cfg?.KRXPAY?.BR?.BRL?.externalItemId || '');
       // Countries from DB (routing + prices) — ignore legacy config for the list
       const en: Record<string, boolean> = {};
       const pr: Record<string, string> = {};
@@ -398,6 +335,7 @@ export default function EditOfferPage({ params }: PageProps) {
       }
     })();
   }, [currentClinic?.id]);
+
 
   const loadRoutingForCountry = async (oid: string, cc: string) => {
     try {
@@ -457,15 +395,7 @@ export default function EditOfferPage({ params }: PageProps) {
     } catch {}
   };
 
-  const saveStripePrice = async (currency: 'BRL'|'USD', value: string) => {
-    if (!offer) return;
-    try {
-      const country = (searchCountry || 'BR').toUpperCase();
-      const body: any = { provider: 'STRIPE', currency, country, externalPriceId: value };
-      const res = await fetch(`/api/offers/${offer.id}/prices`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      if (res.ok) await loadProviderConfig(productId, offer.id);
-    } catch {}
-  };
+  // Removed: saveStripePrice (manual), replaced by automatic ensure + upsert
 
   const saveKrxItem = async (value: string) => {
     if (!offer) return;
@@ -492,26 +422,7 @@ export default function EditOfferPage({ params }: PageProps) {
     } catch {}
   };
 
-  const validateStripeIds = async () => {
-    try {
-      setValidating(true);
-      const clinicId = currentClinic?.id;
-      const statusRes = await fetch(`/api/admin/integrations/stripe/status?clinicId=${encodeURIComponent(clinicId || '')}`, { cache: 'no-store' });
-      const status = await statusRes.json().catch(() => ({}));
-      const connected = !!status?.connected;
-      const formatOk = (id: string) => !id || /^price_[a-zA-Z0-9]+$/.test(id);
-      const problems: string[] = [];
-      if (!connected) problems.push('Stripe não conectado para esta clínica');
-      if (!formatOk(stripeBRL)) problems.push('BRL: price_id inválido');
-      if (!formatOk(stripeUSD)) problems.push('USD: price_id inválido');
-      if (problems.length) alert('Validação:\n' + problems.join('\n'));
-      else alert('Validação OK');
-    } catch (e) {
-      alert('Falha ao validar');
-    } finally {
-      setValidating(false);
-    }
-  };
+  // Removed: validateStripeIds; auto mode makes this unnecessary
 
   const getSlug = () => (currentClinic?.slug && String(currentClinic.slug)) || 'bella-vida';
 
@@ -660,6 +571,46 @@ export default function EditOfferPage({ params }: PageProps) {
           { method: 'OPEN_FINANCE_AUTOMATIC', active: methods.OPEN_FINANCE_AUTOMATIC },
         ] })
       });
+      // Stripe-only: ensure Product/Price and persist OfferPrice for all countries where CARD is routed to STRIPE and amount>0
+      try {
+        const countries = Array.isArray(overrideCountries) ? overrideCountries : [];
+        for (const cc of countries) {
+          const cur = currencyForCountry(cc);
+          const routedProv = (routing[cc]?.CARD || null) as ('STRIPE'|'KRXPAY'|'APPMAX'|null);
+          if (routedProv !== 'STRIPE' || !methods.CARD) continue;
+          // Determine amount cents: overridePrice -> merged cfg -> form base price if same country as default
+          let cents = parseAmountToCents(overridePrice[cc] || '');
+          if (!(cents > 0)) {
+            const cfgAmt = Number(providerConfig?.STRIPE?.[cc]?.[cur]?.amountCents || 0);
+            if (Number.isFinite(cfgAmt) && cfgAmt > 0) cents = cfgAmt;
+          }
+          if (!(cents > 0)) {
+            if (cc === (defaultCountry || '').toUpperCase()) {
+              const baseCents = Math.round(Math.max(0, Number((form.price || '0').replace(',', '.')) * 100));
+              if (baseCents > 0) cents = baseCents;
+            }
+          }
+          if (!(cents > 0)) continue;
+          const ensBody: any = { currency: cur, amountCents: cents, nickname: `${offer.name || 'Offer'} ${cc}` };
+          if (currentClinic?.id) ensBody.clinicId = String(currentClinic.id);
+          if (form.isSubscription) {
+            ensBody.interval = form.intervalUnit;
+            ensBody.intervalCount = Number(form.intervalCount || '1');
+            const td = Number(form.trialDays || '0');
+            if (Number.isFinite(td) && td >= 0) ensBody.trialDays = td;
+          }
+          const ensRes = await fetch(`/api/products/${productId}/offers/${offer.id}/providers/stripe/ensure`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ensBody)
+          });
+          const ensJs = await ensRes.json().catch(() => ({}));
+          if (ensRes.ok && ensJs?.priceId) {
+            await fetch(`/api/offers/${offer.id}/prices`, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ country: cc, currency: cur, provider: 'STRIPE', amountCents: cents, externalPriceId: String(ensJs.priceId), active: true })
+            });
+          }
+        }
+      } catch {}
       // providers config: save default checkout country together with offer
       try {
         // fetch latest config to avoid overwriting concurrent keys
@@ -868,9 +819,6 @@ export default function EditOfferPage({ params }: PageProps) {
                           <div className="flex items-center justify-between w-full">
                             <div className="flex items-center gap-3">
                               <span>Details {name}</span>
-                              {routing[cc]?.CARD === 'STRIPE' && (
-                                <span className="text-[11px] text-gray-500 font-mono">price_id: {String(providerConfig?.STRIPE?.[cc]?.[cur]?.externalPriceId || '—')}</span>
-                              )}
                             </div>
                             <div className="flex items-center gap-2">
                               <Button type="button" variant="ghost" size="sm" onClick={(e) => { e.preventDefault(); deleteCountry(cc); }}>Excluir país</Button>
@@ -892,24 +840,10 @@ export default function EditOfferPage({ params }: PageProps) {
                                   <div>
                                     <Label className="text-gray-900 font-medium">Preço ({cur})</Label>
                                     <div className="mt-2 text-sm text-gray-800">
-                                      {routing[cc]?.CARD === 'STRIPE' ? (
-                                        (() => {
-                                          const stripeForCountry = providerConfig?.STRIPE?.[cc]?.[cur] || {};
-                                          const priceId = stripeForCountry?.externalPriceId as string | undefined;
-                                          const amt = Number(stripeForCountry?.amountCents) || 0;
-                                          return (
-                                            <div className="flex items-center gap-3 flex-wrap">
-                                              <span className="font-mono text-xs">{priceId ? `price_id: ${priceId}` : 'price_id: —'}</span>
-                                              {amt > 0 && (<span className="text-xs text-gray-600">{(amt/100).toLocaleString('pt-BR', { style: 'currency', currency: cur })}</span>)}
-                                            </div>
-                                          );
-                                        })()
+                                      {enabled ? (
+                                        <span>{(parseAmountToCents(overridePrice[cc] || '0')/100).toLocaleString('pt-BR', { style: 'currency', currency: cur })}</span>
                                       ) : (
-                                        enabled ? (
-                                          <span>{(parseAmountToCents(overridePrice[cc] || '0')/100).toLocaleString('pt-BR', { style: 'currency', currency: cur })}</span>
-                                        ) : (
-                                          <span className="text-gray-500">Usando preço base</span>
-                                        )
+                                        <span className="text-gray-500">Usando preço base</span>
                                       )}
                                     </div>
                                   </div>
@@ -918,17 +852,6 @@ export default function EditOfferPage({ params }: PageProps) {
                                       <Label className="text-gray-900 font-medium">Parcelamento máximo (Brasil)</Label>
                                       <div className="mt-2 text-sm text-gray-800">{form.maxInstallments || '—'}x</div>
                                     </div>
-                                  )}
-                                  {routing[cc]?.CARD === 'STRIPE' && (
-                                    (() => {
-                                      const stripeForCountry = providerConfig?.STRIPE?.[cc]?.[cur] || {};
-                                      const priceId = stripeForCountry?.externalPriceId as string | undefined;
-                                      return (
-                                        <div className="flex items-center gap-3 flex-wrap">
-                                          <div className="text-xs text-gray-600">Status: {priceId ? 'Configurado' : 'Pendente (selecione um price_id)'}</div>
-                                        </div>
-                                      );
-                                    })()
                                   )}
                                   <div className="flex justify-end">
                                     <Button type="button" variant="outline" className="h-9" onClick={() => setEditingCountry(prev => ({ ...prev, [cc]: true }))}>Editar</Button>
@@ -949,44 +872,7 @@ export default function EditOfferPage({ params }: PageProps) {
                                       />
                                     </div>
                                     <div className="flex items-end">
-                                      {routing[cc]?.CARD === 'STRIPE' ? (
-                                        (() => {
-                                          const stripeForCountry = providerConfig?.STRIPE?.[cc]?.[cur] || {};
-                                          const priceId = stripeForCountry?.externalPriceId as string | undefined;
-                                          return (
-                                            <div className="flex gap-2">
-                                              {(() => {
-                                                const isSupported = (cur === 'USD' || cur === 'BRL');
-                                                return (
-                                                  <>
-                                                    <Button
-                                                      type="button"
-                                                      variant="outline"
-                                                      className="h-10"
-                                                      disabled={!isSupported}
-                                                      onClick={() => { if (!isSupported) return; setSearchCountry(cc); openStripeSearch(cur as 'BRL'|'USD'); }}
-                                                    >
-                                                      {priceId ? 'Trocar price_id (Stripe)' : 'Selecionar price_id (Stripe)'}
-                                                    </Button>
-                                                    {!priceId && (
-                                                      <Button
-                                                        type="button"
-                                                        className="h-10"
-                                                        disabled={!isSupported}
-                                                        onClick={() => { const amountStr = overridePrice[cc] || ''; setCreateStripeAmount(amountStr); setCreateStripeOpenFor({ country: cc, currency: cur }); }}
-                                                      >
-                                                        Criar price_id (Stripe)
-                                                      </Button>
-                                                    )}
-                                                  </>
-                                                );
-                                              })()}
-                                            </div>
-                                          );
-                                        })()
-                                      ) : (
-                                        <div className="text-xs text-gray-500">Defina o valor e salve as alterações</div>
-                                      )}
+                                      <div className="text-xs text-gray-500">Defina o valor e salve as alterações</div>
                                     </div>
                                   </div>
                                   {cc === 'BR' && (
@@ -1063,7 +949,14 @@ export default function EditOfferPage({ params }: PageProps) {
               </div>
 
               {/* Dialog to add country (create first routing rule) */}
-              <Dialog open={addingCountry} onOpenChange={setAddingCountry}>
+              <Dialog open={addingCountry} onOpenChange={(open) => {
+                setAddingCountry(open);
+                if (!open) {
+                  setAddingCountryCode('US');
+                  setAddingCountryMethod('');
+                  setAddingCountryProvider('');
+                }
+              }}>
                 <DialogContent className="sm:max-w-[520px]">
                   <DialogHeader>
                     <DialogTitle>Adicionar país</DialogTitle>
@@ -1071,7 +964,7 @@ export default function EditOfferPage({ params }: PageProps) {
                   <div className="space-y-3">
                     <div className="w-full">
                       <Label className="text-gray-900 font-medium">País</Label>
-                      <Select value={addingCountryCode || undefined} onValueChange={(v) => setAddingCountryCode(v)}>
+                      <Select value={addingCountryCode} onValueChange={setAddingCountryCode}>
                         <SelectTrigger className="mt-2 h-10"><SelectValue placeholder="Selecione o país" /></SelectTrigger>
                         <SelectContent className="max-h-80">
                           {REGIONAL_COUNTRIES.map((region) => (
@@ -1088,62 +981,51 @@ export default function EditOfferPage({ params }: PageProps) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div>
                         <Label className="text-gray-900 font-medium">Método</Label>
-                        <Select value={addingCountryMethod || undefined} onValueChange={(v: any) => setAddingCountryMethod(v)}>
+                        <Select value={addingCountryMethod} onValueChange={setAddingCountryMethod}>
                           <SelectTrigger className="mt-2 h-10"><SelectValue placeholder="Selecionar método" /></SelectTrigger>
                           <SelectContent>
-                            {(
-                              (addingCountryCode === 'BR')
-                                ? (integrations.stripe || integrations.krxpay || integrations.appmax)
-                                : integrations.stripe
-                            ) && (<SelectItem value="CARD">CARD</SelectItem>)}
-                            {addingCountryCode === 'BR' && (integrations.krxpay || integrations.appmax) && (
-                              <SelectItem value="PIX">PIX</SelectItem>
-                            )}
+                            <SelectItem value="CARD">CARD</SelectItem>
+                            {addingCountryCode === 'BR' && <SelectItem value="PIX">PIX</SelectItem>}
                           </SelectContent>
                         </Select>
                       </div>
                       <div>
                         <Label className="text-gray-900 font-medium">Gateway</Label>
-                        <Select value={addingCountryProvider || undefined} onValueChange={(v: any) => setAddingCountryProvider(v)}>
+                        <Select value={addingCountryProvider} onValueChange={setAddingCountryProvider}>
                           <SelectTrigger className="mt-2 h-10"><SelectValue placeholder="Selecionar gateway" /></SelectTrigger>
                           <SelectContent>
-                            {addingCountryMethod !== 'PIX' && integrations.stripe && (<SelectItem value="STRIPE">STRIPE</SelectItem>)}
-                            {addingCountryCode === 'BR' && integrations.krxpay && (<SelectItem value="KRXPAY">KRXPAY</SelectItem>)}
-                            {addingCountryCode === 'BR' && integrations.appmax && (<SelectItem value="APPMAX">APPMAX</SelectItem>)}
+                            {integrations.stripe && <SelectItem value="STRIPE">STRIPE</SelectItem>}
+                            {addingCountryCode === 'BR' && integrations.krxpay && <SelectItem value="KRXPAY">KRXPAY</SelectItem>}
+                            {addingCountryCode === 'BR' && integrations.appmax && <SelectItem value="APPMAX">APPMAX</SelectItem>}
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
+                    {!integrations.stripe && !integrations.krxpay && !integrations.appmax && (
+                      <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-2">
+                        Nenhum gateway conectado. Conecte Stripe, Pagar.me ou Appmax em Integrations.
+                      </div>
+                    )}
                     <div className="flex justify-end gap-2">
-                      <Button type="button" variant="ghost" onClick={() => { setAddingCountry(false); setAddingCountryCode('US'); setAddingCountryMethod(''); setAddingCountryProvider(''); }}>Cancelar</Button>
+                      <Button type="button" variant="ghost" onClick={() => setAddingCountry(false)}>Cancelar</Button>
                       <Button type="button" onClick={async () => {
                         try {
                           if (!offer) return;
                           const cc = (addingCountryCode || 'US').toUpperCase();
-                          if (!/^[A-Z]{2}$/.test(cc)) return;
-                          const method = addingCountryMethod || 'CARD';
-                          // Choose a default provider allowed for this clinic and country
-                          let provider: 'STRIPE'|'KRXPAY'|'APPMAX' = (addingCountryProvider as any) || null as any;
-                          if (!provider) {
-                            if (cc === 'BR') {
-                              if (method === 'PIX') {
-                                provider = (integrations.krxpay && 'KRXPAY') || (integrations.appmax && 'APPMAX') || null as any;
-                              } else {
-                                provider = (integrations.krxpay && 'KRXPAY') || (integrations.appmax && 'APPMAX') || (integrations.stripe && 'STRIPE') || null as any;
-                              }
-                            } else {
-                              provider = (integrations.stripe && 'STRIPE') || null as any;
-                            }
-                          }
-                          if (!provider) { alert('Nenhum gateway conectado compatível com o método/país selecionado'); return; }
-                          await saveRouting(offer.id, cc, method as any, provider as any);
-                          // reload from DB to reflect new country
+                          if (!/^[A-Z]{2}$/.test(cc)) { alert('Selecione um país válido'); return; }
+                          if (!addingCountryMethod) { alert('Selecione um método de pagamento'); return; }
+                          if (!addingCountryProvider) { alert('Selecione um gateway'); return; }
+                          const method = addingCountryMethod as 'CARD'|'PIX';
+                          const provider = addingCountryProvider as 'STRIPE'|'KRXPAY'|'APPMAX';
+                          await saveRouting(offer.id, cc, method, provider);
                           await loadProviderConfig(productId, offer.id);
-                        } finally {
                           setAddingCountry(false);
                           setAddingCountryCode('US');
                           setAddingCountryMethod('');
                           setAddingCountryProvider('');
+                        } catch (e) {
+                          console.error(e);
+                          alert('Falha ao adicionar país');
                         }
                       }}>Adicionar</Button>
                     </div>
@@ -1151,48 +1033,7 @@ export default function EditOfferPage({ params }: PageProps) {
                 </DialogContent>
               </Dialog>
 
-              {/* Dialog: Criar price_id (Stripe) para país */}
-              <Dialog open={!!createStripeOpenFor} onOpenChange={(v) => { if (!v) { setCreateStripeOpenFor(null); setCreateStripeAmount(''); } }}>
-                <DialogContent className="sm:max-w-[520px]">
-                  <DialogHeader>
-                    <DialogTitle>Criar price_id (Stripe){createStripeOpenFor ? ` — ${getCountryName(createStripeOpenFor.country)} (${createStripeOpenFor.country}) ${createStripeOpenFor.currency}` : ''}</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-3">
-                    <div>
-                      <Label className="text-gray-900 font-medium">Valor ({createStripeOpenFor?.currency || ''})</Label>
-                      <Input type="number" step="0.01" min={0} value={createStripeAmount} onChange={(e) => setCreateStripeAmount(e.target.value)} className="mt-2 h-10" placeholder="99.90" />
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <Button type="button" variant="ghost" onClick={() => { setCreateStripeOpenFor(null); setCreateStripeAmount(''); }}>Cancelar</Button>
-                      <Button type="button" onClick={async () => {
-                        try {
-                          if (!offer || !productId || !createStripeOpenFor) return;
-                          const cc = createStripeOpenFor.country;
-                          const cur = createStripeOpenFor.currency as 'BRL'|'USD'|'EUR';
-                          const cents = Math.round(Math.max(0, Number(createStripeAmount.replace(',', '.')) * 100));
-                          // 1) Ensure Stripe Product/Price with desired amount/currency
-                          const ens = await fetch(`/api/products/${productId}/offers/${offer.id}/providers/stripe/ensure`, {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currency: cur, amountCents: cents })
-                          });
-                          if (ens.ok) {
-                            const ej = await ens.json().catch(() => ({}));
-                            const priceId = ej?.priceId as string | undefined;
-                            // 2) Persist OfferPrice with externalPriceId for this country/provider
-                            await fetch(`/api/offers/${offer.id}/prices`, {
-                              method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ country: cc, currency: cur, provider: 'STRIPE', amountCents: cents, externalPriceId: priceId || undefined })
-                            });
-                            // 3) Refresh editor data
-                            await loadProviderConfig(productId, offer.id);
-                          }
-                        } finally {
-                          setCreateStripeOpenFor(null);
-                          setCreateStripeAmount('');
-                        }
-                      }}>Criar</Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
+              {/* Removed: Dialog to create Stripe price manually — now automatic on save */}
 
               {/* Dialog to add region */}
               <Dialog open={addingRegion} onOpenChange={setAddingRegion}>
@@ -1233,126 +1074,7 @@ export default function EditOfferPage({ params }: PageProps) {
                 </DialogContent>
               </Dialog>
 
-              <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-                <DialogContent className="sm:max-w-[720px]">
-                  <DialogHeader>
-                    <DialogTitle>Buscar preços no Stripe ({searchCurrency})</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-3">
-                    <div className="flex flex-col gap-2">
-                      <div className="flex gap-2 items-center">
-                        <div className="w-64">
-                          <Label className="text-gray-900 font-medium">País (opcional)</Label>
-                          <Select value={searchCountry || undefined} onValueChange={(v) => setSearchCountry(v === '__NONE__' ? '' : v)}>
-                            <SelectTrigger className="mt-2 h-10"><SelectValue placeholder="Selecionar país (opcional)" /></SelectTrigger>
-                            <SelectContent className="max-h-80">
-                              <SelectItem value="__NONE__">Sem país</SelectItem>
-                              {REGIONAL_COUNTRIES.map((region) => (
-                                <div key={region.key} className="py-1">
-                                  <div className="px-2 py-1 text-[11px] uppercase tracking-wide text-gray-500">{region.label}</div>
-                                  {region.countries.map((c) => (
-                                    <SelectItem key={c.code} value={c.code}>{flagEmoji(c.code)} {c.name} ({c.code})</SelectItem>
-                                  ))}
-                                </div>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="flex-1" />
-                      </div>
-                      <div className="flex gap-2">
-                        <Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Nome do produto ou price_id" />
-                        <Button type="button" onClick={() => fetchStripePrices(searchCurrency, searchQuery)} disabled={searchLoading}>{searchLoading ? 'Buscando...' : 'Buscar'}</Button>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
-                        <div>
-                          <Label className="text-gray-900 font-medium">Valor ({searchCurrency})</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min={0}
-                            value={createStripeAmount}
-                            onChange={(e) => setCreateStripeAmount(e.target.value)}
-                            className="mt-2 h-10"
-                            placeholder={searchCurrency === 'USD' ? '30.00' : '0.00'}
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-gray-900 font-medium">Apelido (opcional)</Label>
-                          <Input
-                            value={createStripeNickname}
-                            onChange={(e) => setCreateStripeNickname(e.target.value)}
-                            className="mt-2 h-10"
-                            placeholder={`ex.: ${offer?.name || 'Offer'} ${searchCurrency}`}
-                          />
-                        </div>
-                        <div className="flex items-end">
-                          <Button
-                            type="button"
-                            className="h-10"
-                            onClick={async () => {
-                              if (!offer) return;
-                              if (!currentClinic?.id) { alert('Clínica não definida'); return; }
-                              if (!searchCountry) { alert('Selecione um país para aplicar o price_id'); return; }
-                              const cents = Math.round(Math.max(0, Number((createStripeAmount || '0').replace(',', '.')) * 100));
-                              if (!(cents > 0)) { alert('Informe um valor válido'); return; }
-                              const nickname = createStripeNickname?.trim() || `${offer.name || 'Offer'} ${searchCurrency}`;
-                              try {
-                                const res = await fetch(`/api/products/${productId}/offers/${offer.id}/providers/stripe/ensure`, {
-                                  method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ clinicId: String(currentClinic.id), currency: searchCurrency, amountCents: cents, nickname })
-                                });
-                                const js = await res.json().catch(() => ({}));
-                                if (!res.ok) throw new Error(js?.error || 'Falha ao criar price');
-                                const pid = js?.priceId as string | undefined;
-                                if (pid) {
-                                  await selectStripePrice(pid);
-                                }
-                                setSearchOpen(false);
-                                setCreateStripeAmount('');
-                                setCreateStripeNickname('');
-                              } catch (e: any) {
-                                alert(e?.message || 'Falha ao criar price');
-                              }
-                            }}
-                          >
-                            Criar price_id (Stripe)
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="max-h-80 overflow-auto rounded-lg border border-gray-200">
-                      <div className="grid grid-cols-12 gap-2 px-3 py-2 text-[11px] text-gray-500 border-b border-gray-200 bg-gray-50/50 sticky top-0">
-                        <div className="col-span-6">Nome do Produto</div>
-                        <div className="col-span-4">Nome do Preço</div>
-                        <div className="col-span-2 text-right">Valor</div>
-                      </div>
-                      {searchResults.length === 0 && (
-                        <div className="p-4 text-sm text-gray-500">Nenhum resultado</div>
-                      )}
-                      {searchResults.map((it) => {
-                        const value = (Number(it.unitAmount||0)/100).toLocaleString('pt-BR', { style: 'currency', currency: String(it.currency||'').toUpperCase()||'BRL' })
-                        const recur = it.interval ? ` / ${String(it.intervalCount||1)} ${String(it.interval).toLowerCase()}(s)` : ''
-                        return (
-                          <div key={it.priceId} className="grid grid-cols-12 gap-2 items-center px-3 py-2 border-b last:border-b-0">
-                            <div className="col-span-6 min-w-0">
-                              <div className="text-sm font-medium text-gray-900 truncate" title={it.productName || ''}>{it.productName || '—'}</div>
-                              {it.productDescription && <div className="text-[11px] text-gray-500 truncate" title={it.productDescription}>{it.productDescription}</div>}
-                            </div>
-                            <div className="col-span-4 min-w-0">
-                              <div className="text-sm text-gray-900 truncate" title={it.priceNickname || ''}>{it.priceNickname || '—'}</div>
-                            </div>
-                            <div className="col-span-2 flex items-center justify-end gap-2">
-                              <div className="text-sm text-gray-900 whitespace-nowrap">{value}{recur}</div>
-                              <Button size="sm" type="button" onClick={() => selectStripePrice(it.priceId)} className="shrink-0">Selecionar</Button>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
+              {/* Removed: Dialog to search/select Stripe prices — now automatic on save */}
               {/* Dialog: Adicionar meio de pagamento (por país) */}
               <Dialog open={!!addRouteOpenFor} onOpenChange={(v) => { if (!v) { setAddRouteOpenFor(''); setAddRouteMethod(''); setAddRouteProvider(''); } }}>
                 <DialogContent className="sm:max-w-[520px]">
