@@ -13,7 +13,7 @@ export class AppmaxClient {
     this.baseURL = explicit || (test ? 'https://homolog.sandboxappmax.com.br/api/v3' : 'https://api.appmax.com.br/api/v3')
   }
 
-  private async post<T = any>(path: string, body: Record<string, any>): Promise<T> {
+  private async post<T = any>(path: string, body: Record<string, any>, retryAttempts: number = 2): Promise<T> {
     const url = `${this.baseURL}${path}`
     const payload = { ...(body || {}), ['access-token']: this.apiKey }
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -32,7 +32,7 @@ export class AppmaxClient {
     }
 
     let lastErr: any = null
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    for (let attempt = 1; attempt <= Math.max(1, retryAttempts); attempt++) {
       const controller = new AbortController()
       const timeoutMs = 20000
       const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -59,7 +59,7 @@ export class AppmaxClient {
         const durationMs = Date.now() - start
         console.error('[appmax][error]', { url, path, attempt, durationMs, message: e?.message, status: e?.status, response: sanitize(e?.response) })
         const retriable = e?.name === 'AbortError' || (Number(e?.status) >= 500)
-        if (attempt < 2 && retriable) {
+        if (attempt < Math.max(1, retryAttempts) && retriable) {
           await new Promise(r => setTimeout(r, 500))
           continue
         }
@@ -79,7 +79,12 @@ export class AppmaxClient {
   }
 
   paymentsCreditCard(body: Record<string, any>) {
-    return this.post('/payment/credit-card', body)
+    return this.post('/payment/credit-card', body, 2)
+  }
+
+  // Important: avoid automatic retry for payments, as the gateway may cancel the order after a failed attempt
+  paymentsCreditCardNoRetry(body: Record<string, any>) {
+    return this.post('/payment/credit-card', body, 1)
   }
 
   paymentsPix(body: Record<string, any>) {

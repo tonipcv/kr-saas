@@ -201,8 +201,10 @@ export async function POST(req: Request) {
 
     // 2) Create Order
     // CRITICAL: Determine base price in CENTS for the order
-    // Priority: items[].price (reais) > product.price (reais)
+    // Priority: explicit amountCents override > items[].price (reais) > product.price (reais)
     const basePriceCents = (() => {
+      const override = Number(body?.amountCents)
+      if (Number.isFinite(override) && override > 0) return Math.round(override)
       // If items come with price, sum them and convert to cents
       if (Array.isArray(items) && items.length > 0) {
         const hasAllPrices = items.every((it: any) => typeof it.price === 'number' && it.price > 0)
@@ -500,6 +502,7 @@ export async function POST(req: Request) {
     if (method === 'card') {
       // Tokenization-first if token provided or card present
       let ccToken: string | null = null
+      let tokenMeta: { brand?: string | null, last4?: string | null } = {}
       if (token && typeof token === 'string') {
         ccToken = token
       } else if (card && (card.number && card.cvv && card.month && card.year)) {
@@ -514,6 +517,8 @@ export async function POST(req: Request) {
             }
           })
           ccToken = tokResp?.token || tokResp?.data?.token || null
+          tokenMeta.brand = tokResp?.brand || tokResp?.data?.brand || null
+          tokenMeta.last4 = tokResp?.last4 || tokResp?.data?.last4 || (card?.number?.toString().slice(-4) || null)
         } catch (e: any) {
           // Fallback: proceed without token, sending raw card details in payment payload
           try { console.warn('[appmax][tokenize][warn] fallback to raw card payment', e?.message || e) } catch {}
@@ -523,7 +528,41 @@ export async function POST(req: Request) {
         return jsonError(400, 'Dados de cartão ou token ausentes', 'input_validation', { need: 'card or token' })
       }
 
-      const buyerDoc = (buyer.document_number || buyer.document || '').toString().replace(/\D+/g, '').slice(0, 14)
+      // Persist token to vault on first purchase or when saveCard=true
+      if (unifiedCustomerId && (ccToken || token)) {
+        try {
+          const { VaultManager } = await import('@/lib/payments/vault/manager')
+          const vaultManager = new VaultManager()
+          const existing = await vaultManager.listCards(String(unifiedCustomerId), 'APPMAX')
+          const shouldSave = !!body.saveCard || (Array.isArray(existing) && existing.length === 0)
+          if (shouldSave && (ccToken || token)) {
+            await vaultManager.saveCard({
+              customerId: String(unifiedCustomerId),
+              provider: 'APPMAX',
+              token: String(ccToken || token),
+              accountId: String(merchant.id),
+              brand: tokenMeta.brand || (card?.brand || null),
+              last4: tokenMeta.last4 || (card?.number?.toString().slice(-4) || null),
+              expMonth: Number(card?.month) || null,
+              expYear: Number(card?.year) || null,
+              setAsDefault: !existing || existing.length === 0
+            })
+            console.log('[appmax][create] ✅ Card token saved to vault (first purchase or saveCard)')
+          }
+        } catch (e) {
+          console.warn('[appmax][create] Failed to save card to vault', e instanceof Error ? e.message : e)
+        }
+      }
+
+      // Resolve buyer document (CPF/CNPJ) required by AppMax. Prefer body; fallback to unified customer record.
+      let buyerDoc = (buyer.document_number || buyer.document || '').toString().replace(/\D+/g, '').slice(0, 14)
+      if (!buyerDoc && unifiedCustomerId) {
+        try {
+          const unified = await prisma.customer.findUnique({ where: { id: String(unifiedCustomerId) }, select: { document: true } })
+          const doc = unified?.document ? String(unified.document) : ''
+          buyerDoc = doc.replace(/\D+/g, '').slice(0, 14)
+        } catch {}
+      }
       const payPayload: any = {
         cart: { order_id },
         customer: { customer_id },
@@ -547,7 +586,8 @@ export async function POST(req: Request) {
 
       let payResp: any
       try {
-        payResp = await client.paymentsCreditCard(payPayload)
+        // Avoid retry to prevent order cancellation on second attempt
+        payResp = await client.paymentsCreditCardNoRetry(payPayload)
       } catch (e: any) {
         try {
           await prisma.$executeRawUnsafe(

@@ -183,6 +183,36 @@ export async function POST(req: Request) {
           )
           customerProvider = { id: newCpId }
         }
+        // Immediately upsert initial payment_transactions if PI exists (first subscription charge)
+        try {
+          const piAny: any = (sub.latest_invoice as any)?.payment_intent || null
+          const piId: string | null = piAny?.id ? String(piAny.id) : null
+          const piStatus: string = String(piAny?.status || '').toLowerCase()
+          if (piId) {
+            const normalized = (piStatus === 'succeeded') ? 'paid' : (piStatus === 'requires_capture' ? 'authorized' : (piStatus || 'processing'))
+            const statusV2 = (piStatus === 'succeeded') ? 'SUCCEEDED' : (piStatus === 'requires_action' || piStatus === 'processing' ? 'PROCESSING' : (piStatus === 'requires_capture' ? 'PROCESSING' : 'FAILED'))
+            await prisma.$executeRawUnsafe(
+              `INSERT INTO payment_transactions (
+                 id, provider, provider_order_id, clinic_id, merchant_id, product_id, customer_id,
+                 amount_cents, currency, payment_method_type, status, provider_v2, status_v2, routed_provider, raw_payload
+               ) VALUES (
+                 gen_random_uuid(), 'stripe', $1, $2, $9, $3, $4,
+                 $5, $6, 'credit_card', $7, 'STRIPE'::"PaymentProvider", $8::"PaymentStatus", 'STRIPE', $10::jsonb
+               ) ON CONFLICT (provider, provider_order_id) DO NOTHING`,
+              String(piId),
+              clinicId,
+              productId,
+              customer?.id || null,
+              unitAmount,
+              currency,
+              normalized,
+              statusV2,
+              JSON.stringify({ provider: 'stripe', subscription_id: sub.id, payment_intent_id: piId })
+            )
+          }
+        } catch (e) {
+          console.warn('[stripe][subscribe] upsert initial payment_transactions failed', (e as any)?.message || e)
+        }
       }
 
       // Retrieve PM details and upsert CustomerPaymentMethod via raw SQL
@@ -201,7 +231,7 @@ export async function POST(req: Request) {
         if (Array.isArray(cpmExist) && cpmExist.length > 0) {
           const cpmId = cpmExist[0].id
           await prisma.$executeRawUnsafe(
-            `UPDATE "customer_payment_methods" SET customer_id = $1, brand = $2, last4 = $3, exp_month = $4, exp_year = $5, customer_provider_id = $6, updated_at = NOW() WHERE id = $7`,
+            `UPDATE "customer_payment_methods" SET customer_id = $1, brand = $2, last4 = $3, exp_month = $4, exp_year = $5, customer_provider_id = $6, status = 'ACTIVE', updated_at = NOW() WHERE id = $7`,
             String(customer.id),
             brand,
             last4,
@@ -214,7 +244,7 @@ export async function POST(req: Request) {
         } else {
           const newCpmId = (global as any).crypto?.randomUUID ? (global as any).crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`
           await prisma.$executeRawUnsafe(
-            `INSERT INTO "customer_payment_methods" ("id","customer_id","customer_provider_id","provider","account_id","provider_payment_method_id","brand","last4","exp_month","exp_year","is_default") VALUES ($1, $2, $3, 'STRIPE', $4, $5, $6, $7, $8, $9, $10)`,
+            `INSERT INTO "customer_payment_methods" ("id","customer_id","customer_provider_id","provider","account_id","provider_payment_method_id","brand","last4","exp_month","exp_year","is_default","status") VALUES ($1, $2, $3, 'STRIPE', $4, $5, $6, $7, $8, $9, $10, 'ACTIVE')`,
             newCpmId,
             String(customer.id),
             customerProvider?.id || null,

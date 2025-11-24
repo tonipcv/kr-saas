@@ -136,6 +136,60 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch {}
+      // Save card (pm_xxx) into vault when we have a PI and unified customer
+      try {
+        if (unifiedCustomerId && (isPI ? !!pi?.payment_method : !!obj?.payment_method)) {
+          const merchantId = (md?.merchantId ? String(md.merchantId) : null)
+          if (merchantId) {
+            // Build Stripe client for merchant to fetch PM details
+            const integ = await prisma.merchantIntegration.findUnique({
+              where: { merchantId_provider: { merchantId, provider: 'STRIPE' as any } },
+              select: { credentials: true, isActive: true },
+            })
+            if (integ?.isActive) {
+              const creds = (integ.credentials || {}) as any
+              const secret: string | undefined = creds?.secretKey || process.env.STRIPE_SECRET_KEY
+              if (secret) {
+                const stripeClient = new Stripe(secret, { apiVersion: '2023-10-16' })
+                // Determine PM id
+                const paymentMethodId = isPI ? String(pi.payment_method || '') : String(obj?.payment_method || '')
+                let brand: string | null = null
+                let last4: string | null = null
+                let expMonth: number | null = null
+                let expYear: number | null = null
+                try {
+                  if (paymentMethodId) {
+                    const pmObj = await stripeClient.paymentMethods.retrieve(paymentMethodId)
+                    const card = (pmObj?.card || null) as any
+                    brand = (card?.brand || null) ? String(card.brand) : null
+                    last4 = (card?.last4 || null) ? String(card.last4) : null
+                    expMonth = (card?.exp_month || null) ? Number(card.exp_month) : null
+                    expYear = (card?.exp_year || null) ? Number(card.exp_year) : null
+                  }
+                } catch {}
+                // Save to vault (dedup by fingerprint). Set default if first STRIPE card
+                try {
+                  const { VaultManager } = await import('@/lib/payments/vault/manager')
+                  const vm = new VaultManager()
+                  const existing = await vm.listCards(String(unifiedCustomerId), 'STRIPE')
+                  await vm.saveCard({
+                    customerId: String(unifiedCustomerId),
+                    provider: 'STRIPE',
+                    token: paymentMethodId,
+                    accountId: md?.accountId || null,
+                    brand,
+                    last4,
+                    expMonth,
+                    expYear,
+                    setAsDefault: !existing || existing.length === 0,
+                  })
+                } catch {}
+              }
+            }
+          }
+        }
+      } catch {}
+
       if (provider_order_id) {
         // Try insert; if exists, update status and payload
         try {

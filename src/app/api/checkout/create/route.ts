@@ -30,8 +30,10 @@ export async function POST(req: Request) {
     if (!productId) return NextResponse.json({ error: 'productId é obrigatório' }, { status: 400 });
     if (!buyer?.name || !buyer?.email || !buyer?.phone) return NextResponse.json({ error: 'Dados do comprador incompletos' }, { status: 400 });
     if (!payment?.method || !['pix', 'card', 'boleto'].includes(payment.method)) return NextResponse.json({ error: 'Forma de pagamento inválida' }, { status: 400 });
-    const explicitSavedCardId: string | null = payment?.saved_card_id || null;
-    const explicitProviderCustomerId: string | null = payment?.provider_customer_id || null;
+    const explicitSavedCardId: string | null = (typeof payment?.saved_card_id === 'string' && payment.saved_card_id.trim()) ? String(payment.saved_card_id).trim() : null;
+    const explicitProviderCustomerId: string | null = (typeof payment?.provider_customer_id === 'string' && payment.provider_customer_id.trim()) ? String(payment.provider_customer_id).trim() : null;
+    // When we create a Pagarme customer on-the-fly (to save a card), keep its id to include in the order payload
+    let providerCustomerIdForOrder: string | null = null;
 
     let product: any = null;
     let clinic: any = null;
@@ -109,13 +111,16 @@ export async function POST(req: Request) {
       } else {
         console.log('[checkout][create] using requested offer', { selectedOfferId: selectedOffer?.id, priceCents: selectedOffer?.priceCents, isSubscription: selectedOffer?.isSubscription });
       }
-      // Final guard: reject subscription offers ONLY if this is a pure one-time purchase (no subscriptionPeriodMonths)
+      // If offer is subscription and body doesn't provide months, infer from offer (intervalUnit/intervalCount)
       const isSubscriptionOffer = !!selectedOffer?.isSubscription;
-      const hasPrepaidSubHint = typeof (body as any)?.subscriptionPeriodMonths === 'number' && (body as any).subscriptionPeriodMonths > 0;
-      if (isSubscriptionOffer && !hasPrepaidSubHint) {
-        console.warn('[checkout][create] selected offer is subscription but no subscriptionPeriodMonths in body, rejecting', { offerId: selectedOffer?.id });
-        return NextResponse.json({ error: 'Oferta de assinatura requer fluxo de checkout específico' }, { status: 400 });
-      }
+      const bodyMonthsHint = (typeof (body as any)?.subscriptionPeriodMonths === 'number' && (body as any).subscriptionPeriodMonths > 0)
+        ? Math.trunc(Number((body as any).subscriptionPeriodMonths))
+        : null;
+      const offerMonthsHint = (isSubscriptionOffer && String((selectedOffer as any)?.intervalUnit) === 'MONTH' && Number((selectedOffer as any)?.intervalCount) > 0)
+        ? Number((selectedOffer as any).intervalCount)
+        : null;
+      const resolvedSubMonthsForFlow = bodyMonthsHint ?? offerMonthsHint ?? null;
+      // Do not reject; we'll use resolvedSubMonthsForFlow downstream to clamp installments/prepaid logic
       // Resolve desired country; defer provider-specific price enforcement until provider is selected via routing
       try {
         desiredCountry = String(((buyer as any)?.address?.country) || clinic?.country || 'BR').toUpperCase();
@@ -166,10 +171,16 @@ export async function POST(req: Request) {
     const requestedInstallments: number = (payment?.method === 'card') ? Number(payment?.installments || 1) : 1;
     const maxByOffer = selectedOffer?.maxInstallments ? Number(selectedOffer.maxInstallments) : PRICING.INSTALLMENT_MAX_INSTALLMENTS;
     const platformMax = PRICING.INSTALLMENT_MAX_INSTALLMENTS;
-    // Subscription prepaid hint from UI (subscriptionPeriodMonths)
-    const subMonths = (typeof (body as any)?.subscriptionPeriodMonths === 'number' && (body as any).subscriptionPeriodMonths > 0)
-      ? Math.trunc(Number((body as any).subscriptionPeriodMonths))
-      : null;
+    // Subscription prepaid hint resolved from body or inferred from Offer (intervalUnit=MONTH)
+    const subMonths = (() => {
+      const bodyMonths = (typeof (body as any)?.subscriptionPeriodMonths === 'number' && (body as any).subscriptionPeriodMonths > 0)
+        ? Math.trunc(Number((body as any).subscriptionPeriodMonths))
+        : null;
+      const offerMonths = (selectedOffer?.isSubscription && String((selectedOffer as any)?.intervalUnit) === 'MONTH' && Number((selectedOffer as any)?.intervalCount) > 0)
+        ? Number((selectedOffer as any).intervalCount)
+        : null;
+      return bodyMonths ?? offerMonths ?? null;
+    })();
     let effectiveInstallments = 1;
     if (payment?.method === 'card') {
       // Country rule: only Brazil supports installments in our orchestration
@@ -500,8 +511,37 @@ export async function POST(req: Request) {
       payments = [paymentObject];
     } else if (payment.method === 'card') {
       const cc = payment.card || {};
+      // Fallback: resolve latest saved PAGARME card for this buyer if UI didn't send it
+      let savedCardIdForCharge: string | null = explicitSavedCardId;
+      let providerCustomerIdForCharge: string | null = explicitProviderCustomerId;
+      try {
+        if (!savedCardIdForCharge && merchant?.id) {
+          const buyerEmailStr = String(buyer?.email || customer?.email || '').trim();
+          if (buyerEmailStr) {
+            const cust = await prisma.customer.findFirst({ where: { merchantId: String(merchant.id), email: buyerEmailStr }, select: { id: true } });
+            const customerIdUnified = cust?.id || null;
+            if (customerIdUnified) {
+              const row = await prisma.$queryRawUnsafe<any>(
+                `SELECT cpm.provider_payment_method_id, cp.provider_customer_id
+                   FROM customer_payment_methods cpm
+                   LEFT JOIN customer_providers cp ON cp.id = cpm.customer_provider_id
+                  WHERE cpm.customer_id = $1 AND cpm.provider IN ('KRXPAY', 'PAGARME') AND cpm.status = 'ACTIVE'
+                  ORDER BY cpm.is_default DESC, cpm.created_at DESC
+                  LIMIT 1`,
+                String(customerIdUnified)
+              ).catch(() => null as any);
+              if (row?.provider_payment_method_id) {
+                savedCardIdForCharge = String(row.provider_payment_method_id);
+                providerCustomerIdForCharge = row?.provider_customer_id ? String(row.provider_customer_id) : providerCustomerIdForCharge;
+                try { console.log('[checkout][create] resolved saved card from DB', { has_card: !!savedCardIdForCharge, has_provider_customer_id: !!providerCustomerIdForCharge }); } catch {}
+              }
+            }
+          }
+        }
+      } catch {}
       // Two paths: (A) explicit saved card, (B) raw card capture
-      if (!explicitSavedCardId) {
+      try { console.log('[checkout][create] card flow decision', { has_saved_card_id: !!savedCardIdForCharge, has_provider_customer_id: !!(providerCustomerIdForCharge || providerCustomerIdForOrder), has_cc_number: !!cc?.number }); } catch {}
+      if (!savedCardIdForCharge) {
         if (!cc.number || !cc.holder_name || !cc.exp_month || !cc.exp_year || !cc.cvv) {
           return NextResponse.json({ error: 'Dados do cartão incompletos' }, { status: 400 });
         }
@@ -531,17 +571,19 @@ export async function POST(req: Request) {
       // Attempt to create/reuse Pagar.me customer and save card to wallet
       let useSavedCard = false;
       // Path (A): explicit saved card provided by caller (UI)
-      if (explicitSavedCardId) {
+      if (savedCardIdForCharge) {
         payments = [{
           amount: amountCents,
           payment_method: 'credit_card',
           credit_card: {
             installments,
             operation_type: 'auth_and_capture',
-            card_id: explicitSavedCardId,
+            card_id: savedCardIdForCharge,
           }
         }];
         useSavedCard = true;
+        // Make sure the order payload uses this customer id when charging with card_id
+        if (providerCustomerIdForCharge && !providerCustomerIdForOrder) providerCustomerIdForOrder = providerCustomerIdForCharge;
       }
       // Hoisted profile id for card save flow persistence
       let profileIdForCardFlow: string | null = null;
@@ -559,6 +601,8 @@ export async function POST(req: Request) {
           const createdCustomer = await pagarmeCreateCustomer(customerPayload);
           const customerId = createdCustomer?.id;
           if (customerId) {
+            // Make sure the order payload uses this customer id when charging with card_id
+            providerCustomerIdForOrder = String(customerId);
             // Defer PaymentCustomer persistence to post-order-response block for single source of truth
             try {
               let profileId: string | null = null;
@@ -765,7 +809,10 @@ export async function POST(req: Request) {
         phones: customer?.phones,
         metadata: { ...(customer?.metadata || {}), source: 'checkout' },
       };
+      // Prefer explicit id from UI when using an explicit saved card
       if (explicitSavedCardId && explicitProviderCustomerId) return { id: explicitProviderCustomerId, ...core };
+      // If we created a provider customer to store the card, include its id per Pagarme v5 order schema
+      if (providerCustomerIdForOrder) return { id: providerCustomerIdForOrder, ...core };
       return { ...core };
     })();
     // At this point, we may not have resolved a user profile yet; omit patient user id in metadata
@@ -780,7 +827,11 @@ export async function POST(req: Request) {
         buyerEmail: String(buyer?.email || customer?.email || ''),
         buyerName: String(buyer?.name || customer?.name || ''),
         productId: String(product?.id || productId || ''),
-        currency: (resolvedOfferPrice && (resolvedOfferPrice as any)?.currency) ? String((resolvedOfferPrice as any).currency).toUpperCase() : undefined,
+        currency: (() => {
+          const pcur = (providerOfferPrice && (providerOfferPrice as any)?.currency) ? String((providerOfferPrice as any).currency).toUpperCase() : '';
+          const rcur = (!pcur && resolvedOfferPrice && (resolvedOfferPrice as any)?.currency) ? String((resolvedOfferPrice as any).currency).toUpperCase() : '';
+          return pcur || rcur || 'BRL';
+        })(),
         patientUserId: patientUserIdVal || null,
         subscriptionPeriodMonths: (typeof body?.subscriptionPeriodMonths === 'number' && body.subscriptionPeriodMonths > 0) ? Number(body.subscriptionPeriodMonths) : null,
         // Product display data (Pagar.me doesn't preserve item.metadata)
@@ -797,7 +848,11 @@ export async function POST(req: Request) {
         buyerEmail: String(buyer?.email || customer?.email || ''),
         buyerName: String(buyer?.name || customer?.name || ''),
         productId: String(product?.id || productId || ''),
-        currency: String((resolvedOfferPrice as any)?.currency || 'BRL').toUpperCase(),
+        currency: (() => {
+          const pcur = (providerOfferPrice && (providerOfferPrice as any)?.currency) ? String((providerOfferPrice as any).currency).toUpperCase() : '';
+          const rcur = (!pcur && resolvedOfferPrice && (resolvedOfferPrice as any)?.currency) ? String((resolvedOfferPrice as any).currency).toUpperCase() : '';
+          return pcur || rcur || 'BRL';
+        })(),
         patientUserId: patientUserIdVal || null,
         subscriptionPeriodMonths: (typeof body?.subscriptionPeriodMonths === 'number' && body.subscriptionPeriodMonths > 0) ? Number(body.subscriptionPeriodMonths) : null,
         // Product display data (Pagar.me doesn't preserve item.metadata)
@@ -856,8 +911,11 @@ export async function POST(req: Request) {
     } catch {}
     // Guard: KRXPAY requires explicit offer currency. Do not create order if missing.
     try {
-      const cur = (resolvedOfferPrice && (resolvedOfferPrice as any)?.currency) ? String((resolvedOfferPrice as any).currency).trim() : '';
+      const cur = (providerOfferPrice && (providerOfferPrice as any)?.currency)
+        ? String((providerOfferPrice as any).currency).trim()
+        : ((resolvedOfferPrice && (resolvedOfferPrice as any)?.currency) ? String((resolvedOfferPrice as any).currency).trim() : '');
       if (!cur) {
+        try { console.error('[checkout][create] currency guard failed — no currency on providerOfferPrice or resolvedOfferPrice', { offerId: selectedOffer?.id, country: desiredCountry, provider: selectedProvider }); } catch {}
         return NextResponse.json({ error: 'Moeda ausente para a oferta/país. Configure OfferPrice.currency.' }, { status: 400 });
       }
     } catch {}
@@ -1121,59 +1179,103 @@ export async function POST(req: Request) {
           if (buyerEmailStr && clinic?.id) {
             const merchantRow = await prisma.merchant.findFirst({ where: { clinicId: String(clinic.id) }, select: { id: true } })
             if (merchantRow?.id) {
-              const cust = await prisma.customer.findFirst({ where: { merchantId: String(merchantRow.id), email: buyerEmailStr }, select: { id: true } })
-              unifiedCustomerIdForBiz = cust?.id || null
+              const existing = await prisma.customer.findFirst({ where: { merchantId: String(merchantRow.id), email: buyerEmailStr }, select: { id: true } })
+              if (existing?.id) {
+                unifiedCustomerIdForBiz = existing.id
+              } else {
+                // Create unified Customer for this merchant+email (first-time buyer path)
+                try {
+                  const created = await prisma.customer.create({
+                    data: {
+                      merchantId: String(merchantRow.id),
+                      name: String(customer?.name || buyer?.name || ''),
+                      email: buyerEmailStr,
+                      phone: String(customer?.phone || buyer?.phone || ''),
+                      document: String(customer?.document || ''),
+                      address: (customer as any)?.address ? (customer as any).address : undefined,
+                      metadata: {
+                        source: 'checkout_create',
+                        created_from_order: true
+                      }
+                    },
+                    select: { id: true }
+                  })
+                  unifiedCustomerIdForBiz = created?.id || null
+                  try { console.log('[checkout][create] created unified customer for business', { merchantId: merchantRow.id, email: buyerEmailStr, customerId: unifiedCustomerIdForBiz }); } catch {}
+                } catch (e) {
+                  // Race-safe: if unique constraint triggers, fetch it
+                  try {
+                    const fallback = await prisma.customer.findFirst({ where: { merchantId: String(merchantRow.id), email: buyerEmailStr }, select: { id: true } })
+                    unifiedCustomerIdForBiz = fallback?.id || null
+                  } catch {}
+                }
+              }
             }
           }
           
           if (unifiedCustomerIdForBiz) {
-            // Upsert customer_providers for PAGARME
+            // Upsert customer_providers for KRXPAY (Pagarme gateway)
             if (pgCustomerId) {
               const acctId = String(merchant?.id || '')
               const rowsCP = await prisma.$queryRawUnsafe<any[]>(
-                `SELECT id FROM customer_providers WHERE customer_id = $1 AND provider = 'PAGARME' AND account_id = $2 LIMIT 1`,
+                `SELECT id FROM customer_providers WHERE customer_id = $1 AND provider IN ('KRXPAY', 'PAGARME') AND account_id = $2 LIMIT 1`,
                 String(unifiedCustomerIdForBiz), acctId
               ).catch(() => [])
               if (rowsCP && rowsCP.length > 0) {
                 await prisma.$executeRawUnsafe(
-                  `UPDATE customer_providers SET provider_customer_id = $2, updated_at = NOW() WHERE id = $1`,
+                  `UPDATE customer_providers SET provider = 'KRXPAY', provider_customer_id = $2, updated_at = NOW() WHERE id = $1`,
                   String(rowsCP[0].id), String(pgCustomerId)
                 )
               } else {
                 await prisma.$executeRawUnsafe(
                   `INSERT INTO customer_providers (id, customer_id, provider, account_id, provider_customer_id, created_at, updated_at)
-                   VALUES (gen_random_uuid(), $1, 'PAGARME'::"PaymentProvider", $2, $3, NOW(), NOW())`,
+                   VALUES (gen_random_uuid(), $1, 'KRXPAY'::"PaymentProvider", $2, $3, NOW(), NOW())`,
                   String(unifiedCustomerIdForBiz), acctId, String(pgCustomerId)
                 )
               }
             }
             
-            // Upsert customer_payment_methods when we have card
+            // Upsert customer_payment_methods when we have card (CRITICAL: save provider_payment_method_id for reuse)
             if (pgCardId && cardObj) {
               const acctId = String(merchant?.id || '')
               const brand = cardObj?.brand || null
               const last4 = cardObj?.last_four_digits || cardObj?.last4 || null
               const expMonth = cardObj?.exp_month || null
               const expYear = cardObj?.exp_year || null
-              
+
+              // Resolve customer_provider_id (KRXPAY link) for this account
+              const cpRows = await prisma.$queryRawUnsafe<any[]>(
+                `SELECT id FROM customer_providers WHERE customer_id = $1 AND provider IN ('KRXPAY', 'PAGARME') AND account_id = $2 LIMIT 1`,
+                String(unifiedCustomerIdForBiz), acctId
+              ).catch(() => [])
+              const customerProviderId = cpRows && cpRows.length > 0 ? String(cpRows[0].id) : null
+
+              // Prefer deduplication by provider_payment_method_id (card_id)
               const rowsPM = await prisma.$queryRawUnsafe<any[]>(
                 `SELECT id FROM customer_payment_methods 
-                 WHERE customer_id = $1 AND provider = 'PAGARME' AND account_id = $2 AND last4 = $3 
-                 ORDER BY created_at DESC LIMIT 1`,
-                String(unifiedCustomerIdForBiz), acctId, String(last4 || '')
+                 WHERE customer_id = $1 AND provider IN ('KRXPAY', 'PAGARME') AND provider_payment_method_id = $2 
+                 LIMIT 1`,
+                String(unifiedCustomerIdForBiz), String(pgCardId)
               ).catch(() => [])
-              
+
               if (rowsPM && rowsPM.length > 0) {
                 await prisma.$executeRawUnsafe(
-                  `UPDATE customer_payment_methods SET brand = $2, exp_month = $3, exp_year = $4, status = 'ACTIVE', updated_at = NOW() WHERE id = $1`,
-                  String(rowsPM[0].id), brand, expMonth, expYear
+                  `UPDATE customer_payment_methods 
+                   SET provider = 'KRXPAY', brand = $2, last4 = $3, exp_month = $4, exp_year = $5, status = 'ACTIVE', 
+                       customer_provider_id = $6, updated_at = NOW() 
+                   WHERE id = $1`,
+                  String(rowsPM[0].id), brand, last4, expMonth, expYear, customerProviderId
                 )
+                try { console.log('[checkout][create][card-save] ✅ Updated existing card', { id: rowsPM[0].id, pgCardId }); } catch {}
               } else {
                 await prisma.$executeRawUnsafe(
-                  `INSERT INTO customer_payment_methods (id, customer_id, provider, account_id, brand, last4, exp_month, exp_year, status, is_default, created_at, updated_at)
-                   VALUES (gen_random_uuid(), $1, 'PAGARME'::"PaymentProvider", $2, $3, $4, $5, $6, 'ACTIVE', true, NOW(), NOW())`,
-                  String(unifiedCustomerIdForBiz), acctId, brand, last4, expMonth, expYear
+                  `INSERT INTO customer_payment_methods 
+                   (id, customer_id, customer_provider_id, provider, account_id, provider_payment_method_id, 
+                    brand, last4, exp_month, exp_year, status, is_default, created_at, updated_at)
+                   VALUES (gen_random_uuid(), $1, $2, 'KRXPAY'::"PaymentProvider", $3, $4, $5, $6, $7, $8, 'ACTIVE', false, NOW(), NOW())`,
+                  String(unifiedCustomerIdForBiz), customerProviderId, acctId, String(pgCardId), brand, last4, expMonth, expYear
                 )
+                try { console.log('[checkout][create][card-save] ✅ Created new card', { pgCardId, brand, last4 }); } catch {}
               }
             }
             
@@ -1223,7 +1325,7 @@ export async function POST(req: Request) {
         const platformAmountCents = Math.max(0, grossCents - clinicAmountCents);
         await prisma.$executeRawUnsafe(
           `INSERT INTO payment_transactions (id, provider, provider_order_id, doctor_id, patient_profile_id, clinic_id, product_id, customer_id, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, installments, payment_method_type, status, raw_payload, routed_provider)
-           VALUES ($1, 'pagarme', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'processing', $15::jsonb, 'KRXPAY')
+           VALUES ($1, 'krxpay', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'processing', $15::jsonb, 'KRXPAY')
            ON CONFLICT (provider, provider_order_id) DO UPDATE
              SET doctor_id = COALESCE(payment_transactions.doctor_id, EXCLUDED.doctor_id),
                  patient_profile_id = COALESCE(payment_transactions.patient_profile_id, EXCLUDED.patient_profile_id),
@@ -1233,7 +1335,8 @@ export async function POST(req: Request) {
                  amount_cents = CASE WHEN payment_transactions.amount_cents = 0 THEN EXCLUDED.amount_cents ELSE payment_transactions.amount_cents END,
                  clinic_amount_cents = COALESCE(payment_transactions.clinic_amount_cents, EXCLUDED.clinic_amount_cents),
                  platform_amount_cents = COALESCE(payment_transactions.platform_amount_cents, EXCLUDED.platform_amount_cents),
-                 platform_fee_cents = COALESCE(payment_transactions.platform_fee_cents, EXCLUDED.platform_fee_cents)`,
+                 platform_fee_cents = COALESCE(payment_transactions.platform_fee_cents, EXCLUDED.platform_fee_cents)`
+,
           txId,
           orderId,
           String(doctorId),

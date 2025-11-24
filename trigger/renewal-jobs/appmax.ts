@@ -57,6 +57,23 @@ export const appmaxRenewal = task({
     // Build Appmax client from merchant integration
     const client = await buildAppmaxClientForMerchant(subscription.merchantId);
 
+    // Buscar método de pagamento salvo em customer_payment_methods
+    const paymentMethod = await prisma.customerPaymentMethod.findFirst({
+      where: {
+        customerId: subscription.customerId,
+        provider: 'APPMAX' as any,
+        status: 'ACTIVE' as any
+      },
+      orderBy: { isDefault: 'desc' }
+    });
+
+    if (!paymentMethod?.providerPaymentMethodId) {
+      console.warn("⚠️  No saved Appmax card found for customer");
+      return { skipped: true, reason: "no_payment_method" };
+    }
+
+    const appmaxCardToken = paymentMethod.providerPaymentMethodId;
+
     // Create order in Appmax ensuring required identifiers are present
     const orderPayload: any = {
       items: [
@@ -85,25 +102,27 @@ export const appmaxRenewal = task({
 
     const order = await client.ordersCreate(orderPayload);
 
-    // Charge credit card immediately (if you store token/card id)
+    // Charge credit card immediately using saved token
     let paymentResp: any = null;
     try {
-      if (meta.appmaxCardToken) {
-        paymentResp = await client.paymentsCreditCard({
-          order_id: order?.id,
-          amount: (subscription.priceCents / 100).toFixed(2),
-          token: meta.appmaxCardToken,
-        });
-      }
+      paymentResp = await client.paymentsCreditCard({
+        order_id: order?.id,
+        amount: (subscription.priceCents / 100).toFixed(2),
+        token: appmaxCardToken,
+      });
     } catch (e: any) {
       console.error("❌ Appmax payment error", { message: e?.message, status: e?.status });
     }
 
     const status = paymentResp?.status || order?.status || "processing";
 
-    const txId = `tx_appmax_${order?.id || subscriptionId}_${Date.now()}`;
-    await prisma.paymentTransaction.create({
-      data: {
+    // Build deterministic transaction id per subscription + billing period (YYYYMM)
+    const periodKey = `${nextPeriodStart.getUTCFullYear()}${String(nextPeriodStart.getUTCMonth() + 1).padStart(2, "0")}`;
+    const txId = `tx_appmax_${subscriptionId}_${periodKey}`;
+
+    await prisma.paymentTransaction.upsert({
+      where: { id: txId },
+      create: {
         id: txId,
         provider: "appmax",
         provider_v2: "APPMAX" as any,
@@ -120,6 +139,13 @@ export const appmaxRenewal = task({
         paymentMethodType: "subscription_renewal",
         billingPeriodStart: nextPeriodStart,
         billingPeriodEnd: nextPeriodEnd,
+        rawPayload: { order, paymentResp } as any,
+      },
+      update: {
+        providerOrderId: String(order?.id || ""),
+        providerChargeId: String(paymentResp?.id || ""),
+        status: status,
+        status_v2: mapStatus(status),
         rawPayload: { order, paymentResp } as any,
       },
     });

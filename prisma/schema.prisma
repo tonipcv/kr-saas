@@ -1026,21 +1026,21 @@ model CustomerProvider {
 
 model CustomerPaymentMethod {
   id                      String          @id @default(cuid())
-  customerId              String
-  customerProviderId      String?
+  customerId              String          @map("customer_id")
+  customerProviderId      String?         @map("customer_provider_id")
   provider                PaymentProvider
-  accountId               String?
-  providerPaymentMethodId String?
+  accountId               String?         @map("account_id")
+  providerPaymentMethodId String?         @map("provider_payment_method_id")
   brand                   String?
   last4                   String?
-  expMonth                Int?
-  expYear                 Int?
-  isDefault               Boolean         @default(false)
+  expMonth                Int?            @map("exp_month")
+  expYear                 Int?            @map("exp_year")
+  isDefault               Boolean         @default(false) @map("is_default")
   status                  String?
   fingerprint             String?
   metadata                Json?
-  createdAt               DateTime        @default(now())
-  updatedAt               DateTime        @updatedAt
+  createdAt               DateTime        @default(now()) @map("created_at")
+  updatedAt               DateTime        @updatedAt @map("updated_at")
 
   customer         Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
   customerProvider CustomerProvider? @relation(fields: [customerProviderId], references: [id])

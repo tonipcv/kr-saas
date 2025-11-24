@@ -30,21 +30,25 @@ export async function GET(req: NextRequest) {
     if (!customer?.id) return NextResponse.json({ ok: true, data: [] });
 
     const methods = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT id,
-              customer_id as customer_id,
-              provider,
-              account_id as account_id,
-              provider_payment_method_id as provider_payment_method_id,
-              brand,
-              last4,
-              exp_month,
-              exp_year,
-              is_default,
-              status,
-              created_at
-         FROM customer_payment_methods
-        WHERE customer_id = $1
-        ORDER BY is_default DESC, created_at DESC
+      `SELECT cpm.id,
+              cpm.customer_id as customer_id,
+              CASE WHEN cpm.provider = 'PAGARME' THEN 'KRXPAY' ELSE cpm.provider END as provider,
+              cpm.account_id as account_id,
+              cpm.provider_payment_method_id as provider_payment_method_id,
+              cpm.brand,
+              cpm.last4,
+              cpm.exp_month,
+              cpm.exp_year,
+              cpm.is_default,
+              cpm.status,
+              cpm.created_at,
+              cp.provider_customer_id as provider_customer_id
+         FROM customer_payment_methods cpm
+         LEFT JOIN customer_providers cp ON cp.id = cpm.customer_provider_id
+        WHERE cpm.customer_id = $1
+          AND cpm.status = 'ACTIVE'
+          AND cpm.provider IN ('KRXPAY', 'PAGARME', 'STRIPE', 'APPMAX')
+        ORDER BY cpm.is_default DESC, cpm.created_at DESC
         LIMIT 50`,
       String(customer.id)
     );

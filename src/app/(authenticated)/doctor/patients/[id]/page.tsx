@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import styles from './bw-theme.module.css';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2 } from "lucide-react";
+import { Loader2, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -43,7 +43,9 @@ import AudioRecorder from '@/components/audio-recorder/audio-recorder';
 import VoiceNoteModal from '@/components/voice-note/voice-note-modal';
 import VoiceNoteList from '@/components/voice-note/voice-note-list';
 import PatientDocuments from '@/components/patient/patient-documents';
+import SmartChargeModal from '@/components/payments/SmartChargeModal';
 import { toast } from 'react-hot-toast';
+import { useClinic } from '@/contexts/clinic-context';
 
 enum PrescriptionStatus {
   PRESCRIBED = 'PRESCRIBED',
@@ -220,8 +222,10 @@ export default function PatientDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { data: session } = useSession();
+  const { currentClinic } = useClinic();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showChargeModal, setShowChargeModal] = useState(false);
   const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
   const [isAssigningCourse, setIsAssigningCourse] = useState(false);
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
@@ -899,6 +903,14 @@ export default function PatientDetailPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setShowChargeModal(true)}
+              >
+                <CreditCard className="h-4 w-4 mr-2" />
+                Cobrar
+              </Button>
               <Dialog open={showVoiceNoteModal} onOpenChange={setShowVoiceNoteModal}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm">
@@ -1505,6 +1517,20 @@ export default function PatientDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Cobrança Inteligente (filtra por país/provider e cartões compatíveis) */}
+      <SmartChargeModal
+        open={showChargeModal}
+        onOpenChange={setShowChargeModal}
+        client={{
+          id: String(patient?.id || params.id),
+          name: patient?.name || null,
+          email: patient?.email || null,
+          phone: patient?.phone || null,
+        }}
+        clinicId={currentClinic?.id || undefined}
+        clinicSlug={currentClinic?.slug || undefined}
+      />
     </div>
   );
 } 

@@ -17,6 +17,10 @@ export default async function BusinessClientPage({ params }: PageProps) {
     String(customerId)
   );
   const customer = customerRows?.[0] || null;
+  // Try to resolve matching User by email (so saved-cards API can work with userId)
+  const matchingUser = customer?.email
+    ? await prisma.user.findFirst({ where: { email: String(customer.email) }, select: { id: true } })
+    : null;
 
   // Related data by customer_id
   const [providers, paymentMethods, subscriptions, transactions] = await Promise.all([
@@ -77,8 +81,15 @@ export default async function BusinessClientPage({ params }: PageProps) {
                   </div>
                 )}
               </div>
-              {/* Optional: keep actions hidden or adapt for customers */}
-              <div />
+              {/* Actions */}
+              <ClientActions
+                client={{
+                  id: String(matchingUser?.id || customer?.id || ''),
+                  name: customer?.name ?? null,
+                  email: customer?.email ?? null,
+                  phone: customer?.phone ?? null,
+                }}
+              />
             </div>
           </div>
 

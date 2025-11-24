@@ -16,6 +16,7 @@ type Props = {
 
 export default function NewChargeModal({ open, onOpenChange, client, defaultSlug = "" }: Props) {
   const router = useRouter();
+  const [country, setCountry] = useState<string>("BR");
   const [slug, setSlug] = useState<string>(defaultSlug);
   const [productId, setProductId] = useState<string>("");
   const [offers, setOffers] = useState<Array<{ id: string; name: string; priceCents: number; maxInstallments?: number | null; isSubscription?: boolean }>>([]);
@@ -51,12 +52,12 @@ export default function NewChargeModal({ open, onOpenChange, client, defaultSlug
   const [selectedProviderCustomerId, setSelectedProviderCustomerId] = useState<string>("");
 
   const isValid = useMemo(() => {
-    if (!slug || !productId || !email || !name) return false;
+    if (!slug || !productId || !email || !name || !country) return false;
     if (method === "card") {
       return Boolean(selectedSavedCardId && selectedProviderCustomerId);
     }
     return true;
-  }, [slug, productId, email, name, method, selectedSavedCardId, selectedProviderCustomerId]);
+  }, [slug, productId, email, name, country, method, selectedSavedCardId, selectedProviderCustomerId]);
 
   // Load clinics when opening
   useEffect(() => {
@@ -182,6 +183,7 @@ export default function NewChargeModal({ open, onOpenChange, client, defaultSlug
           name,
           email,
           phone,
+          address: { country },
         },
         payment: method === "card"
           ? { method: "card", installments, saved_card_id: selectedSavedCardId, provider_customer_id: selectedProviderCustomerId }
@@ -261,6 +263,22 @@ export default function NewChargeModal({ open, onOpenChange, client, defaultSlug
                   </SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+              <Select value={country} onValueChange={setCountry}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a country" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="BR">Brazil (BR)</SelectItem>
+                  <SelectItem value="US">United States (US)</SelectItem>
+                  <SelectItem value="PT">Portugal (PT)</SelectItem>
+                  <SelectItem value="ES">Spain (ES)</SelectItem>
+                  <SelectItem value="GB">United Kingdom (GB)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500 mt-1">Define o país para selecionar o OfferPrice correto e moeda.</p>
             </div>
           </div>
           <div>
