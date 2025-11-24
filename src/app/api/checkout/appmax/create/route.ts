@@ -250,6 +250,8 @@ export async function POST(req: Request) {
       discount: typeof discount === 'number' ? Number(discount) : 0,
       customer_id,
       freight_type: 'PAC',
+      // Flag de infoproduto (digital_product: 1 para produtos digitais)
+      digital_product: product?.type === 'DIGITAL' || product?.isDigital ? 1 : 0,
     }
 
     let orderResp: any

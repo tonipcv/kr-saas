@@ -730,10 +730,8 @@ function IntegrationsInner() {
                         const mid = await resolveMerchantId();
                         if (mid) setAppmaxMerchantId(mid);
                       }
-                      // Prefill masked apiKey and testMode from status
-                      if (appmaxStatusApiKey && !appmaxApiKey) {
-                        setAppmaxApiKey(appmaxStatusApiKey);
-                      }
+                      // Do NOT prefill masked apiKey - user must enter full token to update
+                      setAppmaxApiKey('');
                       setAppmaxTestMode(appmaxStatusTestMode);
                       setAppmaxOpen(true);
                     }}
@@ -974,11 +972,17 @@ function IntegrationsInner() {
                     disabled={appmaxSaving || !appmaxApiKey.trim() || !appmaxMerchantId}
                     onClick={async () => {
                       if (!appmaxMerchantId) return;
+                      const trimmedKey = appmaxApiKey.trim();
+                      // Prevent saving masked tokens (starts with ***)
+                      if (trimmedKey.startsWith('***')) {
+                        toast.error('Please enter the full API key, not the masked value');
+                        return;
+                      }
                       try {
                         setAppmaxSaving(true);
                         const res = await fetch('/api/admin/integrations/appmax/upsert', {
                           method: 'POST', headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ merchantId: appmaxMerchantId, credentials: { apiKey: appmaxApiKey.trim(), testMode: !!appmaxTestMode } })
+                          body: JSON.stringify({ merchantId: appmaxMerchantId, credentials: { apiKey: trimmedKey, testMode: !!appmaxTestMode } })
                         });
                         const data = await res.json();
                         if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`);

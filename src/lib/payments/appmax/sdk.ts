@@ -7,16 +7,21 @@ export class AppmaxClient {
   private baseURL: string
 
   constructor(apiKey: string, opts?: AppmaxOptions) {
-    this.apiKey = apiKey
+    this.apiKey = (apiKey || '').trim()
     const explicit = opts?.baseURL
     const test = opts?.testMode === true
-    this.baseURL = explicit || (test ? 'https://homolog.sandboxappmax.com.br/api/v3' : 'https://api.appmax.com.br/api/v3')
+    // Produção usa admin.appmax.com.br (não api.appmax.com.br)
+    this.baseURL = explicit || (test ? 'https://homolog.sandboxappmax.com.br/api/v3' : 'https://admin.appmax.com.br/api/v3')
   }
 
   private async post<T = any>(path: string, body: Record<string, any>, retryAttempts: number = 2): Promise<T> {
     const url = `${this.baseURL}${path}`
-    const payload = { ...(body || {}), ['access-token']: this.apiKey }
-    const headers: Record<string, string> = { 'Content-Type': 'application/json', 'access-token': this.apiKey }
+    // Token vai no header, não no body (padrão Appmax oficial)
+    const payload = { ...(body || {}) }
+    const headers: Record<string, string> = { 
+      'Content-Type': 'application/json',
+      'access-token': this.apiKey
+    }
     const sanitize = (obj: any) => {
       try {
         const c = JSON.parse(JSON.stringify(obj || {}))
@@ -38,7 +43,17 @@ export class AppmaxClient {
       const timer = setTimeout(() => controller.abort(), timeoutMs)
       const start = Date.now()
       try {
-        console.log('[appmax][request]', { url, path, attempt, payload: sanitize(payload) })
+        const tokenLen = this.apiKey ? this.apiKey.length : 0
+        const tokenPreview = this.apiKey ? `${this.apiKey.slice(0, 8)}...${this.apiKey.slice(-8)}` : 'MISSING'
+        console.log('[appmax][request]', { 
+          url, 
+          path, 
+          attempt, 
+          tokenLen,
+          tokenPreview,
+          headersPresent: Object.keys(headers),
+          payload: sanitize(payload) 
+        })
         const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload), signal: controller.signal })
         const text = await res.text()
         let json: any = null
