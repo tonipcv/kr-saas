@@ -70,7 +70,7 @@ export const pagarmePrepaidRenewal = task({
       // Create order in Pagar.me
       const pagarmeCustomerId: string | undefined = meta.pagarmeCustomerId;
       const pagarmeCardId: string | undefined = paymentMethod.providerPaymentMethodId || meta.pagarmeCardId;
-      if (!pagarmeCustomerId || !pagarmeCardId) throw new Error("Missing Pagar.me identifiers in metadata/payment method");
+      if (!pagarmeCardId) throw new Error("Missing Pagar.me card_id (providerPaymentMethodId or metadata.pagarmeCardId)");
 
       // Build customer payload with required identity fields (Pagarme v5 validates even with card_id)
       const customerDoc = String(subscription.customer?.document || "").replace(/\D+/g, "");
@@ -84,7 +84,7 @@ export const pagarmePrepaidRenewal = task({
       } : undefined;
 
       const customerPayload: any = {
-        id: pagarmeCustomerId,
+        ...(pagarmeCustomerId ? { id: pagarmeCustomerId } : {}),
         name: subscription.customer?.name || "Cliente",
         email: subscription.customer?.email || undefined,
         document: customerDoc || undefined,

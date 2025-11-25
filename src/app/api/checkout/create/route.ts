@@ -1597,6 +1597,18 @@ export async function POST(req: Request) {
             else if (interval === 'YEAR') periodEnd.setFullYear(periodEnd.getFullYear() + intervalCount);
             const currentPeriodEnd = periodEnd.toISOString();
             
+            // Extract customer_id and card_id from order response for renewal
+            const pagarmeCustomerId = order?.customer?.id || null;
+            const pagarmeCardId = (() => {
+              const ch = Array.isArray(order?.charges) ? order.charges[0] : null;
+              const tx = ch?.last_transaction || null;
+              const cardId = tx?.card?.id || null;
+              if (cardId) return cardId;
+              const pay = Array.isArray(order?.payments) ? order.payments[0] : null;
+              const payTx = pay?.last_transaction || pay?.transaction || null;
+              return payTx?.card?.id || null;
+            })();
+            
             const metadata = JSON.stringify({
               interval,
               intervalCount,
@@ -1605,7 +1617,9 @@ export async function POST(req: Request) {
               productName: String(productData?.name || ''),
               source: 'checkout_create_prepaid',
               pagarmeOrderId: order.id,
-              subscriptionPeriodMonths: subMonths
+              subscriptionPeriodMonths: subMonths,
+              pagarmeCustomerId,
+              pagarmeCardId
             });
             
             // Determine status: ACTIVE if paid, PENDING if not

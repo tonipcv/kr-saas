@@ -122,28 +122,38 @@ export const appmaxRenewal = task({
 
     // Charge credit card immediately using saved token (mirror checkout route payload shape)
     let paymentResp: any = null;
-    try {
-      const buyerDoc = String((subscription.customer as any)?.document || '')
-        .toString()
-        .replace(/\D+/g, '')
-        .slice(0, 14);
-      const buyerName = String((subscription.customer as any)?.name || 'Cliente');
-      const payPayload: any = {
-        cart: { order_id: orderId },
-        customer: { customer_id: Number(metaCustomerId) },
-        payment: {
-          CreditCard: {
-            token: appmaxCardToken,
-            installments: 1,
-            soft_descriptor: 'KRXLABS',
-            document_number: buyerDoc,
-            name: buyerName,
-          },
+    const buyerDoc = String((subscription.customer as any)?.document || '')
+      .toString()
+      .replace(/\D+/g, '')
+      .slice(0, 14);
+    const buyerName = String((subscription.customer as any)?.name || 'Cliente');
+    const payPayload: any = {
+      cart: { order_id: orderId },
+      customer: { customer_id: Number(metaCustomerId) },
+      payment: {
+        CreditCard: {
+          token: appmaxCardToken,
+          installments: 1,
+          soft_descriptor: 'KRXLABS',
+          document_number: buyerDoc,
+          name: buyerName,
         },
-      };
+      },
+    };
+    try {
       paymentResp = await client.paymentsCreditCardNoRetry(payPayload);
     } catch (e: any) {
-      console.error("❌ Appmax payment error", { message: e?.message, status: e?.status });
+      if (Number(e?.status) === 504) {
+        try {
+          console.warn('[appmax][retry] 504 on payment, retrying once after backoff');
+          await new Promise((r) => setTimeout(r, 2000));
+          paymentResp = await client.paymentsCreditCardNoRetry(payPayload);
+        } catch (e2: any) {
+          console.error('❌ Appmax payment error after 504 retry', { message: e2?.message, status: e2?.status });
+        }
+      } else {
+        console.error('❌ Appmax payment error', { message: e?.message, status: e?.status });
+      }
     }
 
     // Map status to string, never store numeric HTTP codes

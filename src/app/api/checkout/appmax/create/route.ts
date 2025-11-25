@@ -401,7 +401,8 @@ export async function POST(req: Request) {
           buyerEmail: String(buyer.email || ''),
           productName: String(product.name || ''),
           source: 'appmax_checkout',
-          appmaxOrderId: order_id
+          appmaxOrderId: order_id,
+          appmaxCustomerId: customer_id
         })
         
         // Check if subscription already exists

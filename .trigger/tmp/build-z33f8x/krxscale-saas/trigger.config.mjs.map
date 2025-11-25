@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["../../../../trigger.config.ts"],
-  "sourcesContent": ["export default {\n  project: process.env.TRIGGER_PROJECT || \"proj_naaseftufwbqfmmzzdth\",\n  runtime: \"node\",\n  logLevel: \"info\",\n\n  retries: {\n    enabledInDev: true,\n    default: {\n      maxAttempts: 3,\n      minTimeoutInMs: 1000,\n      maxTimeoutInMs: 10000,\n      factor: 2,\n    },\n  },\n\n  enableIdempotency: true,\n  concurrencyLimit: 50,\n\n  // v4 requires this (>= 5 seconds). Adjust as needed.\n  maxDuration: 60,\n\n  build: {},\n} as any;\nexport const resolveEnvVars = undefined;"],
-  "mappings": ";;;;;AAAA;AAAA,IAAO,yBAAQ;AAAA,EACb,SAAS,QAAQ,IAAI,mBAAmB;AAAA,EACxC,SAAS;AAAA,EACT,UAAU;AAAA,EAEV,SAAS;AAAA,IACP,cAAc;AAAA,IACd,SAAS;AAAA,MACP,aAAa;AAAA,MACb,gBAAgB;AAAA,MAChB,gBAAgB;AAAA,MAChB,QAAQ;AAAA,IACV;AAAA,EACF;AAAA,EAEA,mBAAmB;AAAA,EACnB,kBAAkB;AAAA;AAAA,EAGlB,aAAa;AAAA,EAEb,OAAO,CAAC;AACV;AACO,IAAM,iBAAiB;",
-  "names": []
-}

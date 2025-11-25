@@ -35,7 +35,8 @@ export const dailyBillingRenewal = schedules.task({
         orderBy: { currentPeriodEnd: "asc" },
       });
 
-      const pagarme = due.filter((s) => s.provider === ("PAGARME" as any));
+      // Include KRXPAY as alias for Pagar.me prepaid subscriptions
+      const pagarme = due.filter((s) => ["PAGARME", "KRXPAY"].includes(String(s.provider)) as any);
       const appmax = due.filter((s) => s.provider === ("APPMAX" as any));
 
       const summary = {
