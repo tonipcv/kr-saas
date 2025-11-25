@@ -71,7 +71,7 @@ export default function CreateProductPage() {
   });
 
   // Minimal required country price for the first offer (at least one)
-  const [countryPrice, setCountryPrice] = useState<{ country: string; currency: 'BRL'|'USD'|'EUR'; provider: 'KRXPAY'|'STRIPE'; price: string }>({
+  const [countryPrice, setCountryPrice] = useState<{ country: string; currency: 'BRL'|'USD'|'EUR'; provider: 'KRXPAY'|'STRIPE'|'APPMAX'; price: string }>({
     country: 'BR',
     currency: 'BRL',
     provider: 'KRXPAY',
@@ -93,6 +93,20 @@ export default function CreateProductPage() {
         }
       }
       // BR keeps current selections
+    } catch {}
+  }, [countryPrice.country]);
+
+  // Auto-derive currency from country for minimal UX: BR -> BRL, EU majors -> EUR, others -> USD
+  useEffect(() => {
+    try {
+      const cc = String(countryPrice.country || '').toUpperCase();
+      const euroSet = new Set(['PT','ES','FR','DE','IT']);
+      let cur: 'BRL'|'USD'|'EUR' = 'USD';
+      if (cc === 'BR') cur = 'BRL';
+      else if (euroSet.has(cc)) cur = 'EUR';
+      if (countryPrice.currency !== cur) {
+        setCountryPrice((p) => ({ ...p, currency: cur }));
+      }
     } catch {}
   }, [countryPrice.country]);
 
@@ -251,7 +265,7 @@ export default function CreateProductPage() {
                   });
                   // Align initial routing for this offer (CARD and optionally PIX) similar to the edit page
                   try {
-                    const methodProvider = countryPrice.provider as 'KRXPAY' | 'STRIPE';
+                    const methodProvider = countryPrice.provider as 'KRXPAY' | 'STRIPE' | 'APPMAX';
                     // Route CARD to selected provider for the chosen country
                     await fetch(`/api/payment-routing`, {
                       method: 'PUT',
@@ -403,92 +417,9 @@ export default function CreateProductPage() {
                       <Input id="name" value={formData.name} onChange={(e) => handleInputChange('name', e.target.value)} placeholder="e.g., Ultra Light Sunscreen" required className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-9" />
                     </div>
 
-                    <div>
-                      <Label htmlFor="subtitle" className="text-gray-900 font-medium">Subtitle</Label>
-                      <Input id="subtitle" value={formData.subtitle} onChange={(e) => handleInputChange('subtitle', e.target.value)} placeholder="Short product subtitle" className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-9" />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="description" className="text-gray-900 font-medium">Description</Label>
-                      <Textarea id="description" value={formData.description} onChange={(e) => handleInputChange('description', e.target.value)} placeholder="Describe the product and its benefits..." rows={4} className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 placeholder:text-gray-500 rounded-xl" />
-                    </div>
 
                     {/* Confirmation URL removed in favor of Offer.checkoutUrl on the initial Offer below */}
 
-                    <div>
-                      <Label htmlFor="category" className="text-gray-900 font-medium">Category</Label>
-                      <div className="mt-2">
-                        <Select value={formData.category || ''} onValueChange={(val) => { if (val === '__create__') { setCreatingCategory(true); return; } setCreatingCategory(false); handleInputChange('category', val); }}>
-                          <SelectTrigger className="border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 rounded-xl h-9">
-                            <SelectValue placeholder={categoriesLoading ? 'Loading...' : 'Select a category'} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {formData.category && !categories.some(c => c.name === formData.category) && (
-                              <SelectItem value={formData.category}>{formData.category}</SelectItem>
-                            )}
-                            {categories.map(c => (
-                              <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
-                            ))}
-                            <SelectItem value="__create__">+ Create new category…</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {creatingCategory && (
-                        <div className="mt-3 flex gap-2">
-                          <Input 
-                            id="newCategory"
-                            value={newCategoryName}
-                            onChange={(e) => setNewCategoryName(e.target.value)}
-                            placeholder="New category name"
-                            className="border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-9 flex-1"
-                          />
-                          <Button 
-                            type="button"
-                            className="border border-gray-300 bg-white text-gray-800 hover:bg-gray-50 rounded-xl h-9"
-                            disabled={!newCategoryName.trim()}
-                            onClick={async () => {
-                              const name = newCategoryName.trim();
-                              if (!name) return;
-                              try {
-                                const res = await fetch('/api/product-categories', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ name })
-                                });
-                                if (res.ok) {
-                                  const created = await res.json();
-                                  const listRes = await fetch('/api/product-categories');
-                                  if (listRes.ok) {
-                                    const list = await listRes.json();
-                                    setCategories(list || []);
-                                  }
-                                  handleInputChange('category', created?.name || name);
-                                  setNewCategoryName('');
-                                  setCreatingCategory(false);
-                                } else {
-                                  const err = await res.json();
-                                  alert(err.error || 'Erro ao criar categoria');
-                                }
-                              } catch (e) {
-                                console.error('Error creating category', e);
-                                alert('Erro ao criar categoria');
-                              }
-                            }}
-                          >
-                            Save
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="border-gray-200 bg-white text-gray-700 hover:bg-gray-50 rounded-xl h-9"
-                            onClick={() => { setCreatingCategory(false); setNewCategoryName(''); }}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      )}
-                      <p className="text-xs text-gray-500 mt-2">If left empty, the 'General' category will be used.</p>
-                    </div>
 
                     {/* Product Type Selector (moved below Category) */}
                     <div className="pt-2">
@@ -530,138 +461,167 @@ export default function CreateProductPage() {
                 </Card>
               </div>
 
-              {/* Initial Offer */}
+              {/* Pricing & Offer */}
               <Card className="bg-white border-gray-200 shadow-sm rounded-2xl">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-semibold text-gray-900">Initial Offer</CardTitle>
-                  <p className="text-xs text-gray-500 mt-1">Preço e métodos por país são definidos nas OfferPrices (por país/moeda/provedor).</p>
+                  <CardTitle className="text-base font-semibold text-gray-900">Pricing & Payment</CardTitle>
+                  <p className="text-xs text-gray-500 mt-1">Configure price, payment methods and installments</p>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div className="md:col-span-1">
-                      <Label className="text-gray-900 font-medium">Name</Label>
-                      <Input value={offerForm.name} onChange={(e) => setOfferForm(o => ({ ...o, name: e.target.value }))} className="mt-2 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900" placeholder="New offer" />
-                    </div>
-                  </div>
+                <CardContent className="space-y-5">
+                  {/* Subscription Settings */}
                   {offerForm.isSubscription && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                      <div>
-                        <Label className="text-gray-900 font-medium">Interval</Label>
-                        <Select value={offerForm.intervalUnit} onValueChange={(val: any) => setOfferForm(o => ({ ...o, intervalUnit: val }))}>
-                          <SelectTrigger className="mt-2 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900"><SelectValue placeholder="Interval" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="DAY">Day</SelectItem>
-                            <SelectItem value="WEEK">Week</SelectItem>
-                            <SelectItem value="MONTH">Month</SelectItem>
-                            <SelectItem value="YEAR">Year</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label className="text-gray-900 font-medium">Interval Count</Label>
-                        <Input type="number" min={1} value={offerForm.intervalCount} onChange={(e) => setOfferForm(o => ({ ...o, intervalCount: e.target.value }))} className="mt-2 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900" />
-                      </div>
-                      <div>
-                        <Label className="text-gray-900 font-medium">Trial (days)</Label>
-                        <Input type="number" min={0} value={offerForm.trialDays} onChange={(e) => setOfferForm(o => ({ ...o, trialDays: e.target.value }))} className="mt-2 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900" />
+                    <div className="pb-4 border-b border-gray-100">
+                      <Label className="text-sm font-medium text-gray-900 mb-3 block">Subscription Settings</Label>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                          <Label className="text-xs text-gray-600">Interval</Label>
+                          <Select value={offerForm.intervalUnit} onValueChange={(val: any) => setOfferForm(o => ({ ...o, intervalUnit: val }))}>
+                            <SelectTrigger className="mt-1.5 h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900">
+                              <SelectValue placeholder="Select interval" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="DAY">Day</SelectItem>
+                              <SelectItem value="WEEK">Week</SelectItem>
+                              <SelectItem value="MONTH">Month</SelectItem>
+                              <SelectItem value="YEAR">Year</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-600">Every</Label>
+                          <Input 
+                            type="number" 
+                            min={1} 
+                            value={offerForm.intervalCount} 
+                            onChange={(e) => setOfferForm(o => ({ ...o, intervalCount: e.target.value }))} 
+                            className="mt-1.5 h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900" 
+                            placeholder="1"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-600">Trial Period (days)</Label>
+                          <Input 
+                            type="number" 
+                            min={0} 
+                            value={offerForm.trialDays} 
+                            onChange={(e) => setOfferForm(o => ({ ...o, trialDays: e.target.value }))} 
+                            className="mt-1.5 h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900" 
+                            placeholder="0"
+                          />
+                        </div>
                       </div>
                     </div>
                   )}
 
-                  {/* Initial Country Price (required) */}
-                  <div className="pt-2">
-                    <Label className="text-gray-900 font-medium">Initial country price</Label>
-                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  {/* Price Configuration */}
+                  <div>
+                    <Label className="text-sm font-medium text-gray-900 mb-3 block">Price Configuration *</Label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       <div>
-                        <Label className="text-[11px] text-gray-600">Country</Label>
+                        <Label className="text-xs text-gray-600 mb-1.5 block">Country</Label>
                         <Select value={countryPrice.country} onValueChange={(val: any) => setCountryPrice(p => ({ ...p, country: val }))}>
-                          <SelectTrigger className="mt-1 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900">
+                          <SelectTrigger className="h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900">
                             <SelectValue placeholder="Select" />
                           </SelectTrigger>
                           <SelectContent>
                             {COUNTRIES.map(c => (
-                              <SelectItem key={c.code} value={c.code}>{flagEmoji(c.code)} {c.name}</SelectItem>
+                              <SelectItem key={c.code} value={c.code}>
+                                {flagEmoji(c.code)} {c.name}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
                       <div>
-                        <Label className="text-[11px] text-gray-600">Currency</Label>
-                        <Select value={countryPrice.currency} onValueChange={(val: any) => setCountryPrice(p => ({ ...p, currency: val }))}>
-                          <SelectTrigger className="mt-1 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900">
-                            <SelectValue placeholder="Currency" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="BRL">BRL</SelectItem>
-                            <SelectItem value="USD">USD</SelectItem>
-                            <SelectItem value="EUR">EUR</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <Label className="text-xs text-gray-600 mb-1.5 block">Currency</Label>
+                        <div className="mt-1.5 h-10 flex items-center rounded-xl border border-gray-200 px-3 bg-gray-50 text-gray-700">
+                          {countryPrice.currency}
+                        </div>
                       </div>
                       <div>
-                        <Label className="text-[11px] text-gray-600">Provider</Label>
+                        <Label className="text-xs text-gray-600 mb-1.5 block">Provider</Label>
                         <Select value={countryPrice.provider} onValueChange={(val: any) => setCountryPrice(p => ({ ...p, provider: val }))}>
-                          <SelectTrigger className="mt-1 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900">
+                          <SelectTrigger className="h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900">
                             <SelectValue placeholder="Provider" />
                           </SelectTrigger>
                           <SelectContent>
                             {String(countryPrice.country).toUpperCase() === 'BR' ? (
                               <>
                                 <SelectItem value="KRXPAY">KRXPAY</SelectItem>
-                                <SelectItem value="STRIPE">STRIPE</SelectItem>
+                                <SelectItem value="STRIPE">Stripe</SelectItem>
+                                <SelectItem value="APPMAX">Appmax</SelectItem>
                               </>
                             ) : (
-                              <SelectItem value="STRIPE">STRIPE</SelectItem>
+                              <SelectItem value="STRIPE">Stripe</SelectItem>
                             )}
                           </SelectContent>
                         </Select>
                       </div>
                       <div>
-                        <Label className="text-[11px] text-gray-600">Price</Label>
-                        <div className="mt-1 flex items-center gap-1">
-                          <span className="text-gray-500 text-sm">$</span>
-                          <Input type="number" min="0" step="0.01" value={countryPrice.price} onChange={(e) => setCountryPrice(p => ({ ...p, price: e.target.value }))} className="h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900" placeholder="0.00" />
+                        <Label className="text-xs text-gray-600 mb-1.5 block">Price *</Label>
+                        <Input 
+                          type="number" 
+                          min="0" 
+                          step="0.01" 
+                          value={countryPrice.price} 
+                          onChange={(e) => setCountryPrice(p => ({ ...p, price: e.target.value }))} 
+                          className="h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900" 
+                          placeholder="0.00" 
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment Methods */}
+                  <div className="pt-4 border-t border-gray-100">
+                    <Label className="text-sm font-medium text-gray-900 mb-3 block">Payment Methods</Label>
+                    <div className="flex items-center gap-6">
+                      <label className="inline-flex items-center gap-2.5 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={offerForm.allowCARD} 
+                          onChange={(e) => setOfferForm(o => ({ ...o, allowCARD: e.target.checked }))} 
+                          className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                        />
+                        <span className="text-sm text-gray-700">Credit/Debit Card</span>
+                      </label>
+                      <label className="inline-flex items-center gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={offerForm.allowPIX}
+                          disabled={String(countryPrice.country).toUpperCase() !== 'BR'}
+                          onChange={(e) => setOfferForm(o => ({ ...o, allowPIX: e.target.checked }))} 
+                          className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                        <span className={`text-sm ${String(countryPrice.country).toUpperCase() !== 'BR' ? 'text-gray-400' : 'text-gray-700'}`}>
+                          PIX {String(countryPrice.country).toUpperCase() !== 'BR' && '(Brazil only)'}
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Installments (Brazil only) */}
+                  {String(countryPrice.country).toUpperCase() === 'BR' && (
+                    <div className="pt-4 border-t border-gray-100">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <Label className="text-sm font-medium text-gray-900 block">Installments</Label>
+                          <p className="text-xs text-gray-500 mt-1">Maximum number of installments for card payments</p>
+                        </div>
+                        <div className="w-24">
+                          <Input
+                            type="number"
+                            min={1}
+                            max={12}
+                            value={offerForm.maxInstallments}
+                            onChange={(e) => setOfferForm(o => ({ ...o, maxInstallments: e.target.value }))}
+                            className="h-10 border-gray-300 focus:border-gray-900 focus:ring-gray-900 text-center"
+                          />
                         </div>
                       </div>
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">This first country price will be created for your initial offer.</p>
-                  </div>
-                  {/* Payment methods and BR installments */}
-                  <div className="pt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div className="md:col-span-1">
-                      <Label className="text-gray-900 font-medium">Payment methods</Label>
-                      <div className="mt-2 flex items-center gap-4 text-sm">
-                        <label className="inline-flex items-center gap-2">
-                          <input type="checkbox" checked={offerForm.allowCARD} onChange={(e) => setOfferForm(o => ({ ...o, allowCARD: e.target.checked }))} />
-                          <span>Card</span>
-                        </label>
-                        <label className="inline-flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={offerForm.allowPIX}
-                            disabled={String(countryPrice.country).toUpperCase() !== 'BR'}
-                            onChange={(e) => setOfferForm(o => ({ ...o, allowPIX: e.target.checked }))}
-                          />
-                          <span>PIX</span>
-                        </label>
-                      </div>
-                      <p className="text-[11px] text-gray-500 mt-1">Habilita os meios de pagamento na oferta inicial.</p>
-                    </div>
-                    {String(countryPrice.country).toUpperCase() === 'BR' && (
-                      <div className="md:col-span-1">
-                        <Label className="text-gray-900 font-medium">Parcelamento máximo (Brasil)</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={12}
-                          value={offerForm.maxInstallments}
-                          onChange={(e) => setOfferForm(o => ({ ...o, maxInstallments: e.target.value }))}
-                          className="mt-2 h-9 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
-                        />
-                        <p className="text-[11px] text-gray-500 mt-1">Até 12x, ou limitado pelo período da assinatura.</p>
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </CardContent>
               </Card>
 

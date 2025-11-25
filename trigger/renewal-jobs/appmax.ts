@@ -75,82 +75,139 @@ export const appmaxRenewal = task({
     const appmaxCardToken = paymentMethod.providerPaymentMethodId;
 
     // Create order in Appmax ensuring required identifiers are present
-    const orderPayload: any = {
-      items: [
-        {
-          description: `Renovação ${subscription.productId || "subscription"}`,
-          quantity: 1,
-          price: (subscription.priceCents / 100).toFixed(2),
-          sku: subscription.productId || "subscription",
-        },
-      ],
-      metadata: {
-        type: "subscription_renewal",
-        subscriptionId: subscription.id,
-        periodStart: nextPeriodStart.toISOString(),
-        periodEnd: nextPeriodEnd.toISOString(),
-      },
-    };
-
     const metaCustomerId: string | undefined = meta.appmaxCustomerId;
     if (!metaCustomerId) {
       console.warn("⚠️  Missing appmaxCustomerId in metadata. Skipping Appmax renewal.");
       return { skipped: true, reason: "missing_appmax_customer_id" };
     }
-    // Appmax requires a registered customer reference
-    orderPayload.customer_id = metaCustomerId;
 
-    const order = await client.ordersCreate(orderPayload);
+    // CRITICAL: Use the SAME payload format as checkout (which works)
+    // Appmax API expects: total, products (not items), shipping (number, not object), freight_type
+    const totalReais = Number((subscription.priceCents / 100).toFixed(2));
+    const shippingReais = 0; // No shipping for digital subscription renewals
 
-    // Charge credit card immediately using saved token
+    const orderPayload: any = {
+      total: totalReais, // AppMax expects REAIS (Decimal 10,2)
+      products: [
+        {
+          sku: String(subscription.productId || subscription.id || "subscription"),
+          name: `Renovação ${subscription.productId || "subscription"}`,
+          qty: 1,
+          price: totalReais, // Price in REAIS
+        },
+      ],
+      shipping: shippingReais, // Number (not object)
+      discount: 0,
+      customer_id: Number(metaCustomerId), // Appmax expects numeric customer_id
+      freight_type: "PAC", // Required string
+      digital_product: 1, // Subscription is digital
+    };
+
+    console.log("[appmax][order][payload]", orderPayload);
+
+    let order: any = null;
+    try {
+      order = await client.ordersCreate(orderPayload);
+    } catch (e: any) {
+      console.error("❌ Appmax order creation failed", {
+        message: e?.message,
+        status: e?.status,
+        response: e?.response,
+      });
+      throw e;
+    }
+
+    // Extract orderId from Appmax response (data.id)
+    const orderId: number | null = Number(order?.data?.id ?? order?.id ?? order?.order_id ?? NaN) || null;
+
+    // Charge credit card immediately using saved token (mirror checkout route payload shape)
     let paymentResp: any = null;
     try {
-      paymentResp = await client.paymentsCreditCard({
-        order_id: order?.id,
-        amount: (subscription.priceCents / 100).toFixed(2),
-        token: appmaxCardToken,
-      });
+      const buyerDoc = String((subscription.customer as any)?.document || '')
+        .toString()
+        .replace(/\D+/g, '')
+        .slice(0, 14);
+      const buyerName = String((subscription.customer as any)?.name || 'Cliente');
+      const payPayload: any = {
+        cart: { order_id: orderId },
+        customer: { customer_id: Number(metaCustomerId) },
+        payment: {
+          CreditCard: {
+            token: appmaxCardToken,
+            installments: 1,
+            soft_descriptor: 'KRXLABS',
+            document_number: buyerDoc,
+            name: buyerName,
+          },
+        },
+      };
+      paymentResp = await client.paymentsCreditCardNoRetry(payPayload);
     } catch (e: any) {
       console.error("❌ Appmax payment error", { message: e?.message, status: e?.status });
     }
 
-    const status = paymentResp?.status || order?.status || "processing";
+    // Map status to string, never store numeric HTTP codes
+    const mappedStatus = (() => {
+      const s = String(paymentResp?.status || paymentResp?.data?.status || '').toLowerCase();
+      const txt = String(paymentResp?.text || paymentResp?.data?.text || '').toLowerCase();
+      if (s.includes('aprov')) return 'paid';
+      if (s.includes('autor')) return 'authorized';
+      if (s.includes('pend')) return 'pending';
+      if (txt.includes('captur') || (txt.includes('autoriz') && txt.includes('sucesso'))) return 'paid';
+      return 'processing';
+    })();
 
     // Build deterministic transaction id per subscription + billing period (YYYYMM)
     const periodKey = `${nextPeriodStart.getUTCFullYear()}${String(nextPeriodStart.getUTCMonth() + 1).padStart(2, "0")}`;
     const txId = `tx_appmax_${subscriptionId}_${periodKey}`;
 
+    // Build create/update payloads, avoiding empty strings on provider ids
+    const providerOrderIdStr = orderId ? String(orderId) : null;
+    const providerChargeIdStr = paymentResp?.id ? String(paymentResp.id) : null;
+
+    // If another transaction already recorded this providerChargeId, reuse that record to avoid unique constraint
+    let txIdToUse = txId;
+    if (providerChargeIdStr) {
+      const existing = await prisma.paymentTransaction.findFirst({
+        where: { provider: "appmax" as any, providerChargeId: providerChargeIdStr },
+        select: { id: true },
+      });
+      if (existing?.id && existing.id !== txIdToUse) {
+        txIdToUse = existing.id;
+      }
+    }
+
     await prisma.paymentTransaction.upsert({
-      where: { id: txId },
+      where: { id: txIdToUse },
       create: {
-        id: txId,
+        id: txIdToUse,
         provider: "appmax",
         provider_v2: "APPMAX" as any,
-        providerOrderId: String(order?.id || ""),
-        providerChargeId: String(paymentResp?.id || ""),
+        providerOrderId: providerOrderIdStr as any,
+        ...(providerChargeIdStr ? { providerChargeId: providerChargeIdStr as any } : {}),
         merchantId: subscription.merchantId,
         customerId: subscription.customerId,
         customerSubscriptionId: subscription.id,
         productId: subscription.productId,
         amountCents: subscription.priceCents,
         currency: String(subscription.currency).toLowerCase(),
-        status: status,
-        status_v2: mapStatus(status),
+        status: mappedStatus,
+        status_v2: mapStatus(mappedStatus),
         paymentMethodType: "subscription_renewal",
         billingPeriodStart: nextPeriodStart,
         billingPeriodEnd: nextPeriodEnd,
         rawPayload: { order, paymentResp } as any,
       },
       update: {
-        providerOrderId: String(order?.id || ""),
-        providerChargeId: String(paymentResp?.id || ""),
-        status: status,
-        status_v2: mapStatus(status),
+        providerOrderId: providerOrderIdStr as any,
+        ...(providerChargeIdStr ? { providerChargeId: providerChargeIdStr as any } : {}),
+        status: mappedStatus,
+        status_v2: mapStatus(mappedStatus),
         rawPayload: { order, paymentResp } as any,
       },
     });
 
-    if (status === "paid" || status === "completed" || status === "approved") {
+    if (mappedStatus === "paid" || mappedStatus === "completed" || mappedStatus === "approved") {
       await prisma.customerSubscription.update({
         where: { id: subscriptionId },
         data: {
@@ -159,22 +216,22 @@ export const appmaxRenewal = task({
           currentPeriodEnd: nextPeriodEnd,
         },
       });
-    } else if (status === "failed" || status === "rejected") {
+    } else if (mappedStatus === "failed" || mappedStatus === "rejected") {
       await prisma.customerSubscription.update({
         where: { id: subscriptionId },
         data: {
           status: "PAST_DUE",
           metadata: {
             ...(subscription.metadata as any),
-            lastRenewalError: `appmax_status_${status}`,
+            lastRenewalError: `appmax_status_${mappedStatus}`,
             lastRenewalAttempt: new Date().toISOString(),
           },
         },
       });
     }
 
-    console.log(`✅ Renewal processed (Appmax)`, { subscriptionId, status });
-    return { success: true, status };
+    console.log(`✅ Renewal processed (Appmax)`, { subscriptionId, status: mappedStatus });
+    return { success: true, status: mappedStatus };
   },
 });
 

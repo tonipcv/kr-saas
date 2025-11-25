@@ -1,6 +1,6 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { prisma } from "@/lib/prisma";
-import { pagarmeCreateOrder } from "@/lib/payments/pagarme/sdk";
+import { pagarmeCreateOrder, pagarmeGetOrder } from "@/lib/payments/pagarme/sdk";
 
 export const pagarmePrepaidRenewal = task({
   id: "pagarme-prepaid-renewal",
@@ -72,8 +72,28 @@ export const pagarmePrepaidRenewal = task({
       const pagarmeCardId: string | undefined = paymentMethod.providerPaymentMethodId || meta.pagarmeCardId;
       if (!pagarmeCustomerId || !pagarmeCardId) throw new Error("Missing Pagar.me identifiers in metadata/payment method");
 
+      // Build customer payload with required identity fields (Pagarme v5 validates even with card_id)
+      const customerDoc = String(subscription.customer?.document || "").replace(/\D+/g, "");
+      const customerType = customerDoc && customerDoc.length > 11 ? "company" : (customerDoc ? "individual" : undefined);
+      const phoneRaw = String(subscription.customer?.telephone || "");
+      const phoneDigits = phoneRaw.replace(/\D+/g, "");
+      const mobile_phone = phoneDigits.length >= 10 ? {
+        country_code: phoneDigits.length >= 12 ? phoneDigits.slice(0, 2) : "55",
+        area_code: phoneDigits.length >= 12 ? phoneDigits.slice(2, 4) : phoneDigits.slice(0, 2),
+        number: phoneDigits.length >= 12 ? phoneDigits.slice(4) : phoneDigits.slice(2),
+      } : undefined;
+
+      const customerPayload: any = {
+        id: pagarmeCustomerId,
+        name: subscription.customer?.name || "Cliente",
+        email: subscription.customer?.email || undefined,
+        document: customerDoc || undefined,
+        type: customerType,
+        phones: mobile_phone ? { mobile_phone } : undefined,
+      };
+
       const order = await pagarmeCreateOrder({
-        customer: { id: pagarmeCustomerId },
+        customer: customerPayload,
         items: [
           {
             amount: subscription.priceCents,
@@ -85,9 +105,10 @@ export const pagarmePrepaidRenewal = task({
         payments: [
           {
             payment_method: "credit_card",
-            credit_card: { card_id: pagarmeCardId, statement_descriptor: "RENOVACAO" },
+            credit_card: { card_id: pagarmeCardId, installments: 1, capture: true },
           },
         ],
+        currency: "BRL",
         metadata: {
           type: "subscription_renewal",
           subscriptionId: subscription.id,
@@ -96,6 +117,28 @@ export const pagarmePrepaidRenewal = task({
           periodEnd: nextPeriodEnd.toISOString(),
         },
       });
+
+      // Optional: if not paid, inspect order/transaction to aid diagnostics
+      try {
+        if (order?.status !== "paid") {
+          const inspected = await pagarmeGetOrder(order.id).catch(() => order);
+          const ch = Array.isArray(inspected?.charges) ? inspected.charges[0] : null;
+          const tx = ch?.last_transaction || (Array.isArray(inspected?.payments) ? inspected.payments?.[0]?.last_transaction : null) || null;
+          const summary = tx ? {
+            tx_status: tx?.status,
+            acquirer_message: tx?.acquirer_message,
+            acquirer_return_code: tx?.acquirer_return_code,
+            code: tx?.code,
+            message: tx?.message,
+          } : { no_transaction: true };
+          console.log("[pagarme-prepaid][order inspection]", {
+            order_id: order?.id,
+            order_status: order?.status,
+            charge_status: ch?.status,
+            last_transaction: summary,
+          });
+        }
+      } catch {}
 
       const txId = `tx_pagarme_${order.id}`;
 
