@@ -363,7 +363,6 @@ export default function ProductsPage() {
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
               <div>
                 <h1 className="text-[20px] font-semibold text-gray-900 tracking-[-0.01em]">Products</h1>
-                <p className="text-sm text-gray-500 mt-1">Manage products recommended in your protocols</p>
               </div>
               <Button asChild size="sm" className="h-8 bg-gray-900 hover:bg-black text-white shadow-sm">
                 <Link href="/business/products/create" className="flex items-center">

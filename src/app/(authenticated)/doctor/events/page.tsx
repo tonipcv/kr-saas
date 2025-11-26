@@ -115,7 +115,6 @@ export default function DoctorEventsPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Events</h1>
-              <p className="text-xs text-gray-500">Key metrics for the selected clinic</p>
             </div>
             <div className="flex items-center gap-2">
               <input

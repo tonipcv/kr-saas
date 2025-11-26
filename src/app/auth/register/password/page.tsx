@@ -141,28 +141,7 @@ function RegisterPasswordInner() {
   };
 
   if (isSuccess) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white font-normal tracking-[-0.03em] relative z-10">
-        {/* Logo at top-left */}
-        <div className="absolute top-4 left-4">
-          <div className="relative w-8 h-8">
-            <Image src="/logo.png" alt="Logo" fill className="object-contain" priority />
-          </div>
-        </div>
-        <div className="min-h-screen flex flex-col items-center justify-center p-4">
-          <div className="w-full max-w-[420px] bg-white rounded-2xl border border-gray-200 p-8 shadow-lg relative z-20">
-
-            <div className="text-center mb-2">
-              <div className="flex justify-center">
-                <div className="bg-green-100 p-3 rounded-full">
-                  <Check className="h-8 w-8 text-green-600" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (

@@ -221,8 +221,7 @@ export default async function PaymentsDataPage({ searchParams }: { searchParams?
           <div className="mb-4">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-[20px] font-semibold text-gray-900 tracking-[-0.01em]">Payments Data</h1>
-                <p className="text-sm text-gray-500 mt-1">Latest rows from payment_customers, payment_methods and payment_transactions</p>
+                <h1 className="text-[20px] font-semibold text-gray-900 tracking-[-0.01em]">Payments</h1>
               </div>
             </div>
           </div>

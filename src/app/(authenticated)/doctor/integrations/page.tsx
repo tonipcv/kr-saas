@@ -651,7 +651,6 @@ function IntegrationsInner() {
           <div className="mb-6 flex items-start justify-between gap-3">
             <div>
               <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Apps</h1>
-              <p className="text-sm text-gray-500">Connect your tools to enable automations and triggers.</p>
             </div>
             <Button onClick={() => setAddOpen(true)} className="h-9 rounded-lg">Add Integration</Button>
           </div>

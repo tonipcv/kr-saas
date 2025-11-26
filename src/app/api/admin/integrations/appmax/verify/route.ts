@@ -31,15 +31,37 @@ export async function POST(req: NextRequest) {
 
     const client = new AppmaxClient(apiKey, { testMode })
 
-    // Lightweight call: tokenize card (does not create order/payment)
+    // In production, do not attempt card tokenization with fake numbers.
+    // Use a minimal customer create to validate credentials safely.
     try {
-      await client.tokenizeCard({
-        card_number: '4111111111111111',
-        cvv: '123',
-        expiration_month: '12',
-        expiration_year: '2029',
-        holder_name: 'Test Appmax',
-      })
+      if (testMode) {
+        await client.tokenizeCard({
+          card: {
+            name: 'Test Appmax',
+            number: '4111111111111111',
+            cvv: '123',
+            month: 12,
+            year: 2029,
+          }
+        })
+      } else {
+        const emailSafe = `verify.${String(merchantId).replace(/[^a-zA-Z0-9]/g, '')}@example.com`
+        await client.customersCreate({
+          firstname: 'Verify',
+          lastname: 'Ping',
+          email: emailSafe,
+          telephone: '11999999999',
+          postcode: '01010000',
+          address_street: 'Rua Verificacao',
+          address_street_number: '0',
+          address_street_complement: '',
+          address_street_district: 'Centro',
+          address_city: 'São Paulo',
+          address_state: 'SP',
+          ip: '127.0.0.1',
+          tracking: {}
+        })
+      }
     } catch (e: any) {
       const status = Number(e?.status) || 500
       // Persist lastError
