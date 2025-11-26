@@ -113,19 +113,21 @@ export default function CreateProductPage() {
   // Integration connection flags must be defined before computing providers
   const [pgConnected, setPgConnected] = useState<boolean>(false);
   const [stripeConnected, setStripeConnected] = useState<boolean>(false);
+  const [appmaxConnected, setAppmaxConnected] = useState<boolean>(false);
 
   // Compute available providers per country based on active integrations
   const providersAvailable = React.useMemo(() => {
     const cc = String(countryPrice.country || '').toUpperCase();
-    const list: Array<'KRXPAY'|'STRIPE'> = [];
+    const list: Array<'KRXPAY'|'STRIPE'|'APPMAX'> = [];
     if (cc === 'BR') {
       if (pgConnected) list.push('KRXPAY');
       if (stripeConnected) list.push('STRIPE');
+      if (appmaxConnected) list.push('APPMAX');
     } else {
       if (stripeConnected) list.push('STRIPE');
     }
     return list;
-  }, [countryPrice.country, pgConnected, stripeConnected]);
+  }, [countryPrice.country, pgConnected, stripeConnected, appmaxConnected]);
 
   // Ensure selected provider is valid when country or integrations change
   useEffect(() => {
@@ -153,8 +155,8 @@ export default function CreateProductPage() {
 
   // Gateway por localização (MVP)
   const [routingUsePlatformDefault, setRoutingUsePlatformDefault] = useState(true);
-  const [routingDefaultProvider, setRoutingDefaultProvider] = useState<'KRXPAY' | 'STRIPE'>('KRXPAY');
-  const [routingOverrides, setRoutingOverrides] = useState<Array<{ country: string; provider: 'KRXPAY'|'STRIPE' }>>([]);
+  const [routingDefaultProvider, setRoutingDefaultProvider] = useState<'KRXPAY' | 'STRIPE' | 'APPMAX'>('KRXPAY');
+  const [routingOverrides, setRoutingOverrides] = useState<Array<{ country: string; provider: 'KRXPAY'|'STRIPE'|'APPMAX' }>>([]);
   const [merchantId, setMerchantId] = useState<string>('');
 
   useEffect(() => {
@@ -167,6 +169,8 @@ export default function CreateProductPage() {
         setPgConnected(!!pg?.connected);
         const st = await fetch(`/api/admin/integrations/stripe/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
         setStripeConnected(!!st?.connected);
+        const apm = await fetch(`/api/admin/integrations/appmax/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
+        setAppmaxConnected(!!apm?.connected);
       } catch {}
     };
     loadMerchantAndStatuses();
@@ -598,7 +602,9 @@ export default function CreateProductPage() {
                               </SelectItem>
                             )}
                             {providersAvailable.map((p) => (
-                              <SelectItem key={p} value={p}>{p === 'STRIPE' ? 'Stripe' : p}</SelectItem>
+                              <SelectItem key={p} value={p}>
+                                {p === 'STRIPE' ? 'Stripe' : p === 'KRXPAY' ? 'KRX Pay' : 'Appmax'}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>

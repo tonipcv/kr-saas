@@ -101,6 +101,9 @@ export default function BusinessDashboard() {
   const { currentClinic, isLoading } = useClinic();
   const router = useRouter();
   const [paymentsReady, setPaymentsReady] = useState<boolean | null>(null);
+  const [pgConnected, setPgConnected] = useState<boolean>(false);
+  const [stripeConnected, setStripeConnected] = useState<boolean>(false);
+  const [appmaxConnected, setAppmaxConnected] = useState<boolean>(false);
   const [dateFrom, setDateFrom] = useState<string>(() => {
     const d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const y = d.getFullYear();
@@ -186,15 +189,27 @@ export default function BusinessDashboard() {
     load();
   }, [session, currentClinic, dateFrom, dateTo]);
 
-  // Check payment integration readiness; if not ready, redirect to waiting list
+  // Check payment integration readiness; consider any connected provider (Pagar.me, Stripe, Appmax)
   useEffect(() => {
     const checkPayments = async () => {
       if (!currentClinic?.id) return;
       try {
-        const res = await fetch(`/api/payments/pagarme/config/status?clinic_id=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
-        const js = await res.json().catch(() => ({}));
-        const ready = res.ok && js?.ready_for_production === true;
-        setPaymentsReady(ready);
+        const clinicId = encodeURIComponent(currentClinic.id);
+        const [pgRes, stRes, apmRes] = await Promise.all([
+          fetch(`/api/payments/pagarme/config/status?clinic_id=${clinicId}`, { cache: 'no-store' }),
+          fetch(`/api/admin/integrations/stripe/status?clinicId=${clinicId}`, { cache: 'no-store' }),
+          fetch(`/api/admin/integrations/appmax/status?clinicId=${clinicId}`, { cache: 'no-store' }),
+        ]);
+        const pgJs = await pgRes.json().catch(() => ({}));
+        const stJs = await stRes.json().catch(() => ({}));
+        const apmJs = await apmRes.json().catch(() => ({}));
+        const pgReady = pgRes.ok && (pgJs?.ready_for_production === true || pgJs?.connected === true);
+        const stConn = !!stJs?.connected;
+        const apmConn = !!apmJs?.connected;
+        setPgConnected(!!pgJs?.connected || pgReady);
+        setStripeConnected(stConn);
+        setAppmaxConnected(apmConn);
+        setPaymentsReady(pgReady || stConn || apmConn);
       } catch {
         setPaymentsReady(false);
       }
