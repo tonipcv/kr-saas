@@ -131,7 +131,7 @@ function IntegrationsInner() {
   const [stripeStatusLastUsedAt, setStripeStatusLastUsedAt] = useState<string | null>(null);
   const [stripeStatusApiKey, setStripeStatusApiKey] = useState<string | null>(null);
   const [stripeStatusWebhookSecret, setStripeStatusWebhookSecret] = useState<string | null>(null);
-  const hasAnyConnected = waConnected || pgConnected || emailVerified || stripeConnected;
+  
 
   // Stripe (new, isolated)
   const [stripeOpen, setStripeOpen] = useState(false);
@@ -157,6 +157,8 @@ function IntegrationsInner() {
   const [appmaxMerchantId, setAppmaxMerchantId] = useState<string>('');
   const [appmaxStatusApiKey, setAppmaxStatusApiKey] = useState<string | null>(null);
   const [appmaxStatusTestMode, setAppmaxStatusTestMode] = useState<boolean>(true);
+  // Any connected integration toggles the Connected table
+  const hasAnyConnected = waConnected || pgConnected || emailVerified || stripeConnected || appmaxConnected;
 
   // Page loading while integrations status are being fetched
   const pageLoading = isLoading || waStatusLoading || pgLoading || emailStatusLoading;
