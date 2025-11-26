@@ -61,7 +61,7 @@ export default function AdminFeesPage() {
       setSaving(c.id);
       const body: any = {
         clinicId: c.id,
-        splitPercent: Number(c.merchant?.splitPercent ?? 70),
+        splitPercent: Number(c.merchant?.splitPercent ?? 85),
         platformFeeBps: Number(c.merchant?.platformFeeBps ?? 0),
         transactionFeeCents: Number(c.merchant?.transactionFeeCents ?? 0),
         transactionFeeType: String(c.merchant?.transactionFeeType ?? "flat"),
@@ -143,13 +143,13 @@ export default function AdminFeesPage() {
                                 autoFocus
                                 type="number"
                                 className="w-24 border rounded px-2 py-1 text-right"
-                                value={Number(c.merchant?.splitPercent ?? 70)}
+                                value={Number(c.merchant?.splitPercent ?? 85)}
                                 min={0}
                                 max={100}
                                 onChange={(e) => updateField(c.id, 'splitPercent', Math.max(0, Math.min(100, Number(e.target.value))))}
                               />
                             ) : (
-                              <span className="tabular-nums">{Number(c.merchant?.splitPercent ?? 70)}</span>
+                              <span className="tabular-nums">{Number(c.merchant?.splitPercent ?? 85)}</span>
                             )}
                           </td>
                           <td className="px-3 py-2 text-right">

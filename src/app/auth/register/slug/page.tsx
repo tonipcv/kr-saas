@@ -1,11 +1,14 @@
 'use client';
 
 import { useState, useEffect, Suspense } from "react";
+import { useRef } from 'react';
 import Image from 'next/image';
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Check, X } from 'lucide-react';
 import { debounce } from 'lodash';
+import { PhoneInput } from 'react-international-phone';
+import 'react-international-phone/style.css';
 
 function RegisterSlugInner() {
   const router = useRouter();
@@ -20,7 +23,7 @@ function RegisterSlugInner() {
   const [slugEdited, setSlugEdited] = useState(false);
   const [businessPhone, setBusinessPhone] = useState("");
   const [monthlyRevenue, setMonthlyRevenue] = useState("");
-  const [currentGateway, setCurrentGateway] = useState("");
+  const [country, setCountry] = useState("US");
   const [isChecking, setIsChecking] = useState(false);
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
   const [baseDomain] = useState<string>(
@@ -40,6 +43,37 @@ function RegisterSlugInner() {
       return 'example.com';
     }
   })();
+
+  const dialCodeByCountry: Record<string, string> = {
+    US: '1',
+    BR: '55',
+    PT: '351',
+    MX: '52',
+    ES: '34',
+    AR: '54',
+    CL: '56',
+    CO: '57',
+    GB: '44',
+    DE: '49',
+  };
+  const prevCountryRef = useRef<string>('US');
+  useEffect(() => {
+    const cc = (country || 'US').toUpperCase();
+    const newCode = dialCodeByCountry[cc] || '1';
+    const prevCc = (prevCountryRef.current || 'US').toUpperCase();
+    const prevCode = dialCodeByCountry[prevCc] || '1';
+    const onlyDial = /^\+\d+\s*$/;
+    const startsWithPrev = new RegExp(`^\\+${prevCode}(\\s|$)`);
+    // If empty or only dial, just set new dial
+    if (!businessPhone || onlyDial.test(businessPhone)) {
+      setBusinessPhone(`+${newCode} `);
+    } else if (startsWithPrev.test(businessPhone)) {
+      // Replace leading previous dial code with new one
+      const replaced = businessPhone.replace(/^\+\d+/, `+${newCode}`);
+      setBusinessPhone(replaced);
+    }
+    prevCountryRef.current = cc;
+  }, [country]);
 
   // Redirecionar se não tiver email ou token
   useEffect(() => {
@@ -121,6 +155,12 @@ function RegisterSlugInner() {
       return;
     }
 
+    if (!country) {
+      setError("Country is required");
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const response = await fetch('/api/auth/register/slug', {
         method: 'POST',
@@ -132,7 +172,7 @@ function RegisterSlugInner() {
           subdomain,
           businessPhone,
           monthlyRevenue,
-          currentGateway,
+          country,
         })
       });
 
@@ -200,20 +240,49 @@ function RegisterSlugInner() {
               />
             </div>
 
+            {/* Country */}
+            <div>
+              <label htmlFor="country" className="block text-sm font-medium text-gray-700 mb-2">
+                Country
+              </label>
+              <select
+                id="country"
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                required
+                className="w-full px-4 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900"
+              >
+                <option value="">Select a country…</option>
+                <option value="BR">Brazil</option>
+                <option value="US">United States</option>
+                <option value="PT">Portugal</option>
+                <option value="MX">Mexico</option>
+                <option value="ES">Spain</option>
+                <option value="AR">Argentina</option>
+                <option value="CL">Chile</option>
+                <option value="CO">Colombia</option>
+                <option value="GB">United Kingdom</option>
+                <option value="DE">Germany</option>
+              </select>
+            </div>
+
             {/* Business phone */}
             <div>
               <label htmlFor="businessPhone" className="block text-sm font-medium text-gray-700 mb-2">
                 Business phone (optional)
               </label>
-              <input
-                type="tel"
-                id="businessPhone"
+              <PhoneInput
+                key={`biz-phone-${country || 'US'}`}
+                inputProps={{ id: 'businessPhone', name: 'businessPhone', autoComplete: 'tel' }}
+                defaultCountry={(country || 'US').toLowerCase() as any}
                 value={businessPhone}
-                onChange={(e) => setBusinessPhone(e.target.value)}
-                autoComplete="tel"
-                className="w-full px-4 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900"
+                onChange={(phone) => setBusinessPhone(phone)}
                 placeholder="+1 555 000 0000"
-                maxLength={32}
+                className="w-full flex items-center rounded-lg border border-gray-300 bg-white transition-all duration-200 focus-within:ring-2 focus-within:ring-[#5154e7]/20 focus-within:border-[#5154e7]"
+                inputClassName="w-full !bg-transparent !border-0 !shadow-none !outline-none px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400"
+                countrySelectorStyleProps={{
+                  buttonClassName: "!bg-transparent !border-0",
+                }}
               />
             </div>
 
@@ -238,21 +307,6 @@ function RegisterSlugInner() {
               </select>
             </div>
 
-            {/* Current payment gateway */}
-            <div>
-              <label htmlFor="currentGateway" className="block text-sm font-medium text-gray-700 mb-2">
-                Current payment gateway (optional)
-              </label>
-              <input
-                type="text"
-                id="currentGateway"
-                value={currentGateway}
-                onChange={(e) => setCurrentGateway(e.target.value)}
-                className="w-full px-4 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5154e7]/20 focus:border-[#5154e7] transition-all duration-200 text-gray-900"
-                placeholder="e.g., Stripe, Adyen, Pagar.me"
-                maxLength={64}
-              />
-            </div>
 
             <div>
               <label htmlFor="subdomain" className="block text-sm font-medium text-gray-700 mb-2">

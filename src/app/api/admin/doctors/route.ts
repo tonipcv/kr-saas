@@ -67,8 +67,6 @@ export async function GET(request: NextRequest) {
                         id: true,
                         name: true,
                         monthlyPrice: true,
-                        baseDoctors: true,
-                        basePatients: true,
                         tier: true,
                         trialDays: true
                       }
@@ -114,8 +112,8 @@ export async function GET(request: NextRequest) {
                   id: subscription.plan.id,
                   name: subscription.plan.name,
                   price: (subscription.plan as any).monthlyPrice ?? 0,
-                  maxDoctors: (subscription.plan as any).baseDoctors ?? 0,
-                  maxPatients: (subscription.plan as any).basePatients ?? 0,
+                  maxDoctors: null,
+                  maxPatients: null,
                   tier: subscription.plan.tier,
                   trialDays: subscription.plan.trialDays ?? 0,
                 }

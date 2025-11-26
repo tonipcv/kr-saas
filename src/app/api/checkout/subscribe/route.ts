@@ -438,7 +438,7 @@ export async function POST(req: Request) {
       const currency2 = (row2?.currency || (selectedOffer as any)?.currency || 'BRL') as any;
       const ENABLE_SPLIT = String(process.env.PAGARME_ENABLE_SPLIT || '').toLowerCase() === 'true';
       const platformRecipientId = String(process.env.PLATFORM_RECIPIENT_ID || process.env.PAGARME_PLATFORM_RECIPIENT_ID || '').trim() || null;
-      const clinicPercent = Math.max(0, Math.min(100, Number(merchant?.splitPercent || 70)));
+      const clinicPercent = Math.max(0, Math.min(100, Number(merchant?.splitPercent || 85)));
       const platformPercent = Math.max(0, Math.min(100, 100 - clinicPercent));
       const splitBody = (ENABLE_SPLIT && platformRecipientId && merchant?.recipientId) ? {
         enabled: true,

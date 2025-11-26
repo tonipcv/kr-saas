@@ -98,26 +98,39 @@ function RegisterPasswordInner() {
       setIsSuccess(true);
       const createdClinicId: string | undefined = data?.clinicId;
 
-      // Try to automatically sign the user in and then navigate to the business dashboard
+      // Automatically sign the user in using the registration token (2FA flow)
       try {
         const result = await signIn('credentials', {
           email: emailParam || '',
-          password,
+          password: `token:${tokenParam}`,
           redirect: false,
         });
 
         if (result?.ok) {
+          // Success: redirect to business dashboard
           const target = createdClinicId
             ? `/business/dashboard?clinicId=${encodeURIComponent(createdClinicId)}&newClinic=1`
             : '/business/dashboard';
           router.push(target);
-          router.refresh();
         } else {
-          // Fallback to sign-in page if auto sign-in fails
-          router.push('/auth/signin');
+          // If token auth fails, try direct password auth as fallback
+          const fallbackResult = await signIn('credentials', {
+            email: emailParam || '',
+            password,
+            redirect: false,
+          });
+          if (fallbackResult?.ok) {
+            const target = createdClinicId
+              ? `/business/dashboard?clinicId=${encodeURIComponent(createdClinicId)}&newClinic=1`
+              : '/business/dashboard';
+            router.push(target);
+          } else {
+            // Both methods failed: redirect to sign-in
+            router.push('/auth/signin');
+          }
         }
       } catch (e) {
-        // Fallback to sign-in page in case of any error
+        console.error('Auto sign-in error:', e);
         router.push('/auth/signin');
       }
     } catch (err) {
@@ -139,29 +152,12 @@ function RegisterPasswordInner() {
         <div className="min-h-screen flex flex-col items-center justify-center p-4">
           <div className="w-full max-w-[420px] bg-white rounded-2xl border border-gray-200 p-8 shadow-lg relative z-20">
 
-            <div className="text-center space-y-2 mb-6">
+            <div className="text-center mb-2">
               <div className="flex justify-center">
                 <div className="bg-green-100 p-3 rounded-full">
                   <Check className="h-8 w-8 text-green-600" />
                 </div>
               </div>
-              <h1 className="text-xl font-medium text-gray-900 mt-4">Registration complete!</h1>
-              <p className="text-sm text-gray-600">
-                Your account has been created successfully.
-              </p>
-            </div>
-
-            <div className="mt-6">
-              <p className="text-center text-sm text-gray-600 mb-4">
-                Finalizing your account and redirecting to your dashboard...
-              </p>
-              <Link
-                href="/business/dashboard"
-                className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-black hover:bg-gray-900 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
-              >
-                Go to dashboard
-                <ArrowRight className="h-4 w-4" />
-              </Link>
             </div>
           </div>
         </div>

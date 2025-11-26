@@ -130,7 +130,7 @@ export async function POST(req: Request) {
           if (merchant?.recipientId) {
             const totalCents = Number(chargeData?.amount || 0);
             if (totalCents > 0) {
-              const clinicPercent = Math.max(0, Math.min(100, Number((resolvedSplitPercent != null ? resolvedSplitPercent : merchant.splitPercent) || 70)));
+              const clinicPercent = Math.max(0, Math.min(100, Number((resolvedSplitPercent != null ? resolvedSplitPercent : merchant.splitPercent) || 85)));
               const clinicAmount = Math.round(totalCents * clinicPercent / 100);
               const platformAmount = totalCents - clinicAmount;
               

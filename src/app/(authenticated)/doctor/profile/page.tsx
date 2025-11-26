@@ -24,7 +24,7 @@ import {
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 import Image from "next/image";
 import Link from 'next/link';
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 interface UserStats {
   totalPatients?: number;
@@ -38,6 +38,8 @@ interface UserStats {
 
 export default function DoctorProfilePage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const isBusinessRoute = (pathname || '').startsWith('/business');
   const { data: session, update } = useSession();
   const { currentClinic, refreshClinics } = useClinic();
   const [isEditing, setIsEditing] = useState(false);
@@ -506,11 +508,11 @@ export default function DoctorProfilePage() {
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
-                        <label className="text-sm font-semibold text-gray-900">Clinic Name</label>
+                        <label className="text-sm font-semibold text-gray-900">{isBusinessRoute ? 'Business Name' : 'Clinic Name'}</label>
                         <Input value={clinicName} onChange={(e) => setClinicName(e.target.value)} disabled={!isEditing} className="border-gray-300 bg-white text-gray-900 rounded-md h-8" />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-semibold text-gray-900">Clinic Slug</label>
+                        <label className="text-sm font-semibold text-gray-900">{isBusinessRoute ? 'Business Slug' : 'Clinic Slug'}</label>
                         <Input value={clinicSlug} onChange={(e) => setClinicSlug(e.target.value)} disabled={!isEditing} className="border-gray-300 bg-white text-gray-900 rounded-md h-8" placeholder="ex.: minha-clinica" />
                       </div>
                     </div>

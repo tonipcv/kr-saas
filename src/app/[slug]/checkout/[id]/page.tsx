@@ -445,6 +445,11 @@ export default function BrandedCheckoutPage() {
     const codePoints = chars.map(c => 0x1F1E6 - 65 + c.charCodeAt(0));
     return String.fromCodePoint(codePoints[0], codePoints[1]);
   }
+  function flagSvgUrl(cc: string) {
+    const c = (cc || '').toLowerCase();
+    if (!/^[a-z]{2}$/.test(c)) return null;
+    return `https://flagcdn.com/${c}.svg`;
+  }
   const countryOptions = [
     { code: 'BR', name: 'Brasil' },
     { code: 'US', name: 'United States' },
@@ -586,6 +591,14 @@ export default function BrandedCheckoutPage() {
     const routed = routingMap?.methods?.OPEN_FINANCE_AUTOMATIC?.provider ?? null;
     return (routed || null) as ('KRXPAY'|'STRIPE'|'APPMAX'|null);
   }, [routingMap]);
+  
+  const requiresDocument = useMemo(() => {
+    if (paymentMethod === 'pix' || paymentMethod === 'pix_ob') return true;
+    if ((currentCountry || 'BR').toUpperCase() === 'BR') return true;
+    if (paymentMethod === 'card' && cardProvider && cardProvider !== 'STRIPE') return true;
+    return false;
+  }, [paymentMethod, currentCountry, cardProvider]);
+
   useEffect(() => {
     let active = true;
     async function fetchStripePrice() {
@@ -1335,7 +1348,7 @@ export default function BrandedCheckoutPage() {
     if (!buyerName.trim()) { console.warn('Informe o nome'); return; }
     if (!buyerEmail.trim()) { console.warn('Informe o email'); return; }
     if (!buyerPhone.trim()) { console.warn('Informe o telefone'); return; }
-    if (!buyerDocument.trim()) { console.warn('Informe o CPF/CNPJ'); return; }
+    if (requiresDocument && !buyerDocument.trim()) { console.warn('Informe o CPF/CNPJ'); return; }
     if (paymentMethod === 'pix_ob') {
       if (!PIX_OB_ENABLED) { setError('PIX Open Finance está desativado no momento'); return; }
       try {
@@ -2232,13 +2245,14 @@ export default function BrandedCheckoutPage() {
 
           <div className="flex items-center justify-between max-w-7xl mx-auto px-1 md:px-0 mb-3">
             <div />
+            {availableCountries.length > 1 && (
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setCountryMenuOpen(v => !v)}
                 className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm ${theme==='DARK'?'bg-[#0f0f0f] border-gray-800 text-gray-100':'bg-white border-gray-300 text-gray-900'}`}
               >
-                <span className="text-base">{flagEmoji(currentCountry)}</span>
+                <img src={flagSvgUrl(currentCountry) || ''} alt={`${currentCountry} flag`} className="h-4 w-5 rounded-sm object-cover" loading="lazy" />
                 <span>{isEN ? 'Change country' : 'Alterar país'}</span>
                 <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"/></svg>
               </button>
@@ -2252,7 +2266,7 @@ export default function BrandedCheckoutPage() {
                           onClick={() => { setAddrCountry(cc); setCountryMenuOpen(false); }}
                           className={`w-full px-3 py-2 flex items-center gap-2 text-left ${theme==='DARK'?'hover:bg-gray-900 text-gray-100':'hover:bg-gray-50 text-gray-900'}`}
                         >
-                          <span className="text-base">{flagEmoji(cc)}</span>
+                          <img src={flagSvgUrl(cc) || ''} alt={`${cc} flag`} className="h-4 w-5 rounded-sm object-cover" loading="lazy" />
                           <span>{(isEN ? countryOptionsEN : countryOptions).find(o => o.code === cc)?.name || cc}</span>
                         </button>
                       </li>
@@ -2261,6 +2275,7 @@ export default function BrandedCheckoutPage() {
                 </div>
               )}
             </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -2329,10 +2344,12 @@ export default function BrandedCheckoutPage() {
                       />
                     </div>
                   </div>
-                  <div>
-                    <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>{t.document_label}</div>
-                    <Input value={buyerDocument} onChange={(e) => setBuyerDocument(e.target.value)} placeholder={t.document_placeholder} className={`${inputClass} h-11 text-sm`} />
-                  </div>
+                  {requiresDocument && (
+                    <div>
+                      <div className={`text-sm ${theme === 'DARK' ? 'text-gray-400' : 'text-gray-600'} mb-1.5`}>{t.document_label}</div>
+                      <Input value={buyerDocument} onChange={(e) => setBuyerDocument(e.target.value)} placeholder={t.document_placeholder} className={`${inputClass} h-11 text-sm`} />
+                    </div>
+                  )}
                 </div>
 
                 {/* Payment method */}

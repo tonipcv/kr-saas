@@ -7,11 +7,20 @@ const SECRET_KEY = process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET || "you
 
 export async function POST(req: Request) {
   try {
-    const { email, token, clinicName, subdomain } = await req.json();
+    const {
+      email,
+      token,
+      clinicName,
+      subdomain,
+      businessPhone,
+      monthlyRevenue,
+      currentGateway,
+      country,
+    } = await req.json();
 
-    if (!email || !token || !clinicName || !subdomain) {
+    if (!email || !token || !clinicName || !subdomain || !country) {
       return NextResponse.json(
-        { message: "Email, token, nome da clínica e subdomínio são obrigatórios" },
+        { message: "Email, token, nome da clínica, subdomínio e país são obrigatórios" },
         { status: 400 }
       );
     }
@@ -35,10 +44,15 @@ export async function POST(req: Request) {
 
     // Armazenar temporariamente clinicName e subdomain para etapa final
     const registrationToken = sign(
-      { 
+      {
         email,
         clinicName,
         subdomain,
+        // Optional extra fields to be used on account creation step
+        businessPhone: businessPhone || null,
+        monthlyRevenue: monthlyRevenue || null,
+        currentGateway: currentGateway || null,
+        country: country || null,
         verified: true,
         exp: Math.floor(Date.now() / 1000) + 60 * 30 // 30 minutos
       },

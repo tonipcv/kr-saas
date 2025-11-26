@@ -26,7 +26,12 @@ export async function POST(req: Request) {
         clinicName?: string,
         subdomain?: string,
         slug?: string, // compat
-        verified: boolean 
+        verified: boolean,
+        // optional business fields carried from slug step
+        country?: string | null,
+        monthlyRevenue?: string | null,
+        currentGateway?: string | null,
+        businessPhone?: string | null,
       };
       const normalizedEmail = (email as string).toLowerCase().trim();
       if (decodedToken.email.toLowerCase().trim() !== normalizedEmail || !decodedToken.verified) {
@@ -45,6 +50,10 @@ export async function POST(req: Request) {
     const normalizedEmail = email.toLowerCase().trim();
     const clinicNameFromToken = decodedToken.clinicName || name; // fallback para compatibilidade
     const subdomainFromToken = decodedToken.subdomain || decodedToken.slug; // preferir subdomain
+    const countryFromToken = (decodedToken as any).country || null;
+    const monthlyRevenueFromToken = (decodedToken as any).monthlyRevenue || null;
+    const currentGatewayFromToken = (decodedToken as any).currentGateway || null;
+    const businessPhoneFromToken = (decodedToken as any).businessPhone || null;
 
     if (!clinicNameFromToken) {
       return NextResponse.json(
@@ -130,6 +139,10 @@ export async function POST(req: Request) {
             name: clinicNameFromToken,
             isActive: true,
             ...(subdomainFromToken ? { subdomain: subdomainFromToken, slug: subdomainFromToken } : {}),
+            ...(countryFromToken ? { country: countryFromToken } : {}),
+            ...(monthlyRevenueFromToken ? { monthlyRevenueRange: monthlyRevenueFromToken } : {}),
+            ...(currentGatewayFromToken ? { currentGateway: currentGatewayFromToken } : {}),
+            ...(businessPhoneFromToken ? { phone: businessPhoneFromToken } : {}),
           }
         });
       } catch {
@@ -159,6 +172,10 @@ export async function POST(req: Request) {
             ownerId: doctor.id,
             isActive: true,
             ...(subdomainFromToken ? { subdomain: subdomainFromToken, slug: subdomainFromToken } : {}),
+            ...(countryFromToken ? { country: countryFromToken } : {}),
+            ...(monthlyRevenueFromToken ? { monthlyRevenueRange: monthlyRevenueFromToken } : {}),
+            ...(currentGatewayFromToken ? { currentGateway: currentGatewayFromToken } : {}),
+            ...(businessPhoneFromToken ? { phone: businessPhoneFromToken } : {}),
           }
         });
       } catch {

@@ -126,7 +126,7 @@ export async function createPagarmeSubscription(params: LegacyCreatePagarmeSubsc
 
   const ENABLE_SPLIT = String(process.env.PAGARME_ENABLE_SPLIT || '').toLowerCase() === 'true';
   const platformRecipientId = String(process.env.PAGARME_PLATFORM_RECIPIENT_ID_OVERRIDE || process.env.PLATFORM_RECIPIENT_ID || process.env.PAGARME_PLATFORM_RECIPIENT_ID || '').trim() || null;
-  const clinicPercent = Math.max(0, Math.min(100, Number(merchant?.splitPercent || 70)));
+  const clinicPercent = Math.max(0, Math.min(100, Number(merchant?.splitPercent || 85)));
   const platformPercent = Math.max(0, Math.min(100, 100 - clinicPercent));
   const clinicRecipientId = String(process.env.PAGARME_RECIPIENT_ID_OVERRIDE || merchant?.recipientId || '').trim() || null;
   try {
@@ -414,7 +414,7 @@ export async function createPagarmeSubscription(params: LegacyCreatePagarmeSubsc
             } catch {}
           }
           // Compute split amounts for initial row
-          const clinicSplitPercent = Math.max(0, Math.min(100, Number(merchant?.splitPercent || 70)));
+          const clinicSplitPercent = Math.max(0, Math.min(100, Number(merchant?.splitPercent || 85)));
           const platformFeeBps = Number(merchant?.platformFeeBps || 0);
           const transactionFeeCents = Number(merchant?.transactionFeeCents || 0);
           const clinicShare = Math.round(unitAmount * (clinicSplitPercent / 100));

@@ -700,7 +700,7 @@ export async function POST(req: Request) {
       const ENABLE_SPLIT = String(process.env.PAGARME_ENABLE_SPLIT || '').toLowerCase() === 'true';
       const clinicRecipientId = (String(process.env.PAGARME_RECIPIENT_ID_OVERRIDE || merchant?.recipientId || '').trim()) || null;
       const platformRecipientId = (String(process.env.PAGARME_PLATFORM_RECIPIENT_ID_OVERRIDE || process.env.PLATFORM_RECIPIENT_ID || process.env.PAGARME_PLATFORM_RECIPIENT_ID || '').trim()) || null;
-      const rawSplitPercent = typeof merchant?.splitPercent === 'number' ? merchant.splitPercent : 70; // default 70% clínica
+      const rawSplitPercent = typeof merchant?.splitPercent === 'number' ? merchant.splitPercent : 85; // default 85% clínica, 15% plataforma
       // Split style per method with sensible defaults:
       // - all methods: payments_percentage (per Pagar.me support example)
       const method = String(payment?.method || '').toLowerCase();
@@ -1304,8 +1304,8 @@ export async function POST(req: Request) {
         const methodType = payment?.method === 'pix' ? 'pix' : 'credit_card';
         const orderId = order?.id || null;
         try { console.log('[checkout][create] inserting payment_transactions row', { txId, orderId, methodType, customerId: txCustomerId }); } catch {}
-        // Compute clinic/platform amounts from merchant.splitPercent (fallback 70) and hybrid fees (platformFeeBps + transactionFeeCents)
-        let clinicSplitPercent = 70;
+        // Compute clinic/platform amounts from merchant.splitPercent (fallback 85) and hybrid fees (platformFeeBps + transactionFeeCents)
+        let clinicSplitPercent = 85;
         let platformFeeBps = 0;
         let transactionFeeCents = 0;
         try {

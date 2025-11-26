@@ -110,13 +110,52 @@ export default function CreateProductPage() {
     } catch {}
   }, [countryPrice.country]);
 
+  // Integration connection flags must be defined before computing providers
+  const [pgConnected, setPgConnected] = useState<boolean>(false);
+  const [stripeConnected, setStripeConnected] = useState<boolean>(false);
+
+  // Compute available providers per country based on active integrations
+  const providersAvailable = React.useMemo(() => {
+    const cc = String(countryPrice.country || '').toUpperCase();
+    const list: Array<'KRXPAY'|'STRIPE'> = [];
+    if (cc === 'BR') {
+      if (pgConnected) list.push('KRXPAY');
+      if (stripeConnected) list.push('STRIPE');
+    } else {
+      if (stripeConnected) list.push('STRIPE');
+    }
+    return list;
+  }, [countryPrice.country, pgConnected, stripeConnected]);
+
+  // Ensure selected provider is valid when country or integrations change
+  useEffect(() => {
+    if (!providersAvailable.includes(countryPrice.provider as any)) {
+      if (providersAvailable.length > 0) {
+        setCountryPrice((p) => ({ ...p, provider: providersAvailable[0] }));
+      }
+    }
+  }, [providersAvailable, countryPrice.provider]);
+
+  // Country options allowed by provider: Stripe -> all, others -> only BR
+  const countryOptions = React.useMemo(() => {
+    const prov = String(countryPrice.provider || '').toUpperCase();
+    if (prov === 'STRIPE') return COUNTRIES;
+    return COUNTRIES.filter(c => c.code === 'BR');
+  }, [countryPrice.provider]);
+
+  // Ensure country fits provider constraints (non-Stripe -> BR)
+  useEffect(() => {
+    const prov = String(countryPrice.provider || '').toUpperCase();
+    if (prov !== 'STRIPE' && String(countryPrice.country).toUpperCase() !== 'BR') {
+      setCountryPrice(p => ({ ...p, country: 'BR' }));
+    }
+  }, [countryPrice.provider]);
+
   // Gateway por localização (MVP)
   const [routingUsePlatformDefault, setRoutingUsePlatformDefault] = useState(true);
   const [routingDefaultProvider, setRoutingDefaultProvider] = useState<'KRXPAY' | 'STRIPE'>('KRXPAY');
   const [routingOverrides, setRoutingOverrides] = useState<Array<{ country: string; provider: 'KRXPAY'|'STRIPE' }>>([]);
   const [merchantId, setMerchantId] = useState<string>('');
-  const [pgConnected, setPgConnected] = useState<boolean>(false);
-  const [stripeConnected, setStripeConnected] = useState<boolean>(false);
 
   useEffect(() => {
     const loadMerchantAndStatuses = async () => {
@@ -414,7 +453,7 @@ export default function CreateProductPage() {
                   <CardContent className="space-y-4">
                     <div>
                       <Label htmlFor="name" className="text-gray-900 font-medium">Product Name *</Label>
-                      <Input id="name" value={formData.name} onChange={(e) => handleInputChange('name', e.target.value)} placeholder="e.g., Ultra Light Sunscreen" required className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-9" />
+                      <Input id="name" value={formData.name} onChange={(e) => handleInputChange('name', e.target.value)} placeholder="Your product name" required className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900 bg-white text-gray-700 placeholder:text-gray-500 rounded-xl h-9" />
                     </div>
 
 
@@ -524,9 +563,17 @@ export default function CreateProductPage() {
                             <SelectValue placeholder="Select" />
                           </SelectTrigger>
                           <SelectContent>
-                            {COUNTRIES.map(c => (
+                            {countryOptions.map(c => (
                               <SelectItem key={c.code} value={c.code}>
-                                {flagEmoji(c.code)} {c.name}
+                                <span className="inline-flex items-center gap-2">
+                                  <img
+                                    src={`https://flagcdn.com/${c.code.toLowerCase()}.svg`}
+                                    alt={`${c.name} flag`}
+                                    className="h-3 w-4 rounded-sm object-cover"
+                                    loading="lazy"
+                                  />
+                                  <span>{c.name}</span>
+                                </span>
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -545,15 +592,14 @@ export default function CreateProductPage() {
                             <SelectValue placeholder="Provider" />
                           </SelectTrigger>
                           <SelectContent>
-                            {String(countryPrice.country).toUpperCase() === 'BR' ? (
-                              <>
-                                <SelectItem value="KRXPAY">KRXPAY</SelectItem>
-                                <SelectItem value="STRIPE">Stripe</SelectItem>
-                                <SelectItem value="APPMAX">Appmax</SelectItem>
-                              </>
-                            ) : (
-                              <SelectItem value="STRIPE">Stripe</SelectItem>
+                            {providersAvailable.length === 0 && (
+                              <SelectItem value="__none__" disabled>
+                                No active providers
+                              </SelectItem>
                             )}
+                            {providersAvailable.map((p) => (
+                              <SelectItem key={p} value={p}>{p === 'STRIPE' ? 'Stripe' : p}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>

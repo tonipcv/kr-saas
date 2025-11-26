@@ -147,30 +147,7 @@ export async function DELETE(
       prisma.productCategory.deleteMany({
         where: { doctorId }
       }),
-      // Delete doctor's form settings
-      prisma.referralFormSettings.deleteMany({
-        where: { doctorId }
-      }),
-      // Delete legacy leads where this user was referrer
-      prisma.leads.deleteMany({
-        where: { referrerId: doctorId }
-      }),
-      // Delete doctor's credits
-      prisma.referralCredit.deleteMany({
-        where: { userId: doctorId }
-      }),
-      // Delete doctor's rewards
-      prisma.referralReward.deleteMany({
-        where: { doctorId }
-      }),
-      // Delete doctor's referrals
-      prisma.referrals.deleteMany({
-        where: { doctorId }
-      }),
-      // Delete user's redemptions
-      prisma.rewardRedemption.deleteMany({
-        where: { userId: doctorId }
-      }),
+      // Legacy referral/loyalty models are not present in current schema; deletions removed
       // Finally, delete the doctor
       prisma.user.delete({
         where: { id: doctorId }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useClinic } from '@/contexts/clinic-context';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,10 @@ export default function PagarmeSetupPage() {
   const pathname = usePathname();
   const { currentClinic } = useClinic();
 
+  // Wizard state (4 steps)
+  const [step, setStep] = useState<1|2|3|4>(1);
+  const totalSteps = 4;
+
   const [name, setName] = useState('');
   const [documentNumber, setDocumentNumber] = useState('');
   const [email, setEmail] = useState('');
@@ -22,6 +26,8 @@ export default function PagarmeSetupPage() {
   const [monthlyIncome, setMonthlyIncome] = useState<string>('');
   const [occupation, setOccupation] = useState('');
 
+  // Bank optional toggle
+  const [includeBank, setIncludeBank] = useState(false);
   const [bank, setBank] = useState('');
   const [agency, setAgency] = useState('');
   const [agencyDigit, setAgencyDigit] = useState('');
@@ -39,6 +45,13 @@ export default function PagarmeSetupPage() {
   const [addrState, setAddrState] = useState('');
   const [addrZip, setAddrZip] = useState('');
   const [addrRef, setAddrRef] = useState('');
+
+  // Inline field error map
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  // CEP lookup state
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepError, setCepError] = useState<string | null>(null);
+  const streetNumberRef = useRef<HTMLInputElement | null>(null);
 
   // Prefill email/phone from clinic once
   useEffect(() => {
@@ -74,7 +87,6 @@ export default function PagarmeSetupPage() {
     // Address
     if (!addrStreet.trim()) errs.push('Informe a rua.');
     if (!addrStreetNumber.trim()) errs.push('Informe o número.');
-    if (!addrComplementary.trim()) errs.push('Informe o complemento.');
     if (!addrNeighborhood.trim()) errs.push('Informe o bairro.');
     if (!addrCity.trim()) errs.push('Informe a cidade.');
     if (!addrState.trim() || !isUF(addrState)) errs.push('UF inválida (ex.: SP).');
@@ -82,7 +94,7 @@ export default function PagarmeSetupPage() {
     if (zipDigits.length !== 8) errs.push('CEP deve ter 8 dígitos (somente números).');
 
     // Bank (if any is filled, require all mínimos)
-    const hasAnyBankField = [bank, agency, account, accountType].some((v) => v && v.trim());
+    const hasAnyBankField = includeBank || [bank, agency, account, accountType].some((v) => v && v.trim());
     if (hasAnyBankField) {
       if (onlyDigits(bank).length < 3) errs.push('Banco inválido (código com 3 dígitos).');
       if (onlyDigits(agency).length < 3) errs.push('Agência inválida.');
@@ -95,6 +107,90 @@ export default function PagarmeSetupPage() {
 
     return errs;
   }
+
+  // Per-step validation to gate Next
+  const validateStep = (s: 1|2|3|4): boolean => {
+    const nextErrors: Record<string, string> = {};
+    const docDigits = onlyDigits(documentNumber);
+    const phoneDigits = onlyDigits(phone);
+    const zipDigits = onlyDigits(addrZip);
+    if (s === 1) {
+      if (!name.trim()) nextErrors.name = 'Obrigatório';
+      if (!(docDigits.length === 11 || docDigits.length === 14)) nextErrors.documentNumber = 'CPF/CNPJ inválido';
+      if (!isEmail(email)) nextErrors.email = 'Email inválido';
+      if (!(phoneDigits.length >= 10 && phoneDigits.length <= 13)) nextErrors.phone = 'Telefone inválido';
+      if (!isBirthdate(birthdate)) nextErrors.birthdate = 'Use dd/mm/aaaa';
+    } else if (s === 2) {
+      if (!occupation.trim()) nextErrors.occupation = 'Obrigatório';
+      if (!monthlyIncome || Number.isNaN(Number(monthlyIncome)) || Number(monthlyIncome) <= 0) nextErrors.monthlyIncome = 'Obrigatório';
+      if (siteUrl.trim() && !isHttpUrl(siteUrl)) nextErrors.siteUrl = 'URL inválida';
+      if (!motherName.trim()) nextErrors.motherName = 'Obrigatório';
+    } else if (s === 3) {
+      if (zipDigits.length !== 8) nextErrors.addrZip = 'CEP inválido';
+      if (!addrStreet.trim()) nextErrors.addrStreet = 'Obrigatório';
+      if (!addrStreetNumber.trim()) nextErrors.addrStreetNumber = 'Obrigatório';
+      if (!addrNeighborhood.trim()) nextErrors.addrNeighborhood = 'Obrigatório';
+      if (!addrCity.trim()) nextErrors.addrCity = 'Obrigatório';
+      if (!addrState.trim() || !isUF(addrState)) nextErrors.addrState = 'UF inválida';
+    } else if (s === 4 && (includeBank || [bank, agency, account, accountType].some(v => v && v.trim()))) {
+      if (onlyDigits(bank).length < 3) nextErrors.bank = 'Banco inválido';
+      if (onlyDigits(agency).length < 3) nextErrors.agency = 'Agência inválida';
+      if (onlyDigits(account).length < 1) nextErrors.account = 'Conta inválida';
+      if (!accountDigit.trim()) nextErrors.accountDigit = 'Obrigatório';
+      if (!accountType) nextErrors.accountType = 'Obrigatório';
+    }
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const goNext = () => {
+    if (!validateStep(step)) return;
+    setStep((s) => {
+      const n = s + 1;
+      const clamped = n > 4 ? 4 : (n < 1 ? 1 : n);
+      return clamped as 1|2|3|4;
+    });
+  };
+  const goBack = () => {
+    setStep((s) => {
+      const n = s - 1;
+      const clamped = n < 1 ? 1 : (n > 4 ? 4 : n);
+      return clamped as 1|2|3|4;
+    });
+  };
+
+  // CEP auto-lookup using ViaCEP when 8 digits
+  useEffect(() => {
+    const zip = onlyDigits(addrZip);
+    if (zip.length !== 8) return;
+    let alive = true;
+    setCepLoading(true);
+    setCepError(null);
+    (async () => {
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${zip}/json/`);
+        const js = await res.json().catch(() => ({}));
+        if (!alive) return;
+        if (js?.erro) {
+          setCepError('CEP não encontrado');
+          return;
+        }
+        // Overwrite fields from CEP response
+        setAddrStreet(js.logradouro || '');
+        setAddrNeighborhood(js.bairro || '');
+        setAddrCity(js.localidade || '');
+        setAddrState((js.uf || '').toUpperCase());
+        // Focus on Número para continuar
+        try { streetNumberRef.current?.focus(); } catch {}
+      } catch {
+        if (alive) setCepError('Falha ao buscar CEP');
+      } finally {
+        if (alive) setCepLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addrZip]);
 
   // ---------- Helpers para dados aleatórios de teste ----------
   function randInt(min: number, max: number) {
@@ -262,9 +358,9 @@ export default function PagarmeSetupPage() {
 
   async function onSubmit() {
     if (!currentClinic?.id) return toast.error('Selecione um negócio');
-    const errors = validateForm();
-    if (errors.length) {
-      toast.error(errors[0]);
+    const errorsAll = validateForm();
+    if (errorsAll.length) {
+      toast.error(errorsAll[0]);
       return;
     }
     try {
@@ -296,7 +392,7 @@ export default function PagarmeSetupPage() {
           },
         },
       };
-      const bankAccount: any = bank && agency && account && accountType ? {
+      const bankAccount: any = (includeBank && bank && agency && account && accountType) ? {
         bank_code: bank.trim(),
         agencia: agency.trim(),
         branch_check_digit: agencyDigit.trim() || undefined,
@@ -310,6 +406,7 @@ export default function PagarmeSetupPage() {
           clinicId: currentClinic.id,
           legalInfo,
           bankAccount,
+          splitPercent: 85, // 85% para o recipient, 15% para a plataforma/agente
         })
       });
       const data = await res.json().catch(() => undefined);
@@ -372,7 +469,7 @@ export default function PagarmeSetupPage() {
               >
                 Cancelar
               </Button>
-              <Button onClick={onSubmit} disabled={saving} className="bg-gray-900 text-white hover:bg-black">{saving ? 'Salvando…' : 'Salvar'}</Button>
+              <Button onClick={onSubmit} disabled={saving || step !== 4} className="bg-gray-900 text-white hover:bg-black">{saving ? 'Salvando…' : 'Salvar'}</Button>
             </div>
           </div>
 
@@ -380,111 +477,184 @@ export default function PagarmeSetupPage() {
             {/* Form */}
             <div className="xl:col-span-2">
               <div className="rounded-2xl border border-gray-200 p-5">
-                <div className="text-xs font-semibold text-gray-700 mb-3">Dados legais</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Razão social / Nome completo</div>
-                    <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Negócio Exemplo LTDA" className="h-10" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Documento (CPF/CNPJ)</div>
-                    <Input value={documentNumber} onChange={(e) => setDocumentNumber(e.target.value)} placeholder="Somente números" className="h-10" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Email de contato</div>
-                    <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@dominio.com" className="h-10" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Telefone (E.164)</div>
-                    <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+5511999999999" className="h-10" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Site (URL)</div>
-                    <Input value={siteUrl} onChange={(e) => setSiteUrl(e.target.value)} placeholder="https://negocio.com" className="h-10" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Nome da mãe</div>
-                    <Input value={motherName} onChange={(e) => setMotherName(e.target.value)} placeholder="Maria Exemplo" className="h-10" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Data de nascimento</div>
-                    <Input value={birthdate} onChange={(e) => setBirthdate(e.target.value)} placeholder="dd/mm/aaaa" className="h-10" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Renda mensal (R$ centavos)</div>
-                    <Input type="number" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="ex.: 120000" className="h-10" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Ocupação profissional</div>
-                    <Input value={occupation} onChange={(e) => setOccupation(e.target.value)} placeholder="Dentista" className="h-10" />
-                  </div>
+                {/* Progress */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-xs text-gray-600">Etapa {step} de {totalSteps}</div>
+                  <div className="flex gap-1">{Array.from({ length: totalSteps }).map((_, i) => (
+                    <div key={i} className={`h-1.5 w-8 rounded-full ${i < step ? 'bg-gray-900' : 'bg-gray-200'}`} />
+                  ))}</div>
                 </div>
 
-                <div className="mt-6 text-xs font-semibold text-gray-700 mb-3">Dados bancários</div>
-                <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                {/* Step 1: Dados pessoais */}
+                {step === 1 && (
                   <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Banco</div>
-                    <Input value={bank} onChange={(e) => setBank(e.target.value)} placeholder="341" className="h-10" />
+                    <div className="text-xs font-semibold text-gray-700 mb-3">Dados pessoais</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Razão social / Nome completo <span className="text-red-500">*</span></div>
+                        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Negócio Exemplo LTDA" className="h-10" />
+                        {errors.name && <div className="text-[11px] text-red-600 mt-1">{errors.name}</div>}
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Documento (CPF/CNPJ) <span className="text-red-500">*</span></div>
+                        <Input value={documentNumber} onChange={(e) => setDocumentNumber(e.target.value)} placeholder="Somente números" className="h-10" />
+                        {errors.documentNumber && <div className="text-[11px] text-red-600 mt-1">{errors.documentNumber}</div>}
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Email de contato <span className="text-red-500">*</span></div>
+                        <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@dominio.com" className="h-10" />
+                        {errors.email && <div className="text-[11px] text-red-600 mt-1">{errors.email}</div>}
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Telefone (E.164) <span className="text-red-500">*</span></div>
+                        <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+5511999999999" className="h-10" />
+                        {errors.phone && <div className="text-[11px] text-red-600 mt-1">{errors.phone}</div>}
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Data de nascimento <span className="text-red-500">*</span></div>
+                        <Input value={birthdate} onChange={(e) => setBirthdate(e.target.value)} placeholder="dd/mm/aaaa" className="h-10" />
+                        {errors.birthdate && <div className="text-[11px] text-red-600 mt-1">{errors.birthdate}</div>}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Agência</div>
-                    <Input value={agency} onChange={(e) => setAgency(e.target.value)} placeholder="1234" className="h-10" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Dígito ag.</div>
-                    <Input value={agencyDigit} onChange={(e) => setAgencyDigit(e.target.value)} placeholder="6 (opcional)" className="h-10" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Conta</div>
-                    <Input value={account} onChange={(e) => setAccount(e.target.value)} placeholder="12345" className="h-10" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Dígito conta</div>
-                    <Input value={accountDigit} onChange={(e) => setAccountDigit(e.target.value)} placeholder="6 (opcional)" className="h-10" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Tipo</div>
-                    <select value={accountType} onChange={(e) => setAccountType(e.target.value as any)} className="h-10 w-full rounded-md border border-gray-300 px-3 text-sm text-gray-900">
-                      <option value="" disabled>Selecione</option>
-                      <option value="conta_corrente">conta_corrente</option>
-                      <option value="conta_poupanca">conta_poupanca</option>
-                    </select>
-                  </div>
-                </div>
+                )}
 
-                <div className="mt-6 text-xs font-semibold text-gray-700 mb-3">Endereço</div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="md:col-span-2">
-                    <div className="text-[12px] text-gray-600 mb-1">Rua</div>
-                    <Input value={addrStreet} onChange={(e) => setAddrStreet(e.target.value)} placeholder="Rua Exemplo" className="h-10" />
-                  </div>
+                {/* Step 2: Dados profissionais */}
+                {step === 2 && (
                   <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Número</div>
-                    <Input value={addrStreetNumber} onChange={(e) => setAddrStreetNumber(e.target.value)} placeholder="123" className="h-10" />
+                    <div className="text-xs font-semibold text-gray-700 mb-3">Dados profissionais</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Ocupação profissional <span className="text-red-500">*</span></div>
+                        <Input value={occupation} onChange={(e) => setOccupation(e.target.value)} placeholder="Dentista" className="h-10" />
+                        {errors.occupation && <div className="text-[11px] text-red-600 mt-1">{errors.occupation}</div>}
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Renda mensal (R$ centavos) <span className="text-red-500">*</span></div>
+                        <Input type="number" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="ex.: 120000" className="h-10" />
+                        {errors.monthlyIncome && <div className="text-[11px] text-red-600 mt-1">{errors.monthlyIncome}</div>}
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Nome da mãe <span className="text-red-500">*</span></div>
+                        <Input value={motherName} onChange={(e) => setMotherName(e.target.value)} placeholder="Maria Exemplo" className="h-10" />
+                        {errors.motherName && <div className="text-[11px] text-red-600 mt-1">{errors.motherName}</div>}
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Site (URL)</div>
+                        <Input value={siteUrl} onChange={(e) => setSiteUrl(e.target.value)} placeholder="https://negocio.com" className="h-10" />
+                        {errors.siteUrl && <div className="text-[11px] text-red-600 mt-1">{errors.siteUrl}</div>}
+                        <div className="text-[11px] text-gray-500 mt-1">Inclua http:// ou https://</div>
+                      </div>
+                    </div>
                   </div>
+                )}
+
+                {/* Step 3: Endereço */}
+                {step === 3 && (
                   <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Complemento</div>
-                    <Input value={addrComplementary} onChange={(e) => setAddrComplementary(e.target.value)} placeholder="Sala 1001" className="h-10" />
+                    <div className="text-xs font-semibold text-gray-700 mb-3">Endereço</div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">CEP <span className="text-red-500">*</span></div>
+                        <Input value={addrZip} onChange={(e) => setAddrZip(e.target.value)} placeholder="01001000" className="h-10" />
+                        {errors.addrZip && <div className="text-[11px] text-red-600 mt-1">{errors.addrZip}</div>}
+                        {cepLoading && <div className="text-[11px] text-blue-600 mt-1">Buscando CEP…</div>}
+                        {cepError && <div className="text-[11px] text-red-600 mt-1">{cepError}</div>}
+                        <div className="text-[11px] text-gray-500 mt-1">Ao digitar 8 dígitos, preenchemos rua, bairro, cidade e UF automaticamente.</div>
+                      </div>
+                      <div className="md:col-span-2">
+                        <div className="text-[12px] text-gray-600 mb-1">Rua <span className="text-red-500">*</span></div>
+                        <Input value={addrStreet} onChange={(e) => setAddrStreet(e.target.value)} placeholder="Rua Exemplo" className="h-10" />
+                        {errors.addrStreet && <div className="text-[11px] text-red-600 mt-1">{errors.addrStreet}</div>}
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Número <span className="text-red-500">*</span></div>
+                        <Input ref={streetNumberRef as any} value={addrStreetNumber} onChange={(e) => setAddrStreetNumber(e.target.value)} placeholder="123" className="h-10" />
+                        {errors.addrStreetNumber && <div className="text-[11px] text-red-600 mt-1">{errors.addrStreetNumber}</div>}
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Complemento</div>
+                        <Input value={addrComplementary} onChange={(e) => setAddrComplementary(e.target.value)} placeholder="Sala 1001" className="h-10" />
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Bairro <span className="text-red-500">*</span></div>
+                        <Input value={addrNeighborhood} onChange={(e) => setAddrNeighborhood(e.target.value)} placeholder="Centro" className="h-10" />
+                        {errors.addrNeighborhood && <div className="text-[11px] text-red-600 mt-1">{errors.addrNeighborhood}</div>}
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">Cidade <span className="text-red-500">*</span></div>
+                        <Input value={addrCity} onChange={(e) => setAddrCity(e.target.value)} placeholder="São Paulo" className="h-10" />
+                        {errors.addrCity && <div className="text-[11px] text-red-600 mt-1">{errors.addrCity}</div>}
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-gray-600 mb-1">UF <span className="text-red-500">*</span></div>
+                        <Input value={addrState} onChange={(e) => setAddrState(e.target.value)} placeholder="SP" className="h-10" />
+                        {errors.addrState && <div className="text-[11px] text-red-600 mt-1">{errors.addrState}</div>}
+                      </div>
+                      <div className="md:col-span-3">
+                        <div className="text-[12px] text-gray-600 mb-1">Ponto de referência</div>
+                        <Input value={addrRef} onChange={(e) => setAddrRef(e.target.value)} placeholder="Ao lado da praça" className="h-10" />
+                      </div>
+                    </div>
                   </div>
+                )}
+
+                {/* Step 4: Dados bancários (opcional) */}
+                {step === 4 && (
                   <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Bairro</div>
-                    <Input value={addrNeighborhood} onChange={(e) => setAddrNeighborhood(e.target.value)} placeholder="Centro" className="h-10" />
+                    <div className="text-xs font-semibold text-gray-700 mb-2">Dados bancários (opcional)</div>
+                    <label className="flex items-center gap-2 mb-3 text-sm text-gray-700">
+                      <input type="checkbox" checked={includeBank} onChange={(e) => setIncludeBank(e.target.checked)} />
+                      Adicionar conta bancária agora
+                    </label>
+                    {includeBank && (
+                      <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                        <div>
+                          <div className="text-[12px] text-gray-600 mb-1">Banco <span className="text-red-500">*</span></div>
+                          <Input value={bank} onChange={(e) => setBank(e.target.value)} placeholder="341" className="h-10" />
+                          {errors.bank && <div className="text-[11px] text-red-600 mt-1">{errors.bank}</div>}
+                        </div>
+                        <div>
+                          <div className="text-[12px] text-gray-600 mb-1">Agência <span className="text-red-500">*</span></div>
+                          <Input value={agency} onChange={(e) => setAgency(e.target.value)} placeholder="1234" className="h-10" />
+                          {errors.agency && <div className="text-[11px] text-red-600 mt-1">{errors.agency}</div>}
+                        </div>
+                        <div>
+                          <div className="text-[12px] text-gray-600 mb-1">Dígito ag.</div>
+                          <Input value={agencyDigit} onChange={(e) => setAgencyDigit(e.target.value)} placeholder="6 (opcional)" className="h-10" />
+                        </div>
+                        <div>
+                          <div className="text-[12px] text-gray-600 mb-1">Conta <span className="text-red-500">*</span></div>
+                          <Input value={account} onChange={(e) => setAccount(e.target.value)} placeholder="12345" className="h-10" />
+                          {errors.account && <div className="text-[11px] text-red-600 mt-1">{errors.account}</div>}
+                        </div>
+                        <div>
+                          <div className="text-[12px] text-gray-600 mb-1">Dígito conta <span className="text-red-500">*</span></div>
+                          <Input value={accountDigit} onChange={(e) => setAccountDigit(e.target.value)} placeholder="6" className="h-10" />
+                          {errors.accountDigit && <div className="text-[11px] text-red-600 mt-1">{errors.accountDigit}</div>}
+                        </div>
+                        <div>
+                          <div className="text-[12px] text-gray-600 mb-1">Tipo <span className="text-red-500">*</span></div>
+                          <select value={accountType} onChange={(e) => setAccountType(e.target.value as any)} className="h-10 w-full rounded-md border border-gray-300 px-3 text-sm text-gray-900">
+                            <option value="" disabled>Selecione</option>
+                            <option value="conta_corrente">conta_corrente</option>
+                            <option value="conta_poupanca">conta_poupanca</option>
+                          </select>
+                          {errors.accountType && <div className="text-[11px] text-red-600 mt-1">{errors.accountType}</div>}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">Cidade</div>
-                    <Input value={addrCity} onChange={(e) => setAddrCity(e.target.value)} placeholder="Sao Paulo" className="h-10" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">UF</div>
-                    <Input value={addrState} onChange={(e) => setAddrState(e.target.value)} placeholder="SP" className="h-10" />
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-gray-600 mb-1">CEP</div>
-                    <Input value={addrZip} onChange={(e) => setAddrZip(e.target.value)} placeholder="01001000" className="h-10" />
-                  </div>
-                  <div className="md:col-span-3">
-                    <div className="text-[12px] text-gray-600 mb-1">Ponto de referência</div>
-                    <Input value={addrRef} onChange={(e) => setAddrRef(e.target.value)} placeholder="Ao lado da praça" className="h-10" />
+                )}
+
+                {/* Controls */}
+                <div className="mt-6 flex items-center justify-between">
+                  <div className="text-[11px] text-gray-500">Campos com <span className="text-red-500">*</span> são obrigatórios</div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={goBack} disabled={step === 1}>Voltar</Button>
+                    {step < totalSteps && (
+                      <Button onClick={goNext}>Próximo</Button>
+                    )}
                   </div>
                 </div>
               </div>

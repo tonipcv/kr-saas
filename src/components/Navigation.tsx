@@ -415,12 +415,6 @@ export default function Navigation() {
           icon: DocumentTextIcon,
           description: 'Review and approve KYC applications'
         },
-        {
-          href: '/clinic/subscription',
-          label: 'Business Subscription',
-          icon: ShieldCheckIcon,
-          description: 'Manage active business plan'
-        },
       ]
     }
   ], []);
@@ -691,14 +685,6 @@ export default function Navigation() {
                   <ArrowRightOnRectangleIcon className="h-4 w-4" />
                 </button>
               </div>
-              {isFreePlan && (
-                <Link
-                  href={currentClinic?.id ? `/clinic/subscription?clinicId=${encodeURIComponent(currentClinic.id)}#plans` : "/clinic/subscription#plans"}
-                  className="mt-2 w-full inline-flex items-center justify-center text-xs font-medium text-white bg-gray-900 hover:bg-black rounded-md h-8"
-                >
-                  Upgrade
-                </Link>
-              )}
             </div>
           </div>
         </nav>

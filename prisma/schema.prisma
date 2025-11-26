@@ -76,7 +76,7 @@ enum SubscriptionStatus {
   CANCELED
   EXPIRED
 
-  @@map("SubscriptionStatus")
+  @@map("subscription_status")
 }
 
 enum PlanTier {
@@ -490,7 +490,7 @@ model Merchant {
   recipientId         String?        @map("recipient_id")
   externalAccountId   String?        @map("external_account_id")
   onboardingState     Json?          @map("onboarding_state")
-  splitPercent        Int            @default(100) @map("split_percent")
+  splitPercent        Int            @default(85) @map("split_percent")
   platformFeeBps      Int            @default(0) @map("platform_fee_bps")
   transactionFeeCents Int?           @default(0) @map("transaction_fee_cents")
   transactionFeeType  String?        @default("flat") @map("transaction_fee_type")
