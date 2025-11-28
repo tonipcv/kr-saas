@@ -1,7 +1,9 @@
-export default {
-  project: process.env.TRIGGER_PROJECT || "proj_naaseftufwbqfmmzzdth",
-  runtime: "node",
-  logLevel: "info",
+import { defineConfig } from "@trigger.dev/sdk/v3";
+
+export default defineConfig({
+  project: "proj_naaseftufwbqfmmzzdth",
+  // v4 requires maxDuration (minimum 5 seconds)
+  maxDuration: 300, // 5 minutes max per task execution
   retries: {
     enabledInDev: true,
     default: {
@@ -9,10 +11,8 @@ export default {
       minTimeoutInMs: 1000,
       maxTimeoutInMs: 10000,
       factor: 2,
+      randomize: true,
     },
   },
-  enableIdempotency: true,
-  concurrencyLimit: 50,
-  // v4 requires this (>= 5 seconds). Adjust as needed.
-  maxDuration: 60,
-} as any;
+  dirs: ["./trigger"],
+});

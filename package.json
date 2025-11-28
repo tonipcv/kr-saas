@@ -2,9 +2,6 @@
   "name": "habit-tracker",
   "version": "0.1.0",
   "private": true,
-  "trigger.dev": {
-    "endpointId": "krxscale-webhooks"
-  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
@@ -36,7 +33,8 @@
     "delete:clinics:owner": "node scripts/delete-clinics-by-owner-email.js",
     "test:webhooks": "vitest run src/lib/webhooks/__tests__ src/lib/payments/__tests__",
     "test:webhooks:watch": "vitest watch src/lib/webhooks/__tests__ src/lib/payments/__tests__",
-    "test:webhooks:coverage": "vitest run --coverage src/lib/webhooks/__tests__ src/lib/payments/__tests__"
+    "test:webhooks:coverage": "vitest run --coverage src/lib/webhooks/__tests__ src/lib/payments/__tests__",
+    "test:trigger": "npx tsx scripts/test-trigger-webhook.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
