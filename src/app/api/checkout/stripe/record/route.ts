@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
+import { onPaymentTransactionCreated } from '@/lib/webhooks/emit-updated'
 import Stripe from 'stripe'
 import { randomUUID } from 'crypto'
-
-const prisma = new PrismaClient()
 
 // Fallback: record a Stripe PaymentIntent in payment_transactions when webhooks are not received
 // Body: { payment_intent_id: string, productId?: string, slug?: string }
@@ -207,6 +206,10 @@ export async function POST(req: NextRequest) {
               String(buyer?.email || '')
             )
           }
+        } catch {}
+        // Emit created event (best-effort)
+        try {
+          await onPaymentTransactionCreated(txId)
         } catch {}
       } else {
         if (process.env.NODE_ENV !== 'production') console.warn('[stripe][record] payment_transactions table not found — skipping persistence')

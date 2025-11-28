@@ -4,6 +4,8 @@ import { verifyPagarmeWebhookSignature, pagarmeUpdateCharge, pagarmeGetOrder } f
 import { sendEmail } from '@/lib/email';
 import { baseTemplate } from '@/email-templates/layouts/base';
 import crypto from 'crypto';
+import { onPaymentTransactionStatusChanged } from '@/lib/webhooks/emit-updated';
+import { normalizeProviderStatus } from '@/lib/payments/status-map';
 
 export async function GET() {
   // Health check endpoint; webhooks must POST
@@ -234,42 +236,27 @@ export async function POST(req: Request) {
         }
       } catch {}
 
-      // Status mapping
+      // Status mapping (centralized)
       const rawStatus = (event?.data?.status
         || event?.data?.order?.status
         || event?.order?.status
         || event?.status
-        || '').toString().toLowerCase();
-      const statusMap: Record<string, string> = {
-        paid: 'paid',
-        approved: 'paid',
-        captured: 'paid',
-        canceled: 'canceled',
-        cancelled: 'canceled',
-        refused: 'refused',
-        failed: 'failed',
-        refunded: 'refunded',
-        processing: 'processing',
-        pending: 'pending',
-        underpaid: 'underpaid',
-        overpaid: 'overpaid',
-        chargedback: 'chargedback',
-      };
-      const mappedRaw = statusMap[rawStatus] || (rawStatus ? rawStatus : undefined);
+        || '').toString();
       const isPaidEvent = typeLower.includes('order.paid') || typeLower.includes('charge.paid') || typeLower.includes('invoice.paid');
-      // For invoice.paid or charge.paid events, always map to 'paid' regardless of status field
+      
+      // Use centralized normalizer
       let mapped: string | undefined;
-      if (isPaidEvent) {
-        mapped = 'paid';
-      } else if (mappedRaw === 'paid' && !isPaidEvent) {
-        mapped = undefined; // Don't allow 'paid' on non-paid events
-      } else {
-        mapped = mappedRaw;
+      let internalStatus: string | undefined;
+      if (rawStatus && rawStatus !== 'active') {
+        // For paid events, force 'paid' status
+        const statusToNormalize = isPaidEvent ? 'paid' : rawStatus;
+        const normalized = normalizeProviderStatus('PAGARME', statusToNormalize);
+        mapped = normalized.legacy;
+        internalStatus = normalized.internal;
       }
-      // Do not persist 'active' into payment_transactions; it's an item lifecycle, not payment state
-      if (mapped === 'active') mapped = undefined;
+      
       try {
-        console.log('[pagarme][webhook] normalized', { orderId, chargeId, rawStatus, mapped, type, isPaidEvent });
+        console.log('[pagarme][webhook] normalized', { orderId, chargeId, rawStatus, mapped, internalStatus, type, isPaidEvent });
       } catch {}
 
       // Anti-downgrade is now handled atomically in SQL CASE
@@ -358,14 +345,7 @@ export async function POST(req: Request) {
                             WHEN status = 'canceled' AND ($2::text) = 'failed' THEN ($2::text)
                             ELSE status
                           END,
-                 status_v2 = CASE
-                               WHEN ($2::text) = 'paid' THEN 'SUCCEEDED'::"PaymentStatus"
-                               WHEN ($2::text) IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus"
-                               WHEN ($2::text) = 'failed' THEN 'FAILED'::"PaymentStatus"
-                               WHEN ($2::text) = 'canceled' THEN 'CANCELED'::"PaymentStatus"
-                               WHEN ($2::text) = 'refunded' THEN 'REFUNDED'::"PaymentStatus"
-                               ELSE status_v2
-                             END,
+                 status_v2 = COALESCE($9::"PaymentStatus", status_v2),
                  provider_v2 = COALESCE(provider_v2, 'PAGARME'::"PaymentProvider"),
                  raw_payload = $3::jsonb,
                  payment_method_type = COALESCE($4::text, payment_method_type),
@@ -383,7 +363,8 @@ export async function POST(req: Request) {
             installmentsVal,
             splitClinicAmount,
             splitPlatformAmount,
-            splitPlatformFeeCents
+            splitPlatformFeeCents,
+            internalStatus || null
           );
           // If UPDATE affected 0 rows, INSERT a placeholder row for webhooks that arrive early
           if (result === 0) {
@@ -416,6 +397,21 @@ export async function POST(req: Request) {
             } catch {}
           } else {
             console.log('[pagarme][webhook] updated by orderId', { orderId, status: mapped || 'unchanged', affectedRows: result });
+            
+            // Emit outbound webhook event
+            if (result > 0 && mapped) {
+              try {
+                const tx = await prisma.paymentTransaction.findFirst({
+                  where: { provider: 'pagarme', providerOrderId: String(orderId) },
+                  select: { id: true, clinicId: true, status_v2: true }
+                });
+                if (tx?.clinicId && tx?.status_v2) {
+                  await onPaymentTransactionStatusChanged(tx.id, String(tx.status_v2));
+                }
+              } catch (e) {
+                console.warn('[pagarme][webhook] outbound event emission failed (non-blocking)', e instanceof Error ? e.message : e);
+              }
+            }
           }
         } catch (e) {
           console.warn('[pagarme][webhook] update by orderId failed', { orderId, err: e instanceof Error ? e.message : e });
@@ -437,14 +433,7 @@ export async function POST(req: Request) {
                             WHEN status = 'canceled' AND ($2::text) = 'failed' THEN ($2::text)
                             ELSE status
                           END,
-                 status_v2 = CASE
-                               WHEN ($2::text) = 'paid' THEN 'SUCCEEDED'::"PaymentStatus"
-                               WHEN ($2::text) IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus"
-                               WHEN ($2::text) = 'failed' THEN 'FAILED'::"PaymentStatus"
-                               WHEN ($2::text) = 'canceled' THEN 'CANCELED'::"PaymentStatus"
-                               WHEN ($2::text) = 'refunded' THEN 'REFUNDED'::"PaymentStatus"
-                               ELSE status_v2
-                             END,
+                 status_v2 = COALESCE($10::"PaymentStatus", status_v2),
                  provider_v2 = COALESCE(provider_v2, 'PAGARME'::"PaymentProvider"),
                  raw_payload = $3::jsonb,
                  payment_method_type = COALESCE($5::text, payment_method_type),
@@ -463,7 +452,8 @@ export async function POST(req: Request) {
             installmentsVal,
             splitClinicAmount,
             splitPlatformAmount,
-            splitPlatformFeeCents
+            splitPlatformFeeCents,
+            internalStatus || null
           );
           if (result2 === 0 && !orderId) {
             // No row matched; create placeholder by charge id to ensure visibility in listings
@@ -496,6 +486,21 @@ export async function POST(req: Request) {
             } catch {}
           } else {
             console.log('[pagarme][webhook] updated by chargeId', { chargeId, orderId, status: mapped || 'unchanged', affectedRows: result2 });
+            
+            // Emit outbound webhook event
+            if (result2 > 0 && mapped) {
+              try {
+                const tx = await prisma.paymentTransaction.findFirst({
+                  where: { provider: 'pagarme', providerChargeId: String(chargeId) },
+                  select: { id: true, clinicId: true, status_v2: true }
+                });
+                if (tx?.clinicId && tx?.status_v2) {
+                  await onPaymentTransactionStatusChanged(tx.id, String(tx.status_v2));
+                }
+              } catch (e) {
+                console.warn('[pagarme][webhook] outbound event emission failed (non-blocking)', e instanceof Error ? e.message : e);
+              }
+            }
           }
         } catch (e) {
           console.warn('[pagarme][webhook] update by chargeId failed', { chargeId, orderId, err: e instanceof Error ? e.message : e });

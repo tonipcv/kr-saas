@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { onPaymentTransactionStatusChanged } from '@/lib/webhooks/emit-updated'
+import { normalizeProviderStatus } from '@/lib/payments/status-map'
 import crypto from 'crypto'
 
+// DEPRECATED: use normalizeProviderStatus instead
 function mapStatus(pt: string): string | undefined {
   const s = String(pt || '').toLowerCase()
   if (!s) return undefined
@@ -21,13 +24,16 @@ export async function POST(req: Request) {
     let evt: any = {}
     try { evt = raw ? JSON.parse(raw) : {} } catch { evt = {} }
 
-    const event = String(evt?.event || evt?.type || '')
-    const data = evt?.data || {}
+    const rawStatus = String(evt?.status || evt?.data?.status || '')
+    // Use centralized normalizer
+    const normalized = normalizeProviderStatus('APPMAX', rawStatus)
+    const mapped = normalized.legacy
+    const internalStatus = normalized.internal
     // In Default template, order id is data.id and customer under data.customer
-    const orderId = data?.id ? String(data.id) : null
-    const statusRaw = data?.status || evt?.status || null
-    const paymentType = data?.payment_type || data?.paymentType || null
-    const installments = data?.installments != null ? Number(data.installments) : null
+    const orderId = evt?.data?.id ? String(evt.data.id) : null
+    const statusRaw = evt?.data?.status || evt?.status || null
+    const paymentType = evt?.data?.payment_type || evt?.data?.paymentType || null
+    const installments = evt?.data?.installments != null ? Number(evt.data.installments) : null
 
     console.log('[appmax][webhook] 📥 Received', { event, orderId, statusRaw, paymentType })
 
@@ -47,11 +53,10 @@ export async function POST(req: Request) {
 
     if (!orderId) return NextResponse.json({ received: true, ignored: true, reason: 'no order id' })
 
-    const mapped = mapStatus(String(statusRaw || ''))
     const methodNorm = paymentType ? String(paymentType).toLowerCase() : undefined
 
     // Extract buyer info when available
-    const cust = data?.customer || {}
+    const cust = evt?.data?.customer || {}
     const buyerName = [cust?.firstname, cust?.lastname].filter(Boolean).join(' ').trim() || null
     const buyerEmail = cust?.email || null
 
@@ -69,14 +74,7 @@ export async function POST(req: Request) {
                           WHEN status = 'canceled' AND ($2::text) = 'failed' THEN ($2::text)
                           ELSE status
                         END,
-               status_v2 = CASE
-                             WHEN ($2::text) = 'paid' THEN 'SUCCEEDED'::"PaymentStatus"
-                             WHEN ($2::text) IN ('processing','pending','authorized') THEN 'PROCESSING'::"PaymentStatus"
-                             WHEN ($2::text) = 'failed' THEN 'FAILED'::"PaymentStatus"
-                             WHEN ($2::text) = 'canceled' THEN 'CANCELED'::"PaymentStatus"
-                             WHEN ($2::text) = 'refunded' THEN 'REFUNDED'::"PaymentStatus"
-                             ELSE status_v2
-                           END,
+               status_v2 = COALESCE($8::"PaymentStatus", status_v2),
                provider_v2 = COALESCE(provider_v2, 'APPMAX'::"PaymentProvider"),
                payment_method_type = COALESCE($3::text, payment_method_type),
                installments = COALESCE($4::int, installments),
@@ -91,9 +89,25 @@ export async function POST(req: Request) {
         installments || null,
         JSON.stringify(evt),
         buyerName,
-        buyerEmail
+        buyerEmail,
+        internalStatus || null
       )
       console.log('[appmax][webhook] ✅ Updated transaction', { orderId, mapped, rows: result })
+      
+      // Emit outbound webhook event
+      if (result > 0 && mapped) {
+        try {
+          const tx = await prisma.paymentTransaction.findFirst({
+            where: { provider: 'appmax', providerOrderId: String(orderId) },
+            select: { id: true, clinicId: true, status_v2: true }
+          })
+          if (tx?.clinicId && tx?.status_v2) {
+            await onPaymentTransactionStatusChanged(tx.id, String(tx.status_v2))
+          }
+        } catch (e) {
+          console.warn('[appmax][webhook] outbound event emission failed (non-blocking)', e instanceof Error ? e.message : e)
+        }
+      }
     } catch (e) {
       console.warn('[appmax][webhook] ⚠️  Update failed', e instanceof Error ? e.message : String(e))
     }

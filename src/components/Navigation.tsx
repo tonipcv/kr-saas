@@ -347,6 +347,12 @@ export default function Navigation() {
           description: 'Connect external tools'
         },
         {
+          href: '/business/integrations/webhooks',
+          label: 'Webhooks',
+          icon: TagIcon,
+          description: 'Outbound webhooks'
+        },
+        {
           href: '/business/events',
           label: 'Events',
           icon: PresentationChartBarIcon,

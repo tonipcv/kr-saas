@@ -304,6 +304,10 @@ export async function POST(req: Request) {
           routedProvider: 'pagarme',
         },
       });
+      try {
+        const { onPaymentTransactionCreated } = await import('@/lib/webhooks/emit-updated')
+        await onPaymentTransactionCreated(preTransactionId);
+      } catch {}
     } catch (e) {
       try { console.warn('[subscribe][orchestration] dual-write failed (non-blocking)', e instanceof Error ? e.message : String(e)); } catch {}
       unifiedCustomer = null;

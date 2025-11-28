@@ -5,7 +5,31 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useClinic } from '@/contexts/clinic-context';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'react-hot-toast';
+
+// Map API error payloads to friendlier Portuguese messages for the banner
+function friendlyErrorMessage(raw: string | undefined, status: number | undefined, payload?: any): string {
+  const errs = (payload && (payload.errors || payload.responseJson?.errors)) || null;
+  if (errs && typeof errs === 'object') {
+    const msgs: string[] = [];
+    if (errs['recipient.default_bank_account']) msgs.push('Conta bancária é obrigatória. Preencha todos os campos bancários.');
+    if (errs['recipient.register_information.address.complementary']) msgs.push('Complemento do endereço é obrigatório.');
+    if (errs['recipient.register_information.address.reference_point']) msgs.push('Ponto de referência do endereço é obrigatório.');
+    if (msgs.length) return msgs.join(' ');
+  }
+  const msg = String(raw || '').toLowerCase();
+  if (status === 400 && msg.includes('document')) return 'Documento inválido. Verifique CPF/CNPJ (somente números).';
+  if (status === 400 && (msg.includes('birth') || msg.includes('birthdate'))) return 'Data de nascimento inválida. Use o formato dd/mm/aaaa.';
+  if ((status === 400 || status === 422) && (msg.includes('zip') || msg.includes('cep'))) return 'CEP inválido. Deve conter 8 dígitos.';
+  if (msg.includes('phone')) return 'Telefone inválido. Use E.164 (+5511999999999) ou DDD+Número.';
+  if (msg.includes('bank account holder name') || msg.includes('holder name')) return 'Nome do titular da conta deve ter menos de 30 caracteres. Reduza o nome/razão social.';
+  if (msg.includes('bank_code')) return 'Código do banco inválido. Use o código de 3 dígitos (ex.: 341).';
+  if (msg.includes('agencia')) return 'Agência inválida. Preencha o número da agência.';
+  if (msg.includes('conta')) return 'Conta inválida. Verifique número e dígito.';
+  if (msg.includes('monthly_income')) return 'Renda mensal inválida. Informe um valor em centavos (ex.: 120000).';
+  return 'Não foi possível salvar. Revise os dados do formulário e tente novamente.';
+}
 
 export default function PagarmeSetupPage() {
   const router = useRouter();
@@ -48,10 +72,22 @@ export default function PagarmeSetupPage() {
 
   // Inline field error map
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Error banner for friendly API messages
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
   // CEP lookup state
   const [cepLoading, setCepLoading] = useState(false);
   const [cepError, setCepError] = useState<string | null>(null);
   const streetNumberRef = useRef<HTMLInputElement | null>(null);
+
+  // Banks
+  const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
+  const [banksLoading, setBanksLoading] = useState<boolean>(false);
+  const [bankSearch, setBankSearch] = useState<string>('');
+  const filteredBanks = useMemo(() => {
+    const q = (bankSearch || '').toLowerCase().trim();
+    if (!q) return banks;
+    return banks.filter(b => b.name.toLowerCase().includes(q) || b.code.includes(q));
+  }, [banks, bankSearch]);
 
   // Prefill email/phone from clinic once
   useEffect(() => {
@@ -60,6 +96,52 @@ export default function PagarmeSetupPage() {
     if (!email && preEmail) setEmail(preEmail);
     if (!phone && prePhone) setPhone(prePhone);
   }, [currentClinic]);
+
+  // Load banks from BrasilAPI, fallback to a minimal static list
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setBanksLoading(true);
+        const res = await fetch('https://brasilapi.com.br/api/banks/v1', { cache: 'force-cache' });
+        const js = await res.json().catch(() => []);
+        const list = Array.isArray(js)
+          ? js
+              .map((b: any) => ({ code: b?.code, name: b?.name || b?.fullName }))
+              .filter((b: any) => Number.isFinite(Number(b.code)))
+              .map((b: any) => ({ code: String(b.code).padStart(3, '0'), name: String(b.name || '').trim() }))
+              .filter((b: any) => b.name && b.code && b.code.length === 3)
+          : [];
+        if (alive) {
+          if (list.length > 0) {
+            setBanks(list.sort((a, b) => a.name.localeCompare(b.name)));
+            return;
+          }
+          // Fallback minimal list if API unavailable
+          setBanks([
+            { code: '001', name: 'Banco do Brasil' },
+            { code: '033', name: 'Banco Santander' },
+            { code: '104', name: 'Caixa Econômica Federal' },
+            { code: '237', name: 'Bradesco' },
+            { code: '341', name: 'Itaú Unibanco' },
+          ]);
+        }
+      } catch {
+        if (alive) {
+          setBanks([
+            { code: '001', name: 'Banco do Brasil' },
+            { code: '033', name: 'Banco Santander' },
+            { code: '104', name: 'Caixa Econômica Federal' },
+            { code: '237', name: 'Bradesco' },
+            { code: '341', name: 'Itaú Unibanco' },
+          ]);
+        }
+      } finally {
+        if (alive) setBanksLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   // Simple validators
   const onlyDigits = (s: string) => s.replace(/\D/g, '');
@@ -72,6 +154,7 @@ export default function PagarmeSetupPage() {
     const errs: string[] = [];
     // Legal
     if (!name.trim()) errs.push('Informe a razão social / nome.');
+    if (name.trim().length > 30) errs.push('Nome muito longo. Use até 30 caracteres.');
     const docDigits = onlyDigits(documentNumber);
     if (!(docDigits.length === 11 || docDigits.length === 14)) errs.push('Documento deve ter 11 (CPF) ou 14 (CNPJ) dígitos.');
     if (!email.trim() || !isEmail(email)) errs.push('Email inválido.');
@@ -92,6 +175,8 @@ export default function PagarmeSetupPage() {
     if (!addrState.trim() || !isUF(addrState)) errs.push('UF inválida (ex.: SP).');
     const zipDigits = onlyDigits(addrZip);
     if (zipDigits.length !== 8) errs.push('CEP deve ter 8 dígitos (somente números).');
+    if (!addrComplementary.trim()) errs.push('Informe o complemento.');
+    if (!addrRef.trim()) errs.push('Informe o ponto de referência.');
 
     // Bank (if any is filled, require all mínimos)
     const hasAnyBankField = includeBank || [bank, agency, account, accountType].some((v) => v && v.trim());
@@ -132,6 +217,8 @@ export default function PagarmeSetupPage() {
       if (!addrNeighborhood.trim()) nextErrors.addrNeighborhood = 'Obrigatório';
       if (!addrCity.trim()) nextErrors.addrCity = 'Obrigatório';
       if (!addrState.trim() || !isUF(addrState)) nextErrors.addrState = 'UF inválida';
+      if (!addrComplementary.trim()) nextErrors.addrComplementary = 'Obrigatório';
+      if (!addrRef.trim()) nextErrors.addrRef = 'Obrigatório';
     } else if (s === 4 && (includeBank || [bank, agency, account, accountType].some(v => v && v.trim()))) {
       if (onlyDigits(bank).length < 3) nextErrors.bank = 'Banco inválido';
       if (onlyDigits(agency).length < 3) nextErrors.agency = 'Agência inválida';
@@ -426,10 +513,15 @@ export default function PagarmeSetupPage() {
           });
         }
         const apiMsg = data?.error || data?.message || data?.details || data?.errors?.[0]?.message;
+        const friendly = friendlyErrorMessage(apiMsg, res.status, data);
+        setErrorBanner(friendly);
         throw new Error(`HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''} - ${apiMsg || 'Falha ao configurar recebedor'}`);
       }
       toast.success('Dados salvos. Recipient configurado.');
-      router.push('/doctor/integrations');
+      {
+        const isBusiness = pathname?.startsWith('/business');
+        router.push(isBusiness ? '/business/integrations' : '/doctor/integrations');
+      }
     } catch (e: any) {
       if (process.env.NODE_ENV !== 'production') {
         console.error('[Pagarme Recipient][Exception]', e);
@@ -449,6 +541,11 @@ export default function PagarmeSetupPage() {
               <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Configurar Pagamentos</h1>
               <p className="text-sm text-gray-500">Preencha os dados abaixo para receber repasses. Você pode ajustar o split e a taxa de plataforma.</p>
             </div>
+            {errorBanner && (
+              <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {errorBanner}
+              </div>
+            )}
             <div className="flex gap-2">
               {process.env.NODE_ENV !== 'production' && (
                 <Button
@@ -573,8 +670,9 @@ export default function PagarmeSetupPage() {
                         {errors.addrStreetNumber && <div className="text-[11px] text-red-600 mt-1">{errors.addrStreetNumber}</div>}
                       </div>
                       <div>
-                        <div className="text-[12px] text-gray-600 mb-1">Complemento</div>
-                        <Input value={addrComplementary} onChange={(e) => setAddrComplementary(e.target.value)} placeholder="Sala 1001" className="h-10" />
+                        <div className="text-[12px] text-gray-600 mb-1">Complemento <span className="text-red-500">*</span></div>
+                        <Input value={addrComplementary} onChange={(e) => setAddrComplementary(e.target.value)} placeholder="Sala 1001" className="h-10" required />
+                        {errors.addrComplementary && <div className="text-[11px] text-red-600 mt-1">{errors.addrComplementary}</div>}
                       </div>
                       <div>
                         <div className="text-[12px] text-gray-600 mb-1">Bairro <span className="text-red-500">*</span></div>
@@ -592,8 +690,9 @@ export default function PagarmeSetupPage() {
                         {errors.addrState && <div className="text-[11px] text-red-600 mt-1">{errors.addrState}</div>}
                       </div>
                       <div className="md:col-span-3">
-                        <div className="text-[12px] text-gray-600 mb-1">Ponto de referência</div>
-                        <Input value={addrRef} onChange={(e) => setAddrRef(e.target.value)} placeholder="Ao lado da praça" className="h-10" />
+                        <div className="text-[12px] text-gray-600 mb-1">Ponto de referência <span className="text-red-500">*</span></div>
+                        <Input value={addrRef} onChange={(e) => setAddrRef(e.target.value)} placeholder="Ao lado da praça" className="h-10" required />
+                        {errors.addrRef && <div className="text-[11px] text-red-600 mt-1">{errors.addrRef}</div>}
                       </div>
                     </div>
                   </div>
@@ -602,21 +701,45 @@ export default function PagarmeSetupPage() {
                 {/* Step 4: Dados bancários (opcional) */}
                 {step === 4 && (
                   <div>
-                    <div className="text-xs font-semibold text-gray-700 mb-2">Dados bancários (opcional)</div>
-                    <label className="flex items-center gap-2 mb-3 text-sm text-gray-700">
-                      <input type="checkbox" checked={includeBank} onChange={(e) => setIncludeBank(e.target.checked)} />
-                      Adicionar conta bancária agora
-                    </label>
-                    {includeBank && (
-                      <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                    <div className="text-xs font-semibold text-gray-700 mb-2">Dados bancários</div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div>
                           <div className="text-[12px] text-gray-600 mb-1">Banco <span className="text-red-500">*</span></div>
-                          <Input value={bank} onChange={(e) => setBank(e.target.value)} placeholder="341" className="h-10" />
+                          {banks.length > 0 ? (
+                            <Select value={bank} onValueChange={(val: string) => setBank(val)}>
+                              <SelectTrigger className="h-10">
+                                <SelectValue placeholder="Selecione o banco" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <div className="p-2">
+                                  <Input
+                                    value={bankSearch}
+                                    onChange={(e) => setBankSearch(e.target.value)}
+                                    placeholder="Buscar por nome ou código"
+                                    className="h-8"
+                                  />
+                                </div>
+                                {(filteredBanks.length === 0) ? (
+                                  <SelectItem value="__none__" disabled>
+                                    Nenhum banco encontrado
+                                  </SelectItem>
+                                ) : (
+                                  filteredBanks.map((b) => (
+                                    <SelectItem key={b.code} value={b.code}>
+                                      {b.name} — {b.code}
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input value={bank} onChange={(e) => setBank(e.target.value)} placeholder="341" className="h-10" required />
+                          )}
                           {errors.bank && <div className="text-[11px] text-red-600 mt-1">{errors.bank}</div>}
                         </div>
                         <div>
                           <div className="text-[12px] text-gray-600 mb-1">Agência <span className="text-red-500">*</span></div>
-                          <Input value={agency} onChange={(e) => setAgency(e.target.value)} placeholder="1234" className="h-10" />
+                          <Input value={agency} onChange={(e) => setAgency(e.target.value)} placeholder="1234" className="h-10" required />
                           {errors.agency && <div className="text-[11px] text-red-600 mt-1">{errors.agency}</div>}
                         </div>
                         <div>
@@ -625,25 +748,24 @@ export default function PagarmeSetupPage() {
                         </div>
                         <div>
                           <div className="text-[12px] text-gray-600 mb-1">Conta <span className="text-red-500">*</span></div>
-                          <Input value={account} onChange={(e) => setAccount(e.target.value)} placeholder="12345" className="h-10" />
+                          <Input value={account} onChange={(e) => setAccount(e.target.value)} placeholder="12345" className="h-10" required />
                           {errors.account && <div className="text-[11px] text-red-600 mt-1">{errors.account}</div>}
                         </div>
                         <div>
                           <div className="text-[12px] text-gray-600 mb-1">Dígito conta <span className="text-red-500">*</span></div>
-                          <Input value={accountDigit} onChange={(e) => setAccountDigit(e.target.value)} placeholder="6" className="h-10" />
+                          <Input value={accountDigit} onChange={(e) => setAccountDigit(e.target.value)} placeholder="6" className="h-10" required />
                           {errors.accountDigit && <div className="text-[11px] text-red-600 mt-1">{errors.accountDigit}</div>}
                         </div>
                         <div>
                           <div className="text-[12px] text-gray-600 mb-1">Tipo <span className="text-red-500">*</span></div>
-                          <select value={accountType} onChange={(e) => setAccountType(e.target.value as any)} className="h-10 w-full rounded-md border border-gray-300 px-3 text-sm text-gray-900">
-                            <option value="" disabled>Selecione</option>
-                            <option value="conta_corrente">conta_corrente</option>
-                            <option value="conta_poupanca">conta_poupanca</option>
+                          <select value={accountType} onChange={(e) => setAccountType(e.target.value as any)} className="h-10 w-full rounded-md border border-gray-300 px-3 text-sm text-gray-900" required>
+                            <option value="" disabled>Selecione o tipo de conta</option>
+                            <option value="conta_corrente">Conta corrente</option>
+                            <option value="conta_poupanca">Conta poupança</option>
                           </select>
                           {errors.accountType && <div className="text-[11px] text-red-600 mt-1">{errors.accountType}</div>}
                         </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 )}
 
@@ -673,7 +795,7 @@ export default function PagarmeSetupPage() {
                   <div className="flex justify-between"><span className="text-gray-600">Banco</span><span className="font-medium text-gray-900">{bank || '-'}</span></div>
                   <div className="flex justify-between"><span className="text-gray-600">Agência</span><span className="font-medium text-gray-900">{agency}{agencyDigit ? `-${agencyDigit}` : ''}</span></div>
                   <div className="flex justify-between"><span className="text-gray-600">Conta</span><span className="font-medium text-gray-900">{account}{accountDigit ? `-${accountDigit}` : ''}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-600">Tipo</span><span className="font-medium text-gray-900">{accountType || '-'}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Tipo</span><span className="font-medium text-gray-900">{accountType === 'conta_corrente' ? 'Conta corrente' : accountType === 'conta_poupanca' ? 'Conta poupança' : '-'}</span></div>
                 </div>
               </div>
             </div>

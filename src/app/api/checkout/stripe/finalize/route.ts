@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { onPaymentTransactionCreated } from '@/lib/webhooks/emit-updated'
 import Stripe from 'stripe'
 
 function jsonError(status: number, error: string, step: string, details?: any) {
@@ -118,6 +119,15 @@ export async function POST(req: Request) {
         String(buyerName || ''),
         String(buyerEmail || '')
       )
+      // Emit created event (best-effort)
+      try {
+        const rows: any[] = await prisma.$queryRawUnsafe(
+          `SELECT id FROM payment_transactions WHERE provider = 'stripe' AND provider_order_id = $1 ORDER BY created_at DESC LIMIT 1`,
+          String(pi.id)
+        )
+        const txId = rows?.[0]?.id
+        if (txId) await onPaymentTransactionCreated(String(txId))
+      } catch {}
     } catch {}
 
     return NextResponse.json({ ok: true, payment_intent_id: pi.id, status: pi.status })

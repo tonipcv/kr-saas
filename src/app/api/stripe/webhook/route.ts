@@ -5,6 +5,8 @@ import { emitEvent } from '@/lib/events';
 import { EventActor, EventType } from '@prisma/client';
 import Stripe from 'stripe';
 import crypto from 'crypto';
+import { onPaymentTransactionStatusChanged } from '@/lib/webhooks/emit-updated';
+import { normalizeProviderStatus } from '@/lib/payments/status-map';
 
 // Webhook-only usage: we do not call Stripe APIs here. We only verify signatures and process payloads.
 // Use a dummy key and match the project's Stripe TypeScript apiVersion to satisfy types.
@@ -66,7 +68,7 @@ export async function POST(req: NextRequest) {
         const currency = String(pi.currency || '').toUpperCase();
         try {
           if (matchedMerchantId) {
-            await prisma.$executeRawUnsafe(
+            const result = await prisma.$executeRawUnsafe(
               `UPDATE payment_transactions
                  SET status = 'paid',
                      status_v2 = 'SUCCEEDED'::"PaymentStatus",
@@ -82,6 +84,21 @@ export async function POST(req: NextRequest) {
               currency,
               intentId
             );
+            
+            // Emit outbound webhook event
+            if (result > 0) {
+              try {
+                const tx = await prisma.paymentTransaction.findFirst({
+                  where: { provider: 'stripe', providerOrderId: intentId },
+                  select: { id: true, clinicId: true }
+                });
+                if (tx?.clinicId) {
+                  await onPaymentTransactionStatusChanged(tx.id, 'SUCCEEDED');
+                }
+              } catch (e) {
+                console.warn('[stripe][webhook] outbound event emission failed (non-blocking)', e instanceof Error ? e.message : e);
+              }
+            }
           }
         } catch (e) {
           console.error('[stripe][webhook] update payment_intent.succeeded failed', e);
@@ -95,7 +112,7 @@ export async function POST(req: NextRequest) {
         const lastError = (pi.last_payment_error?.message || pi.last_payment_error?.code || '').toString();
         try {
           if (matchedMerchantId) {
-            await prisma.$executeRawUnsafe(
+            const result = await prisma.$executeRawUnsafe(
               `UPDATE payment_transactions
                  SET status = 'failed',
                      status_v2 = 'FAILED'::"PaymentStatus",
@@ -106,6 +123,21 @@ export async function POST(req: NextRequest) {
               matchedMerchantId,
               lastError
             );
+            
+            // Emit outbound webhook event
+            if (result > 0) {
+              try {
+                const tx = await prisma.paymentTransaction.findFirst({
+                  where: { provider: 'stripe', providerOrderId: intentId },
+                  select: { id: true, clinicId: true }
+                });
+                if (tx?.clinicId) {
+                  await onPaymentTransactionStatusChanged(tx.id, 'FAILED');
+                }
+              } catch (e) {
+                console.warn('[stripe][webhook] outbound event emission failed (non-blocking)', e instanceof Error ? e.message : e);
+              }
+            }
           }
         } catch (e) {
           console.error('[stripe][webhook] update payment_intent.payment_failed failed', e);
@@ -122,7 +154,7 @@ export async function POST(req: NextRequest) {
         const status = ch.paid ? (ch.captured ? 'captured' : 'paid') : 'processing';
         try {
           if (intentId && matchedMerchantId) {
-            await prisma.$executeRawUnsafe(
+            const result = await prisma.$executeRawUnsafe(
               `UPDATE payment_transactions
                  SET provider_charge_id = $1,
                      status = $4,
@@ -141,34 +173,24 @@ export async function POST(req: NextRequest) {
               intentId,
               matchedMerchantId
             );
+            
+            // Emit outbound webhook event
+            if (result > 0 && (status === 'captured' || status === 'paid')) {
+              try {
+                const tx = await prisma.paymentTransaction.findFirst({
+                  where: { provider: 'stripe', providerOrderId: intentId },
+                  select: { id: true, clinicId: true }
+                });
+                if (tx?.clinicId) {
+                  await onPaymentTransactionStatusChanged(tx.id, 'SUCCEEDED');
+                }
+              } catch (e) {
+                console.warn('[stripe][webhook] outbound event emission failed (non-blocking)', e instanceof Error ? e.message : e);
+              }
+            }
           }
         } catch (e) {
           console.error('[stripe][webhook] update charge.succeeded failed', e);
-        }
-        break;
-      }
-
-      case 'charge.captured': {
-        const ch = event.data.object as Stripe.Charge;
-        const chargeId = String(ch.id);
-        const intentId = (ch.payment_intent ? String(ch.payment_intent) : '') || '';
-        try {
-          if (intentId && matchedMerchantId) {
-            await prisma.$executeRawUnsafe(
-              `UPDATE payment_transactions
-                 SET status = 'captured',
-                     status_v2 = 'SUCCEEDED'::"PaymentStatus",
-                     provider_v2 = COALESCE(provider_v2, 'STRIPE'::"PaymentProvider"),
-                     provider_charge_id = COALESCE(provider_charge_id, $1),
-                     captured_at = NOW()
-              WHERE provider = 'stripe' AND provider_order_id = $2 AND merchant_id = $3`,
-              chargeId,
-              intentId,
-              matchedMerchantId
-            );
-          }
-        } catch (e) {
-          console.error('[stripe][webhook] update charge.captured failed', e);
         }
         break;
       }
@@ -181,7 +203,7 @@ export async function POST(req: NextRequest) {
         const status = refunded >= total && total > 0 ? 'refunded' : 'paid';
         try {
           if (intentId && matchedMerchantId) {
-            await prisma.$executeRawUnsafe(
+            const result = await prisma.$executeRawUnsafe(
               `UPDATE payment_transactions
                  SET refunded_cents = $1,
                      status = $2,
@@ -195,6 +217,22 @@ export async function POST(req: NextRequest) {
               intentId,
               matchedMerchantId
             );
+            
+            // Emit outbound webhook event
+            if (result > 0) {
+              try {
+                const tx = await prisma.paymentTransaction.findFirst({
+                  where: { provider: 'stripe', providerOrderId: intentId },
+                  select: { id: true, clinicId: true }
+                });
+                if (tx?.clinicId) {
+                  const eventStatus = status === 'refunded' ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+                  await onPaymentTransactionStatusChanged(tx.id, eventStatus);
+                }
+              } catch (e) {
+                console.warn('[stripe][webhook] outbound event emission failed (non-blocking)', e instanceof Error ? e.message : e);
+              }
+            }
           }
         } catch (e) {
           console.error('[stripe][webhook] update charge.refunded failed', e);

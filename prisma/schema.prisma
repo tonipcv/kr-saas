@@ -462,6 +462,8 @@ model Clinic {
   products            Product[]
   merchant            Merchant?
   merchantApplication MerchantApplication?
+  webhookEndpoints    WebhookEndpoint[]
+  outboundEvents      OutboundWebhookEvent[]
 
   @@index([ownerId])
   @@index([slug])
@@ -1445,4 +1447,65 @@ model WebhookEvent {
   @@index([provider, type, processed], map: "idx_webhook_events_processing")
   @@index([processed, received_at], map: "idx_webhook_events_unprocessed")
   @@map("webhook_events")
+}
+
+
+model WebhookEndpoint {
+  id         String   @id @default(cuid())
+  clinicId   String   @map("clinic_id")
+  name       String
+  url        String
+  secret     String
+  events     String[]
+  enabled    Boolean  @default(true)
+  // New configuration fields
+  maxConcurrentDeliveries Int      @default(5)  @map("max_concurrent_deliveries")
+  categoryFilter          String   @default("all") @map("category_filter")
+  statusFilters           String[] @default([])  @map("status_filters")
+  productFilters          String[] @default([])  @map("product_filters")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  clinic     Clinic                 @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  deliveries OutboundWebhookDelivery[]
+
+  @@index([clinicId, enabled])
+  @@map("webhook_endpoints")
+}
+
+model OutboundWebhookEvent {
+  id         String   @id @default(cuid())
+  clinicId   String   @map("clinic_id")
+  type       String
+  resource   String
+  resourceId String   @map("resource_id")
+  payload    Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  clinic     Clinic                 @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  deliveries OutboundWebhookDelivery[]
+
+  @@index([clinicId, type, createdAt])
+  @@map("outbound_webhook_events")
+}
+
+model OutboundWebhookDelivery {
+  id            String    @id @default(cuid())
+  endpointId    String    @map("endpoint_id")
+  eventId       String    @map("event_id")
+  status        String    @default("PENDING")
+  attempts      Int       @default(0)
+  lastCode      Int?      @map("last_code")
+  lastError     String?   @map("last_error")
+  nextAttemptAt DateTime? @map("next_attempt_at")
+  deliveredAt   DateTime? @map("delivered_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  endpoint WebhookEndpoint       @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  event    OutboundWebhookEvent  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([endpointId, status, nextAttemptAt])
+  @@index([eventId])
+  @@map("outbound_webhook_deliveries")
 }

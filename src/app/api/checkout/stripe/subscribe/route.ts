@@ -209,6 +209,15 @@ export async function POST(req: Request) {
               statusV2,
               JSON.stringify({ provider: 'stripe', subscription_id: sub.id, payment_intent_id: piId })
             )
+            try {
+              const { onPaymentTransactionCreated } = await import('@/lib/webhooks/emit-updated')
+              const rows: any[] = await prisma.$queryRawUnsafe(
+                `SELECT id FROM payment_transactions WHERE provider = 'stripe' AND provider_order_id = $1 ORDER BY created_at DESC LIMIT 1`,
+                String(piId)
+              )
+              const txId = rows?.[0]?.id
+              if (txId) await onPaymentTransactionCreated(String(txId))
+            } catch {}
           }
         } catch (e) {
           console.warn('[stripe][subscribe] upsert initial payment_transactions failed', (e as any)?.message || e)

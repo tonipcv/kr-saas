@@ -2,6 +2,9 @@
   "name": "habit-tracker",
   "version": "0.1.0",
   "private": true,
+  "trigger.dev": {
+    "endpointId": "krxscale-webhooks"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
@@ -30,7 +33,10 @@
     "migrate:drop-legacy": "node scripts/drop-legacy-tables.js",
     "delete:user": "node scripts/delete-user-by-email.js",
     "delete:clinic": "node scripts/delete-clinic.js",
-    "delete:clinics:owner": "node scripts/delete-clinics-by-owner-email.js"
+    "delete:clinics:owner": "node scripts/delete-clinics-by-owner-email.js",
+    "test:webhooks": "vitest run src/lib/webhooks/__tests__ src/lib/payments/__tests__",
+    "test:webhooks:watch": "vitest watch src/lib/webhooks/__tests__ src/lib/payments/__tests__",
+    "test:webhooks:coverage": "vitest run --coverage src/lib/webhooks/__tests__ src/lib/payments/__tests__"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
@@ -65,7 +71,7 @@
     "@tiptap/pm": "^2.11.3",
     "@tiptap/react": "^2.26.2",
     "@tiptap/starter-kit": "^2.26.1",
-    "@trigger.dev/sdk": "4.1.2",
+    "@trigger.dev/sdk": "^4.1.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/nodemailer": "^6.4.17",

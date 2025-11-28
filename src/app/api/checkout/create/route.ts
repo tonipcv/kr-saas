@@ -19,6 +19,7 @@ import { selectProvider } from '@/lib/payments/core/routing';
 import Stripe from 'stripe';
 import { getCurrencyForCountry } from '@/lib/payments/countryCurrency';
 import { SubscriptionService } from '@/services/subscription';
+import { onPaymentTransactionCreated } from '@/lib/webhooks/emit-updated';
 
 function onlyDigits(s: string) { return (s || '').replace(/\D/g, ''); }
 
@@ -474,6 +475,13 @@ export async function POST(req: Request) {
               );
             }
           } catch {}
+
+          // Emit outbound webhook: transaction created (non-blocking)
+          try {
+            await onPaymentTransactionCreated(txId);
+          } catch (e) {
+            try { console.warn('[checkout][create] emit created (stripe) failed:', (e as any)?.message || e); } catch {}
+          }
         }
       } catch (e) {
         console.warn('[checkout][create] persist stripe payment_transactions failed:', e instanceof Error ? e.message : e);
@@ -1353,6 +1361,13 @@ export async function POST(req: Request) {
           methodType,
           JSON.stringify({ payload })
         );
+
+        // Emit outbound webhook: transaction created (non-blocking)
+        try {
+          await onPaymentTransactionCreated(txId);
+        } catch (e) {
+          try { console.warn('[checkout][create] emit created (krxpay) failed:', (e as any)?.message || e); } catch {}
+        }
         try { console.log('[checkout][create] inserted payment_transactions row', { txId }); } catch {}
       }
     } catch (e) {
