@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { buildTransactionPayload } from './payload'
-import { tasks } from '@trigger.dev/sdk'
+import { tasks } from '@trigger.dev/sdk/v3'
 import type { deliverWebhook } from '../../../trigger/deliver-webhook'
 
 export type EmitParams = {

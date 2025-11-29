@@ -1,6 +1,8 @@
-import { schedules, tasks } from "@trigger.dev/sdk";
-import { prisma } from "@/lib/prisma";
+import { schedules, tasks } from "@trigger.dev/sdk/v3";
+import { PrismaClient } from "@prisma/client";
 import type { deliverWebhook } from "./deliver-webhook";
+
+const prisma = new PrismaClient();
 
 /**
  * Safety net: Re-dispara deliveries PENDING travadas
