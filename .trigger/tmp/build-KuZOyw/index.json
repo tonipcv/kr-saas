@@ -1,0 +1,139 @@
+{
+  "configPath": "/Users/albertalves/krxscale-saas/.trigger/tmp/build-KuZOyw/krxscale-saas/trigger.config.mjs",
+  "tasks": [
+    {
+      "id": "appmax-renewal",
+      "queue": {
+        "concurrencyLimit": 10
+      },
+      "retry": {
+        "maxAttempts": 5,
+        "factor": 2,
+        "minTimeoutInMs": 2000,
+        "maxTimeoutInMs": 60000,
+        "randomize": true
+      },
+      "maxDuration": 300,
+      "filePath": "trigger/renewal-jobs/appmax.ts",
+      "entryPoint": "/Users/albertalves/krxscale-saas/.trigger/tmp/build-KuZOyw/krxscale-saas/trigger/renewal-jobs/appmax.mjs"
+    },
+    {
+      "id": "pagarme-prepaid-renewal",
+      "queue": {
+        "concurrencyLimit": 10
+      },
+      "retry": {
+        "maxAttempts": 5,
+        "factor": 2,
+        "minTimeoutInMs": 2000,
+        "maxTimeoutInMs": 60000,
+        "randomize": true
+      },
+      "maxDuration": 300,
+      "filePath": "trigger/renewal-jobs/pagarme-prepaid.ts",
+      "entryPoint": "/Users/albertalves/krxscale-saas/.trigger/tmp/build-KuZOyw/krxscale-saas/trigger/renewal-jobs/pagarme-prepaid.mjs"
+    },
+    {
+      "id": "daily-billing-renewal",
+      "retry": {
+        "maxAttempts": 3,
+        "factor": 2,
+        "minTimeoutInMs": 1000,
+        "maxTimeoutInMs": 10000,
+        "randomize": true
+      },
+      "triggerSource": "schedule",
+      "schedule": {
+        "cron": "0 9 * * *",
+        "timezone": "America/Sao_Paulo"
+      },
+      "maxDuration": 300,
+      "filePath": "trigger/billing-renewal.ts",
+      "entryPoint": "/Users/albertalves/krxscale-saas/.trigger/tmp/build-KuZOyw/krxscale-saas/trigger/billing-renewal.mjs"
+    },
+    {
+      "id": "billing-scheduler-dry-run",
+      "retry": {
+        "maxAttempts": 3,
+        "factor": 2,
+        "minTimeoutInMs": 1000,
+        "maxTimeoutInMs": 10000,
+        "randomize": true
+      },
+      "triggerSource": "schedule",
+      "schedule": {
+        "cron": "0 * * * *",
+        "timezone": "UTC"
+      },
+      "maxDuration": 300,
+      "filePath": "trigger/billing-scheduler.ts",
+      "entryPoint": "/Users/albertalves/krxscale-saas/.trigger/tmp/build-KuZOyw/krxscale-saas/trigger/billing-scheduler.mjs"
+    },
+    {
+      "id": "check-stuck-deliveries",
+      "retry": {
+        "maxAttempts": 3,
+        "factor": 2,
+        "minTimeoutInMs": 1000,
+        "maxTimeoutInMs": 10000,
+        "randomize": true
+      },
+      "triggerSource": "schedule",
+      "schedule": {
+        "cron": "*/5 * * * *",
+        "timezone": "America/Sao_Paulo",
+        "environments": [
+          "PRODUCTION"
+        ]
+      },
+      "maxDuration": 300,
+      "filePath": "trigger/check-stuck-deliveries.ts",
+      "entryPoint": "/Users/albertalves/krxscale-saas/.trigger/tmp/build-KuZOyw/krxscale-saas/trigger/check-stuck-deliveries.mjs"
+    },
+    {
+      "id": "deliver-webhook",
+      "retry": {
+        "maxAttempts": 10,
+        "factor": 1.8,
+        "minTimeoutInMs": 60000,
+        "maxTimeoutInMs": 86400000,
+        "randomize": true
+      },
+      "maxDuration": 300,
+      "filePath": "trigger/deliver-webhook.ts",
+      "entryPoint": "/Users/albertalves/krxscale-saas/.trigger/tmp/build-KuZOyw/krxscale-saas/trigger/deliver-webhook.mjs"
+    },
+    {
+      "id": "expiring-cards-notifier",
+      "retry": {
+        "maxAttempts": 3,
+        "factor": 2,
+        "minTimeoutInMs": 1000,
+        "maxTimeoutInMs": 10000,
+        "randomize": true
+      },
+      "triggerSource": "schedule",
+      "schedule": {
+        "cron": "0 10 * * 1",
+        "timezone": "America/Sao_Paulo"
+      },
+      "maxDuration": 300,
+      "filePath": "trigger/expiring-cards-notifier.ts",
+      "entryPoint": "/Users/albertalves/krxscale-saas/.trigger/tmp/build-KuZOyw/krxscale-saas/trigger/expiring-cards-notifier.mjs"
+    }
+  ],
+  "queues": [],
+  "workerEntryPoint": "/Users/albertalves/krxscale-saas/.trigger/tmp/build-KuZOyw/.npm/_npx/f51a09bd0abf5f10/node_modules/trigger.dev/dist/esm/entryPoints/dev-run-worker.mjs",
+  "runtime": "node",
+  "runtimeVersion": "20.19.0",
+  "customConditions": [],
+  "timings": {
+    "trigger/renewal-jobs/appmax.ts": 64.93404099999998,
+    "trigger/renewal-jobs/pagarme-prepaid.ts": 2.8735419999999863,
+    "trigger/billing-renewal.ts": 2.816750000000013,
+    "trigger/billing-scheduler.ts": 3.01404100000002,
+    "trigger/check-stuck-deliveries.ts": 2.641834000000017,
+    "trigger/deliver-webhook.ts": 9.563290999999992,
+    "trigger/expiring-cards-notifier.ts": 2.0809999999999604
+  }
+}

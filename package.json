@@ -34,7 +34,11 @@
     "test:webhooks": "vitest run src/lib/webhooks/__tests__ src/lib/payments/__tests__",
     "test:webhooks:watch": "vitest watch src/lib/webhooks/__tests__ src/lib/payments/__tests__",
     "test:webhooks:coverage": "vitest run --coverage src/lib/webhooks/__tests__ src/lib/payments/__tests__",
-    "test:trigger": "npx tsx scripts/test-trigger-webhook.ts"
+    "test:trigger": "npx tsx scripts/test-trigger-webhook.ts",
+    "trigger:dev": "npx @trigger.dev/cli@latest dev -p 3001"
+  },
+  "trigger.dev": {
+    "endpointId": "GET_FROM_DASHBOARD"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
@@ -69,7 +73,7 @@
     "@tiptap/pm": "^2.11.3",
     "@tiptap/react": "^2.26.2",
     "@tiptap/starter-kit": "^2.26.1",
-    "@trigger.dev/sdk": "^4.1.2",
+    "@trigger.dev/sdk": "4.1.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/nodemailer": "^6.4.17",

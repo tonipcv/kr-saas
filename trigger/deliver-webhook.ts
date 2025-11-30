@@ -1,14 +1,6 @@
-import { task } from "@trigger.dev/sdk";
-import { PrismaClient } from "@prisma/client";
-import { createHmac } from "crypto";
-
-const prisma = new PrismaClient();
-
-// Função de assinatura HMAC (inline para evitar imports)
-function signPayload(secret: string, body: string, timestamp: number): string {
-  const payload = `${timestamp}.${body}`;
-  return createHmac('sha256', secret).update(payload).digest('hex');
-}
+import { task } from "@trigger.dev/sdk/v3";
+import { prisma } from "@/lib/prisma";
+import { signPayload } from "@/lib/webhooks/signature";
 
 /**
  * Trigger.dev task para entregar webhooks outbound
