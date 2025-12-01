@@ -44,7 +44,8 @@ var deliverWebhook = task({
     const { deliveryId } = payload;
     const attemptNumber = ctx.attempt.number;
     console.log(`[Webhook Delivery] Processing ${deliveryId} (attempt ${attemptNumber}/10)`);
-    const delivery = await prisma.outboundWebhookDelivery.findUnique({
+    console.log("[Webhook Delivery] Lookup delivery by id (type):", deliveryId, typeof deliveryId);
+    const delivery = await prisma.outboundWebhookDelivery.findFirst({
       where: { id: deliveryId },
       include: {
         endpoint: true,
