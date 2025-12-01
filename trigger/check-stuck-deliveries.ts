@@ -1,6 +1,6 @@
 import { schedules, tasks } from "@trigger.dev/sdk/v3";
 import { getPrisma } from "./prisma";
-import type { deliverWebhook } from "./deliver-webhook";
+// import type { deliverWebhook } from "./deliver-webhook"; // Removido: task desativada
 
 /**
  * Safety net: Re-dispara deliveries PENDING travadas
@@ -12,7 +12,9 @@ import type { deliverWebhook } from "./deliver-webhook";
  * 
  * Roda a cada 5 minutos em produção
  */
-export const checkStuckDeliveries = schedules.task({
+// DESATIVADO: Migrado para Vercel Native /api/webhooks/retry-stuck + GitHub Actions (gratuito)
+// Para reativar, remova o comentário abaixo e exporte novamente
+const checkStuckDeliveries = schedules.task({
   id: "check-stuck-deliveries",
   
   // A cada 5 minutos (apenas em produção)
@@ -87,17 +89,17 @@ export const checkStuckDeliveries = schedules.task({
             continue;
           }
 
-          // Re-disparar job
-          await tasks.trigger<typeof deliverWebhook>(
-            "deliver-webhook",
-            { deliveryId: delivery.id },
-            {
-              idempotencyKey: `${delivery.id}-retry-${Date.now()}`, // Novo idempotency key para forçar re-execução
-              queue: 'webhooks', // Queue name
-            }
-          );
+          // Re-disparar job (DESATIVADO: migrado para /api/webhooks/retry-stuck)
+          // await tasks.trigger<typeof deliverWebhook>(
+          //   "deliver-webhook",
+          //   { deliveryId: delivery.id },
+          //   {
+          //     idempotencyKey: `${delivery.id}-retry-${Date.now()}`,
+          //     queue: 'webhooks',
+          //   }
+          // );
 
-          console.log(`[Safety Net] Re-triggered delivery ${delivery.id} (attempt ${delivery.attempts || 0})`);
+          console.log(`[Safety Net] Would re-trigger delivery ${delivery.id} (attempt ${delivery.attempts || 0}) - DISABLED`);
           retriggered++;
 
         } catch (error) {

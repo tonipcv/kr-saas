@@ -1,6 +1,0 @@
-{
-  "crons": [
-    { "path": "/api/webhooks/pump", "schedule": "*/1 * * * *" },
-    { "path": "/api/webhooks/retry-stuck", "schedule": "*/5 * * * *" }
-  ]
-}
