@@ -1,5 +1,5 @@
 import { schedules, tasks } from "@trigger.dev/sdk/v3";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "./prisma";
 
 export const dailyBillingRenewal = schedules.task({
   id: "daily-billing-renewal",
@@ -8,6 +8,7 @@ export const dailyBillingRenewal = schedules.task({
     timezone: "America/Sao_Paulo",
   },
   run: async () => {
+    const prisma = await getPrisma();
     const now = new Date();
     const yyyymm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
 

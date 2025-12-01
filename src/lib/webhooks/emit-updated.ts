@@ -1,7 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { buildTransactionPayload } from './payload'
-import { tasks } from '@trigger.dev/sdk/v3'
-import type { deliverWebhook } from '../../../trigger/deliver-webhook'
+// Trigger.dev calls removed in favor of native Vercel flow when enabled
 
 export type EmitParams = {
   clinicId: string
@@ -60,21 +59,20 @@ export async function emitOutboundEvent(params: EmitParams) {
     })
     deliveries.push(del)
 
-    // ✅ TRIGGER.DEV: Disparar job de delivery (substitui worker manual)
+    // Nativo (Vercel): disparo best-effort imediato; pump cobre o restante
     try {
-      await tasks.trigger<typeof deliverWebhook>(
-        'deliver-webhook',
-        { deliveryId: del.id },
-        {
-          idempotencyKey: del.id, // Garante única execução
-          queue: 'webhooks', // Queue name (concurrency configurado no trigger.config.ts)
-        }
-      )
-      console.log(`[webhooks] Triggered delivery job for ${del.id}`)
+      if (process.env.WEBHOOKS_USE_NATIVE === 'true' && process.env.APP_BASE_URL) {
+        const base = process.env.APP_BASE_URL.replace(/\/$/, '')
+        await fetch(`${base}/api/webhooks/deliver`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deliveryId: del.id }),
+        })
+        console.log(`[webhooks] Enqueued native delivery for ${del.id}`)
+      }
     } catch (error) {
-      console.error(`[webhooks] Failed to trigger delivery job for ${del.id}:`, error)
-      // Não falhar a emissão se Trigger.dev estiver indisponível
-      // O safety net pode re-disparar depois
+      console.error(`[webhooks] Failed to enqueue native delivery for ${del.id}:`, error)
+      // Não falhar a emissão; o pump/cron fará retry
     }
   }
 

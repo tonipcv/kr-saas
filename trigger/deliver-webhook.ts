@@ -1,5 +1,5 @@
 import { task } from "@trigger.dev/sdk/v3";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "./prisma";
 import { signPayload } from "@/lib/webhooks/signature";
 
 /**
@@ -33,6 +33,7 @@ export const deliverWebhook = task({
   // Nota: Trigger.dev não tem timeout de execução, mas o fetch tem
   
   run: async (payload: { deliveryId: string }, { ctx }) => {
+    const prisma = await getPrisma();
     const { deliveryId } = payload;
     const attemptNumber = ctx.attempt.number;
 

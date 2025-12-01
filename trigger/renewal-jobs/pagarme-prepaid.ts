@@ -1,5 +1,5 @@
 import { task } from "@trigger.dev/sdk/v3";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "../prisma";
 import { pagarmeCreateOrder, pagarmeGetOrder } from "@/lib/payments/pagarme/sdk";
 
 export const pagarmePrepaidRenewal = task({
@@ -7,6 +7,7 @@ export const pagarmePrepaidRenewal = task({
   retry: { maxAttempts: 5, minTimeoutInMs: 2000, maxTimeoutInMs: 60000, factor: 2 },
   queue: { concurrencyLimit: 10 },
   run: async (payload: { subscriptionId: string }) => {
+    const prisma = await getPrisma();
     const { subscriptionId } = payload;
     console.log(`🔄 Processing Pagar.me prepaid renewal for subscription: ${subscriptionId}`);
 

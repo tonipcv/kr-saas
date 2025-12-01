@@ -1,12 +1,13 @@
 import { task } from "@trigger.dev/sdk/v3";
-import { prisma } from "@/lib/prisma";
-import { buildAppmaxClientForMerchant } from "@/lib/payments/appmax/sdk";
+import { getPrisma } from "../prisma";
+import { AppmaxClient } from "@/lib/payments/appmax/sdk";
 
 export const appmaxRenewal = task({
   id: "appmax-renewal",
   retry: { maxAttempts: 5, minTimeoutInMs: 2000, maxTimeoutInMs: 60000, factor: 2 },
   queue: { concurrencyLimit: 10 },
   run: async (payload: { subscriptionId: string }) => {
+    const prisma = await getPrisma();
     const { subscriptionId } = payload;
     console.log(`🔄 Processing Appmax renewal for subscription: ${subscriptionId}`);
 
@@ -54,8 +55,17 @@ export const appmaxRenewal = task({
     const nextPeriodStart: Date = subscription.currentPeriodEnd;
     const nextPeriodEnd: Date = calculateNextPeriod(nextPeriodStart, intervalUnit, intervalCount);
 
-    // Build Appmax client from merchant integration
-    const client = await buildAppmaxClientForMerchant(subscription.merchantId);
+    // Build Appmax client from merchant integration (fetch creds with lazy Prisma here)
+    const integ = await prisma.merchantIntegration.findUnique({
+      where: { merchantId_provider: { merchantId: String(subscription.merchantId), provider: "APPMAX" as any } },
+      select: { credentials: true, isActive: true },
+    });
+    if (!integ || !integ.isActive) throw new Error("appmax_integration_inactive");
+    const creds = (integ.credentials || {}) as any;
+    const apiKey: string | undefined = creds?.apiKey;
+    const testMode: boolean = !!creds?.testMode;
+    if (!apiKey) throw new Error("appmax_api_key_missing");
+    const client = new AppmaxClient(apiKey, { testMode });
 
     // Buscar método de pagamento salvo em customer_payment_methods
     const paymentMethod = await prisma.customerPaymentMethod.findFirst({

@@ -1,10 +1,11 @@
 import { schedules } from "@trigger.dev/sdk/v3";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "./prisma";
 
 export const billingScheduler = schedules.task({
   id: "billing-scheduler-dry-run",
   cron: "0 * * * *",
   run: async (payload) => {
+    const prisma = await getPrisma();
     const now = new Date();
     console.log("🔍 Billing Scheduler - DRY RUN MODE", { now: now.toISOString() });
 

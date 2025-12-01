@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+// Lazy-load Prisma from '@/lib/prisma' only when needed to avoid bundler import-time initialization
 
 type AppmaxOptions = { testMode?: boolean, baseURL?: string }
 
@@ -120,6 +120,7 @@ export class AppmaxClient {
 }
 
 export async function buildAppmaxClientForMerchant(merchantId: string) {
+  const { prisma } = await import('@/lib/prisma');
   const integ = await prisma.merchantIntegration.findUnique({
     where: { merchantId_provider: { merchantId: String(merchantId), provider: 'APPMAX' as any } },
     select: { credentials: true, isActive: true },

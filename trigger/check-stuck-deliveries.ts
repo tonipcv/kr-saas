@@ -1,5 +1,5 @@
 import { schedules, tasks } from "@trigger.dev/sdk/v3";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "./prisma";
 import type { deliverWebhook } from "./deliver-webhook";
 
 /**
@@ -23,6 +23,7 @@ export const checkStuckDeliveries = schedules.task({
   },
   
   run: async (payload) => {
+    const prisma = await getPrisma();
     console.log("[Safety Net] Checking for stuck webhook deliveries", {
       timestamp: payload.timestamp,
     });

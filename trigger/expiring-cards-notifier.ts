@@ -1,5 +1,5 @@
 import { schedules } from "@trigger.dev/sdk/v3";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "./prisma";
 
 export const expiringCardsNotifier = schedules.task({
   id: "expiring-cards-notifier",
@@ -8,6 +8,7 @@ export const expiringCardsNotifier = schedules.task({
     timezone: "America/Sao_Paulo",
   },
   run: async () => {
+    const prisma = await getPrisma();
     const now = new Date();
     const currentYear = now.getUTCFullYear();
     const currentMonth = now.getUTCMonth() + 1; // 1-12
