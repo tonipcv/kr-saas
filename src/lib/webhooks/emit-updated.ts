@@ -20,6 +20,7 @@ export async function emitOutboundEvent(params: EmitParams) {
       payload: params.payload,
     },
   })
+  try { console.log('[webhooks] event.created', { id: event.id, type: event.type, clinicId: event.clinicId }) } catch {}
 
   const endpoints = await prisma.webhookEndpoint.findMany({
     where: {
@@ -58,6 +59,7 @@ export async function emitOutboundEvent(params: EmitParams) {
       },
     })
     deliveries.push(del)
+    try { console.log('[webhooks] delivery.created', { id: del.id, endpointId: ep.id, eventId: event.id }) } catch {}
 
     // Nativo (Vercel): disparo best-effort imediato; pump cobre o restante
     try {
@@ -80,35 +82,29 @@ export async function emitOutboundEvent(params: EmitParams) {
 }
 
 // Convenience helpers aligned with guide v2.0
-export async function onPaymentTransactionCreated(transactionId: string) {
-  try {
-    const tx = await prisma.paymentTransaction.findUnique({
-      where: { id: transactionId },
-      select: { id: true, clinicId: true }
-    })
-
-    // ✅ VALIDAÇÃO: Verificar se transação existe e tem clinicId
-    if (!tx) {
-      console.warn(`[webhooks] Transaction ${transactionId} not found, skipping webhook`)
-      return
-    }
-
-    if (!tx.clinicId) {
-      console.warn(`[webhooks] Transaction ${transactionId} has no clinicId, skipping webhook`)
-      return
-    }
-
-    const payload = await buildTransactionPayload(transactionId)
-    await emitOutboundEvent({
-      clinicId: tx.clinicId,
-      type: 'payment.transaction.created',
-      resource: 'payment_transaction',
-      resourceId: transactionId,
-      payload,
-    })
-  } catch (error) {
-    console.error('[webhooks] Failed to emit created event:', error)
+export async function onPaymentTransactionCreated(transactionId: string): Promise<boolean> {
+  const tx = await prisma.paymentTransaction.findUnique({
+    where: { id: transactionId },
+    select: { id: true, clinicId: true }
+  })
+  if (!tx) {
+    console.warn(`[webhooks] Transaction ${transactionId} not found, skipping webhook`)
+    return false
   }
+  if (!tx.clinicId) {
+    console.warn(`[webhooks] Transaction ${transactionId} has no clinicId, skipping webhook`)
+    return false
+  }
+  const payload = await buildTransactionPayload(transactionId)
+  const { event, deliveries } = await emitOutboundEvent({
+    clinicId: tx.clinicId,
+    type: 'payment.transaction.created',
+    resource: 'payment_transaction',
+    resourceId: transactionId,
+    payload,
+  })
+  try { console.log('[webhooks] emitted.created', { eventId: event.id, deliveries: deliveries.map(d => d.id) }) } catch {}
+  return true
 }
 
 export async function onPaymentTransactionStatusChanged(transactionId: string, newStatus: string) {

@@ -15,7 +15,12 @@ export async function GET() {
 export async function POST(req: Request) {
   let hookId: string | null = null;
   try {
+    const contentType = (req.headers.get('content-type') || '').toLowerCase().split(';')[0];
     const rawBody = await req.text();
+    try {
+      const preview = typeof rawBody === 'string' ? rawBody.slice(0, 300) : '';
+      console.log('[pagarme][webhook] headers', { contentType, rawLen: rawBody?.length || 0, preview });
+    } catch {}
     const signature = req.headers.get('x-pagarme-signature')
       || req.headers.get('x-hub-signature-256')
       || req.headers.get('x-hub-signature')

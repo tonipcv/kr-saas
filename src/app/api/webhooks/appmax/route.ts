@@ -21,9 +21,39 @@ function mapStatus(pt: string): string | undefined {
 export async function POST(req: Request) {
   let orderId: string | null = null
   try {
+    const contentType = (req.headers.get('content-type') || '').toLowerCase().split(';')[0]
     const raw = await req.text()
+    try { console.log('[appmax][webhook] headers', { contentType, rawLen: raw?.length || 0 }) } catch {}
     let evt: any = {}
+    // Try JSON first
     try { evt = raw ? JSON.parse(raw) : {} } catch { evt = {} }
+    // Fallback: form-urlencoded
+    if ((!evt || Object.keys(evt).length === 0) && contentType.includes('application/x-www-form-urlencoded')) {
+      try {
+        const params = new URLSearchParams(raw)
+        const obj: any = {}
+        for (const entry of Array.from(params.entries())) {
+          const k = entry[0]
+          const v = entry[1]
+          // Support keys like data[id] => obj.data.id
+          if (k.includes('[')) {
+            const parts = k.replace(/\]/g, '').split('[')
+            let ref: any = obj
+            for (let i = 0; i < parts.length; i++) {
+              const part = parts[i]
+              if (i === parts.length - 1) ref[part] = v
+              else ref = (ref[part] = ref[part] || {})
+            }
+          } else {
+            obj[k] = v
+          }
+        }
+        evt = obj
+        console.log('[appmax][webhook] parsed form-urlencoded fallback')
+      } catch (e) {
+        console.warn('[appmax][webhook] failed to parse form-urlencoded fallback')
+      }
+    }
 
     const rawStatus = String(evt?.status || evt?.data?.status || '')
     // Use centralized normalizer
@@ -298,20 +328,102 @@ export async function POST(req: Request) {
                  start_at = COALESCE(start_at, $2::timestamp),
                  updated_at = NOW()
              WHERE id = $1`,
-            String(subRow.id),
-            periodStart,
-            periodEnd
-          );
-          console.log('[appmax][webhook] ✅ Activated subscription', { subscriptionId: subRow.id, orderId, periodStart, periodEnd, interval: intervalUnit, count: intervalCount });
         }
       } catch (e) {
-        console.warn('[appmax][webhook] subscription activation failed:', e instanceof Error ? e.message : e);
+        console.warn('[appmax][webhook] mirror to unified customer tables failed', e instanceof Error ? e.message : e)
+      }
+
+      // 2) Upsert PaymentMethod if card data present
+      // Appmax webhook typically does not return card details; skip if unavailable
+      // If you need card storage, capture it in /api/checkout/appmax/create instead
+
+      // 3) Create Purchase for the paid transaction
+      if (productId) {
+        const existingPurchase = await prisma.purchase.findFirst({
+          where: { externalIdempotencyKey: String(orderId) }
+        })
+        if (!existingPurchase) {
+          // Resolve userId from patientProfile
+          const profRows = await prisma.$queryRawUnsafe<any[]>(
+            `SELECT user_id FROM patient_profiles WHERE id = $1 LIMIT 1`,
+            patientProfileId
+          )
+          const userId = profRows?.[0]?.user_id ? String(profRows[0].user_id) : null
+          if (userId) {
+            const price = amountCents / 100
+            await prisma.purchase.create({
+              data: {
+                userId: String(userId),
+                doctorId: String(doctorId),
+                productId: String(productId),
+                quantity: 1,
+                unitPrice: price as any,
+                totalPrice: price as any,
+                pointsAwarded: 0 as any,
+                status: 'COMPLETED',
+                externalIdempotencyKey: String(orderId),
+                notes: 'Created via AppMax webhook (paid)',
+              } as any,
+            })
+            console.log('[appmax][webhook] ✅ Created purchase', { orderId, userId, productId, price })
+          }
+        }
       }
     }
+  } catch (e) {
+    console.warn('[appmax][webhook] paid backfill failed:', e instanceof Error ? e.message : e)
+  }
 
-    return NextResponse.json({ received: true })
-  } catch (e: any) {
-    console.error('[appmax][webhook] processing error', e)
+  // Activate subscriptions when payment confirms
+  try {
+    const subRows: any[] = await prisma.$queryRawUnsafe(
+      `SELECT id, product_id, offer_id FROM customer_subscriptions 
+       WHERE metadata->>'appmaxOrderId' = $1 AND status = 'PENDING' LIMIT 1`,
+      String(orderId)
+    );
+    if (subRows && subRows.length > 0) {
+      const subRow = subRows[0];
+      // Calculate period dates from payment confirmation
+      const paidAt = new Date();
+      let periodStart = paidAt;
+      let periodEnd = new Date(paidAt);
+      
+      // Get interval from offer or product
+      let intervalUnit = 'MONTH';
+      let intervalCount = 1;
+      try {
+        if (subRow.offer_id) {
+          const offer = await prisma.offer.findUnique({ where: { id: String(subRow.offer_id) }, select: { intervalUnit: true, intervalCount: true } });
+          if (offer?.intervalUnit) intervalUnit = String(offer.intervalUnit).toUpperCase();
+          if (offer?.intervalCount) intervalCount = Number(offer.intervalCount) || 1;
+        } else if (subRow.product_id) {
+          const product = await prisma.product.findUnique({ where: { id: String(subRow.product_id) }, select: { interval: true, intervalCount: true } } as any);
+          if ((product as any)?.interval) intervalUnit = String((product as any).interval).toUpperCase();
+          if ((product as any)?.intervalCount) intervalCount = Number((product as any).intervalCount) || 1;
+        }
+      } catch {}
+      
+      // Calculate end date based on interval
+      if (intervalUnit === 'DAY') periodEnd.setDate(periodEnd.getDate() + intervalCount);
+      else if (intervalUnit === 'WEEK') periodEnd.setDate(periodEnd.getDate() + 7 * intervalCount);
+      else if (intervalUnit === 'MONTH') periodEnd.setMonth(periodEnd.getMonth() + intervalCount);
+      else if (intervalUnit === 'YEAR') periodEnd.setFullYear(periodEnd.getFullYear() + intervalCount);
+      
+      await prisma.$executeRawUnsafe(
+        `UPDATE customer_subscriptions 
+         SET status = 'ACTIVE'::"SubscriptionStatus",
+             current_period_start = $2::timestamp,
+             current_period_end = $3::timestamp,
+             start_at = COALESCE(start_at, $2::timestamp),
+             updated_at = NOW()
+         WHERE id = $1`,
+        String(subRow.id),
+        periodStart,
+        periodEnd
+      );
+      console.log('[appmax][webhook] ✅ Activated subscription', { subscriptionId: subRow.id, orderId, periodStart, periodEnd, interval: intervalUnit, count: intervalCount });
+
+      // Mirror period dates and subscription linkage into payment_transaction for richer webhook payloads
     
     // CRITICAL: Mesmo com erro, SEMPRE retorna 200 para evitar reenvios duplicados
     // Marca webhook para retry via worker

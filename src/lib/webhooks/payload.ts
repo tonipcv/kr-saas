@@ -45,7 +45,21 @@ export type TransactionSnapshot = {
 export async function buildTransactionPayload(transactionId: string): Promise<TransactionSnapshot> {
   const tx = await prisma.paymentTransaction.findUnique({
     where: { id: transactionId },
-    include: { checkoutSession: true },
+    include: {
+      checkoutSession: {
+        select: {
+          id: true,
+          status: true,
+          paymentMethod: true,
+          country: true,
+          email: true,
+          phone: true,
+          document: true,
+          orderId: true,
+          selectedInstallments: true,
+        }
+      }
+    },
   })
   if (!tx) throw new Error(`Transaction ${transactionId} not found`)
 
@@ -53,13 +67,23 @@ export async function buildTransactionPayload(transactionId: string): Promise<Tr
     ? await prisma.product.findUnique({ where: { id: tx.productId } }).catch(() => null)
     : null
 
-  // Offer is not directly linked on PaymentTransaction; best-effort by productId and active offer
-  const offer = tx.productId
-    ? await prisma.offer.findFirst({
+  // Offer is not directly linked on PaymentTransaction; best-effort resolution
+  // 1) Try active offer; 2) fallback to latest offer by product; 3) fallback to tx amount/currency
+  let offer: any | null = null
+  if (tx.productId) {
+    try {
+      offer = await prisma.offer.findFirst({
         where: { productId: tx.productId, active: true },
         orderBy: { createdAt: 'desc' },
-      }).catch(() => null)
-    : null
+      })
+      if (!offer) {
+        offer = await prisma.offer.findFirst({
+          where: { productId: tx.productId },
+          orderBy: { createdAt: 'desc' },
+        })
+      }
+    } catch {}
+  }
 
   return {
     transaction: {
@@ -104,13 +128,22 @@ export async function buildTransactionPayload(transactionId: string): Promise<Tr
     product: product
       ? { id: product.id, name: product.name, type: product.type }
       : undefined,
-    offer: offer
-      ? {
+    offer: (() => {
+      if (offer) {
+        return {
           id: offer.id,
-          priceCents: offer.priceCents,
-          currency: offer.currency,
-          preferredProvider: (offer.preferredProvider as any) ?? null,
+          priceCents: Number(offer.priceCents ?? 0) > 0 ? Number(offer.priceCents) : tx.amountCents,
+          currency: offer.currency || tx.currency,
+          preferredProvider: (offer.preferredProvider as any) ?? (tx.routedProvider as any) ?? (tx.provider as any) ?? null,
         }
-      : undefined,
+      }
+      // No offer found: provide a sensible fallback to avoid zeros/empties in downstream systems
+      return {
+        id: tx.productId ? `${tx.productId}:fallback` : `${tx.id}:fallback`,
+        priceCents: tx.amountCents,
+        currency: tx.currency,
+        preferredProvider: (tx.routedProvider as any) ?? (tx.provider as any) ?? null,
+      }
+    })(),
   }
 }
