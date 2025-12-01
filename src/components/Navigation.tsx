@@ -352,24 +352,7 @@ export default function Navigation() {
           icon: TagIcon,
           description: 'Outbound webhooks'
         },
-        {
-          href: '/business/events',
-          label: 'Events',
-          icon: PresentationChartBarIcon,
-          description: 'Metrics & timelines'
-        },
-        {
-          href: '/business/broadcast',
-          label: 'Broadcast',
-          icon: ChatBubbleLeftRightIcon,
-          description: 'Send WhatsApp and campaigns'
-        },
-        {
-          href: '/business/automation',
-          label: 'Automation',
-          icon: SparklesIcon,
-          description: 'Triggers & actions'
-        },
+        
       ]
     }
   ], []);

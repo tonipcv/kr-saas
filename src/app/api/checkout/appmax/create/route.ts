@@ -335,8 +335,9 @@ export async function POST(req: Request) {
         unifiedCustomerId,
         unifiedCustomerProviderId
       )
+      const txId = txRows?.[0]?.id
       console.log('[appmax][create] ✅ transaction created', { 
-        txId: txRows?.[0]?.id,
+        txId,
         orderId: order_id, 
         clinicId: resolvedClinicId, 
         amountCents: basePriceCents,
@@ -344,6 +345,16 @@ export async function POST(req: Request) {
         doctorId,
         patientProfileId 
       })
+      
+      // Emit webhook: payment.transaction.created
+      if (txId) {
+        try {
+          await onPaymentTransactionCreated(String(txId))
+          console.log('[appmax][create] ✅ webhook emitted for transaction', { txId })
+        } catch (e) {
+          console.warn('[appmax][create] ⚠️ webhook emission failed (non-blocking)', e instanceof Error ? e.message : e)
+        }
+      }
     } catch (e) {
       console.error('[appmax][create] ❌ CRITICAL: failed to persist transaction', { 
         error: e instanceof Error ? e.message : e, 

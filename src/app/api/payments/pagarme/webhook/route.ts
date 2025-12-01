@@ -4,7 +4,7 @@ import { verifyPagarmeWebhookSignature, pagarmeUpdateCharge, pagarmeGetOrder } f
 import { sendEmail } from '@/lib/email';
 import { baseTemplate } from '@/email-templates/layouts/base';
 import crypto from 'crypto';
-import { onPaymentTransactionStatusChanged } from '@/lib/webhooks/emit-updated';
+import { onPaymentTransactionStatusChanged, onPaymentTransactionCreated } from '@/lib/webhooks/emit-updated';
 import { normalizeProviderStatus } from '@/lib/payments/status-map';
 
 export async function GET() {
@@ -394,6 +394,14 @@ export async function POST(req: Request) {
                 JSON.stringify(event)
               );
               console.log('[pagarme][webhook] created early row by orderId', { orderId, status: placeholderStatus });
+              
+              // Emit webhook: payment.transaction.created
+              try {
+                await onPaymentTransactionCreated(webhookTxId);
+                console.log('[pagarme][webhook] ✅ webhook emitted for early transaction', { txId: webhookTxId, orderId });
+              } catch (e) {
+                console.warn('[pagarme][webhook] ⚠️ webhook emission failed (non-blocking)', e instanceof Error ? e.message : e);
+              }
             } catch {}
           } else {
             console.log('[pagarme][webhook] updated by orderId', { orderId, status: mapped || 'unchanged', affectedRows: result });
@@ -483,6 +491,14 @@ export async function POST(req: Request) {
                 JSON.stringify(event)
               );
               console.log('[pagarme][webhook] created early row by chargeId', { chargeId, status: placeholderStatus });
+              
+              // Emit webhook: payment.transaction.created
+              try {
+                await onPaymentTransactionCreated(webhookTxId2);
+                console.log('[pagarme][webhook] ✅ webhook emitted for early transaction', { txId: webhookTxId2, chargeId });
+              } catch (e) {
+                console.warn('[pagarme][webhook] ⚠️ webhook emission failed (non-blocking)', e instanceof Error ? e.message : e);
+              }
             } catch {}
           } else {
             console.log('[pagarme][webhook] updated by chargeId', { chargeId, orderId, status: mapped || 'unchanged', affectedRows: result2 });
@@ -847,6 +863,14 @@ export async function POST(req: Request) {
                     JSON.stringify(event)
                   );
                   try { console.log('[pagarme][webhook] backfilled payment_transactions'); } catch {}
+                  
+                  // Emit webhook: payment.transaction.created (backfill case)
+                  try {
+                    await onPaymentTransactionCreated(txId);
+                    console.log('[pagarme][webhook] ✅ webhook emitted for backfilled transaction', { txId, orderId, chargeId });
+                  } catch (e) {
+                    console.warn('[pagarme][webhook] ⚠️ webhook emission failed (non-blocking)', e instanceof Error ? e.message : e);
+                  }
                 } else {
                   try { console.log('[pagarme][webhook] skip backfill; transaction already exists for order/charge'); } catch {}
                 }

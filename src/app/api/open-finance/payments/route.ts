@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createRedirectPayment } from '@/lib/linaob';
+import { onPaymentTransactionCreated } from '@/lib/webhooks/emit-updated';
 import crypto from 'crypto';
 
 export async function POST(req: Request) {
@@ -261,6 +262,7 @@ export async function POST(req: Request) {
             }
           }
           // Create PaymentTransaction with OPENFINANCE/PROCESSING
+          const txId = crypto.randomUUID();
           await prisma.$executeRawUnsafe(
             `INSERT INTO payment_transactions (
               id, provider, provider_order_id, doctor_id, clinic_id, merchant_id, product_id,
@@ -274,7 +276,7 @@ export async function POST(req: Request) {
               'processing', 'OPENFINANCE'::"PaymentProvider", 'PROCESSING'::"PaymentStatus", 'OPENFINANCE', $11::jsonb
             )
             ON CONFLICT (provider, provider_order_id) DO NOTHING`,
-            crypto.randomUUID(),
+            txId,
             String(paymentLinkId),
             product.doctorId || null,
             product.clinicId,
@@ -286,6 +288,14 @@ export async function POST(req: Request) {
             String(currency),
             JSON.stringify({ provider: 'open_finance', paymentLinkId, orderRef, payer })
           );
+          
+          // Emit webhook: payment.transaction.created
+          try {
+            await onPaymentTransactionCreated(txId);
+            console.log('[open-finance][payments] ✅ webhook emitted', { txId, paymentLinkId });
+          } catch (e) {
+            console.warn('[open-finance][payments] ⚠️ webhook emission failed (non-blocking)', e instanceof Error ? e.message : e);
+          }
         }
       }
     } catch (e) {
