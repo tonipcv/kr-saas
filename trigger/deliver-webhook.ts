@@ -16,7 +16,7 @@ import { signPayload } from "@/lib/webhooks/signature";
  * - Assinatura HMAC SHA-256
  * - Validações (HTTPS, tamanho)
  */
-export const deliverWebhook = task({
+const deliverWebhook = task({
   id: "deliver-webhook",
   
   // Retry policy: replica o backoff manual original
