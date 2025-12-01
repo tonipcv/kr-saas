@@ -30,6 +30,19 @@ export default function WebhooksPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [createName, setCreateName] = useState('')
   const [createUrl, setCreateUrl] = useState('')
+  // Details modal state
+  const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint | null>(null)
+  const [deliveries, setDeliveries] = useState<Array<{
+    id: string
+    status: string
+    attempts: number | null
+    lastCode: number | null
+    lastError: string | null
+    deliveredAt: string | null
+    createdAt: string
+    event: { type: string; createdAt: string }
+  }>>([])
+  const [deliveriesLoading, setDeliveriesLoading] = useState(false)
   // Predefined outbound transaction events (provider-agnostic)
   // Derived from PaymentStatus enum in prisma/schema.prisma + 'created'
   const AVAILABLE_EVENTS = [
@@ -82,6 +95,29 @@ export default function WebhooksPage() {
   }
 
   useEffect(() => { loadEndpoints() }, [currentClinic?.id])
+
+  // Load deliveries for selected endpoint
+  useEffect(() => {
+    const fetchDeliveries = async () => {
+      if (!currentClinic?.id || !selectedEndpoint?.id) return
+      try {
+        setDeliveriesLoading(true)
+        const u = new URL('/api/webhooks/deliveries', window.location.origin)
+        u.searchParams.set('clinicId', currentClinic.id)
+        u.searchParams.set('endpointId', selectedEndpoint.id)
+        u.searchParams.set('limit', '50')
+        const res = await fetch(u.toString(), { cache: 'no-store' })
+        if (!res.ok) throw new Error('Falha ao carregar entregas')
+        const js = await res.json()
+        setDeliveries(Array.isArray(js?.deliveries) ? js.deliveries : [])
+      } catch (e) {
+        setDeliveries([])
+      } finally {
+        setDeliveriesLoading(false)
+      }
+    }
+    fetchDeliveries()
+  }, [selectedEndpoint?.id, currentClinic?.id])
 
   // Load products when modal is open and user wants to filter by products
   useEffect(() => {
@@ -214,7 +250,11 @@ export default function WebhooksPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {endpoints.map((ep) => (
-                    <tr key={ep.id} className="hover:bg-gray-50/60">
+                    <tr
+                      key={ep.id}
+                      className="hover:bg-gray-50/60 cursor-pointer"
+                      onClick={() => setSelectedEndpoint(ep)}
+                    >
                       <td className="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{ep.name}</td>
                       <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-700">{ep.url}</td>
                       <td className="whitespace-nowrap px-3 py-3.5 text-sm text-gray-700">{ep.events.length}</td>
@@ -236,8 +276,18 @@ export default function WebhooksPage() {
                       </td>
                       <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="outline" size="sm" className="h-7 text-gray-700 hover:bg-gray-50" onClick={() => rotateSecret(ep.id)}>Rotar secret</Button>
-                          <Button variant="outline" size="sm" className="h-7 text-gray-700 hover:bg-gray-50" onClick={() => deleteEndpoint(ep.id)}>Excluir</Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-gray-700 hover:bg-gray-50"
+                            onClick={(e) => { e.stopPropagation(); rotateSecret(ep.id) }}
+                          >Rotar secret</Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-gray-700 hover:bg-gray-50"
+                            onClick={(e) => { e.stopPropagation(); deleteEndpoint(ep.id) }}
+                          >Excluir</Button>
                         </div>
                       </td>
                     </tr>
@@ -348,6 +398,60 @@ export default function WebhooksPage() {
                   <Button variant="outline" className="h-8" onClick={() => setIsCreateOpen(false)} disabled={creating}>Cancelar</Button>
                   <Button className="h-8 bg-gray-900 text-white" onClick={submitCreate} disabled={creating || !currentClinic?.id}>{creating ? 'Salvando...' : 'Salvar'}</Button>
                 </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Details Dialog */}
+          <Dialog open={!!selectedEndpoint} onOpenChange={(open) => { if (!open) setSelectedEndpoint(null) }}>
+            <DialogContent className="w-full max-w-[90vw] sm:max-w-5xl bg-white border border-gray-200 rounded-2xl p-6 max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="text-[18px] font-semibold text-gray-900">Entregas do Endpoint</DialogTitle>
+                <DialogDescription>
+                  {selectedEndpoint ? (
+                    <div className="text-sm text-gray-600">
+                      <div className="font-medium text-gray-900">{selectedEndpoint.name}</div>
+                      <div className="truncate">{selectedEndpoint.url}</div>
+                    </div>
+                  ) : null}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="mt-2 overflow-x-auto">
+                {deliveriesLoading ? (
+                  <div className="rounded-xl border border-gray-200 p-3 text-sm text-gray-600">Carregando entregas...</div>
+                ) : deliveries.length === 0 ? (
+                  <div className="rounded-xl border border-gray-200 p-3 text-sm text-gray-600">Nenhuma entrega encontrada</div>
+                ) : (
+                  <div className="rounded-xl border border-gray-200">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr className="text-left text-xs text-gray-600">
+                          <th className="py-2 px-3">ID</th>
+                          <th className="py-2 px-3">Evento</th>
+                          <th className="py-2 px-3">Status</th>
+                          <th className="py-2 px-3">Tentativas</th>
+                          <th className="py-2 px-3">Código</th>
+                          <th className="py-2 px-3">Criado</th>
+                          <th className="py-2 px-3">Entregue</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {deliveries.map((d) => (
+                          <tr key={d.id} className="hover:bg-gray-50">
+                            <td className="py-2 px-3 font-mono text-[12px] truncate max-w-[220px]" title={d.id}>{d.id}</td>
+                            <td className="py-2 px-3">{d.event?.type || '-'}</td>
+                            <td className="py-2 px-3">{d.status}</td>
+                            <td className="py-2 px-3">{d.attempts ?? 0}</td>
+                            <td className="py-2 px-3">{d.lastCode ?? '-'}</td>
+                            <td className="py-2 px-3">{new Date(d.createdAt).toLocaleString()}</td>
+                            <td className="py-2 px-3">{d.deliveredAt ? new Date(d.deliveredAt).toLocaleString() : '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </DialogContent>
           </Dialog>

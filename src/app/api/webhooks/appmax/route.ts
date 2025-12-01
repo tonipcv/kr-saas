@@ -19,6 +19,7 @@ function mapStatus(pt: string): string | undefined {
 }
 
 export async function POST(req: Request) {
+  let orderId: string | null = null
   try {
     const raw = await req.text()
     let evt: any = {}
@@ -30,12 +31,18 @@ export async function POST(req: Request) {
     const mapped = normalized.legacy
     const internalStatus = normalized.internal
     // In Default template, order id is data.id and customer under data.customer
-    const orderId = evt?.data?.id ? String(evt.data.id) : null
+    orderId = evt?.data?.id ? String(evt.data.id) : null
     const statusRaw = evt?.data?.status || evt?.status || null
     const paymentType = evt?.data?.payment_type || evt?.data?.paymentType || null
     const installments = evt?.data?.installments != null ? Number(evt.data.installments) : null
 
-    console.log('[appmax][webhook] 📥 Received', { event, orderId, statusRaw, paymentType })
+    console.log('[appmax][webhook] 📥 Received', {
+      provider: 'appmax',
+      orderId,
+      statusRaw,
+      paymentType,
+      hasData: !!evt?.data,
+    })
 
     // Idempotent log of webhook
     try {
@@ -45,7 +52,7 @@ export async function POST(req: Request) {
          ON CONFLICT (provider, hook_id) DO NOTHING`,
         String(evt?.id || ''),
         String(orderId || ''),
-        String(event),
+        String(evt?.type || evt?.event || ''),
         String(statusRaw || ''),
         JSON.stringify(evt)
       )
