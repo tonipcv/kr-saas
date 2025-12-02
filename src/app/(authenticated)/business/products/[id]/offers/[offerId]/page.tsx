@@ -447,7 +447,8 @@ export default function EditOfferPage({ params }: PageProps) {
       try {
         const url = new URL(value);
         const sluggedPath = ensureSlugInPath(url.pathname);
-        return `${url.origin}${sluggedPath}`;
+        // Always rebase to configured base domain to avoid leaking old localhost values
+        return `${base}${sluggedPath}`;
       } catch {
         return value;
       }
