@@ -28,6 +28,7 @@ export default function WebhooksPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [createName, setCreateName] = useState('')
   const [createUrl, setCreateUrl] = useState('')
   // Details modal state
@@ -96,6 +97,19 @@ export default function WebhooksPage() {
 
   useEffect(() => { loadEndpoints() }, [currentClinic?.id])
 
+  // Open edit dialog with endpoint data
+  const openEdit = (ep: Endpoint) => {
+    setEditingId(ep.id)
+    setCreateName(ep.name || '')
+    setCreateUrl(ep.url || '')
+    setSelectedEvents(Array.isArray(ep.events) ? ep.events : [])
+    setCreateEnabled(Boolean(ep.enabled))
+    setMaxConcurrentDeliveries((ep as any).maxConcurrentDeliveries ?? 5)
+    setCategoryFilter(((ep as any).categoryFilter ?? 'all') as any)
+    setProductFilters(((ep as any).productFilters ?? []) as any)
+    setIsCreateOpen(true)
+  }
+
   // Load deliveries for selected endpoint
   useEffect(() => {
     const fetchDeliveries = async () => {
@@ -148,25 +162,26 @@ export default function WebhooksPage() {
     }
     try {
       setCreating(true)
-      const res = await fetch('/api/webhooks/endpoints', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clinicId: currentClinic.id,
-          name: createName.trim(),
-          url: createUrl.trim(),
-          events,
-          enabled: createEnabled,
-          maxConcurrentDeliveries,
-          categoryFilter,
-          productFilters: categoryFilter === 'products' ? productFilters : [],
-        }),
+      const isEditing = Boolean(editingId)
+      const endpointUrl = isEditing ? `/api/webhooks/endpoints/${editingId}` : '/api/webhooks/endpoints'
+      const method = isEditing ? 'PATCH' : 'POST'
+      const body = JSON.stringify({
+        clinicId: currentClinic.id,
+        name: createName.trim(),
+        url: createUrl.trim(),
+        events,
+        enabled: createEnabled,
+        maxConcurrentDeliveries,
+        categoryFilter,
+        productFilters: categoryFilter === 'products' ? productFilters : [],
       })
+      const res = await fetch(endpointUrl, { method, headers: { 'Content-Type': 'application/json' }, body })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
-        throw new Error(j?.error || 'Falha ao criar endpoint')
+        throw new Error(j?.error || (isEditing ? 'Falha ao atualizar endpoint' : 'Falha ao criar endpoint'))
       }
       setIsCreateOpen(false)
+      setEditingId(null)
       setCreateName('')
       setCreateUrl('')
       setSelectedEvents(['payment.transaction.created', 'payment.transaction.succeeded'])
@@ -176,7 +191,7 @@ export default function WebhooksPage() {
       setCreateEnabled(true)
       await loadEndpoints()
     } catch (e: any) {
-      alert(e?.message || 'Erro ao criar endpoint')
+      alert(e?.message || 'Erro ao salvar endpoint')
     } finally {
       setCreating(false)
     }
@@ -276,18 +291,41 @@ export default function WebhooksPage() {
                       </td>
                       <td className="relative whitespace-nowrap py-3.5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                         <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-gray-700 hover:bg-gray-50"
+                          {/* Edit icon button on the right */}
+                          <button
+                            className="inline-flex items-center rounded-lg p-1.5 border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                            title="Editar"
+                            aria-label="Editar"
+                            onClick={(e) => { e.stopPropagation(); openEdit(ep) }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                              <path d="M21.731 2.269a2.625 2.625 0 0 0-3.714 0l-1.157 1.157 3.714 3.714 1.157-1.157a2.625 2.625 0 0 0 0-3.714z" />
+                              <path d="M3 17.25V21h3.75l10.94-10.94-3.714-3.714L3 17.25z" />
+                            </svg>
+                          </button>
+                          <button
+                            className="inline-flex items-center rounded-lg p-1.5 border border-gray-200 bg-white text-gray-900 hover:bg-gray-50 hover:border-gray-300"
+                            title="Rotar secret"
+                            aria-label="Rotar secret"
                             onClick={(e) => { e.stopPropagation(); rotateSecret(ep.id) }}
-                          >Rotar secret</Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-gray-700 hover:bg-gray-50"
+                          >
+                            {/* Rotate/refresh icon */}
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                              <path d="M12 5a7 7 0 1 1-6.708 9h2.073a5 5 0 1 0 1.17-5.4L9 10H4V5l1.818 1.818A8.96 8.96 0 0 1 12 3c4.97 0 9 4.03 9 9s-4.03 9-9 9-9-4.03-9-9h2a7 7 0 0 1 7-7z" />
+                            </svg>
+                          </button>
+                          <button
+                            className="inline-flex items-center rounded-lg p-1.5 border border-gray-200 bg-white text-gray-900 hover:bg-gray-50 hover:border-gray-300"
+                            title="Excluir"
+                            aria-label="Excluir"
                             onClick={(e) => { e.stopPropagation(); deleteEndpoint(ep.id) }}
-                          >Excluir</Button>
+                          >
+                            {/* Trash icon */}
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                              <path d="M9 3a1 1 0 0 0-1 1v1H5.5a.75.75 0 0 0 0 1.5h13a.75.75 0 0 0 0-1.5H16V4a1 1 0 0 0-1-1H9z" />
+                              <path d="M6.5 8.25a.75.75 0 0 1 .75-.75h9.5a.75.75 0 0 1 .75.75v9.5A2.25 2.25 0 0 1 15.25 20H8.75A2.25 2.25 0 0 1 6.5 17.75v-9.5z" />
+                            </svg>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -297,11 +335,11 @@ export default function WebhooksPage() {
             </div>
           )}
 
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) setEditingId(null) }}>
             <DialogContent className="max-w-xl bg-white border border-gray-200 rounded-2xl p-6">
               <DialogHeader>
-                <DialogTitle className="text-[18px] font-semibold text-gray-900">Novo Endpoint</DialogTitle>
-                <DialogDescription>Crie um endpoint para receber eventos de transação</DialogDescription>
+                <DialogTitle className="text-[18px] font-semibold text-gray-900">{editingId ? 'Editar Endpoint' : 'Novo Endpoint'}</DialogTitle>
+                <DialogDescription>{editingId ? 'Atualize as configurações do endpoint' : 'Crie um endpoint para receber eventos de transação'}</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
@@ -396,7 +434,7 @@ export default function WebhooksPage() {
                 </div>
                 <div className="flex items-center justify-end gap-2 pt-2">
                   <Button variant="outline" className="h-8" onClick={() => setIsCreateOpen(false)} disabled={creating}>Cancelar</Button>
-                  <Button className="h-8 bg-gray-900 text-white" onClick={submitCreate} disabled={creating || !currentClinic?.id}>{creating ? 'Salvando...' : 'Salvar'}</Button>
+                  <Button className="h-8 bg-gray-900 text-white" onClick={submitCreate} disabled={creating || !currentClinic?.id}>{creating ? 'Salvando...' : (editingId ? 'Atualizar' : 'Salvar')}</Button>
                 </div>
               </div>
             </DialogContent>

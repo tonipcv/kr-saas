@@ -1,22 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import nodemailer from "nodemailer";
 import { createVerificationCodeEmail } from "@/email-templates/auth/verification-code";
 import { getDoctorBySlug, getClinicBrandingByDoctorId } from "@/lib/tenant-slug";
+import { sendEmail } from "@/lib/email";
 
-if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD || !process.env.SMTP_FROM) {
-  throw new Error('Missing SMTP configuration environment variables');
-}
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: 465,
-  secure: true, // use SSL
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASSWORD
-  }
-});
+// SMTP config is validated inside sendEmail(); optional RESEND fallback may be enabled by env.
 
 export async function POST(req: Request) {
   try {
@@ -108,25 +96,18 @@ export async function POST(req: Request) {
       }
 
       try {
-        await transporter.verify();
-        console.log('SMTP connection verified');
-
         const html = createVerificationCodeEmail({
           code: verificationCode,
           clinicName,
           clinicLogo,
         });
 
-        await transporter.sendMail({
-          from: {
-            name: 'KRX',
-            address: process.env.SMTP_FROM as string
-          },
+        const ok = await sendEmail({
           to: normalizedEmail,
           subject: '[KRX] Your verification code',
-          html
+          html,
         });
-
+        if (!ok) throw new Error('Email send failed (SMTP and fallback)');
         console.log('Verification email sent successfully');
       } catch (emailError) {
         console.error('Email sending error:', emailError);
@@ -197,25 +178,18 @@ export async function POST(req: Request) {
     }
 
     try {
-      await transporter.verify();
-      console.log('SMTP connection verified');
-
       const html = createVerificationCodeEmail({
         code: verificationCode,
         clinicName,
         clinicLogo,
       });
 
-      await transporter.sendMail({
-        from: {
-          name: 'KRX',
-          address: process.env.SMTP_FROM as string
-        },
+      const ok = await sendEmail({
         to: normalizedEmail,
         subject: '[KRX] Your verification code',
-        html
+        html,
       });
-
+      if (!ok) throw new Error('Email send failed (SMTP and fallback)');
       console.log('Verification email sent successfully');
     } catch (emailError) {
       console.error('Email sending error:', emailError);

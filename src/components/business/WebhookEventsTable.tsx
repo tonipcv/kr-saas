@@ -44,7 +44,7 @@ export default function WebhookEventsTable({ rows }: { rows: Row[] }) {
               <th className="px-2 py-2 text-left">Attempts</th>
               <th className="px-2 py-2 text-left">Next Retry</th>
               <th className="px-2 py-2 text-left">Err</th>
-              <th className="px-2 py-2 text-left">Actions</th>
+              <th className="px-2 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -61,14 +61,20 @@ export default function WebhookEventsTable({ rows }: { rows: Row[] }) {
                 <td className="px-2 py-2 whitespace-nowrap">{Number(r.retry_count || 0)} / {Number(r.max_retries || 3)}</td>
                 <td className="px-2 py-2 whitespace-nowrap">{r.next_retry_at ? fmtDate(r.next_retry_at) : '—'}</td>
                 <td className="px-2 py-2 max-w-[220px] truncate" title={r.processing_error || ''}>{r.processing_error || '—'}</td>
-                <td className="px-2 py-2">
-                  <div className="flex gap-2">
-                    <form action={async () => {
-                      // server action placeholder; actual update is performed server-side on page via a form
-                    }}>
-                      <button disabled className="px-2 py-1 rounded-lg border border-gray-200 bg-white text-xs text-gray-400" title="Use Re-enqueue button on server page">Re-enqueue</button>
-                    </form>
-                  </div>
+                <td className="px-2 py-2 text-right">
+                  <button
+                    type="button"
+                    onClick={() => onRowDoubleClick(r)}
+                    className="inline-flex items-center rounded-lg p-1.5 border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                    title="Edit"
+                    aria-label="Edit"
+                  >
+                    {/* Pencil icon */}
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                      <path d="M21.731 2.269a2.625 2.625 0 0 0-3.714 0l-1.157 1.157 3.714 3.714 1.157-1.157a2.625 2.625 0 0 0 0-3.714z" />
+                      <path d="M3 17.25V21h3.75l10.94-10.94-3.714-3.714L3 17.25z" />
+                    </svg>
+                  </button>
                 </td>
               </tr>
             ))}

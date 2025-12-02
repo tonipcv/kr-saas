@@ -328,119 +328,56 @@ export async function POST(req: Request) {
                  start_at = COALESCE(start_at, $2::timestamp),
                  updated_at = NOW()
              WHERE id = $1`,
-        }
-      } catch (e) {
-        console.warn('[appmax][webhook] mirror to unified customer tables failed', e instanceof Error ? e.message : e)
-      }
+            String(subRow.id),
+            periodStart,
+            periodEnd
+          );
+          console.log('[appmax][webhook] ✅ Activated subscription', { subscriptionId: subRow.id, orderId, periodStart, periodEnd, interval: intervalUnit, count: intervalCount });
 
-      // 2) Upsert PaymentMethod if card data present
-      // Appmax webhook typically does not return card details; skip if unavailable
-      // If you need card storage, capture it in /api/checkout/appmax/create instead
-
-      // 3) Create Purchase for the paid transaction
-      if (productId) {
-        const existingPurchase = await prisma.purchase.findFirst({
-          where: { externalIdempotencyKey: String(orderId) }
-        })
-        if (!existingPurchase) {
-          // Resolve userId from patientProfile
-          const profRows = await prisma.$queryRawUnsafe<any[]>(
-            `SELECT user_id FROM patient_profiles WHERE id = $1 LIMIT 1`,
-            patientProfileId
-          )
-          const userId = profRows?.[0]?.user_id ? String(profRows[0].user_id) : null
-          if (userId) {
-            const price = amountCents / 100
-            await prisma.purchase.create({
-              data: {
-                userId: String(userId),
-                doctorId: String(doctorId),
-                productId: String(productId),
-                quantity: 1,
-                unitPrice: price as any,
-                totalPrice: price as any,
-                pointsAwarded: 0 as any,
-                status: 'COMPLETED',
-                externalIdempotencyKey: String(orderId),
-                notes: 'Created via AppMax webhook (paid)',
-              } as any,
-            })
-            console.log('[appmax][webhook] ✅ Created purchase', { orderId, userId, productId, price })
+          // Mirror period dates and subscription linkage into payment_transaction for richer webhook payloads
+          try {
+            await prisma.$executeRawUnsafe(
+              `UPDATE payment_transactions
+                 SET customer_subscription_id = COALESCE(customer_subscription_id, $2::text),
+                     billing_period_start = COALESCE(billing_period_start, $3::timestamp),
+                     billing_period_end = COALESCE(billing_period_end, $4::timestamp),
+                     paid_at = COALESCE(paid_at, NOW()),
+                     updated_at = NOW()
+               WHERE provider = 'appmax' AND provider_order_id = $1`,
+              String(orderId),
+              String(subRow.id),
+              periodStart,
+              periodEnd
+            );
+            console.log('[appmax][webhook] ✅ mirrored billing period into payment_transaction', { orderId, subscriptionId: subRow.id });
+          } catch (e) {
+            console.warn('[appmax][webhook] mirror billing period into payment_transaction failed:', e instanceof Error ? e.message : e);
           }
         }
+      } catch (e) {
+        console.warn('[appmax][webhook] subscription activation failed:', e instanceof Error ? e.message : e);
       }
     }
-  } catch (e) {
-    console.warn('[appmax][webhook] paid backfill failed:', e instanceof Error ? e.message : e)
-  }
-
-  // Activate subscriptions when payment confirms
-  try {
-    const subRows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT id, product_id, offer_id FROM customer_subscriptions 
-       WHERE metadata->>'appmaxOrderId' = $1 AND status = 'PENDING' LIMIT 1`,
-      String(orderId)
-    );
-    if (subRows && subRows.length > 0) {
-      const subRow = subRows[0];
-      // Calculate period dates from payment confirmation
-      const paidAt = new Date();
-      let periodStart = paidAt;
-      let periodEnd = new Date(paidAt);
-      
-      // Get interval from offer or product
-      let intervalUnit = 'MONTH';
-      let intervalCount = 1;
-      try {
-        if (subRow.offer_id) {
-          const offer = await prisma.offer.findUnique({ where: { id: String(subRow.offer_id) }, select: { intervalUnit: true, intervalCount: true } });
-          if (offer?.intervalUnit) intervalUnit = String(offer.intervalUnit).toUpperCase();
-          if (offer?.intervalCount) intervalCount = Number(offer.intervalCount) || 1;
-        } else if (subRow.product_id) {
-          const product = await prisma.product.findUnique({ where: { id: String(subRow.product_id) }, select: { interval: true, intervalCount: true } } as any);
-          if ((product as any)?.interval) intervalUnit = String((product as any).interval).toUpperCase();
-          if ((product as any)?.intervalCount) intervalCount = Number((product as any).intervalCount) || 1;
-        }
-      } catch {}
-      
-      // Calculate end date based on interval
-      if (intervalUnit === 'DAY') periodEnd.setDate(periodEnd.getDate() + intervalCount);
-      else if (intervalUnit === 'WEEK') periodEnd.setDate(periodEnd.getDate() + 7 * intervalCount);
-      else if (intervalUnit === 'MONTH') periodEnd.setMonth(periodEnd.getMonth() + intervalCount);
-      else if (intervalUnit === 'YEAR') periodEnd.setFullYear(periodEnd.getFullYear() + intervalCount);
-      
+    return NextResponse.json({ received: true })
+  } catch (e: any) {
+  console.error('[appmax][webhook] processing error', e)
+  
+  // CRITICAL: Mesmo com erro, SEMPRE retorna 200 para evitar reenvios duplicados
+  // Marca webhook para retry via worker
+  if (orderId) {
+    try {
       await prisma.$executeRawUnsafe(
-        `UPDATE customer_subscriptions 
-         SET status = 'ACTIVE'::"SubscriptionStatus",
-             current_period_start = $2::timestamp,
-             current_period_end = $3::timestamp,
-             start_at = COALESCE(start_at, $2::timestamp),
-             updated_at = NOW()
-         WHERE id = $1`,
-        String(subRow.id),
-        periodStart,
-        periodEnd
-      );
-      console.log('[appmax][webhook] ✅ Activated subscription', { subscriptionId: subRow.id, orderId, periodStart, periodEnd, interval: intervalUnit, count: intervalCount });
-
-      // Mirror period dates and subscription linkage into payment_transaction for richer webhook payloads
-    
-    // CRITICAL: Mesmo com erro, SEMPRE retorna 200 para evitar reenvios duplicados
-    // Marca webhook para retry via worker
-    if (orderId) {
-      try {
-        await prisma.$executeRawUnsafe(
-          `UPDATE webhook_events 
-           SET next_retry_at = NOW(), 
-               processing_error = $2,
-               is_retryable = true
-           WHERE provider = 'appmax' AND provider_event_id = $1`,
-          String(orderId),
-          String(e?.message || 'Unknown error').substring(0, 5000)
-        )
-      } catch {}
-    }
-    
-    return NextResponse.json({ received: true, will_retry: true }, { status: 200 })
+        `UPDATE webhook_events 
+         SET next_retry_at = NOW(), 
+             processing_error = $2,
+             is_retryable = true
+         WHERE provider = 'appmax' AND provider_event_id = $1`,
+        String(orderId),
+        String(e?.message || 'Unknown error').substring(0, 5000)
+      )
+    } catch {}
   }
+  
+  return NextResponse.json({ received: true, will_retry: true }, { status: 200 })
+}
 }
