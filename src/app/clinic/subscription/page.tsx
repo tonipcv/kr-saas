@@ -151,47 +151,27 @@ function SubscriptionManagement() {
     }
   };
 
-  const handlePlanChange = async (plan: SubscriptionPlan, trial?: boolean) => {
-    try {
-      if (!plan || plan.contactOnly) return;
-      setRedirectingPlanId(plan.id);
+  const handlePlanChange = (plan: SubscriptionPlan, trial?: boolean) => {
+    console.log('[CHECKOUT] Starting checkout (GET redirect) for plan:', { planId: plan.id, planName: plan.name, trial, isNewClinic, eligibleTrial });
+    if (!plan || plan.contactOnly) return;
+    setRedirectingPlanId(plan.id);
 
-      const res = await fetch('/api/clinic/subscription/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // priceId é opcional no backend; ele mapeia pelo nome do plano
-        // Quando é nova clínica, não enviamos clinicId para forçar criação de rascunho no backend
-        body: JSON.stringify({ 
-          planId: plan.id, 
-          // If we already have a clinic loaded (e.g., created as draft in onboarding), always use its ID
-          clinicId: clinic?.id || undefined,
-          newClinic: !clinic?.id && isNewClinic ? true : undefined,
-          // Only allow trial for brand new clinic with eligibility
-          trial: (isNewClinic && trial && eligibleTrial) ? true : undefined,
-          // Ensure the newly created clinic (if any) uses the intended name from onboarding
-          clinicName: (isNewClinic ? (clinic?.name || searchParams?.get('clinicName') || undefined) : (clinic?.name || undefined)),
-          subdomain: (isNewClinic ? (searchParams?.get('subdomain') || clinic?.name ? undefined : undefined) : undefined)
-        })
-      });
+    // Build GET redirect URL with all applicable params
+    const url = new URL('/api/clinic/subscription/checkout', window.location.origin);
+    url.searchParams.set('planId', plan.id);
+    if ((plan as any).priceId) url.searchParams.set('priceId', String((plan as any).priceId));
+    if (clinic?.id) url.searchParams.set('clinicId', clinic.id);
+    if (!clinic?.id && isNewClinic) url.searchParams.set('newClinic', '1');
+    if (isNewClinic && trial && eligibleTrial) url.searchParams.set('trial', '1');
+    const name = isNewClinic ? (clinic?.name || searchParams?.get('clinicName') || undefined) : (clinic?.name || undefined);
+    if (name) url.searchParams.set('clinicName', String(name));
+    const subd = isNewClinic ? (searchParams?.get('subdomain') || undefined) : undefined;
+    if (subd) url.searchParams.set('subdomain', String(subd));
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Falha ao iniciar checkout');
-      }
-
-      const data = await res.json();
-      if (data?.url) {
-        window.location.href = data.url as string;
-      } else {
-        throw new Error('URL de checkout não recebida');
-      }
-    } catch (e: any) {
-      console.error('Checkout error:', e);
-      alert(e?.message || 'Erro ao redirecionar para o checkout');
-    } finally {
-      // Se não redirecionar, reabilita botão
-      setRedirectingPlanId(null);
-    }
+    console.log('[CHECKOUT] Redirecting to GET endpoint:', url.toString());
+    // Synchronous navigation preserves user gesture and avoids SPA race conditions
+    window.location.href = url.toString();
+    // As we leave the page, no need for try/catch; the server will 303 to Stripe
   };
 
   // Filter and sort plans (Free excluded, Enterprise last)

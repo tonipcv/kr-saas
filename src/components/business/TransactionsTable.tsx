@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { labelForPaymentMethod } from "@/lib/payments/normalize";
 
 type TxRow = {
   id: string;
@@ -65,22 +66,19 @@ export default function TransactionsTable({ transactions }: { transactions: TxRo
 
   const methodBadge = (method?: string | null, installments?: number | null) => {
     const base = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border bg-gray-100 text-gray-800 border-gray-300';
-    const m = String(method || '').toLowerCase();
-    if (m === 'credit_card' || m === 'card') {
+    const label = labelForPaymentMethod(method || null);
+    
+    // Special handling for card with installments
+    if (label === 'Cartão') {
       return (
         <span className={base}>
-          <span>Cartão</span>
+          <span>{label}</span>
           {Number(installments) > 1 ? <span className="opacity-70">({installments}x)</span> : null}
         </span>
       );
     }
-    if (m === 'pix') {
-      return <span className={base}>PIX</span>;
-    }
-    if (m === 'boleto' || m === 'bank_slip') {
-      return <span className={base}>Boleto</span>;
-    }
-    return <span className={base}>{method || '—'}</span>;
+    
+    return <span className={base}>{label}</span>;
   };
 
   const canRefund = useMemo(() => {
@@ -238,7 +236,7 @@ export default function TransactionsTable({ transactions }: { transactions: TxRo
                 <div><span className="text-gray-500">Order:</span> {selected.provider_order_id || '—'}</div>
                 <div><span className="text-gray-500">Charge:</span> {selected.provider_charge_id || '—'}</div>
                 <div><span className="text-gray-500">Gateway:</span> {(() => { const p = String(selected?.provider || '').toLowerCase(); return p === 'pagarme' ? 'KRXPAY' : (p ? p.toUpperCase() : '—'); })()}</div>
-                <div><span className="text-gray-500">Método:</span> {(selected.payment_method_type || '—').toUpperCase()}</div>
+                <div><span className="text-gray-500">Método:</span> {labelForPaymentMethod(selected.payment_method_type)}</div>
                 <div className="flex items-center gap-2"><span className="text-gray-500">Status:</span> {badgeFor(selected.status)}</div>
                 <div className="col-span-2 grid grid-cols-2 gap-2">
                   <div><span className="text-gray-500">Valor (bruto):</span> {formatAmount(selected.amount_cents as any, selected.currency)}</div>

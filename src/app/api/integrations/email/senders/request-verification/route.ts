@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import crypto from 'crypto';
 
-// Native verification email using Zuzz infra (via SendPulse SMTP API), no DB.
+// Native verification email using htps.io infra (via SendPulse SMTP API), no DB.
 // Env required:
 // - SENDPULSE_CLIENT_ID
 // - SENDPULSE_CLIENT_SECRET
-// - EMAIL_FROM (verified sender in our SendPulse account, e.g., no-reply@zuzz.com)
-// - EMAIL_FROM_NAME (e.g., Zuzz)
+// - EMAIL_FROM (verified sender in our SendPulse account)
+// - EMAIL_FROM_NAME (e.g., htps.io)
 // - EMAIL_VERIFY_SECRET (HMAC secret to sign tokens)
 
 const BASE_URL = 'https://api.sendpulse.com';
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     if (!clinicId) return NextResponse.json({ error: 'clinicId required' }, { status: 400 });
     if (!email || typeof email !== 'string') return NextResponse.json({ error: 'email required' }, { status: 400 });
     const FROM = process.env.EMAIL_FROM;
-    const FROM_NAME = process.env.EMAIL_FROM_NAME || 'KRX';
+    const FROM_NAME = process.env.EMAIL_FROM_NAME || 'htps.io';
     const SECRET = process.env.EMAIL_VERIFY_SECRET;
     if (!FROM || !SECRET) return NextResponse.json({ error: 'Missing EMAIL_FROM or EMAIL_VERIFY_SECRET env' }, { status: 500 });
 
@@ -63,10 +63,10 @@ export async function POST(req: NextRequest) {
     const subject = 'Confirme seu remetente de email';
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
     const confirmLink = `${baseUrl}/api/integrations/email/senders/confirm?token=${encodeURIComponent(session)}`;
-    const text = `Olá${name ? ' ' + name : ''},\n\nSeu código para confirmar o remetente é: ${code}.\nOu acesse: ${confirmLink}\n\nEste código expira em 15 minutos.\n— Equipe KRX`;
+    const text = `Olá${name ? ' ' + name : ''},\n\nSeu código para confirmar o remetente é: ${code}.\nOu acesse: ${confirmLink}\n\nEste código expira em 15 minutos.\n— Equipe htps.io`;
     const html = `<!doctype html><html><head><meta charset="utf-8"/></head><body>
       <div style="max-width:560px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
-        <div style="background:#111827;color:#fff;padding:14px 18px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600">KRX</div>
+        <div style="background:#111827;color:#fff;padding:14px 18px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600">htps.io</div>
         <div style="padding:18px 18px 8px 18px;font-family:Arial,Helvetica,sans-serif;color:#111827">
           <p style="margin:0 0 12px 0;">Olá${name ? ' ' + name : ''},</p>
           <p style="margin:0 0 16px 0;">Use o código abaixo para confirmar seu remetente de email:</p>
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
           <p style="margin:0 0 12px 0;">Ou clique no link:</p>
           <p style="margin:0 0 16px 0;"><a href="${confirmLink}" style="color:#2563eb;text-decoration:underline">${confirmLink}</a></p>
           <p style="margin:0 0 12px 0;color:#6b7280">Este código expira em 15 minutos.</p>
-          <p style="margin:0 0 0 0;">— Equipe KRX</p>
+          <p style="margin:0 0 0 0;">— Equipe htps.io</p>
         </div>
       </div>
     </body></html>`;

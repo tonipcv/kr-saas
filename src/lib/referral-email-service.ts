@@ -49,7 +49,7 @@ export async function sendRewardVerificationEmail(params: {
   try {
     await transporter.sendMail({
       from: {
-        name: 'KRX',
+        name: 'htps.io',
         address: process.env.SMTP_FROM as string,
       },
       to,
@@ -92,7 +92,7 @@ export async function sendDoctorLoginConfirmationEmail(params: {
   try {
     const info = await transporter.sendMail({
       from: {
-        name: 'KRX',
+        name: 'htps.io',
         address: process.env.SMTP_FROM as string,
       },
       to,
@@ -141,7 +141,7 @@ export async function sendRewardFulfillConfirmationEmail(params: {
   try {
     const info = await transporter.sendMail({
       from: {
-        name: 'KRX',
+        name: 'htps.io',
         address: process.env.SMTP_FROM as string
       },
       to,
@@ -187,7 +187,7 @@ export async function sendRewardRejectedNotification(redemptionId: string, reaso
 
     await transporter.sendMail({
       from: {
-        name: 'Zuzz',
+        name: 'htps.io',
         address: process.env.SMTP_FROM as string
       },
       to: redemption.user.email,
@@ -234,7 +234,7 @@ export async function sendRewardApprovedNotification(redemptionId: string) {
 
     await transporter.sendMail({
       from: {
-        name: 'Zuzz',
+        name: 'htps.io',
         address: process.env.SMTP_FROM as string
       },
       to: redemption.user.email,
@@ -302,13 +302,13 @@ export async function sendReferralNotification(leadId: string) {
       referralName: lead.name,
       referrerName: referrer?.name || 'Unknown',
       doctorName: lead.doctor.name || '',
-      clinicName: clinicInfo?.name || 'KRX',
+      clinicName: clinicInfo?.name || 'htps.io',
       clinicLogo: clinicInfo?.logo || undefined
     });
 
     await transporter.sendMail({
       from: {
-        name: 'KRX',
+        name: 'htps.io',
         address: process.env.SMTP_FROM as string
       },
       to: lead.doctor.email,
@@ -349,12 +349,12 @@ export async function sendCreditNotification(creditId: string) {
       name: credit.user.name || '',
       amount: Number(credit.amount),
       type: 'CONSULTATION_REFERRAL',
-      clinicName: 'KRX'
+      clinicName: 'htps.io'
     });
 
     await transporter.sendMail({
       from: {
-        name: 'KRX',
+        name: 'htps.io',
         address: process.env.SMTP_FROM as string
       },
       to: credit.user.email,

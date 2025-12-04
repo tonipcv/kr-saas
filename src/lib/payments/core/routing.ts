@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { PaymentProvider, PaymentMethod } from '@prisma/client'
+import type { BINInsights } from '@/lib/payments/krx-secure/types'
 
 export type SelectProviderInput = {
   merchantId: string
@@ -7,6 +8,8 @@ export type SelectProviderInput = {
   productId?: string | null
   country?: string | null
   method?: PaymentMethod | null
+  // Optional enrichment from KRX Secure Inspect (Phase 1)
+  insights?: BINInsights | null
 }
 
 async function isProviderActive(merchantId: string, provider: PaymentProvider): Promise<boolean> {
@@ -36,7 +39,23 @@ export async function selectProvider(params: SelectProviderInput): Promise<Payme
   const country = params.country || null
   const method = params.method || null
 
-  try { console.log('[selectProvider] input', { merchantId, offerId, productId, country, method }); } catch {}
+  try {
+    console.log('[selectProvider] input', {
+      merchantId,
+      offerId,
+      productId,
+      country,
+      method,
+      hasInsights: !!params.insights,
+      insightsMeta: params.insights
+        ? {
+            brand: params.insights.metadata?.brand,
+            funding: params.insights.metadata?.funding,
+            country: params.insights.metadata?.country,
+          }
+        : null,
+    })
+  } catch {}
 
   // Provider must come from routing rules or explicit preferences. No country bias here.
 

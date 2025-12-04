@@ -25,6 +25,18 @@ export type ProviderCustomer = {
   raw?: any;
 };
 
+export type TokenizedPaymentContext = {
+  networkTokenNumber?: string;  // DPAN from network token
+  cryptogram?: string;           // Cryptogram for this transaction
+  eci?: string;                  // Electronic Commerce Indicator
+  evervaultCardId?: string;      // Reference to Evervault card
+  brand?: string;                // Card brand (visa, mastercard, etc)
+  last4?: string;                // Last 4 digits
+  expMonth?: number;             // Expiry month
+  expYear?: number;              // Expiry year
+  par?: string;                  // Payment Account Reference (fingerprint)
+};
+
 export type CreatePaymentInput = {
   amount: number; // major units (e.g., 10.50)
   currency: string; // ISO 4217
@@ -32,6 +44,7 @@ export type CreatePaymentInput = {
   paymentMethodId?: string;
   captureMethod?: 'automatic' | 'manual';
   metadata?: Record<string, string>;
+  tokenized?: TokenizedPaymentContext; // ✅ OPCIONAL - KRX Secure context
 };
 
 export type ProviderPayment = {

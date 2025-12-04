@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
+import { labelForPaymentMethod } from '@/lib/payments/normalize';
 
 const ApexChart = dynamic(() => import('react-apexcharts'), { ssr: false }) as any;
 
@@ -265,13 +266,6 @@ export default function BusinessDashboard() {
   }, [seriesApi, transactions, dateFrom, dateTo]);
 
   // Breakdowns (normalized)
-  const normalizeMethod = (raw?: string | null) => {
-    const k = String(raw || '—').toUpperCase();
-    if (k === 'PIX') return 'PIX';
-    if (k === 'BOLETO' || k === 'BANK_SLIP') return 'Boleto';
-    if (k === 'CREDIT_CARD' || k === 'CARD') return 'Cartão';
-    return k || '—';
-  };
   const normalizeStatus = (raw?: string | null) => {
     const k = String(raw || '—').toUpperCase();
     if (k === 'CANCELLED') return 'CANCELED';
@@ -282,7 +276,7 @@ export default function BusinessDashboard() {
   const methodBreakdown = useMemo(() => {
     const map = new Map<string, number>();
     for (const t of transactions) {
-      const key = normalizeMethod(t.payment_method_type);
+      const key = labelForPaymentMethod(t.payment_method_type);
       map.set(key, (map.get(key) || 0) + 1);
     }
     return Array.from(map.entries()).sort((a,b)=>b[1]-a[1]);

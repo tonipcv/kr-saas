@@ -20,6 +20,7 @@ import Stripe from 'stripe';
 import { getCurrencyForCountry } from '@/lib/payments/countryCurrency';
 import { SubscriptionService } from '@/services/subscription';
 import { onPaymentTransactionCreated } from '@/lib/webhooks/emit-updated';
+import { getTokenSource } from '@/lib/payments/krx-secure/tokenSource';
 
 function onlyDigits(s: string) { return (s || '').replace(/\D/g, ''); }
 
@@ -314,6 +315,47 @@ export async function POST(req: Request) {
       HAS_PT = !!exists?.[0]?.has_pt;
     } catch {}
 
+    // Optionally run KRX Secure Inspect (Phase 1)
+    let krxInsights: any = null;
+    try {
+      const cardToken = (body as any)?.cardToken;
+      const merchantIdForInspect = String(merchant?.id || '');
+      if (merchantIdForInspect && typeof cardToken === 'string' && cardToken.trim()) {
+        const tokenSource = await getTokenSource({
+          merchantId: merchantIdForInspect,
+          cardToken: String(cardToken),
+        });
+        if (tokenSource.supportsInspect()) {
+          try {
+            krxInsights = await tokenSource.inspect();
+            try { console.log('[checkout][krx-secure][inspect] ok', { brand: krxInsights?.metadata?.brand, funding: krxInsights?.metadata?.funding, country: krxInsights?.metadata?.country }); } catch {}
+          } catch (e) {
+            try { console.warn('[checkout][krx-secure][inspect] failed', e instanceof Error ? e.message : e); } catch {}
+          }
+        }
+      } else if (merchantIdForInspect) {
+        // Fallback path: if no Evervault token but raw PAN is present for a NEW card, run BIN lookup
+        try {
+          const pan = (payment?.method === 'card') ? String((payment as any)?.card?.number || '') : '';
+          if (pan && pan.replace(/\D/g, '').length >= 6) {
+            const tokenSource = await getTokenSource({ merchantId: merchantIdForInspect, cardToken: 'ev:none' });
+            if (tokenSource.supportsInspect()) {
+              try {
+                krxInsights = await tokenSource.binLookupFromPan(pan);
+                try { console.log('[checkout][krx-secure][bin-lookup] ok', { brand: krxInsights?.metadata?.brand, funding: krxInsights?.metadata?.funding, country: krxInsights?.metadata?.country }); } catch {}
+              } catch (e) {
+                try { console.warn('[checkout][krx-secure][bin-lookup] failed', e instanceof Error ? e.message : e); } catch {}
+              }
+            } else {
+              try { console.log('[checkout][krx-secure] inspect disabled by flags/plans'); } catch {}
+            }
+          } else {
+            try { console.log('[checkout][krx-secure] no cardToken and no PAN available (saved card flow)'); } catch {}
+          }
+        } catch {}
+      }
+    } catch {}
+
     // Decide provider strictly via routing chips
     let selectedProvider: PaymentProvider | null = null;
     try {
@@ -325,6 +367,7 @@ export async function POST(req: Request) {
         productId: String(product?.id || productId || ''),
         country: String(billingAddr.country || desiredCountry || 'BR'),
         method: requestedMethod,
+        insights: krxInsights || null,
       });
       try { console.log('[checkout][create] selected provider', { selectedProvider, country: billingAddr.country || desiredCountry, productId: product?.id, offerId: selectedOffer?.id, merchantId: merchantIdForRouting }); } catch {}
     } catch (e) {
@@ -522,12 +565,14 @@ export async function POST(req: Request) {
       // Fallback: resolve latest saved PAGARME card for this buyer if UI didn't send it
       let savedCardIdForCharge: string | null = explicitSavedCardId;
       let providerCustomerIdForCharge: string | null = explicitProviderCustomerId;
+      // Hoist a unified customer id (if available) for vaulting
+      let customerIdUnified: string | null = null;
       try {
         if (!savedCardIdForCharge && merchant?.id) {
           const buyerEmailStr = String(buyer?.email || customer?.email || '').trim();
           if (buyerEmailStr) {
             const cust = await prisma.customer.findFirst({ where: { merchantId: String(merchant.id), email: buyerEmailStr }, select: { id: true } });
-            const customerIdUnified = cust?.id || null;
+            customerIdUnified = cust?.id || null;
             if (customerIdUnified) {
               const row = await prisma.$queryRawUnsafe<any>(
                 `SELECT cpm.provider_payment_method_id, cp.provider_customer_id
@@ -550,7 +595,10 @@ export async function POST(req: Request) {
       // Two paths: (A) explicit saved card, (B) raw card capture
       try { console.log('[checkout][create] card flow decision', { has_saved_card_id: !!savedCardIdForCharge, has_provider_customer_id: !!(providerCustomerIdForCharge || providerCustomerIdForOrder), has_cc_number: !!cc?.number }); } catch {}
       if (!savedCardIdForCharge) {
-        if (!cc.number || !cc.holder_name || !cc.exp_month || !cc.exp_year || !cc.cvv) {
+        const evToken: string | undefined = (body as any)?.cardToken;
+        const hasTokenized = typeof evToken === 'string' && !!evToken.trim();
+        const hasRawCc = !!(cc.number && cc.holder_name && cc.exp_month && cc.exp_year && cc.cvv);
+        if (!hasTokenized && !hasRawCc) {
           return NextResponse.json({ error: 'Dados do cartão incompletos' }, { status: 400 });
         }
       }
@@ -611,6 +659,27 @@ export async function POST(req: Request) {
           if (customerId) {
             // Make sure the order payload uses this customer id when charging with card_id
             providerCustomerIdForOrder = String(customerId);
+            // Save in Evervault (vault) BEFORE saving at provider, if we received an Evervault token
+            try {
+              const evToken: string | undefined = (body as any)?.cardToken;
+              if (typeof evToken === 'string' && evToken.trim()) {
+                const expMonth = Number(cc?.exp_month || (payment as any)?.card?.exp_month || 0);
+                const expYearRaw = Number(cc?.exp_year || (payment as any)?.card?.exp_year || 0);
+                const expYear = expYearRaw < 100 ? (2000 + expYearRaw) : expYearRaw;
+                const tokenSource = await getTokenSource({ merchantId: String(merchant?.id || ''), cardToken: evToken });
+                try {
+                  const registered = await tokenSource.registerCard({
+                    token: evToken,
+                    expiry: { month: String(expMonth || '').padStart(2, '0'), year: String(expYear) },
+                    merchantId: String(merchant?.id || ''),
+                    customerId: String(customerIdUnified || buyer?.email || 'na'),
+                  });
+                  try { console.log('[checkout][krx-secure][vault] card registered in Evervault', { evervaultCardId: registered?.evervaultCardId, brand: registered?.brand, last4: registered?.last4 }); } catch {}
+                } catch (e) {
+                  try { console.warn('[checkout][krx-secure][vault] register failed (non-blocking)', e instanceof Error ? e.message : e); } catch {}
+                }
+              }
+            } catch {}
             // Defer PaymentCustomer persistence to post-order-response block for single source of truth
             try {
               let profileId: string | null = null;
@@ -1119,7 +1188,7 @@ export async function POST(req: Request) {
       }
       // Notify customer by email (non-blocking)
       try {
-        const clinicNameStr = (clinic?.name as any) || 'Zuzz';
+        const clinicNameStr = (clinic?.name as any) || 'htps.io';
         const customerEmail = String(buyer?.email || customer?.email || '');
         const customerName = String(buyer?.name || customer?.name || '');
         const currency = 'BRL';

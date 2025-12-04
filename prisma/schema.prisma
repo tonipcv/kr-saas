@@ -1508,3 +1508,61 @@ model OutboundWebhookDelivery {
   @@index([eventId])
   @@map("outbound_webhook_deliveries")
 }
+
+// -----------------------------------------------------------------------------
+// KRX SECURE (Evervault wrapper) - Metering & Vault
+// -----------------------------------------------------------------------------
+
+model KRXSecureUsage {
+  id            String   @id @default(cuid())
+  merchantId    String   @map("merchant_id")
+  customerId    String?  @map("customer_id")
+  paymentTxId   String?  @map("payment_tx_id")
+  
+  operation     String   // 'inspect', 'card.create', 'network-token.create', etc
+  
+  evervaultCost Decimal  @map("evervault_cost") @db.Decimal(10, 4)
+  krxPrice      Decimal  @map("krx_price") @db.Decimal(10, 4)
+  margin        Decimal  @db.Decimal(10, 4)
+  
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+  
+  @@index([merchantId, createdAt])
+  @@index([operation, createdAt])
+  @@map("krx_secure_usage")
+}
+
+model VaultCard {
+  id                  String   @id @default(cuid())
+  merchantId          String   @map("merchant_id")
+  customerId          String   @map("customer_id")
+  
+  // KRX Secure (Evervault) fields
+  evervaultCardId     String?  @unique @map("evervault_card_id")
+  networkTokenId      String?  @map("network_token_id")
+  networkTokenNumber  String?  @map("network_token_number") // DPAN
+  
+  // Provider-native fields (Stripe PM, etc)
+  provider            String?  // 'STRIPE', 'KRXPAY', etc
+  providerTokenId     String?  @map("provider_token_id") // pm_xxx, card_xxx
+  
+  // Card metadata
+  brand               String
+  last4               String   @db.VarChar(4)
+  expMonth            Int      @map("exp_month")
+  expYear             Int      @map("exp_year")
+  
+  fingerprint         String   // PAR or provider fingerprint
+  status              String   @default("active") // active, replaced, closed, invalid
+  
+  isDefault           Boolean  @default(false) @map("is_default")
+  
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  
+  @@index([merchantId, customerId])
+  @@index([fingerprint])
+  @@index([evervaultCardId])
+  @@map("vault_cards")
+}

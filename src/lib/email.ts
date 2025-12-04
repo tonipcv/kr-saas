@@ -105,7 +105,7 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
     const { to, subject, html, from, replyTo, attachments } = options;
 
     const defaultFrom = {
-      name: process.env.MAIL_FROM_NAME || 'KRX',
+      name: process.env.MAIL_FROM_NAME || 'htps.io',
       address: (process.env.SMTP_FROM || process.env.MAIL_FROM) as string,
     };
 
@@ -174,7 +174,7 @@ export async function sendVerificationCode(
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
       <div style="text-align: center; margin-bottom: 20px;">
-        <img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.png" alt="KRX Logo" style="max-width: 150px;">
+        <img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.png" alt="htps.io Logo" style="max-width: 150px;">
       </div>
       
       <h1 style="color: #333; font-size: 24px; margin-bottom: 20px; text-align: center;">Your access code</h1>
@@ -192,7 +192,7 @@ export async function sendVerificationCode(
       <p style="color: #555; font-size: 16px; line-height: 1.5;">If you did not request this code, please ignore this email.</p>
       
       <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center; color: #888; font-size: 14px;">
-        <p> ${new Date().getFullYear()} KRX. All rights reserved.</p>
+        <p> ${new Date().getFullYear()} htps.io. All rights reserved.</p>
       </div>
     </div>
   `;

@@ -72,6 +72,13 @@ function IntegrationsInner() {
   const [emailStatusLoading, setEmailStatusLoading] = useState(false);
   const [verifiedEmail, setVerifiedEmail] = useState<string>('');
 
+  const [kitStatusLoading, setKitStatusLoading] = useState(false);
+  const [kitStatus, setKitStatus] = useState<'CONNECTED' | 'DISCONNECTED' | 'UNKNOWN'>('UNKNOWN');
+  const [kitOpen, setKitOpen] = useState(false);
+  const [kitApiKey, setKitApiKey] = useState('');
+  const [kitTesting, setKitTesting] = useState(false);
+  const [kitSaving, setKitSaving] = useState(false);
+
   // Add Integration dialog and search state
   const [addOpen, setAddOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -158,10 +165,11 @@ function IntegrationsInner() {
   const [appmaxStatusApiKey, setAppmaxStatusApiKey] = useState<string | null>(null);
   const [appmaxStatusTestMode, setAppmaxStatusTestMode] = useState<boolean>(true);
   // Any connected integration toggles the Connected table
-  const hasAnyConnected = waConnected || pgConnected || emailVerified || stripeConnected || appmaxConnected;
+  const kitConnected = kitStatus === 'CONNECTED';
+  const hasAnyConnected = waConnected || pgConnected || emailVerified || stripeConnected || appmaxConnected || kitConnected;
 
   // Page loading while integrations status are being fetched
-  const pageLoading = isLoading || waStatusLoading || pgLoading || emailStatusLoading;
+  const pageLoading = isLoading || waStatusLoading || pgLoading || emailStatusLoading || kitStatusLoading;
 
   // Open Add Integration modal based on URL params
   useEffect(() => {
@@ -376,6 +384,29 @@ function IntegrationsInner() {
         setAppmaxStatusTestMode(true);
       }
     })();
+  }, [currentClinic?.id]);
+
+  const loadKitStatus = async () => {
+    if (!currentClinic?.id) return;
+    try {
+      setKitStatusLoading(true);
+      const res = await fetch(`/api/integrations/autoresponders/kit/status?clinicId=${encodeURIComponent(currentClinic.id)}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed to load Kit status');
+      if (data?.exists) {
+        setKitStatus(String(data.status || 'UNKNOWN').toUpperCase() as any);
+      } else {
+        setKitStatus('DISCONNECTED');
+      }
+    } catch {
+      setKitStatus('UNKNOWN');
+    } finally {
+      setKitStatusLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadKitStatus();
   }, [currentClinic?.id]);
 
   // Prefill Stripe dialog when opening
@@ -782,6 +813,22 @@ function IntegrationsInner() {
                     </div>
                   </div>
                 )}
+                {/* Row: ConvertKit */}
+                {kitConnected && (
+                  <div className="px-6 py-3 grid grid-cols-3 items-center gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Image src="/kit.png" alt="Kit.com" width={20} height={20} />
+                      <div className="truncate">
+                        <div className="text-sm font-semibold text-gray-900 truncate">Kit</div>
+                        <div className="text-[11px] text-gray-500 truncate">Email marketing (autoresponder)</div>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-700">Email</div>
+                    <div className="flex items-center justify-end">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-200 text-xs">Connected</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -865,6 +912,23 @@ function IntegrationsInner() {
                         <div>
                           <div className="font-semibold text-gray-900">WhatsApp</div>
                           <div className="text-xs text-gray-600">Send messages and templates via the official WhatsApp API.</div>
+                        </div>
+                      </div>
+                    </button>
+                    {/* ConvertKit (Autoresponder) */}
+                    <button
+                      className="text-left rounded-xl border border-gray-200 bg-white hover:bg-gray-50 p-4"
+                      onClick={() => {
+                        setAddOpen(false);
+                        if (!currentClinic?.id) return toast.error('Select a clinic');
+                        setKitOpen(true);
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Image src="/kit.png" alt="ConvertKit" width={40} height={40} />
+                        <div>
+                          <div className="font-semibold text-gray-900">ConvertKit</div>
+                          <div className="text-xs text-gray-600">Autoresponder via API Key (v4).</div>
                         </div>
                       </div>
                     </button>
@@ -1016,6 +1080,69 @@ function IntegrationsInner() {
                       }
                     }}
                   >{appmaxSaving ? 'Saving…' : 'Save'}</Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Kit.com Connect Dialog */}
+          <Dialog open={kitOpen} onOpenChange={setKitOpen}>
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader>
+                <DialogTitle>Connect Kit.com</DialogTitle>
+                <DialogDescription>Paste your Kit API Key (v4) to enable autoresponder features.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <div className="text-sm text-gray-700 mb-1">API Key</div>
+                  <Input value={kitApiKey} onChange={(e) => setKitApiKey(e.target.value)} placeholder="ck_****************" />
+                </div>
+                <div className="pt-2 flex items-center justify-between gap-2">
+                  <Button
+                    variant="secondary"
+                    disabled={kitTesting || !kitApiKey.trim() || !currentClinic?.id}
+                    onClick={async () => {
+                      if (!currentClinic?.id) return;
+                      try {
+                        setKitTesting(true);
+                        const res = await fetch('/api/integrations/autoresponders/kit/test', {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ clinicId: currentClinic.id, apiKey: kitApiKey.trim() })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data?.error || 'Test failed');
+                        toast.success('Kit API Key is valid');
+                      } catch (e: any) {
+                        toast.error(e?.message || 'Kit test failed');
+                      } finally {
+                        setKitTesting(false);
+                      }
+                    }}
+                  >{kitTesting ? 'Testing…' : 'Test'}</Button>
+                  <div className="flex-1" />
+                  <Button
+                    disabled={kitSaving || !kitApiKey.trim() || !currentClinic?.id}
+                    onClick={async () => {
+                      if (!currentClinic?.id) return;
+                      try {
+                        setKitSaving(true);
+                        const res = await fetch('/api/integrations/autoresponders/kit/save', {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ clinicId: currentClinic.id, apiKey: kitApiKey.trim() })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data?.error || 'Failed to connect');
+                        toast.success('Kit connected');
+                        setKitOpen(false);
+                        setKitApiKey('');
+                        await loadKitStatus();
+                      } catch (e: any) {
+                        toast.error(e?.message || 'Save failed');
+                      } finally {
+                        setKitSaving(false);
+                      }
+                    }}
+                  >{kitSaving ? 'Saving…' : 'Save'}</Button>
                 </div>
               </div>
             </DialogContent>
