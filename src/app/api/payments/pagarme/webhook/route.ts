@@ -685,7 +685,7 @@ export async function POST(req: Request) {
 
         // Resolve clinic context
         const clinicId: string | null = metaClinicId || txRow?.clinicId || null;
-        let clinicName = 'Zuzz';
+        let clinicName = 'htps.io';
         try {
           if (clinicId) {
             const c = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { name: true } });

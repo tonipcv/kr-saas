@@ -46,7 +46,7 @@ export const createPatientWelcomeEmail = ({
 
   return baseTemplate({
     content,
-    clinicName: clinicName || 'Zuzz',
+    clinicName: clinicName || 'htps.io',
     clinicLogo,
     doctorName,
   });

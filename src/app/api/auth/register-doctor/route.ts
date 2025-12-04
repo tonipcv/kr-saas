@@ -103,12 +103,9 @@ export async function POST(req: Request) {
       });
 
       await transporter.sendMail({
-        from: {
-          name: 'KRX',
-          address: process.env.SMTP_FROM as string
-        },
+        from: process.env.SMTP_FROM as string,
         to: email,
-        subject: '[KRX] Verify Your Email',
+        subject: 'Verify Your Email',
         html
       });
 

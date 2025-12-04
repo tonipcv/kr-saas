@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     const payload = {
       instanceId: row.instance_id,
       number: target,
-      message: message || 'Teste de integração WhatsApp via Xase.ai (Zuzz).',
+      message: message || 'Teste de integração WhatsApp via Xase.ai.',
     };
     const resp = await sendMessage(apiKey, payload);
     return NextResponse.json({ success: true, response: resp });

@@ -32,7 +32,7 @@ export const createConsultationRequestEmail = ({
 
   return baseTemplate({
     content,
-    clinicName: 'Zuzz',
+    clinicName: 'htps.io',
     doctorName
   });
 } 

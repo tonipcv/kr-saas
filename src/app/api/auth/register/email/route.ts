@@ -104,7 +104,7 @@ export async function POST(req: Request) {
 
         const ok = await sendEmail({
           to: normalizedEmail,
-          subject: '[KRX] Your verification code',
+          subject: `${clinicName ? `[${clinicName}] ` : ''}Your verification code`,
           html,
         });
         if (!ok) throw new Error('Email send failed (SMTP and fallback)');
@@ -186,7 +186,7 @@ export async function POST(req: Request) {
 
       const ok = await sendEmail({
         to: normalizedEmail,
-        subject: '[KRX] Your verification code',
+        subject: `${clinicName ? `[${clinicName}] ` : ''}Your verification code`,
         html,
       });
       if (!ok) throw new Error('Email send failed (SMTP and fallback)');

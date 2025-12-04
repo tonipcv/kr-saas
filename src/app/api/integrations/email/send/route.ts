@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     // If no verified sender, fallback to envs
     if (!fromEmail) {
       fromEmail = process.env.EMAIL_FROM || '';
-      fromName = process.env.EMAIL_FROM_NAME || 'Zuzz';
+      fromName = process.env.EMAIL_FROM_NAME || 'htps.io';
     }
     if (!fromEmail) return NextResponse.json({ error: 'Missing FROM: no clinic sender and no EMAIL_FROM env' }, { status: 500 });
 

@@ -205,12 +205,6 @@ function LoginForm() {
               <span className="h-8 px-3 inline-flex items-center justify-center rounded-lg text-sm text-gray-900 bg-white shadow-sm select-none">
                 Log In
               </span>
-              <Link
-                href="/auth/register/email"
-                className="h-8 px-3 inline-flex items-center justify-center rounded-lg text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50"
-              >
-                Sign Up
-              </Link>
             </div>
           </div>
 
@@ -353,12 +347,6 @@ function LoginForm() {
               >
                 Cancel
               </button>
-              <Link
-                href="/auth/register-doctor"
-                className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white hover:bg-black"
-              >
-                Create business account
-              </Link>
             </div>
           </div>
         </div>

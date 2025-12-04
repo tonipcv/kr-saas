@@ -301,16 +301,13 @@ export async function POST(request: NextRequest) {
         inviteUrl,
         subscriptionType,
         trialDays,
-        clinicName: 'Zuzz'
+        clinicName: 'htps.io'
       });
 
       await transporter.sendMail({
-        from: {
-          name: 'Zuzz',
-          address: process.env.SMTP_FROM as string
-        },
+        from: process.env.SMTP_FROM as string,
         to: email,
-        subject: '[Zuzz] Convite - Configure sua senha',
+        subject: 'Convite - Configure sua senha',
         html: emailHtml
       });
       console.log('Invite email sent successfully to:', email);

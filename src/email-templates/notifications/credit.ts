@@ -26,6 +26,6 @@ export const createCreditEmail = ({
 
   return baseTemplate({
     content,
-    clinicName: 'Zuzz'
+    clinicName: 'htps.io'
   });
 } 

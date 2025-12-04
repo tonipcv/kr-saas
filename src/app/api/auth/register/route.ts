@@ -225,12 +225,9 @@ export async function POST(req: Request) {
         });
 
         await transporter.sendMail({
-          from: {
-            name: 'Zuzz',
-            address: process.env.SMTP_FROM as string
-          },
+          from: process.env.SMTP_FROM as string,
           to: email,
-          subject: '[Zuzz] Verify Your Email',
+          subject: 'Verify Your Email',
           html: emailHtml
         });
 
