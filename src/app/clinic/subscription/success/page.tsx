@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function SubscriptionSuccessPage() {
+function SubscriptionSuccessInner() {
   const router = useRouter();
   const params = useSearchParams();
   const [message, setMessage] = useState<string>('Finalizando sua assinatura...');
@@ -42,5 +42,19 @@ export default function SubscriptionSuccessPage() {
         <div className="text-sm text-gray-400 mt-2">Você já pode fechar esta janela se nada acontecer em alguns segundos.</div>
       </div>
     </div>
+  );
+}
+
+export default function SubscriptionSuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#111] text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-xl font-medium">Carregando...</div>
+        </div>
+      </div>
+    }>
+      <SubscriptionSuccessInner />
+    </Suspense>
   );
 }
