@@ -4,6 +4,7 @@ import Stripe from 'stripe'
 import { buildStripeClientForMerchant } from '@/lib/payments/stripe/build'
 import { getCurrencyForCountry } from '@/lib/payments/countryCurrency'
 import { onPaymentTransactionCreated } from '@/lib/webhooks/emit-updated'
+import { normalizeEmail } from '@/lib/utils'
 
 function jsonError(status: number, error: string, step: string, details?: any) {
   try { console.error('[stripe][create][error]', { step, error, details }); } catch {}
@@ -56,7 +57,8 @@ export async function POST(req: Request) {
     const resolvedCurrency = String(currency || 'BRL').toUpperCase()
 
     // Ensure unified Customer
-    const buyerEmail = String(buyer.email)
+    const buyerEmail = normalizeEmail(buyer.email)
+    if (!buyerEmail) return jsonError(400, 'Email inválido', 'input_validation')
     const buyerName = String(buyer.name || '')
     let unifiedCustomerId: string
     const existing = await prisma.customer.findFirst({ where: { merchantId: String(merchant.id), email: buyerEmail }, select: { id: true } })

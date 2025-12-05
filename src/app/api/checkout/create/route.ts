@@ -21,6 +21,7 @@ import { getCurrencyForCountry } from '@/lib/payments/countryCurrency';
 import { SubscriptionService } from '@/services/subscription';
 import { onPaymentTransactionCreated } from '@/lib/webhooks/emit-updated';
 import { getTokenSource } from '@/lib/payments/krx-secure/tokenSource';
+import { normalizeEmail } from '@/lib/utils';
 
 function onlyDigits(s: string) { return (s || '').replace(/\D/g, ''); }
 
@@ -267,7 +268,7 @@ export async function POST(req: Request) {
     }
     const customer: any = {
       name: buyer.name,
-      email: buyer.email,
+      email: normalizeEmail(buyer.email) || buyer.email,
       document: onlyDigits(String(buyer.document || '')) || undefined,
       type: (onlyDigits(String(buyer.document || '')).length > 11) ? 'company' : 'individual',
       phones: phonesObj,
@@ -684,7 +685,8 @@ export async function POST(req: Request) {
             try {
               let profileId: string | null = null;
               try {
-                const u = buyer?.email ? await prisma.user.findUnique({ where: { email: String(buyer.email) }, select: { id: true } }) : null;
+                const normalizedEmail = normalizeEmail(buyer.email)
+                const u = normalizedEmail ? await prisma.user.findUnique({ where: { email: normalizedEmail }, select: { id: true } }) : null;
                 if (u?.id && doctorId) {
                   const existingProfile = await prisma.patientProfile.findUnique({
                     where: { doctorId_userId: { doctorId: String(doctorId), userId: String(u.id) } },
@@ -695,7 +697,8 @@ export async function POST(req: Request) {
                 }
               } catch {}
               if (!profileId && buyer?.email) {
-                const u = await prisma.user.findUnique({ where: { email: String(buyer.email) }, select: { id: true } }).catch(() => null as any);
+                const normalizedEmail = normalizeEmail(buyer.email)
+                const u = normalizedEmail ? await prisma.user.findUnique({ where: { email: normalizedEmail }, select: { id: true } }).catch(() => null as any) : null;
                 if (u?.id && doctorId) {
                   try {
                     const createdProfile = await prisma.patientProfile.create({
@@ -1151,17 +1154,20 @@ export async function POST(req: Request) {
       let userIdForProfile: string | null = null;
       if (buyer?.email) {
         try {
-          const u = await prisma.user.findUnique({ where: { email: String(buyer.email) }, select: { id: true } });
+          const normalizedEmail = normalizeEmail(buyer.email)
+          const u = normalizedEmail ? await prisma.user.findUnique({ where: { email: normalizedEmail }, select: { id: true } }) : null;
           userIdForProfile = u?.id || null;
         } catch {}
       }
       // Create minimal PATIENT user if not exists (normalize dependency)
       if (!userIdForProfile && buyer?.email) {
         try {
+          const normalizedEmail = normalizeEmail(buyer.email)
+          if (!normalizedEmail) throw new Error('Invalid email')
           const created = await prisma.user.create({
             data: {
               id: crypto.randomUUID(),
-              email: String(buyer.email),
+              email: normalizedEmail,
               name: String(buyer?.name || ''),
               phone: String(buyer?.phone || ''),
               role: 'PATIENT',
@@ -1468,14 +1474,15 @@ export async function POST(req: Request) {
           let patientId: string | null = null;
           try {
             if (buyer?.email) {
-              const existingUser = await prisma.user.findUnique({ where: { email: String(buyer.email) }, select: { id: true } });
+              const normalizedEmail = normalizeEmail(buyer.email)
+              const existingUser = normalizedEmail ? await prisma.user.findUnique({ where: { email: normalizedEmail }, select: { id: true } }) : null;
               if (existingUser) {
                 patientId = existingUser.id;
-              } else {
+              } else if (normalizedEmail) {
                 const createdUser = await prisma.user.create({
                   data: {
                     id: crypto.randomUUID(),
-                    email: String(buyer.email),
+                    email: normalizedEmail,
                     name: String(buyer?.name || ''),
                     phone: String(buyer?.phone || ''),
                     role: 'PATIENT',

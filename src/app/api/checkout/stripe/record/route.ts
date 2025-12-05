@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { normalizeEmail } from '@/lib/utils'
 import { onPaymentTransactionCreated } from '@/lib/webhooks/emit-updated'
 import Stripe from 'stripe'
 import { randomUUID } from 'crypto'
@@ -98,7 +99,8 @@ export async function POST(req: NextRequest) {
     let profileId: string | null = null
     try {
       if (buyer.email) {
-        const u = await prisma.user.findUnique({ where: { email: String(buyer.email) }, select: { id: true } })
+        const normalizedEmail = normalizeEmail(buyer.email)
+        const u = normalizedEmail ? await prisma.user.findUnique({ where: { email: normalizedEmail }, select: { id: true } }) : null
         const userId = u?.id || null
         if (doctorId && userId) {
           const existing = await prisma.patientProfile.findUnique({ where: { doctorId_userId: { doctorId: String(doctorId), userId: String(userId) } }, select: { id: true } })
@@ -116,7 +118,7 @@ export async function POST(req: NextRequest) {
     // Resolve unified Customer (merchant + buyer.email)
     let unifiedCustomerId: string | null = null
     try {
-      const buyerEmail = String(buyer.email || '')
+      const buyerEmail = normalizeEmail(buyer.email)
       if (buyerEmail) {
         const existing = await prisma.customer.findFirst({ where: { merchantId: String(merchant.id), email: buyerEmail }, select: { id: true } })
         if (existing?.id) unifiedCustomerId = existing.id

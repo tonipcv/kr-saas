@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { onPaymentTransactionCreated } from '@/lib/webhooks/emit-updated'
 import { AppmaxClient, buildAppmaxClientForMerchant } from '@/lib/payments/appmax/sdk'
+import { normalizeEmail } from '@/lib/utils'
 import crypto from 'crypto'
 
 function jsonError(status: number, error: string, step: string, details?: any) {
@@ -89,7 +90,7 @@ export async function POST(req: Request) {
     const customerPayload: any = {
       firstname,
       lastname,
-      email: String(buyer.email),
+      email: normalizeEmail(buyer.email) || String(buyer.email),
       telephone: (buyer.telephone || buyer.phone || '').toString().replace(/\D+/g, '').slice(0, 11) || '11999999999',
       postcode: (buyer.postcode || buyer.zip || '').toString().replace(/\D+/g, '').slice(0, 8) || '01010000',
       address_street: buyer.address_street || buyer.street || 'Rua Desconhecida',
@@ -124,7 +125,7 @@ export async function POST(req: Request) {
       console.log('[appmax][create][orchestration] 🔄 Starting dual-write...', { merchantId: merchant.id, buyerEmail: buyer.email })
       // Upsert Customer by email ONLY
       const docDigits = (buyer.document_number || buyer.document || '').toString().replace(/\D/g, '') || null
-      const buyerEmail = buyer.email ? String(buyer.email) : null
+      const buyerEmail = normalizeEmail(buyer.email)
       
       // VALIDATION: Only create customer if we have complete data (name, email, phone)
       const buyerName = String(buyer.name || '').trim()
@@ -290,14 +291,17 @@ export async function POST(req: Request) {
     let patientProfileId: string | null = null
     if (doctorId && buyer?.email) {
       try {
-        // Find or create User by email
-        let user = await prisma.user.findUnique({ where: { email: String(buyer.email) }, select: { id: true } })
+        // Find or create User by email (normalized)
+        const normalizedEmail = normalizeEmail(buyer.email)
+        if (!normalizedEmail) throw new Error('Invalid email')
+        
+        let user = await prisma.user.findUnique({ where: { email: normalizedEmail }, select: { id: true } })
         if (!user) {
           const userId = crypto.randomUUID()
           user = await prisma.user.create({
             data: {
               id: userId,
-              email: String(buyer.email),
+              email: normalizedEmail,
               name: String(buyer.name || 'Cliente'),
               role: 'PATIENT' as any,
             },
