@@ -44,8 +44,6 @@ export async function GET(
                 id: true,
                 name: true,
                 monthlyPrice: true,
-                baseDoctors: true,
-                basePatients: true,
                 tier: true,
                 features: true,
               }
@@ -70,14 +68,14 @@ export async function GET(
             startDate: latestSub.startDate,
             endDate: latestSub.currentPeriodEnd,
             trialEndDate: latestSub.trialEndsAt,
-            maxDoctors: latestSub.plan?.baseDoctors ?? null,
+            maxDoctors: null,
             plan: latestSub.plan
               ? {
                   id: latestSub.plan.id,
                   name: latestSub.plan.name,
                   price: latestSub.plan.monthlyPrice != null ? Number(latestSub.plan.monthlyPrice) : null,
-                  maxDoctors: latestSub.plan.baseDoctors,
-                  maxPatients: latestSub.plan.basePatients,
+                  maxDoctors: null,
+                  maxPatients: null,
                   tier: (latestSub.plan as any).tier ?? null,
                 }
               : null,
@@ -205,8 +203,6 @@ export async function PUT(
                 id: true,
                 name: true,
                 monthlyPrice: true,
-                baseDoctors: true,
-                basePatients: true,
                 tier: true
               }
             }
@@ -262,14 +258,14 @@ export async function PUT(
             startDate: latestUpdatedSub.startDate,
             endDate: latestUpdatedSub.currentPeriodEnd,
             trialEndDate: latestUpdatedSub.trialEndsAt,
-            maxDoctors: latestUpdatedSub.plan?.baseDoctors ?? null,
+            maxDoctors: null,
             plan: latestUpdatedSub.plan
               ? {
                   id: latestUpdatedSub.plan.id,
                   name: latestUpdatedSub.plan.name,
                   price: latestUpdatedSub.plan.monthlyPrice != null ? Number(latestUpdatedSub.plan.monthlyPrice) : null,
-                  maxDoctors: latestUpdatedSub.plan.baseDoctors,
-                  maxPatients: latestUpdatedSub.plan.basePatients,
+                  maxDoctors: null,
+                  maxPatients: null,
                   tier: (latestUpdatedSub.plan as any).tier ?? null,
                 }
               : null,

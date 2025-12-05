@@ -120,6 +120,9 @@ export default function EditClinicPage() {
 
   // Payments (merchant) state
   const [merchantRecipientId, setMerchantRecipientId] = useState<string>('');
+  const [recipientInfo, setRecipientInfo] = useState<any>(null);
+  const [isVerifyingRecipient, setIsVerifyingRecipient] = useState(false);
+  const [isSavingRecipient, setIsSavingRecipient] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -251,6 +254,65 @@ export default function EditClinicPage() {
       toast.error('Error deleting clinic');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleVerifyRecipient = async () => {
+    const rid = (merchantRecipientId || '').trim();
+    if (!rid) {
+      toast.error('Informe um Recipient ID (re_...)');
+      return;
+    }
+    if (!/^re_[A-Za-z0-9]+$/.test(rid)) {
+      toast.error('Recipient ID inválido. Esperado formato re_...');
+      return;
+    }
+    setIsVerifyingRecipient(true);
+    setRecipientInfo(null);
+    try {
+      const resp = await fetch(`/api/admin/merchants/recipient/info?recipientId=${encodeURIComponent(rid)}`);
+      const data = await resp.json();
+      if (!resp.ok) {
+        toast.error(data?.error || 'Falha ao buscar recipient');
+        return;
+      }
+      setRecipientInfo(data?.provider || null);
+      toast.success('Recipient verificado com sucesso');
+    } catch (e) {
+      toast.error('Erro ao verificar recipient');
+    } finally {
+      setIsVerifyingRecipient(false);
+    }
+  };
+
+  const handleSaveRecipient = async () => {
+    const rid = (merchantRecipientId || '').trim();
+    if (!rid) {
+      toast.error('Informe um Recipient ID (re_...)');
+      return;
+    }
+    if (!/^re_[A-Za-z0-9]+$/.test(rid)) {
+      toast.error('Recipient ID inválido. Esperado formato re_...');
+      return;
+    }
+    setIsSavingRecipient(true);
+    try {
+      const resp = await fetch('/api/admin/merchants/recipient/set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId, recipientId: rid, verify: true })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        toast.error(data?.error || 'Falha ao salvar recipient');
+        return;
+      }
+      toast.success('Recipient salvo com sucesso');
+      setRecipientInfo(data?.provider || null);
+    } catch (e) {
+      toast.error('Erro ao salvar recipient');
+    } finally {
+      setIsSavingRecipient(false);
     }
   };
 
@@ -746,10 +808,43 @@ export default function EditClinicPage() {
                       id="recipientId"
                       value={merchantRecipientId}
                       onChange={(e) => setMerchantRecipientId(e.target.value)}
-                      placeholder="recp_..."
+                      placeholder="re_..."
                       className="border-gray-300 focus:border-gray-900 focus:ring-gray-900"
                     />
-                    <p className="text-xs text-gray-500">Used for settlements and splits. Leave blank to unset.</p>
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-gray-300"
+                        onClick={handleVerifyRecipient}
+                        disabled={isVerifyingRecipient}
+                      >
+                        {isVerifyingRecipient ? 'Verifying...' : 'Verify Recipient'}
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleSaveRecipient}
+                        disabled={isSavingRecipient}
+                        className="bg-gray-900 hover:bg-black text-white"
+                      >
+                        {isSavingRecipient ? 'Saving...' : 'Save Recipient'}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-gray-500">Used for settlements and splits. Verify to check validity at provider.</p>
+                    {recipientInfo && (
+                      <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                        <p className="text-sm font-medium text-gray-900 mb-2">Recipient Info</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <span className="text-gray-500">ID:</span> <span className="text-gray-900">{recipientInfo.id || recipientInfo?.data?.id || '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Status:</span> <span className="text-gray-900">{recipientInfo.status || recipientInfo?.data?.status || '-'}</span>
+                          </div>
+                        </div>
+                        <pre className="mt-2 text-xs text-gray-700 whitespace-pre-wrap break-all">{JSON.stringify(recipientInfo, null, 2)}</pre>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
