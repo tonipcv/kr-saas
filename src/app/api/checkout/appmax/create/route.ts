@@ -178,20 +178,39 @@ export async function POST(req: Request) {
       }
       // Upsert CustomerProvider (APPMAX)
       if (unifiedCustomerId) {
-        const cpWhere = { customerId: unifiedCustomerId, provider: 'APPMAX' as any, accountId: merchant.id }
-        let customerProvider = await prisma.customerProvider.findFirst({ where: cpWhere, select: { id: true } })
+        // Check by unique constraint fields: provider + accountId + providerCustomerId
+        const cpWhere = { 
+          provider: 'APPMAX' as any, 
+          accountId: merchant.id, 
+          providerCustomerId: String(customer_id) 
+        }
+        let customerProvider = await prisma.customerProvider.findFirst({ 
+          where: cpWhere, 
+          select: { id: true, customerId: true } 
+        })
         if (!customerProvider) {
           customerProvider = await prisma.customerProvider.create({
-            data: { ...cpWhere, providerCustomerId: String(customer_id), metadata: { source: 'appmax_checkout' } },
-            select: { id: true },
+            data: { 
+              customerId: unifiedCustomerId,
+              provider: 'APPMAX' as any,
+              accountId: merchant.id,
+              providerCustomerId: String(customer_id), 
+              metadata: { source: 'appmax_checkout' } 
+            },
+            select: { id: true, customerId: true },
           })
           console.log('[appmax][create][orchestration] ✅ CustomerProvider created', { customerProviderId: customerProvider.id })
         } else {
-          await prisma.customerProvider.update({
-            where: { id: customerProvider.id },
-            data: { providerCustomerId: String(customer_id), metadata: { source: 'appmax_checkout' } },
-          })
-          console.log('[appmax][create][orchestration] ✅ CustomerProvider updated', { customerProviderId: customerProvider.id })
+          // Update if customerId changed
+          if (customerProvider.customerId !== unifiedCustomerId) {
+            await prisma.customerProvider.update({
+              where: { id: customerProvider.id },
+              data: { customerId: unifiedCustomerId, metadata: { source: 'appmax_checkout' } },
+            })
+            console.log('[appmax][create][orchestration] ✅ CustomerProvider updated (customerId changed)', { customerProviderId: customerProvider.id })
+          } else {
+            console.log('[appmax][create][orchestration] ✅ CustomerProvider already exists', { customerProviderId: customerProvider.id })
+          }
         }
         unifiedCustomerProviderId = customerProvider.id
       }
@@ -578,11 +597,20 @@ export async function POST(req: Request) {
           buyerDoc = doc.replace(/\D+/g, '').slice(0, 14)
         } catch {}
       }
+      // CRITICAL: AppMax requires document_number for credit card payments
+      if (!buyerDoc) {
+        return jsonError(400, 'document_number ausente para pagamento com cartão', 'input_validation', { 
+          need: 'buyer.document_number or buyer.document',
+          hint: 'CPF ou CNPJ é obrigatório para pagamentos com cartão'
+        })
+      }
+      
       const payPayload: any = {
         cart: { order_id },
         customer: { customer_id },
         payment: { CreditCard: ccToken ? {
           token: ccToken,
+          cvv: String(card?.cvv || ''), // CRITICAL: AppMax requires CVV even with token
           installments: Number(installments || 1),
           soft_descriptor: 'KRXLABS',
           document_number: buyerDoc,
