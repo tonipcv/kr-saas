@@ -367,7 +367,7 @@ export async function POST(req: Request) {
                  platform_fee_cents = COALESCE(platform_fee_cents, $8::bigint),
                  paid_at = CASE WHEN ($2::text) = 'paid' THEN COALESCE(paid_at, NOW()) ELSE paid_at END,
                  updated_at = NOW()
-             WHERE provider = 'pagarme' AND provider_order_id = $1`,
+             WHERE provider IN ('pagarme','krxpay') AND provider_order_id = $1`,
             String(orderId),
             mapped || null,
             JSON.stringify(event),
@@ -427,7 +427,7 @@ export async function POST(req: Request) {
               );
               await prisma.$executeRawUnsafe(
                 `INSERT INTO payment_transactions (id, provider, provider_order_id, status, payment_method_type, installments, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2, clinic_id, client_name, client_email, product_id)
-                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, $6, $7, $8, $9, 'BRL', $10::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END, $11, $12, $13, $14)
+                 VALUES ($1, 'krxpay', $2, $3::text, $4::text, $5::int, $6, $7, $8, $9, 'BRL', $10::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END, $11, $12, $13, $14)
                  ON CONFLICT DO NOTHING`,
                 webhookTxId,
                 String(orderId),
@@ -509,7 +509,7 @@ export async function POST(req: Request) {
                  platform_fee_cents = COALESCE(platform_fee_cents, $9::bigint),
                  paid_at = CASE WHEN ($2::text) = 'paid' THEN COALESCE(paid_at, NOW()) ELSE paid_at END,
                  updated_at = NOW()
-             WHERE provider = 'pagarme' AND (provider_charge_id = $1 OR provider_order_id = $4)`,
+             WHERE provider IN ('pagarme','krxpay') AND (provider_charge_id = $1 OR provider_order_id = $4)`,
             String(chargeId),
             mapped || null,
             JSON.stringify(event),
@@ -570,7 +570,7 @@ export async function POST(req: Request) {
               );
               await prisma.$executeRawUnsafe(
                 `INSERT INTO payment_transactions (id, provider, provider_charge_id, status, payment_method_type, installments, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2, clinic_id, client_name, client_email, product_id)
-                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, $6, $7, $8, $9, 'BRL', $10::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END, $11, $12, $13, $14)
+                 VALUES ($1, 'krxpay', $2, $3::text, $4::text, $5::int, $6, $7, $8, $9, 'BRL', $10::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END, $11, $12, $13, $14)
                  ON CONFLICT DO NOTHING`,
                 webhookTxId2,
                 String(chargeId),
@@ -712,7 +712,7 @@ export async function POST(req: Request) {
                   await prisma.$executeRawUnsafe(
                     `UPDATE payment_transactions
                        SET status = 'pending'
-                     WHERE provider = 'pagarme' AND provider_order_id = $1`,
+                     WHERE provider IN ('pagarme','krxpay') AND provider_order_id = $1`,
                     String(orderId)
                   );
                 } catch {}
@@ -762,7 +762,7 @@ export async function POST(req: Request) {
             const rows = await prisma.$queryRawUnsafe<any[]>(
               `SELECT id, amount_cents, currency, clinic_id, patient_profile_id, product_id, status
                  FROM payment_transactions
-                WHERE provider = 'pagarme' AND provider_charge_id = $1
+                WHERE provider IN ('pagarme','krxpay') AND provider_charge_id = $1
              ORDER BY created_at DESC
                 LIMIT 1`,
               String(chargeId)
@@ -899,7 +899,7 @@ export async function POST(req: Request) {
                   const updatedRows = await prisma.$queryRawUnsafe<any[]>(
                     `WITH candidate AS (
                        SELECT id FROM payment_transactions
-                        WHERE provider = 'pagarme'
+                        WHERE provider IN ('pagarme','krxpay')
                           AND clinic_id = $1
                           AND patient_profile_id = $2
                           AND ($3::text IS NULL OR product_id = $3)
@@ -938,7 +938,7 @@ export async function POST(req: Request) {
                 // First, try to find any existing row by order or charge via raw SQL
                 const existsRows = await prisma.$queryRawUnsafe<any[]>(
                   `SELECT id FROM payment_transactions
-                     WHERE provider = 'pagarme'
+                     WHERE provider IN ('pagarme','krxpay')
                        AND (provider_order_id = $1 OR provider_charge_id = $2)
                      LIMIT 1`,
                   orderId ? String(orderId) : null,
@@ -1054,7 +1054,7 @@ export async function POST(req: Request) {
                   if (orderId) {
                     await prisma.$executeRawUnsafe(
                       `UPDATE payment_transactions SET customer_id = $2, updated_at = NOW() 
-                       WHERE provider = 'pagarme' AND provider_order_id = $1 AND customer_id IS NULL`,
+                       WHERE provider IN ('pagarme','krxpay') AND provider_order_id = $1 AND customer_id IS NULL`,
                       String(orderId), String(unifiedCustomerId)
                     );
                   }
