@@ -32,9 +32,11 @@ export async function POST(req: Request) {
       if (!ok) {
         return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
       }
+      console.log('[pagarme][webhook] ✅ Signature verified');
     } else {
-      // Dev/Test mode: accept webhook without signature validation
-      console.warn('[pagarme][webhook] No PAGARME_WEBHOOK_SECRET configured; skipping signature verification. Do not use this in production.');
+      // Pagar.me v5 does not require webhook secrets by default (optional feature)
+      // If you want signature validation, configure PAGARME_WEBHOOK_SECRET and enable authentication in Pagar.me dashboard
+      console.log('[pagarme][webhook] ℹ️ No PAGARME_WEBHOOK_SECRET configured; accepting webhooks without signature validation (Pagar.me default behavior)');
     }
 
     const event = JSON.parse(rawBody || '{}');
@@ -270,8 +272,12 @@ export async function POST(req: Request) {
       const chargeObj = event?.data?.charge || (Array.isArray(event?.data?.charges) ? event?.data?.charges?.[0] : null) || event?.charge || null;
       const lastTx = chargeObj?.last_transaction || event?.data?.transaction || null;
       // CRITICAL: extract payment_method carefully to avoid overwriting pix with credit_card
-      // Priority: last_transaction.payment_method > charge.payment_method (only when we have transaction)
-      const paymentMethodRaw: string | null = lastTx?.payment_method || (lastTx ? chargeObj?.payment_method : null) || null;
+      // Priority: last_transaction.payment_method > charge.payment_method > event.data.payment_method
+      const paymentMethodRaw: string | null = lastTx?.payment_method 
+        || (lastTx ? chargeObj?.payment_method : null) 
+        || chargeObj?.payment_method 
+        || event?.data?.payment_method 
+        || null;
       const paymentMethodType: string | null = paymentMethodRaw ? String(paymentMethodRaw).toLowerCase() : null;
       try {
         console.log('[pagarme][webhook] payment_method extraction', { 
@@ -281,6 +287,7 @@ export async function POST(req: Request) {
           hasLastTx: !!lastTx, 
           txMethod: lastTx?.payment_method || null,
           chargeMethod: chargeObj?.payment_method || null,
+          eventDataMethod: event?.data?.payment_method || null,
           final: paymentMethodType 
         });
       } catch {}
@@ -383,9 +390,17 @@ export async function POST(req: Request) {
                 || event?.data?.charges?.[0]?.amount
                 || 0
               ) || 0;
+              // Extract clinicId from metadata for early transactions
+              const earlyClinicId: string | null = (
+                event?.data?.metadata?.clinicId
+                || event?.data?.order?.metadata?.clinicId
+                || event?.order?.metadata?.clinicId
+                || event?.metadata?.clinicId
+                || null
+              );
               await prisma.$executeRawUnsafe(
-                `INSERT INTO payment_transactions (id, provider, provider_order_id, status, payment_method_type, installments, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2)
-                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, $6, $7, $8, $9, 'BRL', $10::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END)
+                `INSERT INTO payment_transactions (id, provider, provider_order_id, status, payment_method_type, installments, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2, clinic_id)
+                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, $6, $7, $8, $9, 'BRL', $10::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END, $11)
                  ON CONFLICT DO NOTHING`,
                 webhookTxId,
                 String(orderId),
@@ -396,9 +411,10 @@ export async function POST(req: Request) {
                 splitClinicAmount,
                 splitPlatformAmount,
                 splitPlatformFeeCents,
-                JSON.stringify(event)
+                JSON.stringify(event),
+                earlyClinicId
               );
-              console.log('[pagarme][webhook] created early row by orderId', { orderId, status: placeholderStatus });
+              console.log('[pagarme][webhook] created early row by orderId', { orderId, status: placeholderStatus, clinicId: earlyClinicId });
               
               // Emit webhook: payment.transaction.created
               try {
@@ -480,9 +496,17 @@ export async function POST(req: Request) {
                 || event?.data?.charges?.[0]?.amount
                 || 0
               ) || 0;
+              // Extract clinicId from metadata for early transactions
+              const earlyClinicId2: string | null = (
+                event?.data?.metadata?.clinicId
+                || event?.data?.order?.metadata?.clinicId
+                || event?.order?.metadata?.clinicId
+                || event?.metadata?.clinicId
+                || null
+              );
               await prisma.$executeRawUnsafe(
-                `INSERT INTO payment_transactions (id, provider, provider_charge_id, status, payment_method_type, installments, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2)
-                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, $6, $7, $8, $9, 'BRL', $10::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END)
+                `INSERT INTO payment_transactions (id, provider, provider_charge_id, status, payment_method_type, installments, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2, clinic_id)
+                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, $6, $7, $8, $9, 'BRL', $10::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END, $11)
                  ON CONFLICT DO NOTHING`,
                 webhookTxId2,
                 String(chargeId),
@@ -493,9 +517,10 @@ export async function POST(req: Request) {
                 splitClinicAmount,
                 splitPlatformAmount,
                 splitPlatformFeeCents,
-                JSON.stringify(event)
+                JSON.stringify(event),
+                earlyClinicId2
               );
-              console.log('[pagarme][webhook] created early row by chargeId', { chargeId, status: placeholderStatus });
+              console.log('[pagarme][webhook] created early row by chargeId', { chargeId, status: placeholderStatus, clinicId: earlyClinicId2 });
               
               // Emit webhook: payment.transaction.created
               try {

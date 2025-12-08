@@ -178,67 +178,9 @@ export default function ClinicsPage() {
       <div className="min-h-screen bg-white">
         <div className="lg:ml-64">
           <div className="p-4 pt-[88px] lg:pl-6 lg:pr-4 lg:pt-6 lg:pb-4 pb-24">
-            
-            {/* Header Skeleton */}
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-              <div className="space-y-3">
-                <div className="h-8 bg-gray-200 rounded-lg w-64 animate-pulse"></div>
-                <div className="h-5 bg-gray-100 rounded-lg w-80 animate-pulse"></div>
-              </div>
-              <div className="flex gap-3">
-                <div className="h-10 bg-gray-200 rounded-xl w-32 animate-pulse"></div>
-                <div className="h-10 bg-gray-100 rounded-xl w-40 animate-pulse"></div>
-              </div>
-            </div>
-
-            {/* Stats Cards Skeleton */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="bg-white border border-gray-200 shadow-lg rounded-2xl p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-gray-100 rounded-xl animate-pulse">
-                      <div className="h-6 w-6 bg-gray-200 rounded animate-pulse"></div>
-                    </div>
-                    <div className="space-y-2 flex-1">
-                      <div className="h-4 bg-gray-200 rounded w-20 animate-pulse"></div>
-                      <div className="h-7 bg-gray-100 rounded w-12 animate-pulse"></div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Clinics List Skeleton */}
-            <div className="bg-white border border-gray-200 shadow-lg rounded-2xl">
-              <div className="p-6 pb-4">
-                <div className="h-6 bg-gray-200 rounded w-32 animate-pulse"></div>
-              </div>
-              <div className="p-6 pt-0 space-y-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 bg-gray-200 rounded-xl animate-pulse"></div>
-                        <div className="space-y-2">
-                          <div className="h-4 bg-gray-200 rounded w-32 animate-pulse"></div>
-                          <div className="h-3 bg-gray-100 rounded w-40 animate-pulse"></div>
-                          <div className="h-3 bg-gray-100 rounded w-24 animate-pulse"></div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="space-y-2">
-                          <div className="h-6 bg-gray-100 rounded-xl w-16 animate-pulse"></div>
-                          <div className="h-3 bg-gray-100 rounded w-20 animate-pulse"></div>
-                        </div>
-                        <div className="flex gap-2">
-                          <div className="h-8 bg-gray-100 rounded-xl w-20 animate-pulse"></div>
-                          <div className="h-8 bg-gray-200 rounded-xl w-24 animate-pulse"></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="flex items-center justify-center py-24">
+              <Loader2 className="h-6 w-6 animate-spin text-gray-600 mr-2" />
+              <span className="text-gray-600">Loading…</span>
             </div>
           </div>
         </div>
@@ -255,12 +197,7 @@ export default function ClinicsPage() {
           <div className="flex flex-col gap-3 mb-6">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
               <div>
-                <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">
-                  Manage Business
-                </h1>
-                <p className="text-gray-600 mt-0.5 text-sm">
-                  View and manage all registered businesses
-                </p>
+                <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Overview</h1>
               </div>
               <div className="flex gap-2">
                 <Button 
@@ -269,7 +206,7 @@ export default function ClinicsPage() {
                 >
                   <Link href="/admin/clinics/new">
                     <PlusIcon className="h-4 w-4 mr-2" />
-                    New Clinic
+                    New Business
                   </Link>
                 </Button>
                 <Button 
@@ -322,18 +259,18 @@ export default function ClinicsPage() {
           {/* Clinics List - compact table style */}
           <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">All Clinics</CardTitle>
+              <CardTitle className="text-lg font-semibold text-gray-900">All Businesses</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               {clinics.length === 0 ? (
                 <div className="text-center py-12">
                   <BuildingOfficeIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 text-lg">No clinics found.</p>
-                  <p className="text-gray-500 text-sm mt-2">Clinics will appear here once they are registered.</p>
+                  <p className="text-gray-600 text-lg">No businesses found.</p>
+                  <p className="text-gray-500 text-sm mt-2">Businesses will appear here once they are registered.</p>
                   <Button asChild className="mt-4 bg-black hover:bg-gray-900 text-white font-semibold">
                     <Link href="/admin/clinics/new">
                       <PlusIcon className="h-4 w-4 mr-2" />
-                      Create First Clinic
+                      Create First Business
                     </Link>
                   </Button>
                 </div>
@@ -342,13 +279,13 @@ export default function ClinicsPage() {
                   <table className="min-w-full">
                     <thead className="bg-gray-50/80">
                       <tr className="text-left text-xs text-gray-600">
-                        <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Clinic</th>
+                        <th className="py-3.5 pl-4 pr-3 font-medium sm:pl-6">Business</th>
                         <th className="px-3 py-3.5 font-medium">Owner</th>
                         <th className="px-3 py-3.5 font-medium">Members</th>
                         <th className="px-3 py-3.5 font-medium">Subscription</th>
                         <th className="px-3 py-3.5 font-medium">Plan</th>
                         <th className="px-3 py-3.5 font-medium">Tier</th>
-                        <th className="px-3 py-3.5 font-medium">Trial Ends</th>
+                        <th className="px-3 py-3.5 font-medium">Ends</th>
                         <th className="px-3 py-3.5 font-medium">Payments</th>
                         <th className="py-3.5 pl-3 pr-4 sm:pr-6 text-right font-medium">Actions</th>
                       </tr>
@@ -445,10 +382,10 @@ export default function ClinicsPage() {
                                       setClinics(prev => prev.filter(c => c.id !== clinic.id));
                                     } else {
                                       const js = await res.json().catch(() => ({} as any));
-                                      if (typeof window !== 'undefined') alert(js?.error || 'Failed to delete clinic');
+                                      if (typeof window !== 'undefined') alert(js?.error || 'Failed to delete business');
                                     }
                                   } catch (err) {
-                                    if (typeof window !== 'undefined') alert('Failed to delete clinic');
+                                    if (typeof window !== 'undefined') alert('Failed to delete business');
                                   } finally {
                                     setDeletingId(null);
                                   }
