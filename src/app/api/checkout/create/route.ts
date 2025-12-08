@@ -1300,22 +1300,14 @@ export async function POST(req: Request) {
             // Upsert customer_providers for KRXPAY (Pagarme gateway)
             if (pgCustomerId) {
               const acctId = String(merchant?.id || '')
-              const rowsCP = await prisma.$queryRawUnsafe<any[]>(
-                `SELECT id FROM customer_providers WHERE customer_id = $1 AND provider IN ('KRXPAY', 'PAGARME') AND account_id = $2 LIMIT 1`,
-                String(unifiedCustomerIdForBiz), acctId
-              ).catch(() => [])
-              if (rowsCP && rowsCP.length > 0) {
-                await prisma.$executeRawUnsafe(
-                  `UPDATE customer_providers SET provider = 'KRXPAY', provider_customer_id = $2, updated_at = NOW() WHERE id = $1`,
-                  String(rowsCP[0].id), String(pgCustomerId)
-                )
-              } else {
-                await prisma.$executeRawUnsafe(
-                  `INSERT INTO customer_providers (id, customer_id, provider, account_id, provider_customer_id, created_at, updated_at)
-                   VALUES (gen_random_uuid(), $1, 'KRXPAY'::"PaymentProvider", $2, $3, NOW(), NOW())`,
-                  String(unifiedCustomerIdForBiz), acctId, String(pgCustomerId)
-                )
-              }
+              // Use ON CONFLICT to handle race conditions and duplicate inserts
+              await prisma.$executeRawUnsafe(
+                `INSERT INTO customer_providers (id, customer_id, provider, account_id, provider_customer_id, created_at, updated_at)
+                 VALUES (gen_random_uuid(), $1, 'KRXPAY'::"PaymentProvider", $2, $3, NOW(), NOW())
+                 ON CONFLICT (provider, account_id, provider_customer_id) 
+                 DO UPDATE SET customer_id = EXCLUDED.customer_id, updated_at = NOW()`,
+                String(unifiedCustomerIdForBiz), acctId, String(pgCustomerId)
+              )
             }
             
             // Upsert customer_payment_methods when we have card (CRITICAL: save provider_payment_method_id for reuse)

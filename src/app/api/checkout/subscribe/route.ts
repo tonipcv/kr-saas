@@ -821,23 +821,14 @@ export async function POST(req: Request) {
         if (unifiedCustomerId && merchantId) {
           // Upsert customer_providers
           if (providerCustomerId) {
-            const rowsCP = await prisma.$queryRawUnsafe<any[]>(
-              `SELECT id FROM customer_providers WHERE customer_id = $1 AND provider = 'PAGARME' AND account_id = $2 LIMIT 1`,
-              String(unifiedCustomerId), String(merchantId)
-            ).catch(() => []);
-            
-            if (rowsCP && rowsCP.length > 0) {
-              await prisma.$executeRawUnsafe(
-                `UPDATE customer_providers SET provider_customer_id = $2, updated_at = NOW() WHERE id = $1`,
-                String(rowsCP[0].id), String(providerCustomerId)
-              );
-            } else {
-              await prisma.$executeRawUnsafe(
-                `INSERT INTO customer_providers (id, customer_id, provider, account_id, provider_customer_id, created_at, updated_at)
-                 VALUES (gen_random_uuid(), $1, 'PAGARME'::"PaymentProvider", $2, $3, NOW(), NOW())`,
-                String(unifiedCustomerId), String(merchantId), String(providerCustomerId)
-              );
-            }
+            // Use ON CONFLICT to handle race conditions and duplicate inserts
+            await prisma.$executeRawUnsafe(
+              `INSERT INTO customer_providers (id, customer_id, provider, account_id, provider_customer_id, created_at, updated_at)
+               VALUES (gen_random_uuid(), $1, 'PAGARME'::"PaymentProvider", $2, $3, NOW(), NOW())
+               ON CONFLICT (provider, account_id, provider_customer_id) 
+               DO UPDATE SET customer_id = EXCLUDED.customer_id, updated_at = NOW()`,
+              String(unifiedCustomerId), String(merchantId), String(providerCustomerId)
+            );
           }
           
           // Upsert customer_payment_methods
