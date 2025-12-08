@@ -201,4 +201,63 @@ UNIQUE (provider, account_id, provider_customer_id)
 
 ---
 
+## 🔧 Correção Adicional: Dados Vazios em Transações Early
+
+### **Problema Descoberto**
+Após corrigir o erro 23505, descobrimos que transações criadas por **webhooks early** (que chegam antes do checkout) apareciam com dados vazios:
+- ❌ Client: vazio
+- ❌ Email: vazio
+- ❌ Product: vazio
+
+### **Causa**
+O webhook criava transação com apenas:
+- `clinic_id`
+- `amount_cents`
+- `status`
+- `provider_order_id`
+
+Mas **não incluía**:
+- `client_name` (nome do comprador)
+- `client_email` (email do comprador)
+- `product_id` (produto comprado)
+
+### **Solução**
+Adicionamos extração desses campos dos metadados do evento:
+
+```typescript
+// Extract client info from metadata or customer object
+const earlyClientName: string | null = (
+  event?.data?.metadata?.buyerName
+  || event?.data?.order?.metadata?.buyerName
+  || event?.order?.metadata?.buyerName
+  || event?.metadata?.buyerName
+  || event?.data?.customer?.name
+  || event?.customer?.name
+  || null
+);
+
+const earlyClientEmail: string | null = (
+  event?.data?.metadata?.buyerEmail
+  || event?.data?.order?.metadata?.buyerEmail
+  || event?.order?.metadata?.buyerEmail
+  || event?.metadata?.buyerEmail
+  || event?.data?.customer?.email
+  || event?.customer?.email
+  || null
+);
+
+const earlyProductId: string | null = (
+  event?.data?.metadata?.productId
+  || event?.data?.order?.metadata?.productId
+  || event?.order?.metadata?.productId
+  || event?.metadata?.productId
+  || null
+);
+```
+
+### **Resultado**
+Agora transações early incluem todos os dados necessários para exibição na listagem.
+
+---
+
 **Status**: ✅ **CORRIGIDO** - Pronto para deploy

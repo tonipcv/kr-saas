@@ -398,9 +398,36 @@ export async function POST(req: Request) {
                 || event?.metadata?.clinicId
                 || null
               );
+              // Extract client info from metadata or customer object
+              const earlyClientName: string | null = (
+                event?.data?.metadata?.buyerName
+                || event?.data?.order?.metadata?.buyerName
+                || event?.order?.metadata?.buyerName
+                || event?.metadata?.buyerName
+                || event?.data?.customer?.name
+                || event?.customer?.name
+                || null
+              );
+              const earlyClientEmail: string | null = (
+                event?.data?.metadata?.buyerEmail
+                || event?.data?.order?.metadata?.buyerEmail
+                || event?.order?.metadata?.buyerEmail
+                || event?.metadata?.buyerEmail
+                || event?.data?.customer?.email
+                || event?.customer?.email
+                || null
+              );
+              // Extract product_id from metadata
+              const earlyProductId: string | null = (
+                event?.data?.metadata?.productId
+                || event?.data?.order?.metadata?.productId
+                || event?.order?.metadata?.productId
+                || event?.metadata?.productId
+                || null
+              );
               await prisma.$executeRawUnsafe(
-                `INSERT INTO payment_transactions (id, provider, provider_order_id, status, payment_method_type, installments, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2, clinic_id)
-                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, $6, $7, $8, $9, 'BRL', $10::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END, $11)
+                `INSERT INTO payment_transactions (id, provider, provider_order_id, status, payment_method_type, installments, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2, clinic_id, client_name, client_email, product_id)
+                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, $6, $7, $8, $9, 'BRL', $10::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END, $11, $12, $13, $14)
                  ON CONFLICT DO NOTHING`,
                 webhookTxId,
                 String(orderId),
@@ -412,9 +439,19 @@ export async function POST(req: Request) {
                 splitPlatformAmount,
                 splitPlatformFeeCents,
                 JSON.stringify(event),
-                earlyClinicId
+                earlyClinicId,
+                earlyClientName,
+                earlyClientEmail,
+                earlyProductId
               );
-              console.log('[pagarme][webhook] created early row by orderId', { orderId, status: placeholderStatus, clinicId: earlyClinicId });
+              console.log('[pagarme][webhook] created early row by orderId', { 
+                orderId, 
+                status: placeholderStatus, 
+                clinicId: earlyClinicId,
+                clientName: earlyClientName,
+                clientEmail: earlyClientEmail,
+                productId: earlyProductId
+              });
               
               // Emit webhook: payment.transaction.created
               try {
@@ -504,9 +541,36 @@ export async function POST(req: Request) {
                 || event?.metadata?.clinicId
                 || null
               );
+              // Extract client info from metadata or customer object
+              const earlyClientName2: string | null = (
+                event?.data?.metadata?.buyerName
+                || event?.data?.order?.metadata?.buyerName
+                || event?.order?.metadata?.buyerName
+                || event?.metadata?.buyerName
+                || event?.data?.customer?.name
+                || event?.customer?.name
+                || null
+              );
+              const earlyClientEmail2: string | null = (
+                event?.data?.metadata?.buyerEmail
+                || event?.data?.order?.metadata?.buyerEmail
+                || event?.order?.metadata?.buyerEmail
+                || event?.metadata?.buyerEmail
+                || event?.data?.customer?.email
+                || event?.customer?.email
+                || null
+              );
+              // Extract product_id from metadata
+              const earlyProductId2: string | null = (
+                event?.data?.metadata?.productId
+                || event?.data?.order?.metadata?.productId
+                || event?.order?.metadata?.productId
+                || event?.metadata?.productId
+                || null
+              );
               await prisma.$executeRawUnsafe(
-                `INSERT INTO payment_transactions (id, provider, provider_charge_id, status, payment_method_type, installments, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2, clinic_id)
-                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, $6, $7, $8, $9, 'BRL', $10::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END, $11)
+                `INSERT INTO payment_transactions (id, provider, provider_charge_id, status, payment_method_type, installments, amount_cents, clinic_amount_cents, platform_amount_cents, platform_fee_cents, currency, raw_payload, created_at, routed_provider, provider_v2, status_v2, clinic_id, client_name, client_email, product_id)
+                 VALUES ($1, 'pagarme', $2, $3::text, $4::text, $5::int, $6, $7, $8, $9, 'BRL', $10::jsonb, NOW(), 'KRXPAY', 'PAGARME'::"PaymentProvider", CASE WHEN $3 = 'paid' THEN 'SUCCEEDED'::"PaymentStatus" WHEN $3 IN ('processing','pending') THEN 'PROCESSING'::"PaymentStatus" ELSE 'PROCESSING'::"PaymentStatus" END, $11, $12, $13, $14)
                  ON CONFLICT DO NOTHING`,
                 webhookTxId2,
                 String(chargeId),
@@ -518,9 +582,19 @@ export async function POST(req: Request) {
                 splitPlatformAmount,
                 splitPlatformFeeCents,
                 JSON.stringify(event),
-                earlyClinicId2
+                earlyClinicId2,
+                earlyClientName2,
+                earlyClientEmail2,
+                earlyProductId2
               );
-              console.log('[pagarme][webhook] created early row by chargeId', { chargeId, status: placeholderStatus, clinicId: earlyClinicId2 });
+              console.log('[pagarme][webhook] created early row by chargeId', { 
+                chargeId, 
+                status: placeholderStatus, 
+                clinicId: earlyClinicId2,
+                clientName: earlyClientName2,
+                clientEmail: earlyClientEmail2,
+                productId: earlyProductId2
+              });
               
               // Emit webhook: payment.transaction.created
               try {
